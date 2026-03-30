@@ -9,13 +9,23 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "address": { "type": "string" },
-        "rooms": { "type": "number", "description": "Total rooms in the building" },
+        "roomsCount": { "type": "number", "description": "Total number of rooms" },
+        "roomsDetail": { 
+          "type": "array", 
+          "items": {
+            "type": "object",
+            "properties": {
+              "roomNo": { "type": "string" },
+              "seats": { "type": "number" }
+            }
+          }
+        },
         "totalSeats": { "type": "number", "description": "Total capacity of seats" },
         "occupiedSeats": { "type": "number", "description": "Currently occupied seats" },
         "emptySeats": { "type": "number", "description": "Currently vacant seats" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name", "address", "rooms", "totalSeats"]
+      "required": ["id", "name", "address", "roomsCount", "totalSeats"]
     },
     "Student": {
       "title": "Student",
@@ -26,6 +36,7 @@
         "name": { "type": "string" },
         "buildingId": { "type": "string" },
         "buildingName": { "type": "string" },
+        "roomNumber": { "type": "string" },
         "isActive": { "type": "boolean" },
         "paymentSystem": { "type": "string" },
         "monthlyAmount": { "type": "number" }
