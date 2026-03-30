@@ -15,18 +15,20 @@ import {
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Wallet, Info, Loader2, Lock, ArrowDownToLine, UserPlus } from "lucide-react"
+import { Wallet, Info, Loader2, Lock, ArrowDownToLine, UserPlus, DoorOpen, Building2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, Timestamp } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export default function IncomeEntryPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("")
+  const [selectedRoomNumber, setSelectedRoomNumber] = useState<string>("")
   const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
   const [newStaff, setNewStaff] = useState({ name: "", phone: "" })
@@ -52,7 +54,17 @@ export default function IncomeEntryPage() {
     description: ""
   })
 
-  const filteredStudents = students?.filter(s => s.buildingId === selectedBuildingId && s.isActive)
+  // Hierarchical Filtering Data
+  const selectedBuilding = useMemo(() => buildings?.find(b => b.id === selectedBuildingId), [buildings, selectedBuildingId])
+  const roomsInBuilding = useMemo(() => selectedBuilding?.roomsDetail || [], [selectedBuilding])
+  
+  const filteredStudents = useMemo(() => {
+    return students?.filter(s => 
+      s.buildingId === selectedBuildingId && 
+      (selectedRoomNumber ? s.roomNumber === selectedRoomNumber : true) &&
+      s.isActive
+    ) || []
+  }, [students, selectedBuildingId, selectedRoomNumber])
 
   const selectedStudent = useMemo(() => {
     return students?.find(s => s.id === formData.studentId)
@@ -186,7 +198,7 @@ export default function IncomeEntryPage() {
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div>
         <h1 className="text-3xl font-headline font-bold text-primary">Income Entry</h1>
-        <p className="text-muted-foreground mt-1">Unified payment entry with advance deduction support.</p>
+        <p className="text-muted-foreground mt-1">Unified payment entry with room-based filtering.</p>
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
@@ -198,10 +210,15 @@ export default function IncomeEntryPage() {
         </CardHeader>
         <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6" onKeyDown={handleKeyDown}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Hierarchical Selection */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 bg-secondary/10 rounded-xl border">
               <div className="space-y-2">
-                <Label>Building</Label>
-                <Select required onValueChange={setSelectedBuildingId}>
+                <Label className="flex items-center gap-1.5"><Building2 size={14} /> Building</Label>
+                <Select required onValueChange={(val) => {
+                  setSelectedBuildingId(val)
+                  setSelectedRoomNumber("")
+                  setFormData({...formData, studentId: ""})
+                }}>
                   <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
                   <SelectContent>
                     {buildings?.map(b => (
@@ -212,17 +229,36 @@ export default function IncomeEntryPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Student</Label>
+                <Label className="flex items-center gap-1.5"><DoorOpen size={14} /> Room No.</Label>
+                <Select 
+                  disabled={!selectedBuildingId}
+                  value={selectedRoomNumber}
+                  onValueChange={(val) => {
+                    setSelectedRoomNumber(val)
+                    setFormData({...formData, studentId: ""})
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger>
+                  <SelectContent>
+                    {roomsInBuilding.map(r => (
+                      <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">Student</Label>
                 <Select 
                   required
-                  disabled={!selectedBuildingId}
+                  disabled={!selectedRoomNumber && filteredStudents.length === 0}
                   onValueChange={(val) => setFormData({...formData, studentId: val})}
                 >
                   <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
                   <SelectContent>
                     {filteredStudents?.map(s => (
                       <SelectItem key={s.id} value={s.id}>
-                        {s.name} (Room: {s.roomNumber} | {s.paymentSystem})
+                        {s.name} ({s.paymentSystem})
                       </SelectItem>
                     ))}
                   </SelectContent>

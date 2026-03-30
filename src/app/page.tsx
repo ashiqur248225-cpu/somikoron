@@ -15,7 +15,8 @@ import {
   Check,
   UserPlus,
   Lock,
-  ArrowDownToLine
+  ArrowDownToLine,
+  DoorOpen
 } from "lucide-react"
 import { 
   Table, 
@@ -63,22 +64,8 @@ export default function DashboardPage() {
   const [newStaff, setNewStaff] = useState({ name: "", phone: "" })
   const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        e.preventDefault();
-        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
-        if (container) {
-          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
-          const index = focusables.indexOf(target);
-          if (index > -1 && index < focusables.length - 1) {
-            focusables[index + 1].focus();
-          }
-        }
-      }
-    }
-  };
+  const [selectedBuildingId, setSelectedBuildingId] = useState("")
+  const [selectedRoomNumber, setSelectedRoomNumber] = useState("")
 
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
@@ -97,7 +84,6 @@ export default function DashboardPage() {
     query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(5)), [db])
   const { data: recentExpenses, isLoading: expensesLoading } = useCollection(recentExpensesQuery)
 
-  const [selectedBuildingId, setSelectedBuildingId] = useState("")
   const [paymentForm, setPaymentForm] = useState({
     studentId: "",
     month: new Date().toLocaleString('default', { month: 'long' }),
@@ -110,9 +96,17 @@ export default function DashboardPage() {
     description: ""
   })
 
+  // Hierarchical Filtering Data
+  const selectedBuilding = useMemo(() => buildings?.find(b => b.id === selectedBuildingId), [buildings, selectedBuildingId])
+  const roomsInBuilding = useMemo(() => selectedBuilding?.roomsDetail || [], [selectedBuilding])
+
   const filteredStudents = useMemo(() => {
-    return students?.filter(s => s.buildingId === selectedBuildingId && s.isActive) || []
-  }, [students, selectedBuildingId])
+    return students?.filter(s => 
+      s.buildingId === selectedBuildingId && 
+      (selectedRoomNumber ? s.roomNumber === selectedRoomNumber : true) &&
+      s.isActive
+    ) || []
+  }, [students, selectedBuildingId, selectedRoomNumber])
 
   const selectedStudent = useMemo(() => {
     return students?.find(s => s.id === paymentForm.studentId)
@@ -206,6 +200,8 @@ export default function DashboardPage() {
       toast({ title: "Success", description: `Processed ₹${totalAmount}.` })
       setIsPaymentOpen(false)
       setPaymentForm({ ...paymentForm, amount: "", seatAmount: "", foodAmount: "", description: "" })
+      setSelectedBuildingId("")
+      setSelectedRoomNumber("")
       setUseAdvanceBalance(false)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -239,6 +235,23 @@ export default function DashboardPage() {
     { title: "Active Students", amount: students?.filter(s => s.isActive).length || 0, change: "Current residents", icon: TrendingUp, color: "text-primary" },
     { title: "Total Buildings", amount: buildings?.length || 0, change: "Buildings count", icon: Building2, color: "text-primary" }
   ]
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
 
   return (
     <div className="space-y-8 pb-20">
@@ -318,19 +331,42 @@ export default function DashboardPage() {
             <DialogHeader><DialogTitle>Quick Payment Record</DialogTitle></DialogHeader>
             
             <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 p-4 bg-secondary/10 rounded-xl border">
                 <div className="space-y-2">
-                  <Label>Building</Label>
-                  <Select onValueChange={setSelectedBuildingId}>
-                    <SelectTrigger><SelectValue placeholder="Building" /></SelectTrigger>
+                  <Label className="flex items-center gap-1.5"><Building2 size={12}/> Building</Label>
+                  <Select onValueChange={(val) => {
+                    setSelectedBuildingId(val)
+                    setSelectedRoomNumber("")
+                    setPaymentForm({...paymentForm, studentId: ""})
+                  }}>
+                    <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
                     <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                
                 <div className="space-y-2">
-                  <Label>Student</Label>
-                  <Select disabled={!selectedBuildingId} onValueChange={val => setPaymentForm({...paymentForm, studentId: val})}>
-                    <SelectTrigger><SelectValue placeholder="Student" /></SelectTrigger>
-                    <SelectContent>{filteredStudents.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R: {s.roomNumber})</SelectItem>)}</SelectContent>
+                  <Label className="flex items-center gap-1.5"><DoorOpen size={12}/> Room No.</Label>
+                  <Select 
+                    disabled={!selectedBuildingId} 
+                    value={selectedRoomNumber}
+                    onValueChange={(val) => {
+                      setSelectedRoomNumber(val)
+                      setPaymentForm({...paymentForm, studentId: ""})
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger>
+                    <SelectContent>{roomsInBuilding.map(r => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">Student</Label>
+                  <Select 
+                    disabled={!selectedRoomNumber && filteredStudents.length === 0} 
+                    onValueChange={val => setPaymentForm({...paymentForm, studentId: val})}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
+                    <SelectContent>{filteredStudents.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>

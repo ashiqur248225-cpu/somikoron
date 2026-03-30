@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye, Contact, Filter, XCircle } from "lucide-react"
+import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye, Contact, Filter, XCircle, Building2, DoorOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -328,7 +328,7 @@ export default function StudentsPage() {
               {/* Location Selection */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
                 <div className="space-y-2">
-                  <Label>Building</Label>
+                  <Label className="flex items-center gap-1"><Building2 size={12}/> Building</Label>
                   <Select onValueChange={val => setFormData({...formData, buildingId: val, roomNumber: "", seatNumber: ""})}>
                     <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
                     <SelectContent>
@@ -337,7 +337,7 @@ export default function StudentsPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Room</Label>
+                  <Label className="flex items-center gap-1"><DoorOpen size={12}/> Room</Label>
                   <Select 
                     disabled={!formData.buildingId}
                     value={formData.roomNumber}
@@ -448,6 +448,59 @@ export default function StudentsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </div>
+
+      {/* Enhanced Filters */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end bg-secondary/20 p-4 rounded-xl border">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground flex items-center gap-1"><Search size={10}/> Search</Label>
+          <Input 
+            placeholder="Name or Phone..." 
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground flex items-center gap-1"><Building2 size={10}/> Building</Label>
+          <Select value={buildingFilter} onValueChange={val => {
+            setBuildingFilter(val)
+            setRoomFilter("all")
+          }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Buildings</SelectItem>
+              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground flex items-center gap-1"><DoorOpen size={10}/> Room</Label>
+          <Select 
+            value={roomFilter} 
+            onValueChange={setRoomFilter}
+            disabled={buildingFilter === "all"}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Rooms</SelectItem>
+              {roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Residents</SelectItem>
+              <SelectItem value="active">Active Only</SelectItem>
+              <SelectItem value="left">Ex-Residents</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground h-10">
+          <XCircle size={14} className="mr-1" /> Reset
+        </Button>
       </div>
 
       {isLoading ? (
