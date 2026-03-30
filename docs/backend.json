@@ -60,6 +60,34 @@
         "monthlyRent": { "type": "number" },
         "foodCost": { "type": "number" },
         "foodRate": { "type": "number" },
+        "paymentsHistory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string", "format": "date-time" },
+              "amount": { "type": "number" },
+              "method": { "type": "string" },
+              "receiver": { "type": "string" },
+              "month": { "type": "string" },
+              "year": { "type": "string" },
+              "type": { "type": "string" }
+            }
+          }
+        },
+        "mealsHistory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string", "format": "date" },
+              "month": { "type": "string" },
+              "totalMeals": { "type": "number" },
+              "perMealCost": { "type": "number" },
+              "totalCost": { "type": "number" }
+            }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name", "buildingId", "roomNumber"]
@@ -98,9 +126,9 @@
   },
   "firestore": {
     "/buildings/{buildingId}": { "schema": "Building", "description": "Buildings list" },
-    "/students/{studentId}": { "schema": "Student", "description": "Students list" },
-    "/payments/{paymentId}": { "schema": "Payment", "description": "Income records" },
-    "/expenses/{expenseId}": { "schema": "Expense", "description": "Expense records" },
-    "/meals/{mealId}": { "schema": "MealRecord", "description": "Meal counts" }
+    "/students/{studentId}": { "schema": "Student", "description": "Students list with embedded histories" },
+    "/payments/{paymentId}": { "schema": "Payment", "description": "Global Income records" },
+    "/expenses/{expenseId}": { "schema": "Expense", "description": "Global Expense records" },
+    "/meals/{mealId}": { "schema": "MealRecord", "description": "Global Meal counts" }
   }
 }

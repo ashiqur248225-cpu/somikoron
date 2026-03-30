@@ -4,7 +4,7 @@
 import { useParams, useRouter } from "next/navigation"
 import { useState, useMemo } from "react"
 import { useDoc, useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { doc, collection, query, where, serverTimestamp, updateDoc, setDoc, getDoc, deleteDoc, orderBy } from "firebase/firestore"
+import { doc, collection, query, where, serverTimestamp, updateDoc, setDoc, getDoc, deleteDoc, orderBy, arrayUnion } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -52,36 +52,26 @@ export default function StudentDetailsPage() {
   const [editRate, setEditRate] = useState(false)
   const [newRate, setNewRate] = useState("")
 
-  // Calculator State (Year removed as requested)
+  // Calculator State
   const [calcMonth, setCalcMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
   const [calcMealCount, setCalcMealCount] = useState("")
   const [calcRate, setCalcRate] = useState("")
 
-  // Fetch Student Data
+  // Fetch Student Data (Histories are now inside this document)
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id as string) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
-  // Fetch Payment History
-  const paymentsQuery = useMemoFirebase(() => 
-    id ? query(collection(db, "payments"), where("studentId", "==", id), orderBy("date", "desc")) : null, [db, id])
-  const { data: payments } = useCollection(paymentsQuery)
-
-  // Fetch Monthly Meal History
-  const mealsQuery = useMemoFirebase(() => 
-    id ? query(collection(db, "meals"), where("studentId", "==", id), orderBy("createdAt", "desc")) : null, [db, id])
-  const { data: meals } = useCollection(mealsQuery)
-
-  // Financial Calculations
+  // Calculations for display
   const currentMonth = new Date().toLocaleString('default', { month: 'long' })
   const currentYear = new Date().getFullYear().toString()
 
   const currentMonthMealRecord = useMemo(() => {
-    return meals?.find(m => m.month === currentMonth && m.year === currentYear)
-  }, [meals, currentMonth, currentYear])
+    return student?.mealsHistory?.find((m: any) => m.month === currentMonth && m.date.includes(currentYear))
+  }, [student, currentMonth, currentYear])
 
   const foodBill = useMemo(() => {
     if (student?.paymentSystem === 'package') return 0
-    return (currentMonthMealRecord?.count || 0) * (student?.foodRate || 0)
+    return (currentMonthMealRecord?.totalMeals || 0) * (student?.foodRate || 0)
   }, [currentMonthMealRecord, student])
 
   const foodAdvance = student?.foodCost || student?.advanceAmount || 0
@@ -133,30 +123,27 @@ export default function StudentDetailsPage() {
   }
 
   const logMonthlyMeal = async () => {
-    if (!student || !logCount) return
+    if (!student || !logCount || !studentRef) return
     setIsUpdating(true)
     try {
-      const existing = meals?.find(m => m.month === logMonth && m.year === logYear)
-      
-      if (existing) {
-        await updateDoc(doc(db, "meals", existing.id), {
-          count: Number(logCount),
-          rateAtTime: student.foodRate || 0,
-          updatedAt: serverTimestamp()
-        })
-      } else {
-        const mealId = doc(collection(db, "meals")).id
-        await setDoc(doc(db, "meals", mealId), {
-          studentId: student.id,
-          count: Number(logCount),
-          month: logMonth,
-          year: logYear,
-          rateAtTime: student.foodRate || 0,
-          createdAt: serverTimestamp()
-        })
+      const mealRate = student.foodRate || 0
+      const totalMeals = Number(logCount)
+      const totalCost = totalMeals * mealRate
+
+      const mealEntry = {
+        date: new Date().toISOString(),
+        month: logMonth,
+        totalMeals,
+        perMealCost: mealRate,
+        totalCost
       }
+
+      await updateDoc(studentRef, {
+        mealsHistory: arrayUnion(mealEntry),
+        updatedAt: serverTimestamp()
+      })
       
-      toast({ title: "Monthly Count Saved", description: `Record for ${logMonth} ${logYear} updated.` })
+      toast({ title: "Monthly Count Saved", description: `Record for ${logMonth} added to history.` })
       setLogCount("")
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -179,16 +166,6 @@ export default function StudentDetailsPage() {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
       setIsUpdating(false)
-    }
-  }
-
-  const deleteMealRecord = async (mealId: string) => {
-    if (!confirm("Are you sure you want to delete this record?")) return
-    try {
-      await deleteDoc(doc(db, "meals", mealId))
-      toast({ title: "Deleted", description: "Meal record removed." })
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
     }
   }
 
@@ -322,7 +299,7 @@ export default function StudentDetailsPage() {
                 <p className="text-[10px] uppercase text-primary font-bold">Current Food Bill</p>
                 <p className="text-lg font-bold text-primary">₹{foodBill.toLocaleString()}</p>
                 <p className="text-[9px] text-muted-foreground">
-                  {currentMonthMealRecord ? `${currentMonthMealRecord.count} Meals` : 'No logs yet'} in {currentMonth}
+                  {currentMonthMealRecord ? `${currentMonthMealRecord.totalMeals} Meals` : 'No logs yet'} in {currentMonth}
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-success/10 border border-success/20">
@@ -355,21 +332,23 @@ export default function StudentDetailsPage() {
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Month/Year</TableHead>
-                    <TableHead>Type</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead>Receiver</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {payments?.map((p: any) => (
-                    <TableRow key={p.id}>
-                      <TableCell>{p.date?.toDate()?.toLocaleDateString() || "N/A"}</TableCell>
+                  {student.paymentsHistory?.map((p: any, idx: number) => (
+                    <TableRow key={idx}>
+                      <TableCell>{new Date(p.date).toLocaleDateString()}</TableCell>
                       <TableCell>{p.month} {p.year}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-[10px]">{p.paymentType}</Badge></TableCell>
+                      <TableCell className="capitalize">{p.method}</TableCell>
+                      <TableCell className="text-xs">{p.receiver}</TableCell>
                       <TableCell className="text-right font-bold text-success">₹{p.amount?.toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
-                  {payments?.length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No payments recorded.</TableCell></TableRow>
+                  {(!student.paymentsHistory || student.paymentsHistory.length === 0) && (
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No payments recorded in history.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -397,10 +376,6 @@ export default function StudentDetailsPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Year</Label>
-                      <Input type="number" value={logYear} onChange={e => setLogYear(e.target.value)} />
                     </div>
                     <div className="space-y-2">
                       <Label>Total Meals</Label>
@@ -454,27 +429,21 @@ export default function StudentDetailsPage() {
                       <TableHead>Count</TableHead>
                       <TableHead>Rate (₹)</TableHead>
                       <TableHead className="text-right">Total (₹)</TableHead>
-                      <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {meals?.map((m: any) => (
-                      <TableRow key={m.id}>
-                        <TableCell className="font-medium">{m.month} {m.year}</TableCell>
-                        <TableCell className="font-bold">{m.count}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">₹{m.rateAtTime || student.foodRate || 0}</TableCell>
+                    {student.mealsHistory?.map((m: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{m.month}</TableCell>
+                        <TableCell className="font-bold">{m.totalMeals}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">₹{m.perMealCost}</TableCell>
                         <TableCell className="text-right font-bold text-primary">
-                          ₹{(m.count * (m.rateAtTime || student.foodRate || 0)).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteMealRecord(m.id)}>
-                            <Trash2 size={14} />
-                          </Button>
+                          ₹{m.totalCost?.toLocaleString()}
                         </TableCell>
                       </TableRow>
                     ))}
-                    {meals?.length === 0 && (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No monthly records found.</TableCell></TableRow>
+                    {(!student.mealsHistory || student.mealsHistory.length === 0) && (
+                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No monthly records found in history.</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>

@@ -89,6 +89,8 @@ export default function StudentsPage() {
         foodRate: 0,
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
+        paymentsHistory: [],
+        mealsHistory: [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -243,7 +245,7 @@ export default function StudentsPage() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label>{formData.type === 'new' ? 'Advance Amount' : 'New Advance'}</Label>
+                    <Label>Advance Amount</Label>
                     <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
                   </div>
                   <div className="space-y-2">

@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Wallet, Info, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, increment } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion } from "firebase/firestore"
 
 export default function IncomeEntryPage() {
   const { toast } = useToast()
@@ -57,20 +57,37 @@ export default function IncomeEntryPage() {
     const paymentId = doc(collection(db, "payments")).id
     const summaryId = `${formData.year}-${formData.month}`
 
-    // Save Payment
-    const paymentRef = doc(db, "payments", paymentId)
-    setDoc(paymentRef, {
-      ...formData,
+    const paymentRecord = {
       amount,
       buildingId: selectedBuildingId,
       buildingName: building?.name || "Unknown",
       studentName: student?.name || "Unknown",
       type: "income",
+      paymentType: formData.paymentType,
+      month: formData.month,
+      year: formData.year,
+      method: formData.method,
+      receiver: formData.receiver,
+      description: formData.description,
+      date: new Date().toISOString()
+    }
+
+    // 1. Save to Global Payments Collection
+    const paymentRef = doc(db, "payments", paymentId)
+    setDoc(paymentRef, {
+      ...paymentRecord,
       date: serverTimestamp(),
       createdAt: serverTimestamp(),
     })
 
-    // Update Summary (Reduces read cost for reports)
+    // 2. Mirror to Student's paymentsHistory map field
+    const studentRef = doc(db, "students", formData.studentId)
+    updateDoc(studentRef, {
+      paymentsHistory: arrayUnion(paymentRecord),
+      updatedAt: serverTimestamp()
+    })
+
+    // 3. Update Summary
     const summaryRef = doc(db, "summaries", summaryId)
     setDoc(summaryRef, {
       totalIncome: increment(amount),
@@ -80,7 +97,7 @@ export default function IncomeEntryPage() {
 
     toast({
       title: "Success",
-      description: "Payment record saved and summary updated.",
+      description: "Payment record saved to ledger and student history.",
     })
     
     setFormData(prev => ({...prev, amount: "", description: ""}))
@@ -230,7 +247,7 @@ export default function IncomeEntryPage() {
                   <p className="font-semibold text-primary">Student Info</p>
                   <p className="text-muted-foreground">
                     Current plan: <span className="font-bold">{selectedStudent.paymentSystem}</span>. 
-                    Standard amount: ₹{selectedStudent.monthlyAmount}
+                    Standard Rent: ₹{selectedStudent.monthlyRent}
                   </p>
                 </div>
               </div>
