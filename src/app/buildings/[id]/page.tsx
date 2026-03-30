@@ -46,8 +46,9 @@ interface RoomDetail {
   seats: SeatDetail[];
 }
 
-export default function BuildingDetailsPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = React.use(params)
+export default function BuildingDetailsPage(props: { params: Promise<{ id: string }> }) {
+  const params = React.use(props.params)
+  const id = params.id
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()
