@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Receipt, Search, UserPlus } from "lucide-react"
+import { Receipt, Search, UserPlus, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -24,17 +25,70 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog"
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
+import { collection, serverTimestamp } from "firebase/firestore"
 
 export default function ExpenseEntryPage() {
   const { toast } = useToast()
-  const [category, setCategory] = useState<string>("market")
+  const db = useFirestore()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isAddingParty, setIsAddingParty] = useState(false)
   
-  const handleSubmit = (e: React.FormEvent) => {
+  // Data Fetching
+  const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
+  const { data: buildings } = useCollection(buildingsQuery)
+
+  const partiesQuery = useMemoFirebase(() => collection(db, "expenseParties"), [db])
+  const { data: parties } = useCollection(partiesQuery)
+
+  const [formData, setFormData] = useState({
+    category: "market",
+    buildingId: "",
+    expensePartyId: "",
+    amount: "",
+    description: "",
+    expenseDate: new Date().toISOString().split('T')[0],
+    meterNumber: ""
+  })
+
+  const [newParty, setNewParty] = useState({ name: "", role: "", phone: "" })
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    toast({
-      title: "Expense Logged",
-      description: "Transaction has been saved to the ledger.",
+    if (!formData.buildingId || !formData.amount) {
+      toast({ variant: "destructive", title: "Error", description: "Please fill required fields." })
+      return
+    }
+
+    setIsSubmitting(true)
+    const building = buildings?.find(b => b.id === formData.buildingId)
+    const party = parties?.find(p => p.id === formData.expensePartyId)
+
+    addDocumentNonBlocking(collection(db, "expenses"), {
+      ...formData,
+      amount: Number(formData.amount),
+      buildingName: building?.name || "General",
+      expensePartyName: party?.name || "Anonymous",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     })
+
+    toast({ title: "Expense Logged", description: "Transaction saved to ledger." })
+    setFormData(prev => ({ ...prev, amount: "", description: "", meterNumber: "" }))
+    setIsSubmitting(false)
+  }
+
+  const handleAddParty = () => {
+    if (!newParty.name) return
+    setIsAddingParty(true)
+    addDocumentNonBlocking(collection(db, "expenseParties"), {
+      ...newParty,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    })
+    setNewParty({ name: "", role: "", phone: "" })
+    setIsAddingParty(false)
+    toast({ title: "Party Added", description: "New vendor/worker profile created." })
   }
 
   return (
@@ -57,7 +111,10 @@ export default function ExpenseEntryPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="category">Expense Category</Label>
-                <Select value={category} onValueChange={setCategory} required>
+                <Select 
+                  value={formData.category} 
+                  onValueChange={val => setFormData({...formData, category: val})}
+                >
                   <SelectTrigger id="category">
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
@@ -74,14 +131,18 @@ export default function ExpenseEntryPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="building">Building</Label>
-                <Select required>
+                <Select 
+                  value={formData.buildingId} 
+                  onValueChange={val => setFormData({...formData, buildingId: val})}
+                >
                   <SelectTrigger id="building">
                     <SelectValue placeholder="Select building" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Buildings (General)</SelectItem>
-                    <SelectItem value="b1">Blue Heights</SelectItem>
-                    <SelectItem value="b2">Serene Residency</SelectItem>
+                    <SelectItem value="general">All Buildings (General)</SelectItem>
+                    {buildings?.map(b => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -103,55 +164,101 @@ export default function ExpenseEntryPage() {
                       <div className="space-y-4 py-4">
                         <div className="space-y-2">
                           <Label>Name</Label>
-                          <Input placeholder="Electrician Name, Vendor Name, etc." />
+                          <Input 
+                            value={newParty.name}
+                            onChange={e => setNewParty({...newParty, name: e.target.value})}
+                            placeholder="Electrician, Vendor, etc." 
+                          />
                         </div>
                         <div className="space-y-2">
                           <Label>Role / Type</Label>
-                          <Input placeholder="e.g. Electrician, Market Vendor" />
+                          <Input 
+                            value={newParty.role}
+                            onChange={e => setNewParty({...newParty, role: e.target.value})}
+                            placeholder="e.g. Electrician, Market Vendor" 
+                          />
                         </div>
                         <div className="space-y-2">
                           <Label>Phone</Label>
-                          <Input placeholder="Phone number" />
+                          <Input 
+                            value={newParty.phone}
+                            onChange={e => setNewParty({...newParty, phone: e.target.value})}
+                            placeholder="Phone number" 
+                          />
                         </div>
                       </div>
                       <DialogFooter>
-                        <Button onClick={() => toast({ title: "Party Added", description: "New party created successfully." })}>
-                          Save Party
+                        <Button onClick={handleAddParty} disabled={isAddingParty}>
+                          {isAddingParty ? <Loader2 className="animate-spin" /> : "Save Party"}
                         </Button>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
                 </div>
-                <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search party..." className="pl-8" />
-                </div>
+                <Select 
+                  value={formData.expensePartyId} 
+                  onValueChange={val => setFormData({...formData, expensePartyId: val})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select recipient" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {parties?.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name} ({p.role})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="amount">Amount</Label>
-                <Input id="amount" type="number" placeholder="0.00" required />
+                <Input 
+                  id="amount" 
+                  type="number" 
+                  placeholder="0.00" 
+                  required 
+                  value={formData.amount}
+                  onChange={e => setFormData({...formData, amount: e.target.value})}
+                />
               </div>
 
-              {category === "utility" && (
+              {formData.category === "utility" && (
                 <div className="space-y-2">
                   <Label htmlFor="meter">Meter Number</Label>
-                  <Input id="meter" placeholder="Enter meter number for tracking" />
+                  <Input 
+                    id="meter" 
+                    placeholder="Enter meter number" 
+                    value={formData.meterNumber}
+                    onChange={e => setFormData({...formData, meterNumber: e.target.value})}
+                  />
                 </div>
               )}
 
               <div className="space-y-2">
                 <Label htmlFor="date">Transaction Date</Label>
-                <Input id="date" type="date" required defaultValue={new Date().toISOString().split('T')[0]} />
+                <Input 
+                  id="date" 
+                  type="date" 
+                  required 
+                  value={formData.expenseDate}
+                  onChange={e => setFormData({...formData, expenseDate: e.target.value})}
+                />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="description">Notes / Details</Label>
-              <Textarea id="description" placeholder="Specify items, bill months, or repair details..." />
+              <Textarea 
+                id="description" 
+                placeholder="Specify items, bill months, or repair details..." 
+                value={formData.description}
+                onChange={e => setFormData({...formData, description: e.target.value})}
+              />
             </div>
 
-            <Button type="submit" variant="destructive" className="w-full h-12 text-lg bg-expense">Log Expense</Button>
+            <Button type="submit" variant="destructive" className="w-full h-12 text-lg bg-expense" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin" /> : "Log Expense"}
+            </Button>
           </form>
         </CardContent>
       </Card>

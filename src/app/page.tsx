@@ -1,12 +1,15 @@
+
 "use client"
 
+import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   ArrowUpCircle, 
   ArrowDownCircle, 
   Building2, 
   TrendingUp,
-  History
+  History,
+  Loader2
 } from "lucide-react"
 import { 
   Table, 
@@ -17,47 +20,90 @@ import {
   TableRow 
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-
-const stats = [
-  {
-    title: "Today's Income",
-    amount: "₹12,500",
-    change: "+12% from yesterday",
-    icon: ArrowUpCircle,
-    color: "text-income"
-  },
-  {
-    title: "Today's Expenses",
-    amount: "₹4,200",
-    change: "-5% from yesterday",
-    icon: ArrowDownCircle,
-    color: "text-expense"
-  },
-  {
-    title: "Monthly Income",
-    amount: "₹185,000",
-    change: "+8% from last month",
-    icon: TrendingUp,
-    color: "text-primary"
-  },
-  {
-    title: "Total Buildings",
-    amount: "4",
-    change: "32 Rooms total",
-    icon: Building2,
-    color: "text-primary"
-  }
-]
-
-const recentTransactions = [
-  { id: "1", type: "income", title: "John Doe - Rent", amount: 5500, date: "2024-05-20", category: "Rent" },
-  { id: "2", type: "expense", title: "Electricity Bill - B1", amount: 1200, date: "2024-05-19", category: "Utility" },
-  { id: "3", type: "income", title: "Alice Smith - Meal", amount: 2500, date: "2024-05-19", category: "Meal" },
-  { id: "4", type: "expense", title: "Vegetable Market", amount: 800, date: "2024-05-18", category: "Market" },
-  { id: "5", type: "income", title: "Robert Brown - Package", amount: 7500, date: "2024-05-18", category: "Package" },
-]
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection, query, orderBy, limit, where, Timestamp } from "firebase/firestore"
 
 export default function DashboardPage() {
+  const db = useFirestore()
+
+  // Queries for dynamic stats
+  const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
+  const { data: buildings } = useCollection(buildingsQuery)
+
+  const studentsQuery = useMemoFirebase(() => collection(db, "students"), [db])
+  const { data: students } = useCollection(studentsQuery)
+
+  // Get today's range for stats
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayTimestamp = Timestamp.fromDate(today)
+
+  const recentPaymentsQuery = useMemoFirebase(() => 
+    query(collection(db, "payments"), orderBy("date", "desc"), limit(5)), [db])
+  const { data: recentPayments, isLoading: paymentsLoading } = useCollection(recentPaymentsQuery)
+
+  const recentExpensesQuery = useMemoFirebase(() => 
+    query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(5)), [db])
+  const { data: recentExpenses, isLoading: expensesLoading } = useCollection(recentExpensesQuery)
+
+  // Today's Income Calculation (Client side aggregation to minimize reads)
+  const todayIncome = useMemo(() => {
+    return (recentPayments || [])
+      .filter(p => p.date?.toDate() >= today)
+      .reduce((acc, curr) => acc + (curr.amount || 0), 0)
+  }, [recentPayments, today])
+
+  // Today's Expense Calculation
+  const todayExpense = useMemo(() => {
+    return (recentExpenses || [])
+      .filter(e => e.createdAt?.toDate() >= today)
+      .reduce((acc, curr) => acc + (curr.amount || 0), 0)
+  }, [recentExpenses, today])
+
+  // Merge for recent activity feed
+  const recentActivity = useMemo(() => {
+    const combined = [
+      ...(recentPayments || []).map(p => ({ ...p, type: 'income', title: `${p.studentName} - Rent` })),
+      ...(recentExpenses || []).map(e => ({ ...e, type: 'expense', title: e.description, date: e.createdAt }))
+    ].sort((a, b) => {
+      const dateA = a.date?.toDate?.() || new Date(0)
+      const dateB = b.date?.toDate?.() || new Date(0)
+      return dateB.getTime() - dateA.getTime()
+    }).slice(0, 5)
+    return combined
+  }, [recentPayments, recentExpenses])
+
+  const stats = [
+    {
+      title: "Today's Income",
+      amount: `₹${todayIncome.toLocaleString()}`,
+      change: "Recorded today",
+      icon: ArrowUpCircle,
+      color: "text-income"
+    },
+    {
+      title: "Today's Expenses",
+      amount: `₹${todayExpense.toLocaleString()}`,
+      change: "Logged today",
+      icon: ArrowDownCircle,
+      color: "text-expense"
+    },
+    {
+      title: "Active Students",
+      amount: students?.length || 0,
+      change: "Current residents",
+      icon: TrendingUp,
+      color: "text-primary"
+    },
+    {
+      title: "Total Buildings",
+      amount: buildings?.length || 0,
+      change: `${buildings?.reduce((acc, b) => acc + (b.rooms || 0), 0) || 0} Rooms total`,
+      icon: Building2,
+      color: "text-primary"
+    }
+  ]
+
   return (
     <div className="space-y-8">
       <div>
@@ -90,65 +136,80 @@ export default function DashboardPage() {
             <History className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentTransactions.map((tx) => (
-                  <TableRow key={tx.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex flex-col">
-                        <span>{tx.title}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase">{tx.date}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="font-normal">
-                        {tx.category}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className={`text-right font-bold ${tx.type === 'income' ? 'text-income' : 'text-expense'}`}>
-                      {tx.type === 'income' ? '+' : '-'}₹{tx.amount.toLocaleString()}
-                    </TableCell>
+            {paymentsLoading || expensesLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary" /></div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {recentActivity.map((tx, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col">
+                          <span className="truncate max-w-[150px]">{tx.title}</span>
+                          <span className="text-[10px] text-muted-foreground uppercase">
+                            {tx.date?.toDate?.().toLocaleDateString() || 'N/A'}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="font-normal capitalize">
+                          {tx.category || tx.paymentType || 'General'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className={`text-right font-bold ${tx.type === 'income' ? 'text-income' : 'text-expense'}`}>
+                        {tx.type === 'income' ? '+' : '-'}₹{tx.amount?.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {recentActivity.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No recent activity.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
         <Card className="col-span-3 shadow-sm border-none">
           <CardHeader>
             <CardTitle>Building Occupancy</CardTitle>
-            <p className="text-sm text-muted-foreground">Room availability across buildings.</p>
+            <p className="text-sm text-muted-foreground">Room usage across properties.</p>
           </CardHeader>
           <CardContent className="space-y-6">
-            {[
-              { name: "Blue Heights", occupied: 12, total: 15 },
-              { name: "Serene Residency", occupied: 8, total: 10 },
-              { name: "Victory Hostel", occupied: 20, total: 20 },
-              { name: "Park Side", occupied: 4, total: 8 },
-            ].map((building) => (
-              <div key={building.name} className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{building.name}</span>
-                  <span className="text-muted-foreground">
-                    {building.occupied}/{building.total} Rooms
-                  </span>
+            {buildings?.map((building: any) => {
+              const occupiedCount = students?.filter(s => s.buildingId === building.id).length || 0;
+              const totalRooms = building.rooms || 1;
+              const percentage = Math.min((occupiedCount / totalRooms) * 100, 100);
+              
+              return (
+                <div key={building.id} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">{building.name}</span>
+                    <span className="text-muted-foreground">
+                      {occupiedCount}/{totalRooms} Students
+                    </span>
+                  </div>
+                  <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all duration-500" 
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-primary" 
-                    style={{ width: `${(building.occupied / building.total) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              )
+            })}
+            {(!buildings || buildings.length === 0) && (
+              <div className="text-center py-8 text-muted-foreground">No building data available.</div>
+            )}
           </CardContent>
         </Card>
       </div>
