@@ -4,7 +4,7 @@
 import React, { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, serverTimestamp, updateDoc, setDoc, getDoc, arrayUnion, increment, collection } from "firebase/firestore"
+import { doc, serverTimestamp, updateDoc, setDoc, getDoc, arrayUnion, increment, collection, Timestamp } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -103,6 +103,19 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
   const foodAdvance = student?.foodCost || 0
   const foodBalance = foodAdvance - foodBill
+
+  // Updated Total Due Logic
+  const totalDueAmount = useMemo(() => {
+    if (!student) return 0
+    const baseDue = (student.dueAmount || 0) + (student.monthlyRent || 0)
+    if (student.paymentSystem === 'package') {
+      return baseDue
+    } else {
+      // For non-package: Monthly Seat Rent + Food Overspent (if any)
+      const foodDebt = foodBalance < 0 ? Math.abs(foodBalance) : 0
+      return baseDue + foodDebt
+    }
+  }, [student, foodBalance])
 
   const handleDeactivate = async () => {
     if (!student || !student.isActive || !studentRef) return
@@ -294,8 +307,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
   if (!student) return <div className="text-center p-20">Student not found.</div>
 
-  const totalPayable = (student.dueAmount || 0) + (student.monthlyRent || 0)
-
   return (
     <div className="space-y-6 pb-20 relative">
       <div className="flex flex-col md:flex-row justify-between gap-4">
@@ -377,7 +388,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 <p className="text-lg font-bold">₹{student.advanceAmount || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-secondary/30">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold">Monthly Rent</p>
+                <p className="text-[10px] uppercase text-muted-foreground font-bold">{student.paymentSystem === 'package' ? 'Monthly Rent' : 'Seat Rent'}</p>
                 <p className="text-lg font-bold">₹{student.monthlyRent || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-secondary/30">
@@ -386,7 +397,11 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
               </div>
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                 <p className="text-[10px] uppercase text-destructive font-bold">Total Due</p>
-                <p className="text-lg font-bold text-destructive">₹{(student.dueAmount || 0).toLocaleString()}</p>
+                <p className="text-lg font-bold text-destructive">₹{totalDueAmount.toLocaleString()}</p>
+                <div className="text-[9px] text-muted-foreground mt-1">
+                   Prev Due: ₹{student.dueAmount || 0} + Rent: ₹{student.monthlyRent || 0}
+                   {student.paymentSystem === 'non-package' && foodBalance < 0 && ` + Food: ₹${Math.abs(foodBalance)}`}
+                </div>
               </div>
 
               {student.paymentSystem === 'non-package' && (
@@ -626,9 +641,15 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
               <span className="text-muted-foreground">Monthly Rent ({student.paymentSystem}):</span>
               <span className="font-bold">₹{student.monthlyRent || 0}</span>
             </div>
+            {student.paymentSystem === 'non-package' && foodBalance < 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Food Debt:</span>
+                <span className="font-bold text-destructive">₹{Math.abs(foodBalance)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm border-t pt-2">
               <span className="font-semibold">Total Payable:</span>
-              <span className="font-bold text-primary">₹{totalPayable}</span>
+              <span className="font-bold text-primary">₹{totalDueAmount}</span>
             </div>
           </div>
 
