@@ -1,11 +1,10 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // OPEN ACCESS FOR PROTOTYPING
-    // Allowing full read/write access to all collections (buildings, students, meals, payments, expenses, etc.)
-    // This removes the need for auth checks to unblock development as requested.
-    // FORCE REFRESH: 2024-05-20-01
+    // This allows anyone to read and write to any collection.
+    // Use this only for development/prototyping.
+    // FORCE REFRESH: 2024-05-21-02
     match /{document=**} {
       allow read, write: if true;
     }
