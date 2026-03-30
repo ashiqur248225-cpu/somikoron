@@ -9,7 +9,7 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "address": { "type": "string" },
-        "roomsCount": { "type": "number", "description": "Total number of rooms" },
+        "roomsCount": { "type": "number" },
         "roomsDetail": { 
           "type": "array", 
           "items": {
@@ -35,7 +35,7 @@
         "emptySeats": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name", "address", "roomsCount", "totalSeats"]
+      "required": ["id", "name", "address"]
     },
     "Student": {
       "title": "Student",
@@ -45,13 +45,19 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "phone": { "type": "string" },
+        "address": { "type": "string" },
         "buildingId": { "type": "string" },
         "buildingName": { "type": "string" },
         "roomNumber": { "type": "string" },
         "seatNumber": { "type": "string" },
+        "type": { "type": "string", "enum": ["new", "old"] },
+        "dueAmount": { "type": "number" },
+        "advanceAmount": { "type": "number" },
+        "serviceCharge": { "type": "number" },
         "isActive": { "type": "boolean" },
         "paymentSystem": { "type": "string", "enum": ["package", "non-package"] },
-        "monthlyAmount": { "type": "number" },
+        "monthlyRent": { "type": "number" },
+        "foodCost": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name", "buildingId", "roomNumber"]
@@ -68,20 +74,20 @@
         "studentId": { "type": "string" },
         "buildingId": { "type": "string" },
         "buildingName": { "type": "string" },
+        "type": { "type": "string" },
         "date": { "type": "string", "format": "date-time" }
       }
     },
-    "Summary": {
-      "title": "Monthly Summary",
+    "MealRecord": {
+      "title": "Meal Record",
       "type": "object",
-      "description": "Aggregated financial data for a specific month.",
       "properties": {
-        "id": { "type": "string", "description": "Format: YYYY-MonthName" },
-        "totalIncome": { "type": "number" },
-        "totalExpense": { "type": "number" },
-        "buildingIncome": { "type": "object" },
-        "categoryExpense": { "type": "object" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "count": { "type": "number" },
+        "month": { "type": "string" },
+        "year": { "type": "string" }
       }
     }
   },
@@ -89,12 +95,10 @@
     "providers": ["password", "anonymous"]
   },
   "firestore": {
-    "/managers/{managerId}": { "schema": "Manager", "description": "Managers list" },
     "/buildings/{buildingId}": { "schema": "Building", "description": "Buildings list" },
     "/students/{studentId}": { "schema": "Student", "description": "Students list" },
     "/payments/{paymentId}": { "schema": "Payment", "description": "Income records" },
     "/expenses/{expenseId}": { "schema": "Expense", "description": "Expense records" },
-    "/summaries/{summaryId}": { "schema": "Summary", "description": "Monthly aggregations" },
-    "/expenseParties/{partyId}": { "schema": "ExpenseParty", "description": "Parties for expenses" }
+    "/meals/{mealId}": { "schema": "MealRecord", "description": "Meal counts" }
   }
 }

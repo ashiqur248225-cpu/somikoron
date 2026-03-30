@@ -1,7 +1,8 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Table, 
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble } from "lucide-react"
+import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -26,12 +27,14 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
-import { collection, serverTimestamp } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection, serverTimestamp, doc, setDoc, updateDoc, increment } from "firebase/firestore"
 
 export default function StudentsPage() {
   const { toast } = useToast()
+  const router = useRouter()
   const db = useFirestore()
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
@@ -45,40 +48,83 @@ export default function StudentsPage() {
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
+    address: "",
     buildingId: "",
     roomNumber: "",
     seatNumber: "",
+    type: "new", // new or old
+    dueAmount: "0",
+    advanceAmount: "0",
+    serviceCharge: "0",
     paymentSystem: "package",
-    monthlyAmount: ""
+    monthlyRent: "",
+    foodCost: ""
   })
 
-  const handleRegister = () => {
-    if (!formData.name || !formData.buildingId || !formData.roomNumber) {
-      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building and Room are required." })
+  // Cascading Select Helpers
+  const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
+  const rooms = selectedBuilding?.roomsDetail || []
+  const selectedRoom = rooms.find((r: any) => r.roomNo === formData.roomNumber)
+  const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
+
+  const handleRegister = async () => {
+    if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber) {
+      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Room and Seat are required." })
       return
     }
 
-    const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
+    try {
+      const studentId = doc(collection(db, "students")).id
+      const studentRef = doc(db, "students", studentId)
 
-    addDocumentNonBlocking(collection(db, "students"), {
-      ...formData,
-      buildingName: selectedBuilding?.name || "Unknown",
-      isActive: true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
+      // 1. Create Student
+      await setDoc(studentRef, {
+        ...formData,
+        dueAmount: Number(formData.dueAmount),
+        advanceAmount: Number(formData.advanceAmount),
+        serviceCharge: Number(formData.serviceCharge),
+        monthlyRent: Number(formData.monthlyRent),
+        foodCost: Number(formData.foodCost),
+        buildingName: selectedBuilding?.name || "Unknown",
+        isActive: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
 
-    setFormData({
-      name: "",
-      phone: "",
-      buildingId: "",
-      roomNumber: "",
-      seatNumber: "",
-      paymentSystem: "package",
-      monthlyAmount: ""
-    })
-    setOpen(false)
-    toast({ title: "Student Registered", description: "Profile and seat assignment saved." })
+      // 2. Update Building Seat Status
+      const buildingRef = doc(db, "buildings", formData.buildingId)
+      const updatedRoomsDetail = selectedBuilding.roomsDetail.map((room: any) => {
+        if (room.roomNo === formData.roomNumber) {
+          return {
+            ...room,
+            seats: room.seats.map((seat: any) => {
+              if (seat.seatNo === formData.seatNumber) {
+                return { ...seat, status: 'occupied' }
+              }
+              return seat
+            })
+          }
+        }
+        return room
+      })
+
+      await updateDoc(buildingRef, {
+        roomsDetail: updatedRoomsDetail,
+        occupiedSeats: increment(1),
+        emptySeats: increment(-1),
+        updatedAt: serverTimestamp()
+      })
+
+      toast({ title: "Student Registered", description: "Profile saved and seat occupied." })
+      setOpen(false)
+      setFormData({
+        name: "", phone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
+        type: "new", dueAmount: "0", advanceAmount: "0", serviceCharge: "0",
+        paymentSystem: "package", monthlyRent: "", foodCost: ""
+      })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    }
   }
 
   const filteredStudents = students?.filter(s => 
@@ -92,7 +138,7 @@ export default function StudentsPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-headline font-bold text-primary">Student Residents</h1>
-          <p className="text-muted-foreground mt-1">Manage student profiles and their room/seat assignments.</p>
+          <p className="text-muted-foreground mt-1">Manage profiles, seat assignments and financial plans.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -100,79 +146,135 @@ export default function StudentsPage() {
               <Plus size={18} /> Register Student
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>New Resident Registration</DialogTitle>
-              <DialogDescription>Assign a student to a specific building, room, and seat.</DialogDescription>
+              <DialogTitle>Resident Registration</DialogTitle>
+              <DialogDescription>Assign cascading room/seat details and financial plans.</DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-              <div className="space-y-2">
-                <Label>Full Name</Label>
-                <Input 
-                  value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                  placeholder="Student Name" 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone Number</Label>
-                <Input 
-                  value={formData.phone}
-                  onChange={e => setFormData({...formData, phone: e.target.value})}
-                  placeholder="Contact Number" 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Building</Label>
-                <Select onValueChange={val => setFormData({...formData, buildingId: val})}>
-                  <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
-                  <SelectContent>
-                    {buildings?.map(b => (
-                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-6 py-4">
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Room Number</Label>
-                  <Input 
+                  <Label>Full Name</Label>
+                  <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Phone Number</Label>
+                  <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                </div>
+                <div className="col-span-full space-y-2">
+                  <Label>Address</Label>
+                  <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                </div>
+              </div>
+
+              {/* Location Logic */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
+                <div className="space-y-2">
+                  <Label>Building</Label>
+                  <Select onValueChange={val => setFormData({...formData, buildingId: val, roomNumber: "", seatNumber: ""})}>
+                    <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
+                    <SelectContent>
+                      {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Room</Label>
+                  <Select 
+                    disabled={!formData.buildingId}
                     value={formData.roomNumber}
-                    onChange={e => setFormData({...formData, roomNumber: e.target.value})}
-                    placeholder="e.g. 302" 
-                  />
+                    onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select Room" /></SelectTrigger>
+                    <SelectContent>
+                      {rooms.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Seat Number</Label>
-                  <Input 
+                  <Label>Available Seat</Label>
+                  <Select 
+                    disabled={!formData.roomNumber}
                     value={formData.seatNumber}
-                    onChange={e => setFormData({...formData, seatNumber: e.target.value})}
-                    placeholder="e.g. A, B, 1" 
-                  />
+                    onValueChange={val => setFormData({...formData, seatNumber: val})}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select Seat" /></SelectTrigger>
+                    <SelectContent>
+                      {emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Payment System</Label>
-                <Select value={formData.paymentSystem} onValueChange={val => setFormData({...formData, paymentSystem: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="package">Package (Combined)</SelectItem>
-                    <SelectItem value="non-package">Non-Package (Separate)</SelectItem>
-                  </SelectContent>
-                </Select>
+
+              {/* Type and Finances */}
+              <div className="space-y-4 border-t pt-4">
+                <div className="flex items-center gap-4">
+                  <Label>Resident Type:</Label>
+                  <RadioGroup 
+                    defaultValue="new" 
+                    onValueChange={val => setFormData({...formData, type: val})}
+                    className="flex gap-4"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="new" id="new" />
+                      <Label htmlFor="new">New Student</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="old" id="old" />
+                      <Label htmlFor="old">Old Student</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {formData.type === 'old' ? (
+                    <div className="space-y-2">
+                      <Label>Previous Due</Label>
+                      <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Advance Amount</Label>
+                        <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Service Charge</Label>
+                        <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Monthly Amount (Rent/Fee)</Label>
-                <Input 
-                  type="number" 
-                  value={formData.monthlyAmount}
-                  onChange={e => setFormData({...formData, monthlyAmount: e.target.value})}
-                  placeholder="Fixed amount" 
-                />
+
+              {/* Billing Plan */}
+              <div className="space-y-4 border-t pt-4">
+                <Label className="text-primary font-bold">Billing & Food Plan</Label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Payment System</Label>
+                    <Select value={formData.paymentSystem} onValueChange={val => setFormData({...formData, paymentSystem: val})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="package">Package (All-in)</SelectItem>
+                        <SelectItem value="non-package">Non-Package (Separate)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{formData.paymentSystem === 'package' ? 'Monthly Full Rent' : 'Seat Rent'}</Label>
+                    <Input type="number" value={formData.monthlyRent} onChange={e => setFormData({...formData, monthlyRent: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Food Cost (If separate)</Label>
+                    <Input type="number" value={formData.foodCost} onChange={e => setFormData({...formData, foodCost: e.target.value})} />
+                  </div>
+                </div>
               </div>
             </div>
             <DialogFooter className="sticky bottom-0 bg-background pt-2">
-              <Button onClick={handleRegister} className="w-full">Register & Assign Seat</Button>
+              <Button onClick={handleRegister} className="w-full h-12 text-lg">Save & Occupy Seat</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -200,7 +302,7 @@ export default function StudentsPage() {
                   <TableHead>Student</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Seat Info</TableHead>
-                  <TableHead>Payment Plan</TableHead>
+                  <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -227,21 +329,23 @@ export default function StudentsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="flex gap-1 items-center w-fit">
-                        <BedDouble size={10} /> Seat {student.seatNumber || 'N/A'}
+                        <BedDouble size={10} /> Seat {student.seatNumber}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="capitalize font-normal border-primary/30 text-primary">
+                      <Badge variant="outline" className="capitalize font-normal">
                         {student.paymentSystem}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={student.isActive ? 'secondary' : 'destructive'} className="capitalize font-normal">
-                        {student.isActive ? 'Active' : 'Inactive'}
+                      <Badge variant={student.isActive ? 'success' : 'destructive'} className="capitalize font-normal">
+                        {student.isActive ? 'Active' : 'Left Hostel'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">Edit</Button>
+                      <Button variant="ghost" size="sm" onClick={() => router.push(`/students/${student.id}`)}>
+                        <Eye size={16} className="mr-1" /> View Details
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
