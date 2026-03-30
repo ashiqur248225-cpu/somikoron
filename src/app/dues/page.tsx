@@ -21,6 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
 export default function DuesPage() {
   const router = useRouter()
@@ -60,13 +61,15 @@ export default function DuesPage() {
       const historicalFoodDue = Number(student.foodDueAmount) || 0
       const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
       const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
-      const foodDue = Math.max(0, (historicalFoodDue + generatedFoodCost) - totalFoodPaid)
+      const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
+      const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
 
       return {
         ...student,
         totalDue: rentDue + foodDue,
         rentDue,
         foodDue,
+        foodBalance,
         monthsElapsed
       }
     }).filter(s => s.totalDue > 0)
@@ -164,7 +167,7 @@ export default function DuesPage() {
                   <TableHead>Resident</TableHead>
                   <TableHead>Building / Room</TableHead>
                   <TableHead>Rent Due</TableHead>
-                  <TableHead>Food Due</TableHead>
+                  <TableHead>Food Balance/Due</TableHead>
                   <TableHead className="text-right">Total Due</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -199,7 +202,11 @@ export default function DuesPage() {
                         </TooltipProvider>
                        </div>
                     </TableCell>
-                    <TableCell className="text-xs">₹{s.foodDue?.toLocaleString() || 0}</TableCell>
+                    <TableCell className="text-xs">
+                      <span className={cn(s.foodBalance >= 0 ? "text-success" : "text-destructive")}>
+                        ₹{s.foodBalance?.toLocaleString() || 0}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right font-bold text-destructive">₹{s.totalDue?.toLocaleString()}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>

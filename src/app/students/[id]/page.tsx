@@ -132,9 +132,9 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
 
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-  // Dues Calculation (Historical + Generated - Paid)
+  // Dues & Balance Calculation (Historical + Generated - Paid)
   const financialStats = useMemo(() => {
-    if (!student) return { rentDue: 0, foodDue: 0, monthsElapsed: 0 }
+    if (!student) return { rentDue: 0, foodBalance: 0, monthsElapsed: 0 }
     
     const regDate = student.createdAt?.toDate?.() || new Date()
     const now = new Date()
@@ -148,16 +148,17 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     }, 0) || 0
     const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
-    // Food Due
+    // Food Balance (Prepaid style: Total Paid - (Historical Debt + Actual Cost))
     const historicalFoodDue = Number(student.foodDueAmount) || 0
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
     const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
-    const foodDue = Math.max(0, (historicalFoodDue + generatedFoodCost) - totalFoodPaid)
+    const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
 
-    return { rentDue, foodDue, monthsElapsed }
+    return { rentDue, foodBalance, monthsElapsed }
   }, [student])
 
-  const totalOverallDue = financialStats.rentDue + financialStats.foodDue
+  const foodDue = financialStats.foodBalance < 0 ? Math.abs(financialStats.foodBalance) : 0
+  const totalOverallDue = financialStats.rentDue + foodDue
   
   const exitSettlement = useMemo(() => {
     if (!student) return { finalBalance: 0, mode: 'none' }
@@ -396,7 +397,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                     <div className="mt-4 space-y-3">
                       <p className="text-sm font-medium">System will perform automatic background settlement:</p>
                       <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
-                        <div className="flex justify-between"><span>Total Dues (Rent + Food):</span><span className="font-bold text-destructive">₹{exitSettlement.dues.toLocaleString()}</span></div>
+                        <div className="flex justify-between"><span>Total Dues (Rent + Food Debt):</span><span className="font-bold text-destructive">₹{exitSettlement.dues.toLocaleString()}</span></div>
                         <div className="flex justify-between"><span>Advance Pool:</span><span className="font-bold text-primary">₹{exitSettlement.advance.toLocaleString()}</span></div>
                         <Separator />
                         <div className="flex justify-between font-bold text-sm pt-1">
@@ -498,21 +499,30 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
               </div>
 
               {student.paymentSystem === 'non-package' && (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 relative">
+                <div className={cn(
+                  "p-3 rounded-lg border relative",
+                  financialStats.foodBalance >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20"
+                )}>
                   <div className="flex justify-between items-start">
-                    <p className="text-[10px] uppercase text-destructive font-bold">Food Due</p>
+                    <p className={cn(
+                      "text-[10px] uppercase font-bold",
+                      financialStats.foodBalance >= 0 ? "text-success" : "text-destructive"
+                    )}>Food Balance</p>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Info size={12} className="text-destructive cursor-help" />
+                          <Info size={12} className={cn("cursor-help", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")} />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p className="text-[10px]">Food Due = (Initial Food Debt: ₹{student.foodDueAmount || 0}) + (Total Meal Cost from Logs) - (Total Food Paid)</p>
+                          <p className="text-[10px]">Food Balance = (Total Food Paid) - (Initial Food Debt: ₹{student.foodDueAmount || 0}) - (Total Meal Cost from Logs)</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <p className="text-lg font-bold text-destructive">₹{financialStats.foodDue.toLocaleString()}</p>
+                  <p className={cn(
+                    "text-lg font-bold",
+                    financialStats.foodBalance >= 0 ? "text-success" : "text-destructive"
+                  )}>₹{financialStats.foodBalance.toLocaleString()}</p>
                 </div>
               )}
             </div>
@@ -594,7 +604,14 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           <DialogHeader><DialogTitle>Record Transaction for {student.name}</DialogTitle></DialogHeader>
           <div className="bg-secondary/30 p-4 rounded-lg space-y-2 mb-2">
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Rent Due:</span><span className="font-bold text-destructive">₹{financialStats.rentDue.toLocaleString()}</span></div>
-            {student.paymentSystem === 'non-package' && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Food Due:</span><span className="font-bold text-destructive">₹{financialStats.foodDue.toLocaleString()}</span></div>}
+            {student.paymentSystem === 'non-package' && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Food {financialStats.foodBalance >= 0 ? "Balance" : "Debt"}:</span>
+                <span className={cn("font-bold", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")}>
+                  ₹{Math.abs(financialStats.foodBalance).toLocaleString()}
+                </span>
+              </div>
+            )}
             <div className="flex flex-col gap-1 mt-2 p-2 bg-primary/5 rounded border border-primary/10"><div className="flex justify-between text-xs"><span className="text-primary font-medium">Advance Pool:</span><span className="font-bold text-primary">₹{student.advanceAmount || 0}</span></div><div className="flex justify-between text-[10px] text-muted-foreground"><span>Security Lock:</span><span>₹{student.monthlyRent || 0}</span></div></div>
           </div>
           <div className="space-y-4 py-2">

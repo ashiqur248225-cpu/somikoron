@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -147,10 +148,19 @@ export default function DashboardPage() {
     const totalDues = students.filter(s => s.isActive).reduce((sAcc, student) => {
       const joinDate = student.createdAt?.toDate?.() || new Date()
       const monthsSinceJoin = (now.getFullYear() - joinDate.getFullYear()) * 12 + (now.getMonth() - joinDate.getMonth()) + 1
-      const totalExpected = monthsSinceJoin * (student.monthlyRent || 0)
-      const totalPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || curr.amount || 0), 0) || 0
-      const rentDue = Math.max(0, (totalExpected + (Number(student.dueAmount) || 0)) - totalPaid)
-      return sAcc + rentDue
+      
+      const historicalRentDue = Number(student.dueAmount) || 0
+      const totalExpectedRent = monthsSinceJoin * (student.monthlyRent || 0)
+      const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0), 0) || 0
+      const rentDue = Math.max(0, (historicalRentDue + totalExpectedRent) - totalRentPaid)
+
+      const historicalFoodDue = Number(student.foodDueAmount) || 0
+      const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+      const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+      const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
+      const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
+
+      return sAcc + rentDue + foodDue
     }, 0)
 
     const fund = { cash: 0, bkash: 0, nagad: 0, bank: 0 }
