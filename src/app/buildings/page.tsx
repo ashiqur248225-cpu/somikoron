@@ -23,6 +23,8 @@ import { collection, serverTimestamp } from "firebase/firestore"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator"
 
 interface SeatDetail {
   seatNo: string;
@@ -151,9 +153,13 @@ export default function BuildingsPage() {
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-headline font-bold text-primary">Building Management</h1>
-          <p className="text-muted-foreground mt-1">Manage rooms and seat assignments.</p>
+        <div className="flex items-center gap-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <div>
+            <h1 className="text-3xl font-headline font-bold text-primary">Building Management</h1>
+            <p className="text-muted-foreground mt-1">Manage rooms and seat assignments.</p>
+          </div>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

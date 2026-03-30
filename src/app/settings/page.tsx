@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -9,6 +10,8 @@ import { Utensils, Save, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc, setDoc, serverTimestamp } from "firebase/firestore"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator"
 
 export default function SettingsPage() {
   const { toast } = useToast()
@@ -49,9 +52,13 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-headline font-bold text-primary">Global Settings</h1>
-        <p className="text-muted-foreground mt-1">Configure hostel-wide parameters and rates.</p>
+      <div className="flex items-center gap-4">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="mr-2 h-4" />
+        <div>
+          <h1 className="text-3xl font-headline font-bold text-primary">Global Settings</h1>
+          <p className="text-muted-foreground mt-1">Configure hostel-wide parameters and rates.</p>
+        </div>
       </div>
 
       <Card className="border-none shadow-sm">

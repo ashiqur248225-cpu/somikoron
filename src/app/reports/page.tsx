@@ -9,6 +9,8 @@ import { BarChart3, Download, Calendar, ArrowRight, Loader2 } from "lucide-react
 import { Button } from "@/components/ui/button"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, orderBy, limit } from "firebase/firestore"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator"
 
 export default function ReportsPage() {
   const db = useFirestore()
@@ -42,9 +44,13 @@ export default function ReportsPage() {
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-headline font-bold text-primary">Financial Reports</h1>
-          <p className="text-muted-foreground mt-1">Aggregated insights from optimized monthly summaries.</p>
+        <div className="flex items-center gap-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <div>
+            <h1 className="text-3xl font-headline font-bold text-primary">Financial Reports</h1>
+            <p className="text-muted-foreground mt-1">Aggregated insights from optimized monthly summaries.</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="flex gap-2">

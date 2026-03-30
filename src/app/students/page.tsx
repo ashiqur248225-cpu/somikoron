@@ -31,6 +31,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, updateDoc, increment, Timestamp } from "firebase/firestore"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator"
 
 export default function StudentsPage() {
   const { toast } = useToast()
@@ -244,9 +246,13 @@ export default function StudentsPage() {
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-headline font-bold text-primary">Student Residents</h1>
-          <p className="text-muted-foreground mt-1">Manage profiles, seat assignments and financial plans.</p>
+        <div className="flex items-center gap-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <div>
+            <h1 className="text-3xl font-headline font-bold text-primary">Student Residents</h1>
+            <p className="text-muted-foreground mt-1">Manage profiles, seat assignments and financial plans.</p>
+          </div>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

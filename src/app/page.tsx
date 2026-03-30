@@ -47,6 +47,8 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, orderBy, limit, where, Timestamp, doc, setDoc, updateDoc, arrayUnion, increment } from "firebase/firestore"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator"
 
 export default function DashboardPage() {
   const db = useFirestore()
@@ -255,9 +257,13 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 pb-20">
-      <div>
-        <h1 className="text-3xl font-headline font-bold tracking-tight text-primary">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Daily overview and quick insights for your hostel network.</p>
+      <div className="flex items-center gap-4">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="mr-2 h-4" />
+        <div>
+          <h1 className="text-3xl font-headline font-bold tracking-tight text-primary">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Daily overview and quick insights for your hostel network.</p>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
