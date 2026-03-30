@@ -139,7 +139,25 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "phone": { "type": "string" },
-        "role": { "type": "string" }
+        "role": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Transfer": {
+      "title": "Fund Transfer",
+      "type": "object",
+      "description": "Internal money transfers between accounts.",
+      "properties": {
+        "id": { "type": "string" },
+        "amount": { "type": "number" },
+        "fromAccount": { "type": "string" },
+        "toAccount": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "receiverName": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" }
       }
     }
   },
@@ -152,6 +170,7 @@
     "/payments/{paymentId}": { "schema": "Payment", "description": "Global Income records" },
     "/expenses/{expenseId}": { "schema": "Expense", "description": "Global Expense records" },
     "/meals/{mealId}": { "schema": "MealRecord", "description": "Global Meal counts" },
-    "/staff/{staffId}": { "schema": "Staff", "description": "List of staff/receivers" }
+    "/staff/{staffId}": { "schema": "Staff", "description": "List of staff/receivers" },
+    "/transfers/{transferId}": { "schema": "Transfer", "description": "Internal fund transfers" }
   }
 }

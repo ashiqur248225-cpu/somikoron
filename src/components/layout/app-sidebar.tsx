@@ -13,7 +13,9 @@ import {
   BarChart3,
   CircleDollarSign,
   Settings,
-  CircleAlert
+  CircleAlert,
+  UserCog,
+  ArrowLeftRight
 } from "lucide-react"
 import {
   Sidebar,
@@ -65,6 +67,16 @@ const items = [
     title: "Ledgers",
     url: "/ledger",
     icon: History,
+  },
+  {
+    title: "Staff",
+    url: "/staff",
+    icon: UserCog,
+  },
+  {
+    title: "Transfers",
+    url: "/transfers",
+    icon: ArrowLeftRight,
   },
   {
     title: "Parties",
