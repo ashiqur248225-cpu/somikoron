@@ -12,7 +12,8 @@ import {
   Loader2,
   Plus,
   Wallet,
-  Check
+  Check,
+  UserPlus
 } from "lucide-react"
 import { 
   Table, 
@@ -52,6 +53,8 @@ export default function DashboardPage() {
   const { toast } = useToast()
   const [isPaymentOpen, setIsPaymentOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
+  const [newStaff, setNewStaff] = useState({ name: "", phone: "" })
 
   // Data for Dashboard
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
@@ -59,6 +62,9 @@ export default function DashboardPage() {
 
   const studentsQuery = useMemoFirebase(() => collection(db, "students"), [db])
   const { data: students } = useCollection(studentsQuery)
+
+  const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
+  const { data: staffList } = useCollection(staffQuery)
 
   const recentPaymentsQuery = useMemoFirebase(() => 
     query(collection(db, "payments"), orderBy("date", "desc"), limit(5)), [db])
@@ -116,8 +122,8 @@ export default function DashboardPage() {
   }, [recentPayments, recentExpenses])
 
   const handleQuickPayment = async () => {
-    if (!paymentForm.studentId || !paymentForm.amount) {
-      toast({ variant: "destructive", title: "Error", description: "Please fill required fields." })
+    if (!paymentForm.studentId || !paymentForm.amount || !paymentForm.receiver) {
+      toast({ variant: "destructive", title: "Error", description: "Please fill required fields (Student, Amount, Receiver)." })
       return
     }
 
@@ -173,6 +179,25 @@ export default function DashboardPage() {
         receiver: "",
         description: ""
       })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleAddStaff = async () => {
+    if (!newStaff.name) return
+    setIsSubmitting(true)
+    try {
+      const staffId = doc(collection(db, "staff")).id
+      await setDoc(doc(db, "staff", staffId), {
+        ...newStaff,
+        createdAt: Timestamp.now()
+      })
+      toast({ title: "Success", description: "Staff added to receivers list." })
+      setNewStaff({ name: "", phone: "" })
+      setIsAddStaffOpen(false)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -397,12 +422,51 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Receiver Name</Label>
-                <Input 
-                  placeholder="Receiver name"
-                  value={paymentForm.receiver}
-                  onChange={e => setPaymentForm({...paymentForm, receiver: e.target.value})}
-                />
+                <div className="flex items-center justify-between">
+                  <Label>Receiver Name</Label>
+                  <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="link" size="sm" className="h-auto p-0 text-xs">
+                        <UserPlus size={12} className="mr-1" /> Add New
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add New Receiver</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Full Name</Label>
+                          <Input value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Phone Number</Label>
+                          <Input 
+                            value={newStaff.phone} 
+                            maxLength={11}
+                            onChange={e => setNewStaff({...newStaff, phone: e.target.value})} 
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button onClick={handleAddStaff} disabled={isSubmitting}>Save Receiver</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                <Select value={paymentForm.receiver} onValueChange={val => setPaymentForm({...paymentForm, receiver: val})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select receiver" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staffList?.map(s => (
+                      <SelectItem key={s.id} value={s.name}>{s.name} ({s.phone})</SelectItem>
+                    ))}
+                    {(!staffList || staffList.length === 0) && (
+                      <div className="p-2 text-xs text-muted-foreground text-center">No staff found. Please add one.</div>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
