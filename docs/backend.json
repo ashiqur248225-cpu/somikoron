@@ -119,6 +119,16 @@
         "month": { "type": "string" },
         "year": { "type": "string" }
       }
+    },
+    "Staff": {
+      "title": "Staff",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string" }
+      }
     }
   },
   "auth": {
@@ -129,6 +139,7 @@
     "/students/{studentId}": { "schema": "Student", "description": "Students list with embedded histories" },
     "/payments/{paymentId}": { "schema": "Payment", "description": "Global Income records" },
     "/expenses/{expenseId}": { "schema": "Expense", "description": "Global Expense records" },
-    "/meals/{mealId}": { "schema": "MealRecord", "description": "Global Meal counts" }
+    "/meals/{mealId}": { "schema": "MealRecord", "description": "Global Meal counts" },
+    "/staff/{staffId}": { "schema": "Staff", "description": "List of staff/receivers" }
   }
 }

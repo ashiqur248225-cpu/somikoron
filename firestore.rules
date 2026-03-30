@@ -2,10 +2,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // OPEN ACCESS FOR PROTOTYPING
-    // This allows anyone to read and write to any collection.
-    // Use this only for development/prototyping.
-    // FORCE REFRESH: 2024-05-21-06 (Security rules nudge for all collections access)
+    // FORCE FULL OPEN ACCESS FOR PROTOTYPING
+    // REFRESH: 2024-05-21-09 (Global open access policy)
     match /{document=**} {
       allow read, write: if true;
     }
