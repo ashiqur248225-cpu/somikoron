@@ -7,7 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus, Trash2, CheckCircle2, Circle } from "lucide-react"
+import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus, Trash2, CheckCircle2, Circle, XCircle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -223,11 +223,11 @@ export default function BuildingsPage() {
                                     "flex flex-col items-center justify-center p-2 rounded-md border w-14 transition-all",
                                     seat.status === 'occupied' 
                                       ? "bg-success/10 border-success text-success" 
-                                      : "bg-secondary border-muted text-muted-foreground"
+                                      : "bg-destructive/10 border-destructive text-destructive"
                                   )}
                                 >
                                   <span className="text-[10px] font-bold">S-{seat.seatNo}</span>
-                                  {seat.status === 'occupied' ? <CheckCircle2 size={12} /> : <Circle size={12} />}
+                                  {seat.status === 'occupied' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                                 </button>
                               ))}
                             </div>

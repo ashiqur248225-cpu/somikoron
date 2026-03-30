@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Building2, MapPin, DoorOpen, Users, UserCheck, UserMinus, Trash2, Edit, Loader2, Plus, Circle, CheckCircle2 } from "lucide-react"
+import { Building2, MapPin, DoorOpen, Users, UserCheck, UserMinus, Trash2, Edit, Loader2, Plus, Circle, CheckCircle2, XCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -210,7 +210,9 @@ export default function BuildingDetailsPage({ params }: { params: Promise<{ id: 
                                 onClick={() => toggleSeatStatus(rIdx, sIdx)}
                                 className={cn(
                                   "p-2 border rounded text-[10px] font-bold transition-all",
-                                  seat.status === 'occupied' ? "bg-success/20 border-success text-success" : "bg-background border-muted"
+                                  seat.status === 'occupied' 
+                                    ? "bg-success/20 border-success text-success" 
+                                    : "bg-destructive/10 border-destructive text-destructive"
                                 )}
                               >
                                 S-{seat.seatNo}
@@ -322,11 +324,11 @@ export default function BuildingDetailsPage({ params }: { params: Promise<{ id: 
                       "flex flex-col items-center justify-center p-2 rounded-md border w-14",
                       seat.status === 'occupied' 
                         ? "bg-success/10 border-success text-success" 
-                        : "bg-secondary border-muted text-muted-foreground"
+                        : "bg-destructive/10 border-destructive text-destructive"
                     )}
                   >
                     <span className="text-[10px] font-bold">S-{seat.seatNo}</span>
-                    {seat.status === 'occupied' ? <CheckCircle2 size={12} /> : <Circle size={12} />}
+                    {seat.status === 'occupied' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                   </div>
                 ))}
               </div>
