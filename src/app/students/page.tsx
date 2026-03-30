@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye, Contact, Filter, XCircle, Building2, DoorOpen } from "lucide-react"
+import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye, Contact, Filter, XCircle, Building2, DoorOpen, LayoutGrid } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -42,12 +42,11 @@ export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Filter States
   const [buildingFilter, setBuildingFilter] = useState("all")
+  const [aptFilter, setAptFilter] = useState("all")
   const [roomFilter, setRoomFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [planFilter, setPlanFilter] = useState("all")
-  
+
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
@@ -60,6 +59,7 @@ export default function StudentsPage() {
     parentPhone: "",
     address: "",
     buildingId: "",
+    apartmentName: "",
     roomNumber: "",
     seatNumber: "",
     type: "new", 
@@ -73,38 +73,31 @@ export default function StudentsPage() {
     foodCost: "0"
   })
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        e.preventDefault();
-        const container = target.closest('.space-y-6') || target.closest('.grid') || target.closest('[role="dialog"]');
-        if (container) {
-          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea, [role="radio"]')) as HTMLElement[];
-          const index = focusables.indexOf(target);
-          if (index > -1 && index < focusables.length - 1) {
-            focusables[index + 1].focus();
-          }
-        }
-      }
-    }
-  };
-
+  // Cascading Selection Logic for Form
   const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
-  const rooms = selectedBuilding?.roomsDetail || []
+  const apartments = selectedBuilding?.apartmentsDetail || []
+  const selectedApt = apartments.find((a: any) => a.name === formData.apartmentName)
+  const rooms = selectedApt?.rooms || []
   const selectedRoom = rooms.find((r: any) => r.roomNo === formData.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
-  // Options for Room Filter based on Building Filter
-  const roomOptions = useMemo(() => {
+  // Cascading Options for Filters
+  const aptOptions = useMemo(() => {
     if (buildingFilter === "all" || !buildings) return []
-    const building = buildings.find(b => b.id === buildingFilter)
-    return building?.roomsDetail?.map((r: any) => r.roomNo) || []
+    const b = buildings.find(b => b.id === buildingFilter)
+    return b?.apartmentsDetail?.map((a: any) => a.name) || []
   }, [buildingFilter, buildings])
 
+  const roomOptions = useMemo(() => {
+    if (buildingFilter === "all" || aptFilter === "all" || !buildings) return []
+    const b = buildings.find(b => b.id === buildingFilter)
+    const a = b?.apartmentsDetail?.find((a: any) => a.name === aptFilter)
+    return a?.rooms?.map((r: any) => r.roomNo) || []
+  }, [buildingFilter, aptFilter, buildings])
+
   const handleRegister = async () => {
-    if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber || !formData.monthlyRent) {
-      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Room, Seat and Monthly Rent are required." })
+    if (!formData.name || !formData.buildingId || !formData.apartmentName || !formData.roomNumber || !formData.seatNumber || !formData.monthlyRent) {
+      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Apt, Room, Seat and Monthly Rent are required." })
       return
     }
 
@@ -112,56 +105,41 @@ export default function StudentsPage() {
     try {
       const studentId = doc(collection(db, "students")).id
       const studentRef = doc(db, "students", studentId)
-
       const monthlyRent = Number(formData.monthlyRent)
       const initialRentPayment = Number(formData.initialRentPayment)
       
-      const startingDue = formData.type === 'new' 
-        ? (monthlyRent - initialRentPayment) 
-        : Number(formData.dueAmount)
+      const startingDue = formData.type === 'new' ? (monthlyRent - initialRentPayment) : Number(formData.dueAmount)
+      const foodCostVal = formData.paymentSystem === 'package' ? 0 : (formData.type === 'old' ? -Number(formData.foodDue) : Number(formData.foodCost))
 
-      const foodCostVal = formData.paymentSystem === 'package' 
-        ? 0 
-        : (formData.type === 'old' ? -Number(formData.foodDue) : Number(formData.foodCost))
+      const paymentRecord = (initialRentPayment > 0 && formData.type === 'new') ? {
+        amount: initialRentPayment,
+        seatAmount: initialRentPayment,
+        buildingId: formData.buildingId,
+        buildingName: selectedBuilding?.name || "Unknown",
+        studentName: formData.name,
+        studentId: studentId,
+        type: "income",
+        paymentType: "registration_rent",
+        month: new Date().toLocaleString('default', { month: 'long' }),
+        year: new Date().getFullYear().toString(),
+        method: "cash",
+        receiver: "Admin (Registration)",
+        description: "Initial rent payment at registration",
+        date: new Date().toISOString()
+      } : null
 
-      const paymentsHistory = []
-      
-      if (initialRentPayment > 0 && formData.type === 'new') {
-        const paymentId = doc(collection(db, "payments")).id
-        const currentMonth = new Date().toLocaleString('default', { month: 'long' })
-        const currentYear = new Date().getFullYear().toString()
-        const summaryId = `${currentYear}-${currentMonth}`
-
-        const paymentRecord = {
-          amount: initialRentPayment,
-          seatAmount: initialRentPayment, // In reg, we assume it's for seat
-          buildingId: formData.buildingId,
-          buildingName: selectedBuilding?.name || "Unknown",
-          studentName: formData.name,
-          studentId: studentId,
-          type: "income",
-          paymentType: "registration_rent",
-          month: currentMonth,
-          year: currentYear,
-          method: "cash",
-          receiver: "Admin (Registration)",
-          description: "Initial rent payment at registration",
-          date: new Date().toISOString()
-        }
-
-        await setDoc(doc(db, "payments", paymentId), {
+      if (paymentRecord) {
+        await setDoc(doc(db, "payments", doc(collection(db, "payments")).id), {
           ...paymentRecord,
           date: serverTimestamp(),
           createdAt: serverTimestamp(),
         })
-
+        const summaryId = `${paymentRecord.year}-${paymentRecord.month}`
         await setDoc(doc(db, "summaries", summaryId), {
           totalIncome: increment(initialRentPayment),
-          [`buildingIncome.${selectedBuilding?.name || 'Unknown'}`]: increment(initialRentPayment),
+          [`buildingIncome.${selectedBuilding?.name}`]: increment(initialRentPayment),
           updatedAt: serverTimestamp()
         }, { merge: true })
-
-        paymentsHistory.push(paymentRecord)
       }
 
       await setDoc(studentRef, {
@@ -170,42 +148,48 @@ export default function StudentsPage() {
         foodCost: foodCostVal,
         advanceAmount: Number(formData.advanceAmount),
         serviceCharge: Number(formData.serviceCharge),
-        monthlyRent: monthlyRent,
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
-        paymentsHistory: paymentsHistory,
+        paymentsHistory: paymentRecord ? [paymentRecord] : [],
         mealsHistory: [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
 
+      // Update building occupied status
       const buildingRef = doc(db, "buildings", formData.buildingId)
-      const updatedRoomsDetail = selectedBuilding.roomsDetail.map((room: any) => {
-        if (room.roomNo === formData.roomNumber) {
+      const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
+        if (apt.name === formData.apartmentName) {
           return {
-            ...room,
-            seats: room.seats.map((seat: any) => {
-              if (seat.seatNo === formData.seatNumber) {
-                return { ...seat, status: 'occupied' }
+            ...apt,
+            rooms: apt.rooms.map((room: any) => {
+              if (room.roomNo === formData.roomNumber) {
+                return {
+                  ...room,
+                  seats: room.seats.map((seat: any) => {
+                    if (seat.seatNo === formData.seatNumber) return { ...seat, status: 'occupied' }
+                    return seat
+                  })
+                }
               }
-              return seat
+              return room
             })
           }
         }
-        return room
+        return apt
       })
 
       await updateDoc(buildingRef, {
-        roomsDetail: updatedRoomsDetail,
+        apartmentsDetail: updatedApts,
         occupiedSeats: increment(1),
         emptySeats: increment(-1),
         updatedAt: serverTimestamp()
       })
 
-      toast({ title: "Student Registered", description: "Profile saved and seat occupied." })
+      toast({ title: "Registered", description: "Hierarchy Apartment -> Room -> Seat updated." })
       setOpen(false)
       setFormData({
-        name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
+        name: "", phone: "", parentPhone: "", address: "", buildingId: "", apartmentName: "", roomNumber: "", seatNumber: "",
         type: "new", dueAmount: "0", foodDue: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
         paymentSystem: "package", monthlyRent: "", foodCost: "0"
       })
@@ -218,31 +202,15 @@ export default function StudentsPage() {
 
   const filteredStudents = useMemo(() => {
     if (!students) return []
-    const term = searchTerm.toLowerCase()
     return students.filter(s => {
-      const matchesSearch = 
-        s.name.toLowerCase().includes(term) ||
-        (s.phone || "").toLowerCase().includes(term) ||
-        (s.parentPhone || "").toLowerCase().includes(term) ||
-        (s.buildingName || "").toLowerCase().includes(term) ||
-        (s.roomNumber || "").toLowerCase().includes(term)
-      
+      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
+      const matchesApt = aptFilter === "all" || s.apartmentName === aptFilter
       const matchesRoom = roomFilter === "all" || s.roomNumber === roomFilter
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
-      const matchesPlan = planFilter === "all" || s.paymentSystem === planFilter
-
-      return matchesSearch && matchesBuilding && matchesRoom && matchesStatus && matchesPlan
+      return matchesSearch && matchesBuilding && matchesApt && matchesRoom && matchesStatus
     })
-  }, [students, searchTerm, buildingFilter, roomFilter, statusFilter, planFilter])
-
-  const clearFilters = () => {
-    setBuildingFilter("all")
-    setRoomFilter("all")
-    setStatusFilter("all")
-    setPlanFilter("all")
-    setSearchTerm("")
-  }
+  }, [students, searchTerm, buildingFilter, aptFilter, roomFilter, statusFilter])
 
   return (
     <div className="space-y-8">
@@ -251,334 +219,134 @@ export default function StudentsPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Student Residents</h1>
-            <p className="text-muted-foreground mt-1">Manage profiles, seat assignments and financial plans.</p>
+            <h1 className="text-3xl font-headline font-bold text-primary">Residents</h1>
+            <p className="text-muted-foreground mt-1">Building -> Apartment -> Room -> Seat Hierarchy</p>
           </div>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="flex gap-2">
-              <Plus size={18} /> Register Student
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
-            <DialogHeader>
-              <DialogTitle>Resident Registration</DialogTitle>
-              <DialogDescription>Assign cascading room/seat details and financial plans.</DialogDescription>
-            </DialogHeader>
+          <DialogTrigger asChild><Button className="gap-2"><Plus size={18} /> Register Student</Button></DialogTrigger>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Register Resident</DialogTitle></DialogHeader>
             <div className="space-y-6 py-4">
-              {/* Billing & Food Plan - Now at Top */}
-              <div className="space-y-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <Label className="text-primary font-bold">Billing & Food Plan</Label>
+              <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
+                <Label className="font-bold">Billing & Food Plan</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Payment System</Label>
-                    <Select value={formData.paymentSystem} onValueChange={val => setFormData({...formData, paymentSystem: val})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="package">Package (All-in)</SelectItem>
-                        <SelectItem value="non-package">Non-Package (Separate)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>
-                      {formData.paymentSystem === 'package' ? 'Fixed Monthly Rent' : 'Fixed Monthly Seat Rent'}
-                    </Label>
-                    <Input 
-                      type="number" 
-                      value={formData.monthlyRent} 
-                      onChange={e => setFormData({...formData, monthlyRent: e.target.value})} 
-                      placeholder="Enter fixed amount"
-                    />
-                  </div>
+                   <div className="space-y-2">
+                     <Label>Payment System</Label>
+                     <Select value={formData.paymentSystem} onValueChange={val => setFormData({...formData, paymentSystem: val})}>
+                       <SelectTrigger><SelectValue /></SelectTrigger>
+                       <SelectContent><SelectItem value="package">Package</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent>
+                     </Select>
+                   </div>
+                   <div className="space-y-2">
+                     <Label>Monthly Rent</Label>
+                     <Input type="number" value={formData.monthlyRent} onChange={e => setFormData({...formData, monthlyRent: e.target.value})} />
+                   </div>
                 </div>
               </div>
 
-              {/* Personal Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Full Name</Label>
-                  <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Student's name" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Phone Number</Label>
-                  <Input 
-                    value={formData.phone} 
-                    maxLength={11}
-                    onChange={e => setFormData({...formData, phone: e.target.value})} 
-                    placeholder="11 digits" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Parent Number</Label>
-                  <Input 
-                    value={formData.parentPhone} 
-                    maxLength={11}
-                    onChange={e => setFormData({...formData, parentPhone: e.target.value})} 
-                    placeholder="11 digits" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Address</Label>
-                  <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Home address" />
-                </div>
+                <Input placeholder="Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                <Input placeholder="Phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
               </div>
 
-              {/* Location Selection */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1"><Building2 size={12}/> Building</Label>
-                  <Select onValueChange={val => setFormData({...formData, buildingId: val, roomNumber: "", seatNumber: ""})}>
-                    <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
-                    <SelectContent>
-                      {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1"><DoorOpen size={12}/> Room</Label>
-                  <Select 
-                    disabled={!formData.buildingId}
-                    value={formData.roomNumber}
-                    onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Select Room" /></SelectTrigger>
-                    <SelectContent>
-                      {rooms.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Available Seat</Label>
-                  <Select 
-                    disabled={!formData.roomNumber}
-                    value={formData.seatNumber}
-                    onValueChange={val => setFormData({...formData, seatNumber: val})}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Select Seat" /></SelectTrigger>
-                    <SelectContent>
-                      {emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-secondary/20 rounded-lg border">
+                 <div className="space-y-1">
+                    <Label className="text-[10px] font-bold"><Building2 size={10}/> Building</Label>
+                    <Select onValueChange={val => setFormData({...formData, buildingId: val, apartmentName: "", roomNumber: "", seatNumber: ""})}>
+                      <SelectTrigger><SelectValue placeholder="Building" /></SelectTrigger>
+                      <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-1">
+                    <Label className="text-[10px] font-bold"><LayoutGrid size={10}/> Apartment</Label>
+                    <Select disabled={!formData.buildingId} onValueChange={val => setFormData({...formData, apartmentName: val, roomNumber: "", seatNumber: ""})}>
+                      <SelectTrigger><SelectValue placeholder="Apartment" /></SelectTrigger>
+                      <SelectContent>{apartments.map((a: any) => <SelectItem key={a.name} value={a.name}>{a.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-1">
+                    <Label className="text-[10px] font-bold"><DoorOpen size={10}/> Room</Label>
+                    <Select disabled={!formData.apartmentName} onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}>
+                      <SelectTrigger><SelectValue placeholder="Room" /></SelectTrigger>
+                      <SelectContent>{rooms.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-1">
+                    <Label className="text-[10px] font-bold">Seat</Label>
+                    <Select disabled={!formData.roomNumber} onValueChange={val => setFormData({...formData, seatNumber: val})}>
+                      <SelectTrigger><SelectValue placeholder="Seat" /></SelectTrigger>
+                      <SelectContent>{emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
+                    </Select>
+                 </div>
               </div>
 
-              {/* Resident Type & Initial Financials */}
-              <div className="space-y-4 border-t pt-4">
-                <div className="flex items-center gap-4">
-                  <Label>Resident Type:</Label>
-                  <RadioGroup 
-                    value={formData.type}
-                    onValueChange={val => setFormData({...formData, type: val})}
-                    className="flex gap-4"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="new" id="new" />
-                      <Label htmlFor="new">New Student</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="old" id="old" />
-                      <Label htmlFor="old">Old Student</Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {formData.type === 'old' && (
-                    <>
-                      <div className="space-y-2">
-                        <Label>Previous Seat Rent Due</Label>
-                        <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
-                      </div>
-                      {formData.paymentSystem === 'non-package' && (
-                        <div className="space-y-2">
-                          <Label>Previous Food Due</Label>
-                          <Input type="number" value={formData.foodDue} onChange={e => setFormData({...formData, foodDue: e.target.value})} />
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <div className="space-y-2">
-                    <Label>Advance / Security Deposit</Label>
-                    <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} placeholder="e.g. 10000" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Service Charge</Label>
-                    <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Rent Paid at Registration - Always at Bottom */}
-              <div className="space-y-4 border-t pt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {formData.type === 'new' && (
-                    <div className="space-y-2">
-                      <Label className="text-primary font-bold">Rent Paid at Registration</Label>
-                      <Input 
-                        type="number" 
-                        value={formData.initialRentPayment} 
-                        onChange={e => setFormData({...formData, initialRentPayment: e.target.value})}
-                        placeholder="Current month's rent" 
-                      />
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        * This is for the month they are joining in. Advance is separate.
-                      </p>
-                    </div>
-                  )}
-
-                  {formData.paymentSystem === 'non-package' && (
-                    <div className="space-y-2">
-                      <Label>Initial Food Advance</Label>
-                      <Input 
-                        type="number" 
-                        value={formData.foodCost} 
-                        onChange={e => setFormData({...formData, foodCost: e.target.value})} 
-                      />
-                    </div>
-                  )}
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                 <div className="space-y-2">
+                    <Label>Advance / Security</Label>
+                    <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
+                 </div>
+                 <div className="space-y-2">
+                    <Label>Rent at Registration</Label>
+                    <Input type="number" value={formData.initialRentPayment} onChange={e => setFormData({...formData, initialRentPayment: e.target.value})} />
+                 </div>
               </div>
             </div>
-            <DialogFooter className="sticky bottom-0 bg-background pt-2 border-t mt-4">
-              <Button onClick={handleRegister} className="w-full h-12 text-lg" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin" /> : "Save & Occupy Seat"}
-              </Button>
+            <DialogFooter>
+              <Button onClick={handleRegister} className="w-full h-12" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : "Register & Occupy Seat"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Enhanced Filters */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end bg-secondary/20 p-4 rounded-xl border">
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground flex items-center gap-1"><Search size={10}/> Search</Label>
-          <Input 
-            placeholder="Name or Phone..." 
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground flex items-center gap-1"><Building2 size={10}/> Building</Label>
-          <Select value={buildingFilter} onValueChange={val => {
-            setBuildingFilter(val)
-            setRoomFilter("all")
-          }}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Buildings</SelectItem>
-              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground flex items-center gap-1"><DoorOpen size={10}/> Room</Label>
-          <Select 
-            value={roomFilter} 
-            onValueChange={setRoomFilter}
-            disabled={buildingFilter === "all"}
-          >
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Rooms</SelectItem>
-              {roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Status</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Residents</SelectItem>
-              <SelectItem value="active">Active Only</SelectItem>
-              <SelectItem value="left">Ex-Residents</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground h-10">
-          <XCircle size={14} className="mr-1" /> Reset
-        </Button>
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-secondary/20 p-4 rounded-xl border">
+        <Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setAptFilter("all"); setRoomFilter("all") }}>
+          <SelectTrigger><SelectValue placeholder="Building" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select disabled={buildingFilter === 'all'} value={aptFilter} onValueChange={val => { setAptFilter(val); setRoomFilter("all") }}>
+          <SelectTrigger><SelectValue placeholder="Apartment" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All Apartments</SelectItem>{aptOptions.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select disabled={aptFilter === 'all'} value={roomFilter} onValueChange={setRoomFilter}>
+          <SelectTrigger><SelectValue placeholder="Room" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All Rooms</SelectItem>{roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent>
+        </Select>
+        <Button variant="ghost" onClick={() => { setBuildingFilter("all"); setAptFilter("all"); setRoomFilter("all"); setSearchTerm("") }}>Reset</Button>
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" size={32} /></div>
+        <div className="flex justify-center p-12"><Loader2 className="animate-spin" /></div>
       ) : (
         <Table>
           <TableHeader className="bg-secondary/30">
             <TableRow>
               <TableHead>Student</TableHead>
-              <TableHead>Contacts</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Plan</TableHead>
-              <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredStudents?.map((student: any) => (
-              <TableRow key={student.id}>
+            {filteredStudents.map((s: any) => (
+              <TableRow key={s.id}>
                 <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="bg-primary/10 p-1.5 rounded-full text-primary">
-                      <UserCircle size={24} />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-semibold">{student.name}</span>
-                      <span className="text-[10px] text-muted-foreground uppercase">{student.type} Resident</span>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <Phone size={10} className="text-primary" />
-                      {student.phone}
-                    </div>
-                    {student.parentPhone && (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Contact size={10} />
-                        {student.parentPhone} (P)
-                      </div>
-                    )}
-                  </div>
+                   <div className="flex items-center gap-3">
+                      <UserCircle size={32} className="text-primary/40" />
+                      <div className="flex flex-col"><span className="font-bold">{s.name}</span><span className="text-[10px] text-muted-foreground">{s.phone}</span></div>
+                   </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium">{student.buildingName}</span>
-                    <span className="text-xs text-muted-foreground">R: {student.roomNumber} | S: {student.seatNumber}</span>
+                    <span className="text-sm font-medium">{s.buildingName}</span>
+                    <span className="text-[10px] text-muted-foreground">{s.apartmentName} | Room {s.roomNumber} | Seat {s.seatNumber}</span>
                   </div>
                 </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="capitalize font-normal text-[10px]">
-                    {student.paymentSystem}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={student.isActive ? 'success' : 'destructive'} className="capitalize font-normal text-[10px]">
-                    {student.isActive ? 'Active' : 'Left'}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" onClick={() => router.push(`/students/${student.id}`)} className="h-8">
-                    <Eye size={14} className="mr-1" /> View
-                  </Button>
-                </TableCell>
+                <TableCell><Badge variant="outline" className="capitalize">{s.paymentSystem}</Badge></TableCell>
+                <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} className="mr-1" /> View</Button></TableCell>
               </TableRow>
             ))}
-            {filteredStudents.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                  <div className="flex flex-col items-center gap-2">
-                    <Filter className="h-8 w-8 opacity-20" />
-                    <p>No students match your current filters.</p>
-                    <Button variant="link" size="sm" onClick={clearFilters}>Clear all filters</Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
           </TableBody>
         </Table>
       )}

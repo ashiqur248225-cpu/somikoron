@@ -9,22 +9,32 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "address": { "type": "string" },
-        "roomsCount": { "type": "number" },
-        "roomsDetail": { 
+        "apartmentsCount": { "type": "number" },
+        "apartmentsDetail": { 
           "type": "array", 
           "items": {
             "type": "object",
             "properties": {
-              "roomNo": { "type": "string" },
-              "meterNo": { "type": "string", "description": "Electric meter number for this unit" },
-              "totalSeats": { "type": "number" },
-              "seats": {
+              "id": { "type": "string" },
+              "name": { "type": "string", "description": "e.g., Apartment C2" },
+              "meterNo": { "type": "string", "description": "Electric meter for this apartment" },
+              "rooms": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "seatNo": { "type": "string" },
-                    "status": { "type": "string", "enum": ["empty", "occupied"] }
+                    "roomNo": { "type": "string", "description": "e.g., 301" },
+                    "totalSeats": { "type": "number" },
+                    "seats": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "seatNo": { "type": "string" },
+                          "status": { "type": "string", "enum": ["empty", "occupied"] }
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -50,6 +60,7 @@
         "address": { "type": "string" },
         "buildingId": { "type": "string" },
         "buildingName": { "type": "string" },
+        "apartmentName": { "type": "string" },
         "roomNumber": { "type": "string" },
         "seatNumber": { "type": "string" },
         "type": { "type": "string", "enum": ["new", "old"] },
