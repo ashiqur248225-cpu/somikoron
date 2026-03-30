@@ -44,6 +44,7 @@ export default function StudentsPage() {
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [roomFilter, setRoomFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [planFilter, setPlanFilter] = useState("all")
 
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
@@ -208,9 +209,18 @@ export default function StudentsPage() {
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
       const matchesRoom = roomFilter === "all" || s.roomNumber === roomFilter
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
-      return matchesSearch && matchesBuilding && matchesRoom && matchesStatus
+      const matchesPlan = planFilter === "all" || s.paymentSystem === planFilter
+      return matchesSearch && matchesBuilding && matchesRoom && matchesStatus && matchesPlan
     })
-  }, [students, searchTerm, buildingFilter, roomFilter, statusFilter])
+  }, [students, searchTerm, buildingFilter, roomFilter, statusFilter, planFilter])
+
+  const handleResetFilters = () => {
+    setBuildingFilter("all")
+    setRoomFilter("all")
+    setSearchTerm("")
+    setStatusFilter("all")
+    setPlanFilter("all")
+  }
 
   return (
     <div className="space-y-8">
@@ -292,17 +302,50 @@ export default function StudentsPage() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-secondary/20 p-4 rounded-xl border">
-        <Input placeholder="Search name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all") }}>
-          <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select disabled={buildingFilter === 'all'} value={roomFilter} onValueChange={setRoomFilter}>
-          <SelectTrigger><SelectValue placeholder="Select Room" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">All Rooms</SelectItem>{roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent>
-        </Select>
-        <Button variant="ghost" onClick={() => { setBuildingFilter("all"); setRoomFilter("all"); setSearchTerm("") }}>Reset Filters</Button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Search</Label>
+          <Input placeholder="Name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Building</Label>
+          <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all") }}>
+            <SelectTrigger><SelectValue placeholder="Building" /></SelectTrigger>
+            <SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Room</Label>
+          <Select disabled={buildingFilter === 'all'} value={roomFilter} onValueChange={setRoomFilter}>
+            <SelectTrigger><SelectValue placeholder="Room" /></SelectTrigger>
+            <SelectContent><SelectItem value="all">All Rooms</SelectItem>{roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="active">Active Residents</SelectItem>
+              <SelectItem value="left">Ex-Residents</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Plan</Label>
+          <Select value={planFilter} onValueChange={setPlanFilter}>
+            <SelectTrigger><SelectValue placeholder="Plan" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Plans</SelectItem>
+              <SelectItem value="package">Package</SelectItem>
+              <SelectItem value="non-package">Non-Package</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="ghost" className="h-10" onClick={handleResetFilters}>
+          <XCircle size={14} className="mr-1" /> Reset Filters
+        </Button>
       </div>
 
       {isLoading ? (
@@ -314,6 +357,7 @@ export default function StudentsPage() {
               <TableHead>Student</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Plan</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -323,7 +367,10 @@ export default function StudentsPage() {
                 <TableCell>
                    <div className="flex items-center gap-3">
                       <UserCircle size={32} className="text-primary/40" />
-                      <div className="flex flex-col"><span className="font-bold">{s.name}</span><span className="text-[10px] text-muted-foreground">{s.phone}</span></div>
+                      <div className="flex flex-col">
+                        <span className="font-bold">{s.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{s.phone}</span>
+                      </div>
                    </div>
                 </TableCell>
                 <TableCell>
@@ -333,9 +380,19 @@ export default function StudentsPage() {
                   </div>
                 </TableCell>
                 <TableCell><Badge variant="outline" className="capitalize">{s.paymentSystem}</Badge></TableCell>
+                <TableCell>
+                  <Badge variant={s.isActive ? "default" : "secondary"} className={s.isActive ? "bg-success text-white" : ""}>
+                    {s.isActive ? "Active" : "Left"}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} className="mr-1" /> View</Button></TableCell>
               </TableRow>
             ))}
+            {filteredStudents.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found with the selected filters.</TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       )}
