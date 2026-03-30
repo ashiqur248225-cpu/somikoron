@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 
 export const metadata: Metadata = {
-  title: 'HostelLedger - Building & Student Management',
+  title: 'Somikoron - Building & Student Management',
   description: 'A comprehensive hostel accounting and management platform',
 };
 

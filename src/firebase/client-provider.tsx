@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, useEffect, useState, type ReactNode } from 'react';
@@ -57,7 +56,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
       <div className="fixed inset-0 flex items-center justify-center bg-background z-50">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
-          <p className="text-sm font-medium text-muted-foreground animate-pulse">Initializing HostelLedger...</p>
+          <p className="text-sm font-medium text-muted-foreground animate-pulse">Initializing Somikoron...</p>
         </div>
       </div>
     );

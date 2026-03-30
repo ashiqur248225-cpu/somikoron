@@ -86,7 +86,7 @@ export function AppSidebar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <CircleDollarSign size={20} />
           </div>
-          <span className="text-xl tracking-tight group-data-[collapsible=icon]:hidden">HostelLedger</span>
+          <span className="text-xl tracking-tight group-data-[collapsible=icon]:hidden">Somikoron</span>
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -111,7 +111,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t p-4 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-        © 2024 HostelLedger v1.0
+        © 2024 Somikoron v1.0
       </SidebarFooter>
     </Sidebar>
   )
