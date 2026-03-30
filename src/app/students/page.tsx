@@ -56,6 +56,7 @@ export default function StudentsPage() {
     seatNumber: "",
     type: "new", 
     dueAmount: "0",
+    foodDue: "0",
     initialRentPayment: "0",
     advanceAmount: "0",
     serviceCharge: "0",
@@ -84,14 +85,16 @@ export default function StudentsPage() {
 
       const monthlyRent = Number(formData.monthlyRent)
       const initialRentPayment = Number(formData.initialRentPayment)
-      const prevDue = Number(formData.dueAmount)
       
       // Calculate starting due
-      // For new: Monthly Rent - Initial Payment
-      // For old: Previous Due (manual entry)
       const startingDue = formData.type === 'new' 
         ? (monthlyRent - initialRentPayment) 
-        : prevDue
+        : Number(formData.dueAmount)
+
+      // Calculate starting food cost (balance)
+      const foodCostVal = formData.paymentSystem === 'package' 
+        ? 0 
+        : (formData.type === 'old' ? -Number(formData.foodDue) : Number(formData.foodCost))
 
       const paymentsHistory = []
       
@@ -136,10 +139,10 @@ export default function StudentsPage() {
       await setDoc(studentRef, {
         ...formData,
         dueAmount: startingDue,
+        foodCost: foodCostVal,
         advanceAmount: Number(formData.advanceAmount),
         serviceCharge: Number(formData.serviceCharge),
         monthlyRent: monthlyRent,
-        foodCost: formData.paymentSystem === 'package' ? 0 : Number(formData.foodCost),
         foodRate: Number(formData.foodRate),
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
@@ -176,7 +179,7 @@ export default function StudentsPage() {
       setOpen(false)
       setFormData({
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
-        type: "new", dueAmount: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
+        type: "new", dueAmount: "0", foodDue: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
         paymentSystem: "package", monthlyRent: "", foodCost: "0", foodRate: 40
       })
     } catch (e: any) {
@@ -303,22 +306,20 @@ export default function StudentsPage() {
                   </RadioGroup>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {formData.type === 'old' ? (
-                    <div className="space-y-2">
-                      <Label>Previous Due (if any)</Label>
-                      <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <Label>Rent Paid at Registration</Label>
-                      <Input 
-                        type="number" 
-                        value={formData.initialRentPayment} 
-                        onChange={e => setFormData({...formData, initialRentPayment: e.target.value})}
-                        placeholder="0.00" 
-                      />
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {formData.type === 'old' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Previous Seat Rent Due</Label>
+                        <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
+                      </div>
+                      {formData.paymentSystem === 'non-package' && (
+                        <div className="space-y-2">
+                          <Label>Previous Food Due</Label>
+                          <Input type="number" value={formData.foodDue} onChange={e => setFormData({...formData, foodDue: e.target.value})} />
+                        </div>
+                      )}
+                    </>
                   )}
                   <div className="space-y-2">
                     <Label>Advance Amount</Label>
@@ -356,10 +357,26 @@ export default function StudentsPage() {
                     />
                   </div>
                   
+                  {formData.type === 'new' && (
+                    <div className="space-y-2">
+                      <Label>Rent Paid at Registration</Label>
+                      <Input 
+                        type="number" 
+                        value={formData.initialRentPayment} 
+                        onChange={e => setFormData({...formData, initialRentPayment: e.target.value})}
+                        placeholder="0.00" 
+                      />
+                    </div>
+                  )}
+
                   {formData.paymentSystem === 'non-package' && (
-                    <div className="col-span-full space-y-2">
+                    <div className="space-y-2">
                       <Label>Initial Food Advance</Label>
-                      <Input type="number" value={formData.foodCost} onChange={e => setFormData({...formData, foodCost: e.target.value})} />
+                      <Input 
+                        type="number" 
+                        value={formData.foodCost} 
+                        onChange={e => setFormData({...formData, foodCost: e.target.value})} 
+                      />
                     </div>
                   )}
                 </div>
@@ -388,7 +405,7 @@ export default function StudentsPage() {
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" /></div>
+            <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" size={32} /></div>
           ) : (
             <Table>
               <TableHeader className="bg-secondary/30">
