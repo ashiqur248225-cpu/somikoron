@@ -108,20 +108,6 @@ export default function IncomeHistoryPage() {
     return students?.find(s => s.id === formData.studentId)
   }, [students, formData.studentId])
 
-  const foodStats = useMemo(() => {
-    if (!selectedStudent || selectedStudent.paymentSystem === 'package') return { balance: 0 }
-    const totalBill = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-    const totalPaid = Number(selectedStudent.foodCost) || 0
-    return { balance: totalPaid - totalBill }
-  }, [selectedStudent])
-
-  const availableAdvanceForDeduction = useMemo(() => {
-    if (!selectedStudent) return 0
-    const currentAdvance = selectedStudent.advanceAmount || 0
-    const minRequired = selectedStudent.monthlyRent || 0
-    return Math.max(0, currentAdvance - minRequired)
-  }, [selectedStudent])
-
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.studentId || !selectedBuildingId || (!useAdvanceBalance && !formData.receiver)) {
@@ -298,8 +284,9 @@ export default function IncomeHistoryPage() {
             <SelectContent>
               <SelectItem value="all">All Methods</SelectItem>
               <SelectItem value="cash">Cash</SelectItem>
+              <SelectItem value="bkash">Bkash</SelectItem>
+              <SelectItem value="nagad">Nagad</SelectItem>
               <SelectItem value="bank">Bank</SelectItem>
-              <SelectItem value="mobile">Mobile</SelectItem>
               <SelectItem value="advance_deduction">Advance</SelectItem>
             </SelectContent>
           </Select>
@@ -414,20 +401,10 @@ export default function IncomeHistoryPage() {
                     <span className="text-muted-foreground">Standard Rent:</span>
                     <span className="font-bold">₹{selectedStudent.monthlyRent}</span>
                   </div>
-                  {selectedStudent.paymentSystem === 'non-package' && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{foodStats.balance >= 0 ? "Food Surplus:" : "Food Debt:"}</span>
-                      <span className={cn("font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>₹{Math.abs(foodStats.balance)}</span>
-                    </div>
-                  )}
                   <div className="flex flex-col gap-1 p-2 bg-primary/5 rounded border border-primary/10">
                     <div className="flex justify-between text-xs">
                       <span className="text-primary font-medium">Advance Pool:</span>
                       <span className="font-bold text-primary">₹{selectedStudent.advanceAmount || 0}</span>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-muted-foreground border-t pt-1">
-                      <span>Available Deduction:</span>
-                      <span className="font-bold text-success">₹{availableAdvanceForDeduction}</span>
                     </div>
                   </div>
                 </div>
@@ -444,7 +421,7 @@ export default function IncomeHistoryPage() {
                   id="advSwitchInc" 
                   checked={useAdvanceBalance} 
                   onCheckedChange={setUseAdvanceBalance}
-                  disabled={!selectedStudent || availableAdvanceForDeduction <= 0}
+                  disabled={!selectedStudent || (selectedStudent.advanceAmount || 0) <= (selectedStudent.monthlyRent || 0)}
                 />
               </div>
 
@@ -461,7 +438,12 @@ export default function IncomeHistoryPage() {
                     <Label>Method</Label>
                     <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank">Bank</SelectItem><SelectItem value="mobile">Mobile</SelectItem></SelectContent>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="bkash">Bkash</SelectItem>
+                        <SelectItem value="nagad">Nagad</SelectItem>
+                        <SelectItem value="bank">Bank</SelectItem>
+                      </SelectContent>
                     </Select>
                   </div>
                 )}

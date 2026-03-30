@@ -37,7 +37,6 @@ export default function ExpenseHistoryPage() {
   const db = useFirestore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isEntryOpen, setIsEntryOpen] = useState(false)
-  const [isAddingParty, setIsAddingParty] = useState(false)
   
   // Filters
   const [categoryFilter, setCategoryFilter] = useState("all")
@@ -65,10 +64,7 @@ export default function ExpenseHistoryPage() {
     method: "cash",
     description: "",
     expenseDate: new Date().toISOString().split('T')[0],
-    meterNumber: ""
   })
-
-  const [newParty, setNewParty] = useState({ name: "", role: "", phone: "" })
 
   const filteredExpenses = useMemo(() => {
     if (!expenses) return []
@@ -183,8 +179,9 @@ export default function ExpenseHistoryPage() {
             <SelectContent>
               <SelectItem value="all">All Methods</SelectItem>
               <SelectItem value="cash">Cash</SelectItem>
+              <SelectItem value="bkash">Bkash</SelectItem>
+              <SelectItem value="nagad">Nagad</SelectItem>
               <SelectItem value="bank">Bank</SelectItem>
-              <SelectItem value="mobile">Mobile</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -254,12 +251,24 @@ export default function ExpenseHistoryPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bkash">Bkash</SelectItem>
+                  <SelectItem value="nagad">Nagad</SelectItem>
                   <SelectItem value="bank">Bank</SelectItem>
-                  <SelectItem value="mobile">Mobile</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {/* ... other fields as per previous design ... */}
+            {/* ... other fields can be added here as needed ... */}
+            <div className="space-y-2">
+              <Label>Building</Label>
+              <Select onValueChange={val => setFormData({...formData, buildingId: val})}>
+                <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
+                <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Amount (₹)</Label>
+              <Input type="number" placeholder="0.00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
+            </div>
             <Button type="submit" className="w-full bg-expense" disabled={isSubmitting}>Confirm Expense</Button>
           </form>
         </DialogContent>

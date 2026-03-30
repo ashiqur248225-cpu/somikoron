@@ -16,7 +16,12 @@ import {
   UserPlus,
   Lock,
   ArrowDownToLine,
-  DoorOpen
+  DoorOpen,
+  CalendarDays,
+  CircleDollarSign,
+  Smartphone,
+  Banknote,
+  Landmark
 } from "lucide-react"
 import { 
   Table, 
@@ -63,10 +68,12 @@ export default function DashboardPage() {
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
   const [newStaff, setNewStaff] = useState({ name: "", phone: "" })
   const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
+  const [timeFilter, setTimeFilter] = useState("month") // today, month, lastMonth, year
 
   const [selectedBuildingId, setSelectedBuildingId] = useState("")
   const [selectedRoomNumber, setSelectedRoomNumber] = useState("")
 
+  // Data Fetching
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
@@ -76,13 +83,11 @@ export default function DashboardPage() {
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
-  const recentPaymentsQuery = useMemoFirebase(() => 
-    query(collection(db, "payments"), orderBy("date", "desc"), limit(5)), [db])
-  const { data: recentPayments, isLoading: paymentsLoading } = useCollection(recentPaymentsQuery)
+  const allPaymentsQuery = useMemoFirebase(() => collection(db, "payments"), [db])
+  const { data: allPayments } = useCollection(allPaymentsQuery)
 
-  const recentExpensesQuery = useMemoFirebase(() => 
-    query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(5)), [db])
-  const { data: recentExpenses, isLoading: expensesLoading } = useCollection(recentExpensesQuery)
+  const allExpensesQuery = useMemoFirebase(() => collection(db, "expenses"), [db])
+  const { data: allExpenses } = useCollection(allExpensesQuery)
 
   const [paymentForm, setPaymentForm] = useState({
     studentId: "",
@@ -112,34 +117,55 @@ export default function DashboardPage() {
     return students?.find(s => s.id === paymentForm.studentId)
   }, [students, paymentForm.studentId])
 
-  const foodStats = useMemo(() => {
-    if (!selectedStudent || selectedStudent.paymentSystem === 'package') return { balance: 0 }
-    const totalBill = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-    const totalPaid = Number(selectedStudent.foodCost) || 0
-    return { balance: totalPaid - totalBill }
-  }, [selectedStudent])
+  // Stats Calculations
+  const stats = useMemo(() => {
+    if (!allPayments || !allExpenses || !students) return { income: 0, expense: 0, dues: 0, fund: { cash: 0, bkash: 0, nagad: 0, bank: 0 } }
+    
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+    const startOfYear = new Date(now.getFullYear(), 0, 1)
 
-  const availableAdvanceForDeduction = useMemo(() => {
-    if (!selectedStudent) return 0
-    const currentAdvance = selectedStudent.advanceAmount || 0
-    const minRequired = selectedStudent.monthlyRent || 0
-    return Math.max(0, currentAdvance - minRequired)
-  }, [selectedStudent])
+    let filterDate = startOfMonth
+    if (timeFilter === "today") filterDate = startOfToday
+    if (timeFilter === "lastMonth") filterDate = startOfLastMonth
+    if (timeFilter === "year") filterDate = startOfYear
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+    const isWithinRange = (date: any) => {
+      const d = date?.toDate ? date.toDate() : new Date(date)
+      if (timeFilter === "lastMonth") return d >= startOfLastMonth && d <= endOfLastMonth
+      return d >= filterDate
+    }
 
-  const todayIncome = useMemo(() => {
-    return (recentPayments || [])
-      .filter(p => p.date?.toDate() >= today)
-      .reduce((acc, curr) => acc + (curr.amount || 0), 0)
-  }, [recentPayments, today])
+    const income = allPayments.filter(isWithinRange).reduce((acc, p) => acc + (p.amount || 0), 0)
+    const expense = allExpenses.filter(isWithinRange).reduce((acc, e) => acc + (e.amount || 0), 0)
 
-  const todayExpense = useMemo(() => {
-    return (recentExpenses || [])
-      .filter(e => e.createdAt?.toDate() >= today)
-      .reduce((acc, curr) => acc + (curr.amount || 0), 0)
-  }, [recentExpenses, today])
+    // Calculate Dues (Simplified: only for active students)
+    const totalDues = students.filter(s => s.isActive).reduce((sAcc, student) => {
+      // Basic due calculation logic
+      const joinDate = student.createdAt?.toDate?.() || new Date()
+      const monthsSinceJoin = (now.getFullYear() - joinDate.getFullYear()) * 12 + (now.getMonth() - joinDate.getMonth()) + 1
+      const totalExpected = monthsSinceJoin * (student.monthlyRent || 0)
+      const totalPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || curr.amount || 0), 0) || 0
+      const rentDue = Math.max(0, (totalExpected + (Number(student.dueAmount) || 0)) - totalPaid)
+      return sAcc + rentDue
+    }, 0)
+
+    // Fund status (All time)
+    const fund = { cash: 0, bkash: 0, nagad: 0, bank: 0 }
+    allPayments.forEach(p => {
+      const m = p.method as keyof typeof fund
+      if (fund[m] !== undefined) fund[m] += (p.amount || 0)
+    })
+    allExpenses.forEach(e => {
+      const m = e.method as keyof typeof fund
+      if (fund[m] !== undefined) fund[m] -= (e.amount || 0)
+    })
+
+    return { income, expense, dues: totalDues, fund }
+  }, [allPayments, allExpenses, students, timeFilter])
 
   const handleQuickPayment = async () => {
     if (!paymentForm.studentId || (!useAdvanceBalance && !paymentForm.receiver)) {
@@ -229,13 +255,6 @@ export default function DashboardPage() {
     }
   }
 
-  const stats = [
-    { title: "Today's Income", amount: `₹${todayIncome.toLocaleString()}`, change: "Recorded today", icon: ArrowUpCircle, color: "text-income" },
-    { title: "Today's Expenses", amount: `₹${todayExpense.toLocaleString()}`, change: "Logged today", icon: ArrowDownCircle, color: "text-expense" },
-    { title: "Active Students", amount: students?.filter(s => s.isActive).length || 0, change: "Current residents", icon: TrendingUp, color: "text-primary" },
-    { title: "Total Buildings", amount: buildings?.length || 0, change: "Buildings count", icon: Building2, color: "text-primary" }
-  ]
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       const target = e.target as HTMLElement;
@@ -255,75 +274,158 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 pb-20">
-      <div className="flex items-center gap-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4" />
-        <div>
-          <h1 className="text-3xl font-headline font-bold text-primary">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Real-time overview of your hostel network.</p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <div>
+            <h1 className="text-3xl font-headline font-bold text-primary">Dashboard</h1>
+            <p className="text-muted-foreground mt-1">Real-time overview of your hostel network.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 bg-secondary/50 p-1 rounded-lg">
+          <CalendarDays size={16} className="ml-2 text-muted-foreground" />
+          <Select value={timeFilter} onValueChange={setTimeFilter}>
+            <SelectTrigger className="w-[140px] border-none bg-transparent shadow-none focus:ring-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="month">This Month</SelectItem>
+              <SelectItem value="lastMonth">Last Month</SelectItem>
+              <SelectItem value="year">This Year</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.title} className="shadow-sm border-none bg-card hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.amount}</div>
-              <p className="text-xs text-muted-foreground mt-1">{stat.change}</p>
-            </CardContent>
-          </Card>
-        ))}
+        <Card className="shadow-sm border-none bg-income/5 border-l-4 border-l-income">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-income">Income</CardTitle>
+            <ArrowUpCircle className="h-4 w-4 text-income" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{stats.income.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1 capitalize">Total for {timeFilter}</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm border-none bg-expense/5 border-l-4 border-l-expense">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-expense">Expenses</CardTitle>
+            <ArrowDownCircle className="h-4 w-4 text-expense" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{stats.expense.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1 capitalize">Total for {timeFilter}</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm border-none bg-destructive/5 border-l-4 border-l-destructive">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-destructive">Total Dues</CardTitle>
+            <TrendingUp className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{stats.dues.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Current outstanding</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm border-none bg-primary/5 border-l-4 border-l-primary">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">Residents</CardTitle>
+            <Building2 className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{students?.filter(s => s.isActive).length || 0}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Active in {buildings?.length || 0} properties</p>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-7">
+      <div className="grid gap-6 md:grid-cols-7">
         <Card className="col-span-4 shadow-sm border-none">
-          <CardHeader><CardTitle>Recent Activity</CardTitle></CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Total Fund Status</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Available balance across different accounts.</p>
+            </div>
+            <div className="bg-primary/10 p-2 rounded-lg text-primary">
+              <CircleDollarSign size={20} />
+            </div>
+          </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentPayments?.slice(0, 5).map((p, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell>{p.studentName}</TableCell>
-                    <TableCell className="text-right text-income font-bold">₹{p.amount?.toLocaleString()}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl border bg-secondary/20 space-y-1">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Banknote size={14} />
+                  <span className="text-xs font-medium uppercase">Cash in Hand</span>
+                </div>
+                <p className="text-xl font-bold">₹{stats.fund.cash.toLocaleString()}</p>
+              </div>
+              <div className="p-4 rounded-xl border bg-secondary/20 space-y-1">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Landmark size={14} />
+                  <span className="text-xs font-medium uppercase">Bank Account</span>
+                </div>
+                <p className="text-xl font-bold">₹{stats.fund.bank.toLocaleString()}</p>
+              </div>
+              <div className="p-4 rounded-xl border bg-secondary/20 space-y-1">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Smartphone size={14} className="text-primary" />
+                  <span className="text-xs font-medium uppercase">Bkash Wallet</span>
+                </div>
+                <p className="text-xl font-bold text-primary">₹{stats.fund.bkash.toLocaleString()}</p>
+              </div>
+              <div className="p-4 rounded-xl border bg-secondary/20 space-y-1">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Smartphone size={14} className="text-orange-500" />
+                  <span className="text-xs font-medium uppercase">Nagad Wallet</span>
+                </div>
+                <p className="text-xl font-bold text-orange-500">₹{stats.fund.nagad.toLocaleString()}</p>
+              </div>
+            </div>
+            <div className="mt-6 pt-6 border-t flex justify-between items-center">
+              <span className="text-sm font-medium text-muted-foreground">Combined Net Balance:</span>
+              <span className="text-2xl font-black text-primary">
+                ₹{(stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad).toLocaleString()}
+              </span>
+            </div>
           </CardContent>
         </Card>
 
         <Card className="col-span-3 shadow-sm border-none">
-          <CardHeader><CardTitle>Occupancy</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-lg">Property Occupancy</CardTitle></CardHeader>
           <CardContent className="space-y-6">
             {buildings?.map(b => (
               <div key={b.id} className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>{b.name}</span>
-                  <span>{b.occupiedSeats}/{b.totalSeats}</span>
+                  <span className="font-medium">{b.name}</span>
+                  <span className="text-muted-foreground text-xs">{b.occupiedSeats}/{b.totalSeats} Seats</span>
                 </div>
                 <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                  <div className="h-full bg-primary" style={{ width: `${(b.occupiedSeats / (b.totalSeats || 1)) * 100}%` }} />
+                  <div 
+                    className="h-full bg-primary transition-all duration-500" 
+                    style={{ width: `${(b.occupiedSeats / (b.totalSeats || 1)) * 100}%` }} 
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground uppercase font-bold">
+                  <span>{Math.round((b.occupiedSeats / (b.totalSeats || 1)) * 100)}% Full</span>
+                  <span>{b.emptySeats} Vacant</span>
                 </div>
               </div>
             ))}
+            {buildings?.length === 0 && (
+              <div className="text-center py-10 text-muted-foreground text-sm">No property data available.</div>
+            )}
           </CardContent>
         </Card>
       </div>
 
+      {/* Quick Action FAB */}
       <div className="fixed bottom-8 right-8 z-50">
         <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
           <DialogTrigger asChild>
-            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary">
+            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform">
               <Plus className="h-8 w-8 text-white" />
             </Button>
           </DialogTrigger>
@@ -374,23 +476,13 @@ export default function DashboardPage() {
               {selectedStudent && (
                 <div className="bg-secondary/30 p-4 rounded-lg space-y-2 border">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Standard Rent:</span>
+                    <span className="text-muted-foreground">Monthly Rent:</span>
                     <span className="font-bold">₹{selectedStudent.monthlyRent}</span>
                   </div>
-                  {selectedStudent.paymentSystem === 'non-package' && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{foodStats.balance >= 0 ? "Food Surplus:" : "Food Debt:"}</span>
-                      <span className={cn("font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>₹{Math.abs(foodStats.balance)}</span>
-                    </div>
-                  )}
                   <div className="flex flex-col gap-1 p-2 bg-primary/5 rounded border border-primary/10">
                     <div className="flex justify-between text-xs">
                       <span className="text-primary font-medium">Advance Pool:</span>
                       <span className="font-bold text-primary">₹{selectedStudent.advanceAmount || 0}</span>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-muted-foreground border-t pt-1">
-                      <span>Available Deduction:</span>
-                      <span className="font-bold text-success">₹{availableAdvanceForDeduction}</span>
                     </div>
                   </div>
                 </div>
@@ -407,7 +499,7 @@ export default function DashboardPage() {
                   id="advSwitchDash" 
                   checked={useAdvanceBalance} 
                   onCheckedChange={setUseAdvanceBalance}
-                  disabled={!selectedStudent || availableAdvanceForDeduction <= 0}
+                  disabled={!selectedStudent || (selectedStudent.advanceAmount || 0) <= (selectedStudent.monthlyRent || 0)}
                 />
               </div>
 
@@ -424,7 +516,12 @@ export default function DashboardPage() {
                     <Label>Method</Label>
                     <Select value={paymentForm.method} onValueChange={val => setPaymentForm({...paymentForm, method: val})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank">Bank</SelectItem><SelectItem value="mobile">Mobile</SelectItem></SelectContent>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="bkash">Bkash</SelectItem>
+                        <SelectItem value="nagad">Nagad</SelectItem>
+                        <SelectItem value="bank">Bank</SelectItem>
+                      </SelectContent>
                     </Select>
                   </div>
                 )}
