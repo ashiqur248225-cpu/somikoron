@@ -93,20 +93,20 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
   // --- FINANCIAL CALCULATIONS ---
 
-  // 1. Food Balance (For Non-Package)
-  // Logic: Total Money Given for Food - Total Cost of Meals consumed
+  // 1. Food Balance (For Non-Package) - Running Balance Concept
   const foodStats = useMemo(() => {
-    if (!student || student.paymentSystem === 'package') return { bill: 0, balance: 0, debt: 0 }
+    if (!student || student.paymentSystem === 'package') return { bill: 0, balance: 0, debt: 0, surplus: 0 }
     
     const totalBill = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-    const totalPaid = student.foodCost || 0 // Total money given for food
+    const totalPaid = Number(student.foodCost) || 0 // Cumulative payments for food
     const balance = totalPaid - totalBill
     
     return {
       bill: totalBill,
       paid: totalPaid,
       balance: balance,
-      debt: balance < 0 ? Math.abs(balance) : 0
+      debt: balance < 0 ? Math.abs(balance) : 0,
+      surplus: balance > 0 ? balance : 0
     }
   }, [student])
 
@@ -125,8 +125,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
       const mName = months[checkDate.getMonth()]
       const yName = checkDate.getFullYear().toString()
       
-      // Find all rent payments for this specific month/year
-      // We look for 'seatAmount' (non-package) or 'amount' (package)
       const monthPayments = student.paymentsHistory?.filter((p: any) => p.month === mName && p.year === yName) || []
       const totalPaidForMonth = monthPayments.reduce((acc: number, curr: any) => {
         return acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0)
@@ -152,12 +150,10 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const totalRentDue = useMemo(() => {
     if (!student) return 0
     const totalExpected = dueBreakdown.reduce((acc, curr) => acc + curr.expected, 0)
-    // Calculate total money ever paid for rent
     const totalPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
       return acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0)
     }, 0) || 0
     
-    // Starting debt for old students
     const startingDebt = student.type === 'old' ? (Number(student.dueAmount) || 0) : 0
     
     return Math.max(0, (totalExpected + startingDebt) - totalPaid)
@@ -170,7 +166,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const availableAdvanceForDeduction = useMemo(() => {
     if (!student) return 0
     const currentAdvance = student.advanceAmount || 0
-    const minRequired = student.monthlyRent || 0 // Always keep 1 month locked
+    const minRequired = student.monthlyRent || 0
     return Math.max(0, currentAdvance - minRequired)
   }, [student])
 
@@ -186,7 +182,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         leftAt: serverTimestamp()
       })
 
-      // Free up the seat in building
       const buildingRef = doc(db, "buildings", student.buildingId)
       const buildingSnap = await getDoc(buildingRef)
       if (buildingSnap.exists()) {
@@ -235,7 +230,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
       toast({ 
         variant: "destructive", 
         title: "Deduction Restricted", 
-        description: `You must keep at least one month's rent (₹${student.monthlyRent}) in Advance as security. Available to deduct: ₹${availableAdvanceForDeduction}` 
+        description: `You must keep at least one month's rent (₹${student.monthlyRent}) in Advance as security.` 
       })
       return
     }
@@ -267,7 +262,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
     }
 
     try {
-      // 1. Record in global collection if it's new cash (not advance deduction)
       if (!useAdvanceBalance) {
         await setDoc(doc(db, "payments", paymentId), {
           ...paymentRecord,
@@ -282,7 +276,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         }, { merge: true })
       }
 
-      // 2. Update Student: History, Advance Pool, and Food Pool
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(paymentRecord),
         ...(useAdvanceBalance && {
@@ -296,7 +289,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
       toast({ 
         title: useAdvanceBalance ? "Advance Adjusted" : "Payment Recorded", 
-        description: `Successfully processed ₹${totalAmount} for ${paymentData.month}.` 
+        description: `Successfully processed ₹${totalAmount}. Food credit updated.` 
       })
       setIsPaymentDialogOpen(false)
       setUseAdvanceBalance(false)
@@ -347,7 +340,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         updatedAt: serverTimestamp()
       })
       
-      toast({ title: "Meal Record Saved", description: `Log for ${logMonth} saved using global rate.` })
+      toast({ title: "Meal Record Saved", description: `Log for ${logMonth} saved. Balance updated.` })
       setLogCount("")
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -433,7 +426,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         <Card className="border-none shadow-sm md:col-span-2">
           <CardHeader>
             <CardTitle className="text-lg">Financial Overview</CardTitle>
-            <CardDescription>Consolidated balances and due tracking.</CardDescription>
+            <CardDescription>Real-time running balances and debt tracking.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
@@ -441,8 +434,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 <p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p>
                 <p className="text-lg font-bold">₹{student.advanceAmount || 0}</p>
                 <div className="text-[8px] text-muted-foreground mt-1 flex justify-between">
-                  <span>Locked: ₹{student.monthlyRent || 0}</span>
-                  <span>Free: ₹{availableAdvanceForDeduction}</span>
+                  <span>Security Lock: ₹{student.monthlyRent || 0}</span>
                 </div>
               </div>
               
@@ -462,13 +454,13 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                   foodStats.balance >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20"
                 )}>
                   <p className={cn("text-[10px] uppercase font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>
-                    Food Balance
+                    {foodStats.balance >= 0 ? "Food Surplus" : "Food Debt"}
                   </p>
                   <p className={cn("text-lg font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>
                     ₹{foodStats.balance.toLocaleString()}
                   </p>
                   <p className="text-[8px] text-muted-foreground mt-1">
-                    {foodStats.balance >= 0 ? "Surplus available" : "Payment required"}
+                    {foodStats.balance >= 0 ? "Carried to next month" : "Needs payment"}
                   </p>
                 </div>
               )}
@@ -656,24 +648,23 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
           
           <div className="bg-secondary/30 p-4 rounded-lg space-y-2 mb-2">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Total Rent Due:</span>
+              <span className="text-muted-foreground">Rent Due:</span>
               <span className="font-bold text-destructive">₹{totalRentDue.toLocaleString()}</span>
             </div>
-            {student.paymentSystem === 'non-package' && foodStats.debt > 0 && (
+            {student.paymentSystem === 'non-package' && (
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Food Balance (Debt):</span>
-                <span className="font-bold text-destructive">₹{foodStats.debt.toLocaleString()}</span>
+                <span className="text-muted-foreground">
+                  {foodStats.balance >= 0 ? "Food Surplus (Carried):" : "Food Debt (Unpaid):"}
+                </span>
+                <span className={cn("font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>
+                  ₹{Math.abs(foodStats.balance).toLocaleString()}
+                </span>
               </div>
             )}
             <div className="flex justify-between text-xs mt-2 p-2 bg-primary/5 rounded border border-primary/10">
-              <span className="text-primary font-medium">Available Advance Pool:</span>
+              <span className="text-primary font-medium">Available Advance:</span>
               <span className="font-bold text-primary">₹{student.advanceAmount || 0}</span>
             </div>
-            {useAdvanceBalance && (
-               <p className="text-[10px] text-primary italic">
-                 * Locked security deposit (₹{student.monthlyRent}) will be maintained.
-               </p>
-            )}
           </div>
 
           <div className="space-y-4 py-2">
@@ -683,7 +674,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                   <ArrowDownToLine size={14} className="text-primary" />
                   Deduct from Advance Pool
                 </Label>
-                <p className="text-[10px] text-muted-foreground">Adjust monthly bill from student's deposit</p>
+                <p className="text-[10px] text-muted-foreground">Security deposit will remain locked.</p>
               </div>
               <Switch id="advSwitch" checked={useAdvanceBalance} onCheckedChange={setUseAdvanceBalance} />
             </div>
@@ -715,7 +706,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
             {student.paymentSystem === 'package' ? (
               <div className="space-y-2">
-                <Label>Total Payment/Adjustment Amount (₹)</Label>
+                <Label>Total Payment Amount (₹)</Label>
                 <Input 
                   type="number" 
                   value={paymentData.amount} 
@@ -726,7 +717,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
             ) : (
               <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border">
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase text-muted-foreground">Seat Rent</Label>
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Seat Rent Payment</Label>
                   <Input 
                     type="number" 
                     value={paymentData.seatAmount} 
@@ -736,7 +727,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase text-muted-foreground">Food Credit</Label>
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Food Credit Payment</Label>
                   <Input 
                     type="number" 
                     value={paymentData.foodAmount} 
