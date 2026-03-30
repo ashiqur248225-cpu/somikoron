@@ -1,3 +1,16 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-dashboard",
+      "description": "Financial Dashboard Overview",
+      "imageUrl": "https://picsum.photos/seed/hostel1/1200/600",
+      "imageHint": "finance dashboard"
+    },
+    {
+      "id": "building-thumb",
+      "description": "Hostel Building Thumbnail",
+      "imageUrl": "https://picsum.photos/seed/hostel2/400/300",
+      "imageHint": "hostel building"
+    }
+  ]
 }
