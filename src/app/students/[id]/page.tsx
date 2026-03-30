@@ -16,7 +16,7 @@ import {
   Loader2, Calculator,
   Contact, Plus, UserMinus, Wallet,
   UserPlus, AlertCircle, CheckCircle,
-  ArrowDownToLine
+  ArrowDownToLine, Lock
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -159,14 +159,10 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
     return Math.max(0, (totalExpected + startingDebt) - totalPaid)
   }, [student, dueBreakdown])
 
-  const totalDueAmount = useMemo(() => {
-    return totalRentDue + (foodStats.debt || 0)
-  }, [totalRentDue, foodStats.debt])
-
   const availableAdvanceForDeduction = useMemo(() => {
     if (!student) return 0
     const currentAdvance = student.advanceAmount || 0
-    const minRequired = student.monthlyRent || 0
+    const minRequired = student.monthlyRent || 0 // Always lock 1 month rent
     return Math.max(0, currentAdvance - minRequired)
   }, [student])
 
@@ -433,8 +429,8 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
                 <p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p>
                 <p className="text-lg font-bold">₹{student.advanceAmount || 0}</p>
-                <div className="text-[8px] text-muted-foreground mt-1 flex justify-between">
-                  <span>Security Lock: ₹{student.monthlyRent || 0}</span>
+                <div className="text-[8px] text-muted-foreground mt-1 flex justify-between items-center">
+                  <span className="flex items-center gap-0.5"><Lock size={8} /> Locked: ₹{student.monthlyRent || 0}</span>
                 </div>
               </div>
               
@@ -661,9 +657,19 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 </span>
               </div>
             )}
-            <div className="flex justify-between text-xs mt-2 p-2 bg-primary/5 rounded border border-primary/10">
-              <span className="text-primary font-medium">Available Advance:</span>
-              <span className="font-bold text-primary">₹{student.advanceAmount || 0}</span>
+            <div className="flex flex-col gap-1 mt-2 p-2 bg-primary/5 rounded border border-primary/10">
+              <div className="flex justify-between text-xs">
+                <span className="text-primary font-medium">Advance Pool:</span>
+                <span className="font-bold text-primary">₹{student.advanceAmount || 0}</span>
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-0.5"><Lock size={8} /> Security Lock:</span>
+                <span>₹{student.monthlyRent || 0}</span>
+              </div>
+              <div className="flex justify-between text-[10px] font-bold text-success border-t pt-1 mt-1">
+                <span>Available for Deduction:</span>
+                <span>₹{availableAdvanceForDeduction.toLocaleString()}</span>
+              </div>
             </div>
           </div>
 
@@ -676,7 +682,12 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 </Label>
                 <p className="text-[10px] text-muted-foreground">Security deposit will remain locked.</p>
               </div>
-              <Switch id="advSwitch" checked={useAdvanceBalance} onCheckedChange={setUseAdvanceBalance} />
+              <Switch 
+                id="advSwitch" 
+                checked={useAdvanceBalance} 
+                onCheckedChange={setUseAdvanceBalance}
+                disabled={availableAdvanceForDeduction <= 0}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
