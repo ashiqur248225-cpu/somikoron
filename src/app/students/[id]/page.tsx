@@ -165,9 +165,9 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
     
-    const totalAmount = student.paymentSystem === 'package' 
-      ? Number(paymentData.amount) 
-      : Number(paymentData.seatAmount) + Number(paymentData.foodAmount)
+    const seatPaid = student.paymentSystem === 'package' ? Number(paymentData.amount) : Number(paymentData.seatAmount)
+    const foodPaid = student.paymentSystem === 'non-package' ? Number(paymentData.foodAmount) : 0
+    const totalAmount = seatPaid + foodPaid
 
     if (totalAmount <= 0) {
       toast({ variant: "destructive", title: "Error", description: "Please enter a valid amount." })
@@ -186,8 +186,8 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
     const paymentRecord = {
       amount: totalAmount,
-      seatAmount: student.paymentSystem === 'non-package' ? Number(paymentData.seatAmount) : totalAmount,
-      foodAmount: student.paymentSystem === 'non-package' ? Number(paymentData.foodAmount) : 0,
+      seatAmount: seatPaid,
+      foodAmount: foodPaid,
       buildingId: student.buildingId,
       buildingName: student.buildingName,
       studentName: student.name,
@@ -208,10 +208,12 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         createdAt: serverTimestamp(),
       })
 
+      // Update student document: decrement dueAmount and increment foodCost
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(paymentRecord),
+        dueAmount: increment(-seatPaid),
         ...(student.paymentSystem === 'non-package' && {
-          foodCost: increment(Number(paymentData.foodAmount))
+          foodCost: increment(foodPaid)
         }),
         updatedAt: serverTimestamp()
       })
@@ -222,7 +224,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         updatedAt: serverTimestamp()
       }, { merge: true })
 
-      toast({ title: "Payment Recorded", description: `Amount ₹${totalAmount} added to history.` })
+      toast({ title: "Payment Recorded", description: `Amount ₹${totalAmount} added to history and balances updated.` })
       setIsPaymentDialogOpen(false)
       setPaymentData(prev => ({ ...prev, amount: "", seatAmount: "", foodAmount: "", description: "" }))
     } catch (e: any) {

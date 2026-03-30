@@ -149,8 +149,10 @@ export default function DashboardPage() {
         createdAt: Timestamp.now(),
       })
 
+      // Update student: decrement dueAmount
       await updateDoc(doc(db, "students", paymentForm.studentId), {
         paymentsHistory: arrayUnion(paymentRecord),
+        dueAmount: increment(-amount),
         updatedAt: Timestamp.now()
       })
 
@@ -160,7 +162,7 @@ export default function DashboardPage() {
         updatedAt: Timestamp.now()
       }, { merge: true })
 
-      toast({ title: "Payment Recorded", description: `Quick payment of ₹${amount} saved.` })
+      toast({ title: "Payment Recorded", description: `Quick payment of ₹${amount} saved and student due updated.` })
       setIsPaymentOpen(false)
       setPaymentForm({
         studentId: "",

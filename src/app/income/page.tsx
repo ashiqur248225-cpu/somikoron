@@ -80,10 +80,11 @@ export default function IncomeEntryPage() {
       createdAt: serverTimestamp(),
     })
 
-    // 2. Mirror to Student's paymentsHistory map field
+    // 2. Mirror to Student's paymentsHistory map field and update balances
     const studentRef = doc(db, "students", formData.studentId)
     updateDoc(studentRef, {
       paymentsHistory: arrayUnion(paymentRecord),
+      dueAmount: increment(-amount), // Subtract from due
       updatedAt: serverTimestamp()
     })
 
@@ -97,7 +98,7 @@ export default function IncomeEntryPage() {
 
     toast({
       title: "Success",
-      description: "Payment record saved to ledger and student history.",
+      description: "Payment record saved and student due updated.",
     })
     
     setFormData(prev => ({...prev, amount: "", description: ""}))
@@ -247,7 +248,7 @@ export default function IncomeEntryPage() {
                   <p className="font-semibold text-primary">Student Info</p>
                   <p className="text-muted-foreground">
                     Current plan: <span className="font-bold">{selectedStudent.paymentSystem}</span>. 
-                    Standard Rent: ₹{selectedStudent.monthlyRent}
+                    Current Due: ₹{selectedStudent.dueAmount || 0}
                   </p>
                 </div>
               </div>
