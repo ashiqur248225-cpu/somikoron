@@ -16,7 +16,8 @@ import {
   Loader2, Calculator,
   Contact, Plus, UserMinus, Wallet,
   UserPlus, AlertCircle, CheckCircle,
-  ArrowDownToLine, Lock
+  ArrowDownToLine, Lock,
+  History
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -56,6 +57,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
+  const [isLogMealDialogOpen, setIsLogMealDialogOpen] = useState(false)
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
   const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
   
@@ -338,6 +340,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
       
       toast({ title: "Meal Record Saved", description: `Log for ${logMonth} saved. Balance updated.` })
       setLogCount("")
+      setIsLogMealDialogOpen(false)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -556,64 +559,38 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
         {student.paymentSystem === 'non-package' && (
           <TabsContent value="meals">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-6">
-                <Card className="border-none shadow-sm h-fit">
-                  <CardHeader>
-                    <CardTitle className="text-sm">Log Monthly Count</CardTitle>
-                    <CardDescription className="text-xs">Global rate: ₹{globalMealRate}/meal</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Month</Label>
-                      <Select value={logMonth} onValueChange={setLogMonth}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Total Meals</Label>
-                      <Input type="number" placeholder="Count" value={logCount} onChange={e => setLogCount(e.target.value)} />
-                    </div>
-                    <Button className="w-full gap-2" onClick={logMonthlyMeal} disabled={isUpdating}>
-                      <Plus size={16} /> Save Record
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card className="md:col-span-2 border-none shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">Meal Logs History</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Period</TableHead>
-                        <TableHead>Count</TableHead>
-                        <TableHead>Rate</TableHead>
-                        <TableHead className="text-right">Cost (₹)</TableHead>
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-sm">Meal Logs History</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Count</TableHead>
+                      <TableHead>Rate</TableHead>
+                      <TableHead className="text-right">Cost (₹)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {student.mealsHistory?.map((m: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{m.month}</TableCell>
+                        <TableCell className="font-bold">{m.totalMeals}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">₹{m.perMealCost}</TableCell>
+                        <TableCell className="text-right font-bold">
+                          ₹{m.totalCost?.toLocaleString()}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {student.mealsHistory?.map((m: any, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-medium">{m.month}</TableCell>
-                          <TableCell className="font-bold">{m.totalMeals}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">₹{m.perMealCost}</TableCell>
-                          <TableCell className="text-right font-bold">
-                            ₹{m.totalCost?.toLocaleString()}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </div>
+                    ))}
+                    {(!student.mealsHistory || student.mealsHistory.length === 0) && (
+                      <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No meal records found.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
         )}
       </Tabs>
@@ -632,10 +609,20 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
               </div>
               <span className="font-medium">Process Payment</span>
             </DropdownMenuItem>
+            
+            {student.paymentSystem === 'non-package' && (
+              <DropdownMenuItem onClick={() => setIsLogMealDialogOpen(true)} className="flex items-center gap-2 cursor-pointer p-3">
+                <div className="bg-primary/10 p-2 rounded-lg text-primary">
+                  <Utensils size={18} />
+                </div>
+                <span className="font-medium">Log Meals</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
+      {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
           <DialogHeader>
@@ -806,6 +793,50 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
           <DialogFooter>
             <Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg" disabled={isUpdating}>
               {isUpdating ? <Loader2 className="animate-spin" /> : (useAdvanceBalance ? "Confirm Adjustment" : "Record Payment")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Log Meal Dialog */}
+      <Dialog open={isLogMealDialogOpen} onOpenChange={setIsLogMealDialogOpen}>
+        <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
+          <DialogHeader>
+            <DialogTitle>Log Monthly Meals</DialogTitle>
+            <DialogDescription>
+              Set the total meal count for the month. Global rate: ₹{globalMealRate}/meal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Month</Label>
+              <Select value={logMonth} onValueChange={setLogMonth}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Total Meals Count</Label>
+              <Input 
+                type="number" 
+                placeholder="Enter count" 
+                value={logCount} 
+                onChange={e => setLogCount(e.target.value)} 
+              />
+            </div>
+            {logCount && (
+              <div className="bg-primary/5 p-3 rounded-lg flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Estimated Cost:</span>
+                <span className="font-bold text-primary">₹{(Number(logCount) * globalMealRate).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button className="w-full h-12 text-lg gap-2" onClick={logMonthlyMeal} disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle size={18} />}
+              Save Meal Record
             </Button>
           </DialogFooter>
         </DialogContent>
