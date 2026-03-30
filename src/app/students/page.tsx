@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -62,16 +63,16 @@ export default function StudentsPage() {
     roomNumber: "",
     seatNumber: "",
     type: "new", 
-    dueAmount: "0",
+    dueAmount: "0", // Rent Due for Old Student
+    foodDueAmount: "0", // Food Due for Old Student (Non-Package)
     initialRentPayment: "0",
     advanceAmount: "0",
     serviceCharge: "0",
     paymentSystem: "package",
     monthlyRent: "",
-    foodCost: "0"
+    foodCost: "0" // Total Food Paid so far
   })
 
-  // Cascading Selection Logic for Form (Building -> Room -> Seat)
   const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
   
   const allRoomsInSelectedBuilding = useMemo(() => {
@@ -84,7 +85,6 @@ export default function StudentsPage() {
   const selectedRoom = allRoomsInSelectedBuilding.find((r: any) => r.roomNo === formData.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
-  // Cascading Options for Filters
   const roomOptions = useMemo(() => {
     if (buildingFilter === "all" || !buildings) return []
     const b = buildings.find(b => b.id === buildingFilter)
@@ -104,8 +104,15 @@ export default function StudentsPage() {
       const monthlyRent = Number(formData.monthlyRent)
       const initialRentPayment = Number(formData.initialRentPayment)
       
-      const startingDue = formData.type === 'new' ? (monthlyRent - initialRentPayment) : Number(formData.dueAmount)
-      const foodCostVal = formData.paymentSystem === 'package' ? 0 : Number(formData.foodCost)
+      // For Old Students, we initialize the dues directly from input
+      // For New Students, dues are monthlyRent - initialRentPayment (for current month)
+      const startingRentDue = formData.type === 'old' ? Number(formData.dueAmount) : (monthlyRent - initialRentPayment)
+      
+      // For Non-Package Food: 
+      // If old student, we treat the 'foodCost' as already paid amount, and 'foodDueAmount' as starting debt
+      // But in our model, food debt = consumed - paid. 
+      // So if they have food due of 500, we could represent it as starting meals history of 500 cost with 0 paid.
+      const initialFoodPaid = Number(formData.foodCost)
 
       const apartmentName = selectedRoom?.aptName || "General"
 
@@ -133,17 +140,26 @@ export default function StudentsPage() {
         })
       }
 
+      const initialMealsHistory = (formData.type === 'old' && formData.paymentSystem === 'non-package' && Number(formData.foodDueAmount) > 0) ? [{
+        date: new Date().toISOString(),
+        month: "Previous Balance",
+        totalMeals: 0,
+        perMealCost: 0,
+        totalCost: Number(formData.foodDueAmount),
+        description: "Balance brought forward"
+      }] : []
+
       await setDoc(studentRef, {
         ...formData,
         apartmentName: apartmentName,
-        dueAmount: startingDue,
-        foodCost: foodCostVal,
+        dueAmount: startingRentDue, // Starting Seat Due
+        foodCost: initialFoodPaid, // Starting Food Paid
         advanceAmount: Number(formData.advanceAmount),
         serviceCharge: Number(formData.serviceCharge),
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
         paymentsHistory: paymentRecord ? [paymentRecord] : [],
-        mealsHistory: [],
+        mealsHistory: initialMealsHistory,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -181,7 +197,7 @@ export default function StudentsPage() {
       setOpen(false)
       setFormData({
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
-        type: "new", dueAmount: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
+        type: "new", dueAmount: "0", foodDueAmount: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
         paymentSystem: "package", monthlyRent: "", foodCost: "0"
       })
     } catch (e: any) {
@@ -220,8 +236,7 @@ export default function StudentsPage() {
             <DialogHeader><DialogTitle>Register Resident</DialogTitle></DialogHeader>
             <div className="space-y-6 py-4">
               
-              {/* Student Type Selection */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-secondary/20 rounded-lg border">
+              <div className="p-4 bg-secondary/20 rounded-lg border space-y-4">
                 <div className="space-y-2">
                   <Label className="font-bold">Student Type</Label>
                   <RadioGroup 
@@ -235,19 +250,27 @@ export default function StudentsPage() {
                     </div>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="old" id="old-std" />
-                      <Label htmlFor="old-std" className="cursor-pointer">Old Student</Label>
+                      <Label htmlFor="old-std" className="cursor-pointer">Old Student (Existing Data)</Label>
                     </div>
                   </RadioGroup>
                 </div>
+
                 {formData.type === 'old' && (
-                  <div className="space-y-2">
-                    <Label className="font-bold">Previous Due (₹)</Label>
-                    <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                    <div className="space-y-2">
+                      <Label className="font-bold text-destructive">Previous SEAT Due (₹)</Label>
+                      <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
+                    </div>
+                    {formData.paymentSystem === 'non-package' && (
+                      <div className="space-y-2">
+                        <Label className="font-bold text-destructive">Previous FOOD Due (₹)</Label>
+                        <Input type="number" value={formData.foodDueAmount} onChange={e => setFormData({...formData, foodDueAmount: e.target.value})} placeholder="0.00" />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Personal Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Student Name</Label>
@@ -270,7 +293,6 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-              {/* Billing & Plan */}
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
                 <Label className="font-bold">Billing & Food Plan</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -279,19 +301,18 @@ export default function StudentsPage() {
                      <Select value={formData.paymentSystem} onValueChange={val => setFormData({...formData, paymentSystem: val})}>
                        <SelectTrigger><SelectValue /></SelectTrigger>
                        <SelectContent>
-                         <SelectItem value="package">Package Plan</SelectItem>
-                         <SelectItem value="non-package">Non-Package (Food Tracker)</SelectItem>
+                         <SelectItem value="package">Package Plan (Fixed All-in)</SelectItem>
+                         <SelectItem value="non-package">Non-Package (Separate Rent & Food)</SelectItem>
                        </SelectContent>
                      </Select>
                    </div>
                    <div className="space-y-2">
-                     <Label>Monthly Rent (₹)</Label>
+                     <Label>{formData.paymentSystem === 'package' ? 'Monthly Package Rate (₹)' : 'Monthly Seat Rent (₹)'}</Label>
                      <Input type="number" value={formData.monthlyRent} onChange={e => setFormData({...formData, monthlyRent: e.target.value})} />
                    </div>
                 </div>
               </div>
 
-              {/* Location Selection */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
                  <div className="space-y-1">
                     <Label className="text-[10px] font-bold flex items-center gap-1"><Building2 size={10}/> Building</Label>
@@ -316,16 +337,21 @@ export default function StudentsPage() {
                  </div>
               </div>
 
-              {/* Financials at Registration */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t pt-4">
                  <div className="space-y-2">
-                    <Label>Advance Amount (₹)</Label>
+                    <Label>Advance / Security (₹)</Label>
                     <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
                  </div>
                  <div className="space-y-2">
                     <Label>Rent Paid Now (₹)</Label>
                     <Input type="number" value={formData.initialRentPayment} onChange={e => setFormData({...formData, initialRentPayment: e.target.value})} />
                  </div>
+                 {formData.type === 'old' && formData.paymentSystem === 'non-package' && (
+                    <div className="space-y-2">
+                      <Label>Food Already Paid (₹)</Label>
+                      <Input type="number" value={formData.foodCost} onChange={e => setFormData({...formData, foodCost: e.target.value})} />
+                    </div>
+                 )}
                  <div className="space-y-2">
                     <Label>Service Charge (₹)</Label>
                     <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
@@ -339,7 +365,6 @@ export default function StudentsPage() {
         </Dialog>
       </div>
 
-      {/* Filtering Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Search</Label>
