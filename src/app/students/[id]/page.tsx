@@ -1,8 +1,8 @@
 
 "use client"
 
-import { useParams, useRouter } from "next/navigation"
-import { useState, useMemo } from "react"
+import React, { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, setDoc, getDoc, arrayUnion, increment, collection } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -15,7 +15,7 @@ import {
   BedDouble, CreditCard, Utensils,
   Loader2, Calculator,
   Contact, Plus, UserMinus, Wallet,
-  History, UserPlus, Info
+  UserPlus
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -45,10 +45,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
 
-export default function StudentDetailsPage() {
-  const { id } = useParams()
+export default function StudentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = React.use(params)
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()
@@ -78,19 +77,18 @@ export default function StudentDetailsPage() {
   const [paymentData, setPaymentData] = useState({
     month: new Date().toLocaleString('default', { month: 'long' }),
     year: new Date().getFullYear().toString(),
-    amount: "", // Total paid
-    seatAmount: "", // For non-package
-    foodAmount: "", // For non-package
+    amount: "", 
+    seatAmount: "", 
+    foodAmount: "", 
     method: "cash",
     receiver: "",
     description: ""
   })
 
   // Fetch Student Data
-  const studentRef = useMemoFirebase(() => id ? doc(db, "students", id as string) : null, [db, id])
+  const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
-  // Calculations for display
   const currentMonth = new Date().toLocaleString('default', { month: 'long' })
 
   const currentMonthMealRecord = useMemo(() => {
@@ -153,7 +151,6 @@ export default function StudentDetailsPage() {
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
     
-    // Validate amounts
     const totalAmount = student.paymentSystem === 'package' 
       ? Number(paymentData.amount) 
       : Number(paymentData.seatAmount) + Number(paymentData.foodAmount)
@@ -199,7 +196,6 @@ export default function StudentDetailsPage() {
 
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(paymentRecord),
-        // If it's a non-package payment, update foodCost (which acts as food balance/advance)
         ...(student.paymentSystem === 'non-package' && {
           foodCost: increment(Number(paymentData.foodAmount))
         }),
@@ -706,7 +702,11 @@ export default function StudentDetailsPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>Phone Number</Label>
-                        <Input value={newStaff.phone} onChange={e => setNewStaff({...newStaff, phone: e.target.value})} />
+                        <Input 
+                          value={newStaff.phone} 
+                          maxLength={11}
+                          onChange={e => setNewStaff({...newStaff, phone: e.target.value})} 
+                        />
                       </div>
                     </div>
                     <DialogFooter>

@@ -30,7 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, updateDoc, increment } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, updateDoc, increment, Timestamp } from "firebase/firestore"
 
 export default function StudentsPage() {
   const { toast } = useToast()
@@ -168,11 +168,21 @@ export default function StudentsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Phone Number</Label>
-                  <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="Primary contact" />
+                  <Input 
+                    value={formData.phone} 
+                    maxLength={11}
+                    onChange={e => setFormData({...formData, phone: e.target.value})} 
+                    placeholder="11 digits" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Parent Number</Label>
-                  <Input value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} placeholder="Parent/Guardian contact" />
+                  <Input 
+                    value={formData.parentPhone} 
+                    maxLength={11}
+                    onChange={e => setFormData({...formData, parentPhone: e.target.value})} 
+                    placeholder="11 digits" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Address</Label>
