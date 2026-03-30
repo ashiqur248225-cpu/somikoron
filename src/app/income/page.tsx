@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Wallet, Info, Loader2, Lock, ArrowDownToLine, UserPlus, DoorOpen, Building2, Plus, Search, Filter, History, HandCoins, CreditCard, LayoutGrid } from "lucide-react"
+import { Wallet, Info, Loader2, Lock, ArrowDownToLine, UserPlus, DoorOpen, Building2, Plus, Search, Filter, History, HandCoins, CreditCard, LayoutGrid, XCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, Timestamp, query, orderBy, where, limit } from "firebase/firestore"
@@ -37,7 +37,6 @@ export default function IncomeHistoryPage() {
   const [searchTerm, setSearchTerm] = useState("")
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("")
-  const [selectedAptName, setSelectedAptName] = useState<string>("")
   const [selectedRoomNumber, setSelectedRoomNumber] = useState<string>("")
   const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
 
@@ -65,20 +64,20 @@ export default function IncomeHistoryPage() {
   const incomeQuery = useMemoFirebase(() => query(collection(db, "payments"), orderBy("date", "desc"), limit(200)), [db])
   const { data: payments, isLoading: paymentsLoading } = useCollection(incomeQuery)
 
-  // Cascading Selection for Form
+  // Cascading Selection for Form (Building -> Room -> Student)
   const selectedBuildingForForm = buildings?.find(b => b.id === selectedBuildingId)
-  const apartmentsInBuilding = selectedBuildingForForm?.apartmentsDetail || []
-  const selectedAptInBuilding = apartmentsInBuilding.find((a: any) => a.name === selectedAptName)
-  const roomsInApt = selectedAptInBuilding?.rooms || []
+  const roomsInBuildingForForm = useMemo(() => {
+    if (!selectedBuildingForForm) return []
+    return selectedBuildingForForm.apartmentsDetail?.flatMap((a: any) => a.rooms || []) || []
+  }, [selectedBuildingForForm])
   
   const filteredStudentsForForm = useMemo(() => {
     return students?.filter(s => 
       s.buildingId === selectedBuildingId && 
-      s.apartmentName === selectedAptName &&
       s.roomNumber === selectedRoomNumber &&
       s.isActive
     ) || []
-  }, [students, selectedBuildingId, selectedAptName, selectedRoomNumber])
+  }, [students, selectedBuildingId, selectedRoomNumber])
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
@@ -98,7 +97,7 @@ export default function IncomeHistoryPage() {
 
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.studentId || !selectedBuildingId || !selectedAptName || !selectedRoomNumber) return
+    if (!formData.studentId || !selectedBuildingId || !selectedRoomNumber) return
 
     const seatPaid = selectedStudent?.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
     const foodPaid = selectedStudent?.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
@@ -142,10 +141,10 @@ export default function IncomeHistoryPage() {
         updatedAt: serverTimestamp()
       })
 
-      toast({ title: "Success", description: "Hierarchy Apartment &rarr; Room &rarr; Seat updated." })
+      toast({ title: "Success", description: `Processed ₹${totalAmount} for Room ${selectedRoomNumber}.` })
       setIsEntryOpen(false)
       setFormData({ ...formData, studentId: "", amount: "", seatAmount: "", foodAmount: "", description: "" })
-      setSelectedBuildingId(""); setSelectedAptName(""); setSelectedRoomNumber("")
+      setSelectedBuildingId(""); setSelectedRoomNumber("")
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -195,7 +194,7 @@ export default function IncomeHistoryPage() {
               <SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
             </Select>
          </div>
-         <Button variant="ghost" className="h-10 mt-auto" onClick={() => { setSearchTerm(""); setMonthFilter("all"); setBuildingFilter("all") }}>
+         <Button variant="ghost" className="h-10 mt-auto" onClick={() => { setSearchTerm(""); setMonthFilter(new Date().toLocaleString('default', { month: 'long' })); setBuildingFilter("all") }}>
            <XCircle size={14} className="mr-1" /> Reset
          </Button>
       </div>
@@ -239,26 +238,18 @@ export default function IncomeHistoryPage() {
           <DialogHeader><DialogTitle>Record Income Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
              <div className="space-y-4 p-4 bg-secondary/10 rounded-xl border">
-                <Label className="text-xs font-bold uppercase text-muted-foreground tracking-tight">Standard selection fields (Building &rarr; Room &rarr; Student)</Label>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1.5"><Building2 size={12}/> Building</Label>
-                  <Select onValueChange={(val) => { setSelectedBuildingId(val); setSelectedAptName(""); setSelectedRoomNumber(""); setFormData({...formData, studentId: ""}) }}>
+                  <Select onValueChange={(val) => { setSelectedBuildingId(val); setSelectedRoomNumber(""); setFormData({...formData, studentId: ""}) }}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-1.5"><LayoutGrid size={12}/> Apartment</Label>
-                  <Select disabled={!selectedBuildingId} onValueChange={(val) => { setSelectedAptName(val); setSelectedRoomNumber(""); setFormData({...formData, studentId: ""}) }}>
+                  <Label className="flex items-center gap-1.5"><DoorOpen size={12}/> Room No.</Label>
+                  <Select disabled={!selectedBuildingId} onValueChange={(val) => { setSelectedRoomNumber(val); setFormData({...formData, studentId: ""}) }}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>{apartmentsInBuilding.map((a: any) => <SelectItem key={a.name} value={a.name}>{a.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1.5"><DoorOpen size={12}/> Room</Label>
-                  <Select disabled={!selectedAptName} onValueChange={(val) => { setSelectedRoomNumber(val); setFormData({...formData, studentId: ""}) }}>
-                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>{roomsInApt.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
+                    <SelectContent>{roomsInBuildingForForm.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">

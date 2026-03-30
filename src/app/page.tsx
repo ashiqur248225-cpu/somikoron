@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -101,9 +100,12 @@ export default function DashboardPage() {
     description: ""
   })
 
-  // Hierarchical Filtering Data
+  // Hierarchical Filtering Data (Building -> Room -> Student)
   const selectedBuilding = useMemo(() => buildings?.find(b => b.id === selectedBuildingId), [buildings, selectedBuildingId])
-  const roomsInBuilding = useMemo(() => selectedBuilding?.roomsDetail || [], [selectedBuilding])
+  const roomsInBuilding = useMemo(() => {
+    if (!selectedBuilding) return []
+    return selectedBuilding.apartmentsDetail?.flatMap((a: any) => a.rooms || []) || []
+  }, [selectedBuilding])
 
   const filteredStudents = useMemo(() => {
     return students?.filter(s => 
@@ -142,9 +144,7 @@ export default function DashboardPage() {
     const income = allPayments.filter(isWithinRange).reduce((acc, p) => acc + (p.amount || 0), 0)
     const expense = allExpenses.filter(isWithinRange).reduce((acc, e) => acc + (e.amount || 0), 0)
 
-    // Calculate Dues (Simplified: only for active students)
     const totalDues = students.filter(s => s.isActive).reduce((sAcc, student) => {
-      // Basic due calculation logic
       const joinDate = student.createdAt?.toDate?.() || new Date()
       const monthsSinceJoin = (now.getFullYear() - joinDate.getFullYear()) * 12 + (now.getMonth() - joinDate.getMonth()) + 1
       const totalExpected = monthsSinceJoin * (student.monthlyRent || 0)
@@ -153,7 +153,6 @@ export default function DashboardPage() {
       return sAcc + rentDue
     }, 0)
 
-    // Fund status (All time)
     const fund = { cash: 0, bkash: 0, nagad: 0, bank: 0 }
     allPayments.forEach(p => {
       const m = p.method as keyof typeof fund
@@ -347,7 +346,7 @@ export default function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg">Total Fund Status</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Available balance across different accounts.</p>
+              <p className="text-xs text-muted-foreground mt-1">Available balance across accounts.</p>
             </div>
             <div className="bg-primary/10 p-2 rounded-lg text-primary">
               <CircleDollarSign size={20} />
@@ -408,15 +407,8 @@ export default function DashboardPage() {
                     style={{ width: `${(b.occupiedSeats / (b.totalSeats || 1)) * 100}%` }} 
                   />
                 </div>
-                <div className="flex justify-between text-[10px] text-muted-foreground uppercase font-bold">
-                  <span>{Math.round((b.occupiedSeats / (b.totalSeats || 1)) * 100)}% Full</span>
-                  <span>{b.emptySeats} Vacant</span>
-                </div>
               </div>
             ))}
-            {buildings?.length === 0 && (
-              <div className="text-center py-10 text-muted-foreground text-sm">No property data available.</div>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -457,14 +449,14 @@ export default function DashboardPage() {
                     }}
                   >
                     <SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger>
-                    <SelectContent>{roomsInBuilding.map(r => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
+                    <SelectContent>{roomsInBuilding.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1.5">Student</Label>
                   <Select 
-                    disabled={!selectedRoomNumber && filteredStudents.length === 0} 
+                    disabled={!selectedRoomNumber} 
                     onValueChange={val => setPaymentForm({...paymentForm, studentId: val})}
                   >
                     <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
@@ -547,10 +539,7 @@ export default function DashboardPage() {
 
               {!useAdvanceBalance && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Receiver</Label>
-                    <Button variant="link" size="sm" onClick={() => setIsAddStaffOpen(true)}>Add New</Button>
-                  </div>
+                  <Label>Receiver</Label>
                   <Select value={paymentForm.receiver} onValueChange={val => setPaymentForm({...paymentForm, receiver: val})}>
                     <SelectTrigger><SelectValue placeholder="Select receiver" /></SelectTrigger>
                     <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
