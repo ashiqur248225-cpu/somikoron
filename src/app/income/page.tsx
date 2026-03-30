@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -67,9 +66,10 @@ export default function IncomeHistoryPage() {
   const { data: payments, isLoading: paymentsLoading } = useCollection(incomeQuery)
 
   // Cascading Selection for Form
-  const selectedBuildingForForm = useMemo(() => buildings?.find(b => b.id === selectedBuildingId), [buildings, selectedBuildingId])
-  const apartmentsInBuilding = useMemo(() => selectedBuildingForForm?.apartmentsDetail || [], [selectedBuildingForForm])
-  const roomsInApt = useMemo(() => apartmentsInBuilding.find((a: any) => a.name === selectedAptName)?.rooms || [], [apartmentsInBuilding, selectedAptName])
+  const selectedBuildingForForm = buildings?.find(b => b.id === selectedBuildingId)
+  const apartmentsInBuilding = selectedBuildingForForm?.apartmentsDetail || []
+  const selectedAptInBuilding = apartmentsInBuilding.find((a: any) => a.name === selectedAptName)
+  const roomsInApt = selectedAptInBuilding?.rooms || []
   
   const filteredStudentsForForm = useMemo(() => {
     return students?.filter(s => 
@@ -91,6 +91,10 @@ export default function IncomeHistoryPage() {
       return matchesMonth && matchesBuilding && matchesSearch
     })
   }, [payments, monthFilter, buildingFilter, searchTerm])
+
+  const totalFilteredIncome = useMemo(() => {
+    return filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
+  }, [filteredPayments])
 
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -138,7 +142,7 @@ export default function IncomeHistoryPage() {
         updatedAt: serverTimestamp()
       })
 
-      toast({ title: "Success", description: "Hierarchy Apartment -> Room -> Seat updated." })
+      toast({ title: "Success", description: "Hierarchy Apartment &rarr; Room &rarr; Seat updated." })
       setIsEntryOpen(false)
       setFormData({ ...formData, studentId: "", amount: "", seatAmount: "", foodAmount: "", description: "" })
       setSelectedBuildingId(""); setSelectedAptName(""); setSelectedRoomNumber("")
@@ -159,17 +163,41 @@ export default function IncomeHistoryPage() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card className="bg-income/5 border-none shadow-sm border-l-4 border-l-income">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-income flex items-center gap-2">
+              <HandCoins size={16} /> Total Collections (Filtered)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-income">₹{totalFilteredIncome.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-secondary/20 p-4 rounded-xl border">
-         <Input placeholder="Search student..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-         <Select value={monthFilter} onValueChange={setMonthFilter}>
-           <SelectTrigger><SelectValue /></SelectTrigger>
-           <SelectContent>{["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-         </Select>
-         <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-           <SelectTrigger><SelectValue placeholder="Building" /></SelectTrigger>
-           <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-         </Select>
-         <Button variant="ghost" onClick={() => { setSearchTerm(""); setMonthFilter("all"); setBuildingFilter("all") }}>Reset</Button>
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">Search</Label>
+            <Input placeholder="Student name..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+         </div>
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">Month</Label>
+            <Select value={monthFilter} onValueChange={setMonthFilter}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+            </Select>
+         </div>
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">Building</Label>
+            <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+              <SelectTrigger><SelectValue placeholder="Building" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+            </Select>
+         </div>
+         <Button variant="ghost" className="h-10 mt-auto" onClick={() => { setSearchTerm(""); setMonthFilter("all"); setBuildingFilter("all") }}>
+           <XCircle size={14} className="mr-1" /> Reset
+         </Button>
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
@@ -180,6 +208,7 @@ export default function IncomeHistoryPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Student</TableHead>
                 <TableHead>Method</TableHead>
+                <TableHead>Receiver</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
               </TableRow>
             </TableHeader>
@@ -189,23 +218,28 @@ export default function IncomeHistoryPage() {
                   <TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell>
                   <TableCell className="font-medium">{p.studentName}</TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
+                  <TableCell className="text-xs">{p.receiver}</TableCell>
                   <TableCell className="text-right font-bold text-income">₹{p.amount?.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
+              {filteredPayments.length === 0 && (
+                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No income records found.</TableCell></TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
       <div className="fixed bottom-8 right-8 z-50">
-        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg"><Plus className="h-8 w-8" /></Button>
+        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform"><Plus className="h-8 w-8 text-white" /></Button>
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Record Income</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Record Income Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
              <div className="space-y-4 p-4 bg-secondary/10 rounded-xl border">
+                <Label className="text-xs font-bold uppercase text-muted-foreground tracking-tight">Standard selection fields (Building &rarr; Room &rarr; Student)</Label>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1.5"><Building2 size={12}/> Building</Label>
                   <Select onValueChange={(val) => { setSelectedBuildingId(val); setSelectedAptName(""); setSelectedRoomNumber(""); setFormData({...formData, studentId: ""}) }}>
@@ -257,7 +291,15 @@ export default function IncomeHistoryPage() {
                )}
              </div>
 
-             <Button type="submit" className="w-full h-12" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : "Confirm Payment"}</Button>
+             <div className="space-y-2">
+                <Label>Receiver</Label>
+                <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
+                  <SelectTrigger><SelectValue placeholder="Staff Member" /></SelectTrigger>
+                  <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+             </div>
+
+             <Button type="submit" className="w-full h-12 bg-income" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : "Confirm Payment"}</Button>
           </form>
         </DialogContent>
       </Dialog>

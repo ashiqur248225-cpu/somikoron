@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -171,7 +170,7 @@ export default function BuildingsPage() {
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Buildings</h1>
-            <p className="text-muted-foreground mt-1">Manage Apartment -> Room -> Seat hierarchy.</p>
+            <p className="text-muted-foreground mt-1">Manage Apartment &rarr; Room &rarr; Seat hierarchy.</p>
           </div>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>

@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo } from "react"
@@ -229,7 +228,7 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
              <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Building?</AlertDialogTitle>
-                  <AlertDialogDescription>Hierarchy Apartment -> Room -> Seat will be lost.</AlertDialogDescription>
+                  <AlertDialogDescription>Hierarchy Apartment &rarr; Room &rarr; Seat will be lost.</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
