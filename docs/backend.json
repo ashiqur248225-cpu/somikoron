@@ -1,0 +1,426 @@
+{
+  "entities": {
+    "Building": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Building",
+      "type": "object",
+      "description": "Represents a single hostel building.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Building entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the hostel building."
+        },
+        "address": {
+          "type": "string",
+          "description": "Physical address of the hostel building."
+        },
+        "description": {
+          "type": "string",
+          "description": "Brief description or additional details about the building."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the building record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the building record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "address",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Student": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Student",
+      "type": "object",
+      "description": "Represents a student residing in a hostel building.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Student entity."
+        },
+        "buildingId": {
+          "type": "string",
+          "description": "Reference to the Building where the student resides. (Relationship: Building 1:N Student)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the student."
+        },
+        "contactNumber": {
+          "type": "string",
+          "description": "Primary contact number for the student."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the student.",
+          "format": "email"
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Indicates if the student is currently active (true) or inactive (false)."
+        },
+        "paymentSystem": {
+          "type": "string",
+          "description": "Payment system type for the student ('package' for combined rent+meal, 'non-package' for separate amounts).",
+          "format": "enum"
+        },
+        "admissionDate": {
+          "type": "string",
+          "description": "Date when the student was admitted to the hostel.",
+          "format": "date"
+        },
+        "roomNumber": {
+          "type": "string",
+          "description": "Room number assigned to the student."
+        },
+        "buildingName": {
+          "type": "string",
+          "description": "Denormalized name of the building for quick display and filtering. (Derived from Building entity)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the student record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the student record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "buildingId",
+        "name",
+        "contactNumber",
+        "isActive",
+        "paymentSystem",
+        "admissionDate",
+        "roomNumber",
+        "buildingName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Payment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Payment",
+      "type": "object",
+      "description": "Records an income entry from a student.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Payment entity."
+        },
+        "studentId": {
+          "type": "string",
+          "description": "Reference to the Student who made the payment. (Relationship: Student 1:N Payment)"
+        },
+        "buildingId": {
+          "type": "string",
+          "description": "Reference to the Building associated with the student for this payment. (Relationship: Building 1:N Payment)"
+        },
+        "amount": {
+          "type": "number",
+          "description": "The monetary amount of the payment."
+        },
+        "paymentType": {
+          "type": "string",
+          "description": "Type of payment (e.g., advance, partial, full).",
+          "format": "enum"
+        },
+        "paymentMonth": {
+          "type": "number",
+          "description": "The month for which the payment is made (1-12)."
+        },
+        "paymentYear": {
+          "type": "number",
+          "description": "The year for which the payment is made (e.g., 2023)."
+        },
+        "paymentDate": {
+          "type": "string",
+          "description": "Date and time when the payment was recorded.",
+          "format": "date-time"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Method used for payment (e.g., cash, bank transfer, mobile money)."
+        },
+        "receivedBy": {
+          "type": "string",
+          "description": "Name of the person who received/recorded the payment."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes or details about the payment."
+        },
+        "studentName": {
+          "type": "string",
+          "description": "Denormalized name of the student for quick display and filtering. (Derived from Student entity)"
+        },
+        "buildingName": {
+          "type": "string",
+          "description": "Denormalized name of the building for quick display and filtering. (Derived from Building entity)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the payment record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the payment record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "studentId",
+        "buildingId",
+        "amount",
+        "paymentType",
+        "paymentMonth",
+        "paymentYear",
+        "paymentDate",
+        "paymentMethod",
+        "receivedBy",
+        "studentName",
+        "buildingName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ExpenseParty": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ExpenseParty",
+      "type": "object",
+      "description": "Manages a master list of persons or entities involved in expenses.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ExpenseParty entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the person or entity involved in an expense (e.g., electrician, market vendor)."
+        },
+        "contactNumber": {
+          "type": "string",
+          "description": "Contact number for the expense party."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address for the expense party.",
+          "format": "email"
+        },
+        "address": {
+          "type": "string",
+          "description": "Physical address of the expense party."
+        },
+        "description": {
+          "type": "string",
+          "description": "Role or type of the expense party (e.g., 'service provider', 'vendor', 'individual')."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the expense party record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the expense party record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Expense": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Expense",
+      "type": "object",
+      "description": "Tracks all money outflow with detailed categorization.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Expense entity."
+        },
+        "buildingId": {
+          "type": "string",
+          "description": "Reference to the Building associated with this expense. (Relationship: Building 1:N Expense)"
+        },
+        "expensePartyId": {
+          "type": "string",
+          "description": "Reference to the ExpenseParty involved in this expense. (Relationship: ExpenseParty 0..1:N Expense)"
+        },
+        "amount": {
+          "type": "number",
+          "description": "The monetary amount of the expense."
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of the expense (e.g., 'Utility Bill', 'Market Expense', 'Staff Salary', 'Building Rent', 'Other').",
+          "format": "enum"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the expense."
+        },
+        "expenseDate": {
+          "type": "string",
+          "description": "Date and time when the expense was incurred/recorded.",
+          "format": "date-time"
+        },
+        "recordedBy": {
+          "type": "string",
+          "description": "Name of the person who recorded the expense."
+        },
+        "meterNumber": {
+          "type": "string",
+          "description": "Meter number associated with utility bills (if category is 'Utility Bill')."
+        },
+        "buildingName": {
+          "type": "string",
+          "description": "Denormalized name of the building for quick display and filtering. (Derived from Building entity)"
+        },
+        "expensePartyName": {
+          "type": "string",
+          "description": "Denormalized name of the expense party for quick display and filtering. (Derived from ExpenseParty entity)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the expense record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the expense record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "buildingId",
+        "amount",
+        "category",
+        "description",
+        "expenseDate",
+        "recordedBy",
+        "buildingName",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/managers/{managerId}",
+        "definition": {
+          "entityName": "Manager",
+          "schema": {
+            "$ref": "#/backend/entities/Manager"
+          },
+          "description": "Identifies users who have administrative access to the entire system. The presence of a document for a user's UID signifies their manager role. This supports DBAC (Existence over Content) for system-wide authorization."
+        }
+      },
+      {
+        "path": "/buildings/{buildingId}",
+        "definition": {
+          "entityName": "Building",
+          "schema": {
+            "$ref": "#/backend/entities/Building"
+          },
+          "description": "Top-level collection representing individual hostel buildings. Access controlled by the global 'managers' role."
+        }
+      },
+      {
+        "path": "/buildings/{buildingId}/students/{studentId}",
+        "definition": {
+          "entityName": "Student",
+          "schema": {
+            "$ref": "#/backend/entities/Student"
+          },
+          "description": "Students residing within a specific hostel building. Includes denormalized 'buildingId' and 'buildingName' fields within each document for authorization independence and efficient filtering/querying.",
+          "params": [
+            {
+              "name": "buildingId",
+              "description": "The unique identifier of the parent Building."
+            },
+            {
+              "name": "studentId",
+              "description": "The unique identifier of the Student."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/expenseParties/{expensePartyId}",
+        "definition": {
+          "entityName": "ExpenseParty",
+          "schema": {
+            "$ref": "#/backend/entities/ExpenseParty"
+          },
+          "description": "Master list of persons or entities involved in expenses. This collection is independent of specific buildings and is controlled by the global 'managers' role."
+        }
+      },
+      {
+        "path": "/payments/{paymentId}",
+        "definition": {
+          "entityName": "Payment",
+          "schema": {
+            "$ref": "#/backend/entities/Payment"
+          },
+          "description": "Top-level collection for all student income entries. Each document includes denormalized 'buildingId', 'studentId', 'buildingName', and 'studentName'. This structure enables authorization independence, efficient filtering, and supports comprehensive reporting and ledger views across all buildings or specific entities without needing collection group queries or parent 'get()' calls.",
+          "params": [
+            {
+              "name": "paymentId",
+              "description": "The unique identifier of the Payment record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/expenses/{expenseId}",
+        "definition": {
+          "entityName": "Expense",
+          "schema": {
+            "$ref": "#/backend/entities/Expense"
+          },
+          "description": "Top-level collection for all money outflow records. Each document includes denormalized 'buildingId', 'buildingName', and 'expensePartyName'. This structure ensures authorization independence, efficient filtering, and supports comprehensive reporting and ledger views across all buildings without needing collection group queries or parent 'get()' calls.",
+          "params": [
+            {
+              "name": "expenseId",
+              "description": "The unique identifier of the Expense record."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The recommended Firestore structure prioritizes secure, scalable, and debuggable access control by strictly adhering to the core design principles. \n\n**Authorization Independence:** This is achieved through extensive denormalization. For instance, 'Student' documents include 'buildingId' and 'buildingName'. More critically, 'Payment' and 'Expense' documents are placed in top-level collections (`/payments`, `/expenses`) and contain denormalized fields like 'buildingId', 'studentId', 'buildingName', and 'studentName'/'expensePartyName'. This means that Firestore security rules can evaluate access requests directly against the document's own data (`request.resource.data`) without needing to perform expensive and non-atomic `get()` calls to parent documents or related entities. This also enables atomic creation/update operations.\n\n**Querying for Authorization Purposes (QAPs):** The structural segregation and denormalization directly support efficient and secure `list` operations (QAPs). \n1.  **Global Admin Access:** A dedicated top-level collection `/managers/{uid}` is used to implement a Database Access Control (DBAC) model. The mere existence of a document at `/managers/$(request.auth.uid)` grants administrative privileges to the authenticated user, allowing them to access all data. This makes security rules simple: `allow read, write: if exists(/databases/$(database)/documents/managers/$(request.auth.uid));`. \n2.  **Efficient Reporting and Filtering:** By placing 'Payment' and 'Expense' records in top-level collections (e.g., `/payments`, `/expenses`) and including denormalized 'buildingId' and 'studentId' (for payments), it becomes highly efficient to retrieve monthly reports, building-specific ledgers, or student-specific payment histories. A query for all payments in a month can directly target `/payments` with `paymentMonth` and `paymentYear` filters, rather than requiring expensive collection group queries or iterating through nested subcollections. Security rules can then easily enforce that only managers can perform these queries, or in a more granular system, check if the `buildingId` in the queried document is accessible to the requester.\n\n**Minimizing Reads/Writes:** The top-level collections for 'payments' and 'expenses' with denormalized fields mean that aggregate reports (like 'monthly full information') can be generated with fewer, more targeted queries against these larger collections, relying on Firestore's indexing capabilities. This avoids deep, expensive traversals of nested subcollections for reporting purposes, thereby reducing reads and improving performance. For example, to fetch all expenses for a given month and building, a single query on `/expenses` filtered by `buildingId`, `paymentMonth`, and `paymentYear` is sufficient.\n\n**Overall Structure:**\n*   `/managers/{managerId}`: Defines users with administrative roles for system-wide access. (DBAC: existence over content).\n*   `/buildings/{buildingId}`: Top-level entity for hostel buildings. Access controlled by `managers`.\n*   `/buildings/{buildingId}/students/{studentId}`: Students are logically nested under buildings, making their association clear. Student documents denormalize `buildingId` and `buildingName` for context.\n*   `/expenseParties/{expensePartyId}`: Master list of expense-related entities, independent of specific buildings. Access controlled by `managers`.\n*   `/payments/{paymentId}`: Top-level collection for all payments. Critical for reporting. Each document includes denormalized `buildingId`, `studentId`, `buildingName`, and `studentName` to enable `get()`-free authorization checks and efficient filtered queries for QAPs.\n*   `/expenses/{expenseId}`: Top-level collection for all expenses. Critical for reporting. Each document includes denormalized `buildingId`, `buildingName`, and `expensePartyName` for authorization independence and efficient filtered queries for QAPs.\n\nThis design establishes a clear, predictable, and secure data model suitable for the HostelLedger application's requirements."
+  }
+}

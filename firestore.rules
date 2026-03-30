@@ -1,0 +1,139 @@
+/**
+ * Hostel Management System - Security Rules
+ *
+ * Core Philosophy:
+ * This ruleset implements a Database Access Control (DBAC) model based on a global "Manager" role. 
+ * Access to all hostel, student, payment, and expense data is strictly restricted to 
+ * authenticated users whose UID exists in the top-level `/managers` collection.
+ *
+ * Data Structure:
+ * - /managers/{userId}: Identifies administrative users.
+ * - /buildings/{buildingId}: Primary collection for hostel facilities.
+ * - /buildings/{buildingId}/students/{studentId}: Scoped subcollection for residents.
+ * - /expenseParties/{partyId}: Master list for vendors and service providers.
+ * - /payments/{paymentId}: Flattened top-level collection for all income.
+ * - /expenses/{expenseId}: Flattened top-level collection for all outflow.
+ *
+ * Key Security Decisions:
+ * - Denormalization for Authorization: Essential fields like 'buildingId' are denormalized 
+ *   onto student and financial records. This allows for efficient querying and rules validation 
+ *   without requiring costly 'get()' calls to parent documents.
+ * - Efficiency: By utilizing top-level collections for 'payments' and 'expenses', the system 
+ *   supports high-performance monthly reporting and ledger views while keeping read/write 
+ *   operations optimized.
+ * - Prototyping Mode: Rules enforce strict authorization (who can access) but are flexible 
+ *   on data schema (what the data looks like) to allow for rapid development.
+ */
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+
+    /**
+     * @description Checks if the request is from a signed-in user.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user is registered as a manager.
+     * This uses a simple existence check on the 'managers' collection.
+     */
+    function isManager() {
+      return isSignedIn() && exists(/databases/$(database)/documents/managers/$(request.auth.uid));
+    }
+
+    /**
+     * @description Combines manager check with existence check for destructive/update operations.
+     */
+    function isExistingManager() {
+      return isManager() && resource != null;
+    }
+
+    // --- Collection Rules ---
+
+    /**
+     * @description Authorization for the Manager role registry.
+     * @path /managers/{managerId}
+     * @allow (get) Signed-in user checking their own manager status.
+     * @deny (list) Non-manager users listing administrative accounts.
+     * @principle Implements DBAC (Existence over Content) and supports self-creation for onboarding.
+     */
+    match /managers/{managerId} {
+      allow get: if isSignedIn() && request.auth.uid == managerId;
+      allow list: if isManager();
+      allow create: if isSignedIn() && request.auth.uid == managerId;
+      allow update: if isManager() && request.auth.uid == managerId;
+      allow delete: if isManager();
+    }
+
+    /**
+     * @description Access rules for hostel building entities.
+     * @path /buildings/{buildingId}
+     * @allow (create) An authenticated manager adding a new building.
+     * @deny (read) Any non-authenticated or non-manager user.
+     * @principle Restricts facility management to authorized system administrators.
+     */
+    match /buildings/{buildingId} {
+      allow get, list: if isManager();
+      allow create: if isManager();
+      allow update, delete: if isExistingManager();
+    }
+
+    /**
+     * @description Access rules for students, nested under buildings.
+     * @path /buildings/{buildingId}/students/{studentId}
+     * @allow (create) Manager adding a student with a matching buildingId in the data.
+     * @deny (update) Changing the buildingId after creation (maintains relational integrity).
+     * @principle Enforces path-based consistency and manager-only access.
+     */
+    match /buildings/{buildingId}/students/{studentId} {
+      allow get, list: if isManager();
+      allow create: if isManager() && request.resource.data.buildingId == buildingId;
+      allow update: if isExistingManager() && request.resource.data.buildingId == resource.data.buildingId;
+      allow delete: if isExistingManager();
+    }
+
+    /**
+     * @description Master list of parties (vendors/individuals) involved in expenses.
+     * @path /expenseParties/{expensePartyId}
+     * @allow (list) Managers viewing the vendor directory.
+     * @deny (create) Any user not verified in the /managers collection.
+     * @principle Global lookup table accessible only by administrative roles.
+     */
+    match /expenseParties/{expensePartyId} {
+      allow get, list: if isManager();
+      allow create: if isManager();
+      allow update, delete: if isExistingManager();
+    }
+
+    /**
+     * @description Top-level collection for all income (payments).
+     * @path /payments/{paymentId}
+     * @allow (list) Managers performing cross-building reporting or ledger queries.
+     * @deny (write) Any attempt to modify records without manager privileges.
+     * @principle Uses a flattened structure to optimize read counts for large monthly reports.
+     */
+    match /payments/{paymentId} {
+      allow get, list: if isManager();
+      allow create: if isManager();
+      allow update, delete: if isExistingManager();
+    }
+
+    /**
+     * @description Top-level collection for all outflow (expenses).
+     * @path /expenses/{expenseId}
+     * @allow (get) Manager retrieving a specific expense receipt.
+     * @deny (delete) Unauthorized users trying to remove financial records.
+     * @principle Centralizes financial data for auditability and management efficiency.
+     */
+    match /expenses/{expenseId} {
+      allow get, list: if isManager();
+      allow create: if isManager();
+      allow update, delete: if isExistingManager();
+    }
+  }
+}
