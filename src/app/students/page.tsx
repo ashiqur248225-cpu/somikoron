@@ -38,6 +38,7 @@ export default function StudentsPage() {
   const db = useFirestore()
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
   
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
@@ -55,12 +56,13 @@ export default function StudentsPage() {
     seatNumber: "",
     type: "new", 
     dueAmount: "0",
+    initialRentPayment: "0",
     advanceAmount: "0",
     serviceCharge: "0",
     paymentSystem: "package",
     monthlyRent: "",
     foodCost: "0",
-    foodRate: 0
+    foodRate: 40
   })
 
   // Cascading Select Helpers
@@ -70,26 +72,78 @@ export default function StudentsPage() {
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
   const handleRegister = async () => {
-    if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber) {
-      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Room and Seat are required." })
+    if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber || !formData.monthlyRent) {
+      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Room, Seat and Monthly Rent are required." })
       return
     }
 
+    setIsSubmitting(true)
     try {
       const studentId = doc(collection(db, "students")).id
       const studentRef = doc(db, "students", studentId)
 
+      const monthlyRent = Number(formData.monthlyRent)
+      const initialRentPayment = Number(formData.initialRentPayment)
+      const prevDue = Number(formData.dueAmount)
+      
+      // Calculate starting due
+      // For new: Monthly Rent - Initial Payment
+      // For old: Previous Due (manual entry)
+      const startingDue = formData.type === 'new' 
+        ? (monthlyRent - initialRentPayment) 
+        : prevDue
+
+      const paymentsHistory = []
+      
+      // If there's an initial payment, create a payment record
+      if (initialRentPayment > 0 && formData.type === 'new') {
+        const paymentId = doc(collection(db, "payments")).id
+        const currentMonth = new Date().toLocaleString('default', { month: 'long' })
+        const currentYear = new Date().getFullYear().toString()
+        const summaryId = `${currentYear}-${currentMonth}`
+
+        const paymentRecord = {
+          amount: initialRentPayment,
+          buildingId: formData.buildingId,
+          buildingName: selectedBuilding?.name || "Unknown",
+          studentName: formData.name,
+          studentId: studentId,
+          type: "income",
+          paymentType: "registration_rent",
+          month: currentMonth,
+          year: currentYear,
+          method: "cash",
+          receiver: "Admin (Registration)",
+          description: "Initial rent payment at registration",
+          date: new Date().toISOString()
+        }
+
+        await setDoc(doc(db, "payments", paymentId), {
+          ...paymentRecord,
+          date: serverTimestamp(),
+          createdAt: serverTimestamp(),
+        })
+
+        await setDoc(doc(db, "summaries", summaryId), {
+          totalIncome: increment(initialRentPayment),
+          [`buildingIncome.${selectedBuilding?.name || 'Unknown'}`]: increment(initialRentPayment),
+          updatedAt: serverTimestamp()
+        }, { merge: true })
+
+        paymentsHistory.push(paymentRecord)
+      }
+
       await setDoc(studentRef, {
         ...formData,
-        dueAmount: Number(formData.dueAmount),
+        dueAmount: startingDue,
         advanceAmount: Number(formData.advanceAmount),
         serviceCharge: Number(formData.serviceCharge),
-        monthlyRent: Number(formData.monthlyRent),
+        monthlyRent: monthlyRent,
         foodCost: formData.paymentSystem === 'package' ? 0 : Number(formData.foodCost),
-        foodRate: 0,
+        foodRate: Number(formData.foodRate),
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
-        paymentsHistory: [],
+        paymentsHistory: paymentsHistory,
         mealsHistory: [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -122,11 +176,13 @@ export default function StudentsPage() {
       setOpen(false)
       setFormData({
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
-        type: "new", dueAmount: "0", advanceAmount: "0", serviceCharge: "0",
-        paymentSystem: "package", monthlyRent: "", foodCost: "0", foodRate: 0
+        type: "new", dueAmount: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
+        paymentSystem: "package", monthlyRent: "", foodCost: "0", foodRate: 40
       })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -232,7 +288,7 @@ export default function StudentsPage() {
                 <div className="flex items-center gap-4">
                   <Label>Resident Type:</Label>
                   <RadioGroup 
-                    defaultValue="new" 
+                    value={formData.type}
                     onValueChange={val => setFormData({...formData, type: val})}
                     className="flex gap-4"
                   >
@@ -248,10 +304,20 @@ export default function StudentsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {formData.type === 'old' && (
+                  {formData.type === 'old' ? (
                     <div className="space-y-2">
-                      <Label>Previous Due</Label>
+                      <Label>Previous Due (if any)</Label>
                       <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>Rent Paid at Registration</Label>
+                      <Input 
+                        type="number" 
+                        value={formData.initialRentPayment} 
+                        onChange={e => setFormData({...formData, initialRentPayment: e.target.value})}
+                        placeholder="0.00" 
+                      />
                     </div>
                   )}
                   <div className="space-y-2">
@@ -300,7 +366,9 @@ export default function StudentsPage() {
               </div>
             </div>
             <DialogFooter className="sticky bottom-0 bg-background pt-2 border-t mt-4">
-              <Button onClick={handleRegister} className="w-full h-12 text-lg">Save & Occupy Seat</Button>
+              <Button onClick={handleRegister} className="w-full h-12 text-lg" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="animate-spin" /> : "Save & Occupy Seat"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
