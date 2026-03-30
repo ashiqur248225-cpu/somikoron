@@ -390,31 +390,33 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                   <UserMinus size={18} /> Mark as Left
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent className="max-w-md">
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Resident Exit Settlement</AlertDialogTitle>
-                  <AlertDialogDescription asChild>
-                    <div className="mt-4 space-y-3">
-                      <p className="text-sm font-medium">System will perform automatic background settlement:</p>
-                      <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
-                        <div className="flex justify-between"><span>Total Dues (Rent + Food Debt):</span><span className="font-bold text-destructive">₹{exitSettlement.dues.toLocaleString()}</span></div>
-                        <div className="flex justify-between"><span>Advance Pool:</span><span className="font-bold text-primary">₹{exitSettlement.advance.toLocaleString()}</span></div>
-                        <Separator />
-                        <div className="flex justify-between font-bold text-sm pt-1">
-                          <span>{exitSettlement.mode === 'refund' ? 'Refund to Student:' : 'Net Deficit (Remaining Due):'}</span>
-                          <span className={exitSettlement.mode === 'refund' ? 'text-success' : 'text-destructive'}>₹{Math.abs(exitSettlement.finalBalance).toLocaleString()}</span>
+              <AlertDialogContent className="max-w-md" asChild>
+                <div className="grid gap-4 border bg-background p-6 shadow-lg sm:rounded-lg">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Resident Exit Settlement</AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div className="mt-4 space-y-3">
+                        <p className="text-sm font-medium">System will perform automatic background settlement:</p>
+                        <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
+                          <div className="flex justify-between"><span>Total Dues (Rent + Food):</span><span className="font-bold text-destructive">₹{exitSettlement.dues.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span>Advance Pool:</span><span className="font-bold text-primary">₹{exitSettlement.advance.toLocaleString()}</span></div>
+                          <Separator />
+                          <div className="flex justify-between font-bold text-sm pt-1">
+                            <span>{exitSettlement.mode === 'refund' ? 'Refund to Student:' : 'Net Deficit (Remaining Due):'}</span>
+                            <span className={exitSettlement.mode === 'refund' ? 'text-success' : 'text-destructive'}>₹{Math.abs(exitSettlement.finalBalance).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <div className="p-3 bg-primary/5 rounded border border-primary/20 text-[10px] text-muted-foreground italic">
+                          * Confirming will vacate the seat, adjust advance against dues, and mark the resident as inactive.
                         </div>
                       </div>
-                      <div className="p-3 bg-primary/5 rounded border border-primary/20 text-[10px] text-muted-foreground italic">
-                        * Confirming will vacate the seat, adjust advance against dues, and mark the resident as inactive.
-                      </div>
-                    </div>
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeactivate} className="bg-destructive">Confirm Settlement & Exit</AlertDialogAction>
-                </AlertDialogFooter>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeactivate} className="bg-destructive">Confirm Settlement & Exit</AlertDialogAction>
+                  </AlertDialogFooter>
+                </div>
               </AlertDialogContent>
             </AlertDialog>
           )}
@@ -537,9 +539,41 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meal Records</TabsTrigger>}
         </TabsList>
         <TabsContent value="payments">
-          <Card className="border-none shadow-sm"><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Method</TableHead><TableHead>Receiver</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader><TableBody>{student.paymentsHistory?.map((p: any, idx: number) => (
-            <TableRow key={idx}><TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell><TableCell className="font-medium">{p.month} {p.year}</TableCell><TableCell><Badge variant="outline" className={cn("text-[10px] font-normal uppercase", p.method?.includes('settlement') ? "border-primary text-primary" : "")}>{p.method?.replace(/_/g, ' ')}</Badge></TableCell><TableCell className="text-xs">{p.receiver}</TableCell><TableCell className="text-right font-bold text-income">₹{p.amount?.toLocaleString()}</TableCell></TableRow>
-          ))}{(!student.paymentsHistory || student.paymentsHistory.length === 0) && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No payment records found.</TableCell></TableRow>}</TableBody></Table></CardContent></Card>
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead>Receiver</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {student.paymentsHistory?.map((p: any, idx: number) => (
+                    <TableRow key={idx}>
+                      <TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell>
+                      <TableCell className="font-medium">{p.month} {p.year}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn("text-[10px] font-normal uppercase", p.method?.includes('settlement') ? "border-primary text-primary" : "")}>
+                          {p.method?.replace(/_/g, ' ')}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs">{p.receiver}</TableCell>
+                      <TableCell className="text-right font-bold text-income">₹{p.amount?.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                  {(!student.paymentsHistory || student.paymentsHistory.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No payment records found.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="dues">
           <Card className="border-none shadow-sm">
