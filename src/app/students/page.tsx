@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye, Contact } from "lucide-react"
+import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye, Contact, Filter, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -38,6 +39,12 @@ export default function StudentsPage() {
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Filter States
+  const [buildingFilter, setBuildingFilter] = useState("all")
+  const [roomFilter, setRoomFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [planFilter, setPlanFilter] = useState("all")
   
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
@@ -85,6 +92,13 @@ export default function StudentsPage() {
   const rooms = selectedBuilding?.roomsDetail || []
   const selectedRoom = rooms.find((r: any) => r.roomNo === formData.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
+
+  // Options for Room Filter based on Building Filter
+  const roomOptions = useMemo(() => {
+    if (buildingFilter === "all" || !buildings) return []
+    const building = buildings.find(b => b.id === buildingFilter)
+    return building?.roomsDetail?.map((r: any) => r.roomNo) || []
+  }, [buildingFilter, buildings])
 
   const handleRegister = async () => {
     if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber || !formData.monthlyRent) {
@@ -202,14 +216,30 @@ export default function StudentsPage() {
   const filteredStudents = useMemo(() => {
     if (!students) return []
     const term = searchTerm.toLowerCase()
-    return students.filter(s => 
-      s.name.toLowerCase().includes(term) ||
-      (s.phone || "").toLowerCase().includes(term) ||
-      (s.parentPhone || "").toLowerCase().includes(term) ||
-      (s.buildingName || "").toLowerCase().includes(term) ||
-      (s.roomNumber || "").toLowerCase().includes(term)
-    )
-  }, [students, searchTerm])
+    return students.filter(s => {
+      const matchesSearch = 
+        s.name.toLowerCase().includes(term) ||
+        (s.phone || "").toLowerCase().includes(term) ||
+        (s.parentPhone || "").toLowerCase().includes(term) ||
+        (s.buildingName || "").toLowerCase().includes(term) ||
+        (s.roomNumber || "").toLowerCase().includes(term)
+      
+      const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
+      const matchesRoom = roomFilter === "all" || s.roomNumber === roomFilter
+      const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
+      const matchesPlan = planFilter === "all" || s.paymentSystem === planFilter
+
+      return matchesSearch && matchesBuilding && matchesRoom && matchesStatus && matchesPlan
+    })
+  }, [students, searchTerm, buildingFilter, roomFilter, statusFilter, planFilter])
+
+  const clearFilters = () => {
+    setBuildingFilter("all")
+    setRoomFilter("all")
+    setStatusFilter("all")
+    setPlanFilter("all")
+    setSearchTerm("")
+  }
 
   return (
     <div className="space-y-8">
@@ -402,15 +432,85 @@ export default function StudentsPage() {
       </div>
 
       <Card className="border-none shadow-sm">
-        <CardHeader className="pb-4 border-b">
-          <div className="relative w-full md:max-w-md">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search students..." 
-              className="pl-8" 
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
+        <CardHeader className="pb-4 border-b space-y-4">
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search students..." 
+                className="pl-8" 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+            {(buildingFilter !== "all" || roomFilter !== "all" || statusFilter !== "all" || planFilter !== "all" || searchTerm !== "") && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground hover:text-primary">
+                <XCircle size={16} className="mr-2" /> Clear All
+              </Button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
+              <Select value={buildingFilter} onValueChange={(val) => {
+                setBuildingFilter(val)
+                setRoomFilter("all") // Reset room when building changes
+              }}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="All Buildings" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Buildings</SelectItem>
+                  {buildings?.map(b => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room No.</Label>
+              <Select value={roomFilter} onValueChange={setRoomFilter} disabled={buildingFilter === "all"}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="All Rooms" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Rooms</SelectItem>
+                  {roomOptions.map(r => (
+                    <SelectItem key={r} value={r}>Room {r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Status</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Residents</SelectItem>
+                  <SelectItem value="active">Active Only</SelectItem>
+                  <SelectItem value="inactive">Left Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Plan</Label>
+              <Select value={planFilter} onValueChange={setPlanFilter}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="All Plans" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Plans</SelectItem>
+                  <SelectItem value="package">Package</SelectItem>
+                  <SelectItem value="non-package">Non-Package</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -479,6 +579,17 @@ export default function StudentsPage() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {filteredStudents.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Filter className="h-8 w-8 opacity-20" />
+                        <p>No students match your current filters.</p>
+                        <Button variant="link" size="sm" onClick={clearFilters}>Clear all filters</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           )}
