@@ -398,7 +398,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
               <AlertDialogContent className="max-w-md">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Resident Exit Settlement</AlertDialogTitle>
-                  <AlertDialogDescription>
+                  <AlertDialogDescription asChild>
                     <div className="mt-4 space-y-3">
                       <p className="text-sm font-medium">System will perform automatic background settlement:</p>
                       <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
