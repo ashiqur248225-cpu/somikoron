@@ -34,5 +34,9 @@ service cloud.firestore {
     match /summaries/{summaryId} {
       allow read, write: if isSignedIn();
     }
+
+    match /meals/{mealId} {
+      allow read, write: if isSignedIn();
+    }
   }
 }

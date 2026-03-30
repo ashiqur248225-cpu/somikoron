@@ -1,9 +1,10 @@
+
 "use client"
 
 import { useParams, useRouter } from "next/navigation"
 import { useState } from "react"
 import { useDoc, useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { doc, collection, query, where, serverTimestamp, updateDoc, setDoc, increment } from "firebase/firestore"
+import { doc, collection, query, where, serverTimestamp, updateDoc, setDoc, getDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,8 +12,8 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   UserCircle, Phone, MapPin, Building2, 
-  BedDouble, CreditCard, Utensils, History,
-  AlertTriangle, Loader2, CheckCircle2, UserMinus
+  BedDouble, CreditCard, Utensils,
+  Loader2, CheckCircle2, UserMinus
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -55,9 +56,34 @@ export default function StudentDetailsPage() {
 
       // 2. Free up the seat in Building
       const buildingRef = doc(db, "buildings", student.buildingId)
-      // Logic to find the building and update the seat status to 'empty'
-      // We need the full building data to update the nested array
-      toast({ title: "Student Inactivated", description: "Profile marked as left. Please manually update building seat if needed in this prototype." })
+      const buildingSnap = await getDoc(buildingRef)
+      
+      if (buildingSnap.exists()) {
+        const buildingData = buildingSnap.data()
+        const updatedRoomsDetail = buildingData.roomsDetail.map((room: any) => {
+          if (room.roomNo === student.roomNumber) {
+            return {
+              ...room,
+              seats: room.seats.map((seat: any) => {
+                if (seat.seatNo === student.seatNumber) {
+                  return { ...seat, status: 'empty' }
+                }
+                return seat
+              })
+            }
+          }
+          return room
+        })
+
+        await updateDoc(buildingRef, {
+          roomsDetail: updatedRoomsDetail,
+          occupiedSeats: Math.max(0, (buildingData.occupiedSeats || 0) - 1),
+          emptySeats: (buildingData.emptySeats || 0) + 1,
+          updatedAt: serverTimestamp()
+        })
+      }
+
+      toast({ title: "Student Inactivated", description: "Resident profile updated and seat vacated." })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
