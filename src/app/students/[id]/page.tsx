@@ -61,6 +61,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
+import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
 export default function StudentDetailsPage(props: { params: Promise<{ id: string }> }) {
@@ -76,11 +77,9 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
   
-  // States for Meal Logging
   const [logMonth, setLogMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
   const [logCount, setLogCount] = useState("")
 
-  // Edit Form State
   const [editForm, setEditForm] = useState({
     name: "",
     phone: "",
@@ -90,17 +89,14 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     paymentSystem: "package"
   })
 
-  // Staff Data
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
   const [newStaff, setNewStaff] = useState({ name: "", phone: "" })
 
-  // Global Config Data (Meal Rate)
   const configRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
   const { data: config } = useDoc(configRef)
   const globalMealRate = config?.rate || 0
 
-  // Payment State
   const [paymentData, setPaymentData] = useState({
     month: new Date().toLocaleString('default', { month: 'long' }),
     year: new Date().getFullYear().toString(),
@@ -112,11 +108,9 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     description: ""
   })
 
-  // Fetch Student Data
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
-  // Initialize edit form when data loads
   useMemo(() => {
     if (student) {
       setEditForm({
@@ -131,8 +125,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
   }, [student])
 
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-  // --- FINANCIAL CALCULATIONS ---
 
   const foodStats = useMemo(() => {
     if (!student || student.paymentSystem === 'package') return { bill: 0, balance: 0, debt: 0, surplus: 0 }
@@ -192,13 +184,10 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     return Math.max(0, currentAdvance - minRequired)
   }, [student])
 
-  // --- ACTIONS ---
-
   const handleDeleteStudent = async () => {
     if (!studentRef || !student) return
     setIsUpdating(true)
     try {
-      // If student is active, vacate seat first
       if (student.isActive) {
         const bRef = doc(db, "buildings", student.buildingId)
         const bSnap = await getDoc(bRef)
@@ -256,7 +245,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
       const settlement = exitSettlement
       const settlementRecords = []
 
-      // If there's an advance and there are dues, create an adjustment payment
       if (settlement.advance > 0 && settlement.dues > 0) {
         const adjustAmount = Math.min(settlement.advance, settlement.dues)
         const paymentRecord = {
@@ -275,7 +263,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         }
         settlementRecords.push(paymentRecord)
         
-        // Record adjustment globally
         const pId = doc(collection(db, "payments")).id
         await setDoc(doc(db, "payments", pId), { ...paymentRecord, date: serverTimestamp() })
       }
@@ -537,7 +524,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </DropdownMenu>
       </div>
 
-      {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Edit Resident Details</DialogTitle></DialogHeader>
@@ -557,7 +543,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </DialogContent>
       </Dialog>
 
-      {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Record Transaction for {student.name}</DialogTitle></DialogHeader>
@@ -577,7 +562,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </DialogContent>
       </Dialog>
 
-      {/* Log Meal Dialog */}
       <Dialog open={isLogMealDialogOpen} onOpenChange={setIsLogMealDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Log Monthly Meals</DialogTitle><DialogDescription>Rate: ₹{globalMealRate}/meal.</DialogDescription></DialogHeader>
