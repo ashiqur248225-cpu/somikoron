@@ -45,6 +45,7 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "phone": { "type": "string" },
+        "parentPhone": { "type": "string" },
         "address": { "type": "string" },
         "buildingId": { "type": "string" },
         "buildingName": { "type": "string" },
@@ -58,6 +59,7 @@
         "paymentSystem": { "type": "string", "enum": ["package", "non-package"] },
         "monthlyRent": { "type": "number" },
         "foodCost": { "type": "number" },
+        "foodRate": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name", "buildingId", "roomNumber"]

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye } from "lucide-react"
+import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye, Contact } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -48,18 +48,19 @@ export default function StudentsPage() {
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
+    parentPhone: "",
     address: "",
     buildingId: "",
     roomNumber: "",
     seatNumber: "",
-    type: "new", // new or old
+    type: "new", 
     dueAmount: "0",
     advanceAmount: "0",
     serviceCharge: "0",
     paymentSystem: "package",
     monthlyRent: "",
     foodCost: "0",
-    foodRate: "0"
+    foodRate: 0
   })
 
   // Cascading Select Helpers
@@ -78,7 +79,6 @@ export default function StudentsPage() {
       const studentId = doc(collection(db, "students")).id
       const studentRef = doc(db, "students", studentId)
 
-      // 1. Create Student
       await setDoc(studentRef, {
         ...formData,
         dueAmount: Number(formData.dueAmount),
@@ -86,14 +86,13 @@ export default function StudentsPage() {
         serviceCharge: Number(formData.serviceCharge),
         monthlyRent: Number(formData.monthlyRent),
         foodCost: formData.paymentSystem === 'package' ? 0 : Number(formData.foodCost),
-        foodRate: 0, 
+        foodRate: 0,
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
 
-      // 2. Update Building Seat Status
       const buildingRef = doc(db, "buildings", formData.buildingId)
       const updatedRoomsDetail = selectedBuilding.roomsDetail.map((room: any) => {
         if (room.roomNo === formData.roomNumber) {
@@ -120,20 +119,26 @@ export default function StudentsPage() {
       toast({ title: "Student Registered", description: "Profile saved and seat occupied." })
       setOpen(false)
       setFormData({
-        name: "", phone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
+        name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
         type: "new", dueAmount: "0", advanceAmount: "0", serviceCharge: "0",
-        paymentSystem: "package", monthlyRent: "", foodCost: "0", foodRate: "0"
+        paymentSystem: "package", monthlyRent: "", foodCost: "0", foodRate: 0
       })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     }
   }
 
-  const filteredStudents = students?.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.buildingName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.roomNumber?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredStudents = useMemo(() => {
+    if (!students) return []
+    const term = searchTerm.toLowerCase()
+    return students.filter(s => 
+      s.name.toLowerCase().includes(term) ||
+      (s.phone || "").toLowerCase().includes(term) ||
+      (s.parentPhone || "").toLowerCase().includes(term) ||
+      (s.buildingName || "").toLowerCase().includes(term) ||
+      (s.roomNumber || "").toLowerCase().includes(term)
+    )
+  }, [students, searchTerm])
 
   return (
     <div className="space-y-8">
@@ -157,15 +162,19 @@ export default function StudentsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Full Name</Label>
-                  <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                  <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Student's name" />
                 </div>
                 <div className="space-y-2">
                   <Label>Phone Number</Label>
-                  <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                  <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="Primary contact" />
                 </div>
-                <div className="col-span-full space-y-2">
+                <div className="space-y-2">
+                  <Label>Parent Number</Label>
+                  <Input value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} placeholder="Parent/Guardian contact" />
+                </div>
+                <div className="space-y-2">
                   <Label>Address</Label>
-                  <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                  <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Home address" />
                 </div>
               </div>
 
@@ -233,29 +242,14 @@ export default function StudentsPage() {
                       <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
                     </div>
                   )}
-                  {formData.type === 'new' ? (
-                    <>
-                      <div className="space-y-2">
-                        <Label>Advance Amount</Label>
-                        <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Service Charge</Label>
-                        <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        <Label>Advance (Optional)</Label>
-                        <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Service (Optional)</Label>
-                        <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
-                      </div>
-                    </>
-                  )}
+                  <div className="space-y-2">
+                    <Label>{formData.type === 'new' ? 'Advance Amount' : 'New Advance'}</Label>
+                    <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Service Charge</Label>
+                    <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
+                  </div>
                 </div>
               </div>
 
@@ -284,12 +278,9 @@ export default function StudentsPage() {
                     </div>
                   )}
                 </div>
-                <p className="text-[10px] text-muted-foreground italic">
-                  * Meal Rate can be configured from the student's profile page after registration.
-                </p>
               </div>
             </div>
-            <DialogFooter className="sticky bottom-0 bg-background pt-2">
+            <DialogFooter className="sticky bottom-0 bg-background pt-2 border-t mt-4">
               <Button onClick={handleRegister} className="w-full h-12 text-lg">Save & Occupy Seat</Button>
             </DialogFooter>
           </DialogContent>
@@ -301,7 +292,7 @@ export default function StudentsPage() {
           <div className="relative w-full md:max-w-md">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search by name, room or building..." 
+              placeholder="Search by name, phone or parent contact..." 
               className="pl-8" 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -316,8 +307,8 @@ export default function StudentsPage() {
               <TableHeader className="bg-secondary/30">
                 <TableRow>
                   <TableHead>Student</TableHead>
+                  <TableHead>Contacts</TableHead>
                   <TableHead>Location</TableHead>
-                  <TableHead>Seat Info</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -333,34 +324,43 @@ export default function StudentsPage() {
                         </div>
                         <div className="flex flex-col">
                           <span className="font-semibold">{student.name}</span>
-                          <span className="text-[10px] text-muted-foreground uppercase">{student.phone}</span>
+                          <span className="text-[10px] text-muted-foreground uppercase">{student.type} Resident</span>
                         </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <Phone size={10} className="text-primary" />
+                          {student.phone}
+                        </div>
+                        {student.parentPhone && (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Contact size={10} />
+                            {student.parentPhone} (P)
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="text-sm font-medium">{student.buildingName}</span>
-                        <span className="text-xs text-muted-foreground">Room: {student.roomNumber}</span>
+                        <span className="text-xs text-muted-foreground">R: {student.roomNumber} | S: {student.seatNumber}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="flex gap-1 items-center w-fit">
-                        <BedDouble size={10} /> Seat {student.seatNumber}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="capitalize font-normal">
+                      <Badge variant="outline" className="capitalize font-normal text-[10px]">
                         {student.paymentSystem}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={student.isActive ? 'success' : 'destructive'} className="capitalize font-normal">
-                        {student.isActive ? 'Active' : 'Left Hostel'}
+                      <Badge variant={student.isActive ? 'success' : 'destructive'} className="capitalize font-normal text-[10px]">
+                        {student.isActive ? 'Active' : 'Left'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => router.push(`/students/${student.id}`)}>
-                        <Eye size={16} className="mr-1" /> View Details
+                      <Button variant="ghost" size="sm" onClick={() => router.push(`/students/${student.id}`)} className="h-8">
+                        <Eye size={14} className="mr-1" /> View
                       </Button>
                     </TableCell>
                   </TableRow>

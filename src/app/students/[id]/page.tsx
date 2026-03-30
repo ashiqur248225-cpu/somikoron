@@ -14,7 +14,7 @@ import {
   UserCircle, Phone, MapPin, Building2, 
   BedDouble, CreditCard, Utensils,
   Loader2, CheckCircle2, UserMinus, Calculator,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon, Contact
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -58,12 +58,12 @@ export default function StudentDetailsPage() {
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id as string) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
-  // Fetch Payment History - Protected with id check
+  // Fetch Payment History
   const paymentsQuery = useMemoFirebase(() => 
     id ? query(collection(db, "payments"), where("studentId", "==", id)) : null, [db, id])
   const { data: payments } = useCollection(paymentsQuery)
 
-  // Fetch Meal History - Protected with id check
+  // Fetch Meal History
   const mealsQuery = useMemoFirebase(() => 
     id ? query(collection(db, "meals"), where("studentId", "==", id)) : null, [db, id])
   const { data: meals } = useCollection(mealsQuery)
@@ -194,10 +194,10 @@ export default function StudentDetailsPage() {
         <div className="flex gap-2">
           {student.isActive && (
             <Button variant="destructive" className="flex gap-2" onClick={handleDeactivate} disabled={isUpdating}>
-              <UserMinus size={18} /> Mark as Left (Vacate Seat)
+              <UserMinus size={18} /> Mark as Left
             </Button>
           )}
-          <Button variant="outline" onClick={() => router.back()}>Back to List</Button>
+          <Button variant="outline" onClick={() => router.back()}>Back</Button>
         </div>
       </div>
 
@@ -208,9 +208,21 @@ export default function StudentDetailsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-3 text-sm">
-              <Phone className="text-muted-foreground" size={16} />
-              <span>{student.phone}</span>
+              <Phone className="text-primary" size={16} />
+              <div className="flex flex-col">
+                <span className="font-bold">{student.phone}</span>
+                <span className="text-[10px] text-muted-foreground uppercase">Student Contact</span>
+              </div>
             </div>
+            {student.parentPhone && (
+              <div className="flex items-center gap-3 text-sm">
+                <Contact className="text-primary" size={16} />
+                <div className="flex flex-col">
+                  <span className="font-bold">{student.parentPhone}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase">Parent/Guardian Contact</span>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-3 text-sm">
               <MapPin className="text-muted-foreground" size={16} />
               <span>{student.address || "No address provided"}</span>
@@ -227,81 +239,57 @@ export default function StudentDetailsPage() {
         </Card>
 
         <Card className="border-none shadow-sm md:col-span-2">
-          <CardHeader className="flex justify-between items-center">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle className="text-lg">Financial Overview</CardTitle>
-              <CardDescription>Plan and real-time food balance.</CardDescription>
+              <CardDescription>Plan and food balance calculation.</CardDescription>
             </div>
-            <div className="flex items-center gap-4">
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="flex gap-2">
-                    <Calculator size={14} /> Calculate Monthly Bill
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Monthly Meal Calculator</DialogTitle>
-                    <DialogDescription>Calculate the food bill for a specific month based on meals and rate.</DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Select Month</Label>
-                        <Select value={calcMonth} onValueChange={setCalcMonth}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                              <SelectItem key={m} value={m}>{m}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Year</Label>
-                        <Input type="number" value={calcYear} onChange={e => setCalcYear(e.target.value)} />
-                      </div>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="flex gap-2">
+                  <Calculator size={14} /> Monthly Calculator
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Monthly Meal Calculator</DialogTitle>
+                  <DialogDescription>Quickly calculate food bill for any month.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Select Month</Label>
+                      <Select value={calcMonth} onValueChange={setCalcMonth}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Total Meals in {calcMonth}</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="0" 
-                          value={calcMealCount} 
-                          onChange={e => setCalcMealCount(e.target.value)} 
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Rate Per Meal (₹)</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="0" 
-                          value={calcRate} 
-                          onChange={e => setCalcRate(e.target.value)} 
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 flex justify-between items-center">
-                      <span className="font-semibold text-muted-foreground">Total Bill for {calcMonth}:</span>
-                      <span className="text-2xl font-bold text-primary">₹{calculatedTotal.toLocaleString()}</span>
+                    <div className="space-y-2">
+                      <Label>Year</Label>
+                      <Input type="number" value={calcYear} onChange={e => setCalcYear(e.target.value)} />
                     </div>
                   </div>
-                  <DialogFooter>
-                    <Button variant="secondary" onClick={() => {
-                      setCalcMealCount("")
-                      setCalcRate("")
-                    }}>Reset</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-              <div className="flex items-center gap-2">
-                <Calculator size={16} className="text-muted-foreground" />
-                <span className="text-xs font-bold uppercase">₹{student.foodRate || 0}/Meal</span>
-              </div>
-            </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Total Meals</Label>
+                      <Input type="number" placeholder="0" value={calcMealCount} onChange={e => setCalcMealCount(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Rate per Meal (₹)</Label>
+                      <Input type="number" placeholder="0" value={calcRate} onChange={e => setCalcRate(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 flex justify-between items-center">
+                    <span className="font-semibold text-muted-foreground">Total for {calcMonth}:</span>
+                    <span className="text-2xl font-bold text-primary">₹{calculatedTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -310,9 +298,9 @@ export default function StudentDetailsPage() {
                 <p className="text-lg font-bold">₹{student.monthlyRent || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                <p className="text-[10px] uppercase text-primary font-bold">Food Bill (Current)</p>
+                <p className="text-[10px] uppercase text-primary font-bold">Current Food Bill</p>
                 <p className="text-lg font-bold text-primary">₹{foodBill.toLocaleString()}</p>
-                <p className="text-[9px] text-muted-foreground">{currentMonthMeals} Meals logged</p>
+                <p className="text-[9px] text-muted-foreground">{currentMonthMeals} Meals in {currentMonth}</p>
               </div>
               <div className="p-3 rounded-lg bg-success/10 border border-success/20">
                 <p className="text-[10px] uppercase text-success font-bold">Food Balance</p>
@@ -322,7 +310,7 @@ export default function StudentDetailsPage() {
                 <p className="text-[9px] text-muted-foreground">Advance: ₹{foodAdvance}</p>
               </div>
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                <p className="text-[10px] uppercase text-destructive font-bold">Total Due</p>
+                <p className="text-[10px] uppercase text-destructive font-bold">Prev. Due</p>
                 <p className="text-lg font-bold text-destructive">₹{(student.dueAmount || 0).toLocaleString()}</p>
               </div>
             </div>
@@ -333,7 +321,7 @@ export default function StudentDetailsPage() {
       <Tabs defaultValue="payments" className="w-full">
         <TabsList className="bg-secondary/50 p-1 mb-4">
           <TabsTrigger value="payments" className="flex gap-2"><CreditCard size={14} /> Payment History</TabsTrigger>
-          <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meal Logs & Calculations</TabsTrigger>
+          <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meal Logs</TabsTrigger>
         </TabsList>
         
         <TabsContent value="payments">
@@ -353,12 +341,12 @@ export default function StudentDetailsPage() {
                     <TableRow key={p.id}>
                       <TableCell>{p.date?.toDate()?.toLocaleDateString() || "N/A"}</TableCell>
                       <TableCell>{p.month} {p.year}</TableCell>
-                      <TableCell><Badge variant="outline">{p.paymentType}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className="text-[10px]">{p.paymentType}</Badge></TableCell>
                       <TableCell className="text-right font-bold text-success">₹{p.amount?.toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                   {payments?.length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No payments recorded yet.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No payments recorded.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -372,7 +360,6 @@ export default function StudentDetailsPage() {
               <Card className="border-none shadow-sm h-fit">
                 <CardHeader>
                   <CardTitle className="text-sm">Log Daily Meal</CardTitle>
-                  <CardDescription>Track food consumption.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -380,7 +367,7 @@ export default function StudentDetailsPage() {
                     <Input type="number" value={mealCount} onChange={e => setMealCount(e.target.value)} />
                   </div>
                   <Button className="w-full gap-2" onClick={logMeal} disabled={isUpdating}>
-                    <CheckCircle2 size={16} /> Log Today's Meal
+                    <CheckCircle2 size={16} /> Log Meal
                   </Button>
                 </CardContent>
               </Card>
@@ -389,11 +376,11 @@ export default function StudentDetailsPage() {
                 <CardHeader>
                   <CardTitle className="text-sm">Meal Configuration</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent>
                   {!editRate ? (
                     <div className="flex justify-between items-center">
                       <div className="text-sm">
-                        <p className="text-muted-foreground">Current Rate</p>
+                        <p className="text-muted-foreground text-xs">Current Rate</p>
                         <p className="font-bold text-lg">₹{student.foodRate || 0}</p>
                       </div>
                       <Button variant="outline" size="sm" onClick={() => {
@@ -403,10 +390,10 @@ export default function StudentDetailsPage() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <Label>New Meal Rate (₹)</Label>
+                      <Label className="text-xs">New Rate (₹)</Label>
                       <div className="flex gap-2">
-                        <Input type="number" value={newRate} onChange={e => setNewRate(e.target.value)} />
-                        <Button size="sm" onClick={updateMealRate} disabled={isUpdating}>Save</Button>
+                        <Input type="number" value={newRate} onChange={e => setNewRate(e.target.value)} className="h-8" />
+                        <Button size="sm" onClick={updateMealRate} disabled={isUpdating} className="h-8">Save</Button>
                       </div>
                     </div>
                   )}
@@ -416,7 +403,7 @@ export default function StudentDetailsPage() {
 
             <Card className="md:col-span-2 border-none shadow-sm">
               <CardHeader>
-                <CardTitle className="text-sm">Recent Logs</CardTitle>
+                <CardTitle className="text-sm">Recent Logs ({currentMonth})</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -424,21 +411,19 @@ export default function StudentDetailsPage() {
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Count</TableHead>
-                      <TableHead>Period</TableHead>
-                      <TableHead className="text-right">Cost (Est.)</TableHead>
+                      <TableHead className="text-right">Cost (₹)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {meals?.map((m: any) => (
                       <TableRow key={m.id}>
-                        <TableCell>{m.date}</TableCell>
+                        <TableCell className="text-xs">{m.date}</TableCell>
                         <TableCell className="font-bold">{m.count}</TableCell>
-                        <TableCell className="text-muted-foreground">{m.month} {m.year}</TableCell>
-                        <TableCell className="text-right">₹{(m.count * (student.foodRate || 0)).toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-xs">₹{(m.count * (student.foodRate || 0)).toLocaleString()}</TableCell>
                       </TableRow>
                     ))}
                     {meals?.length === 0 && (
-                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No meal records found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No records.</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
