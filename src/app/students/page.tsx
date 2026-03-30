@@ -100,7 +100,7 @@ export default function StudentsPage() {
               <Plus size={18} /> Register Student
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>New Resident Registration</DialogTitle>
               <DialogDescription>Assign a student to a specific building, room, and seat.</DialogDescription>
@@ -171,7 +171,7 @@ export default function StudentsPage() {
                 />
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 bg-background pt-2">
               <Button onClick={handleRegister} className="w-full">Register & Assign Seat</Button>
             </DialogFooter>
           </DialogContent>

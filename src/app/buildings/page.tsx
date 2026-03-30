@@ -142,7 +142,7 @@ export default function BuildingsPage() {
               <Plus size={18} /> Add New Building
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Building</DialogTitle>
               <DialogDescription>Define rooms, auto-generate seats, and mark their current status.</DialogDescription>
@@ -215,6 +215,7 @@ export default function BuildingsPage() {
                               {room.seats.map((seat, seatIdx) => (
                                 <button
                                   key={seatIdx}
+                                  type="button"
                                   onClick={() => toggleSeatStatus(roomIdx, seatIdx)}
                                   className={cn(
                                     "flex flex-col items-center justify-center p-2 rounded-md border w-14 transition-all",
@@ -251,7 +252,7 @@ export default function BuildingsPage() {
                 </div>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 bg-background pt-2">
               <Button onClick={handleCreate} className="w-full h-12 text-lg">Save Building & Configuration</Button>
             </DialogFooter>
           </DialogContent>
