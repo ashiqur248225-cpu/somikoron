@@ -62,7 +62,7 @@ export default function StudentDetailsPage() {
   const [editRate, setEditRate] = useState(false)
   const [newRate, setNewRate] = useState("")
 
-  // Calculator State
+  // Calculator State (Monthly only)
   const [calcMonth, setCalcMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
   const [calcMealCount, setCalcMealCount] = useState("")
   const [calcRate, setCalcRate] = useState("")
@@ -84,7 +84,6 @@ export default function StudentDetailsPage() {
 
   // Calculations for display
   const currentMonth = new Date().toLocaleString('default', { month: 'long' })
-  const currentYear = new Date().getFullYear().toString()
 
   const currentMonthMealRecord = useMemo(() => {
     return student?.mealsHistory?.find((m: any) => m.month === currentMonth)
@@ -324,9 +323,6 @@ export default function StudentDetailsPage() {
               <CardTitle className="text-lg">Financial Overview</CardTitle>
               <CardDescription>Plan and food balance calculation.</CardDescription>
             </div>
-            <Button variant="outline" size="sm" className="flex gap-2" onClick={() => setIsCalcDialogOpen(true)}>
-              <Calculator size={14} /> Monthly Calculator
-            </Button>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
