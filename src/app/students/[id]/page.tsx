@@ -45,6 +45,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 export default function StudentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params)
@@ -100,7 +101,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
     return (currentMonthMealRecord?.totalMeals || 0) * (student?.foodRate || 0)
   }, [currentMonthMealRecord, student])
 
-  const foodAdvance = student?.foodCost || student?.advanceAmount || 0
+  const foodAdvance = student?.foodCost || 0
   const foodBalance = foodAdvance - foodBill
 
   const handleDeactivate = async () => {
@@ -363,33 +364,43 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle className="text-lg">Financial Overview</CardTitle>
-              <CardDescription>Plan and food balance calculation.</CardDescription>
+              <CardDescription>Plan and calculations.</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className={cn(
+              "grid gap-4",
+              student.paymentSystem === 'package' ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2 md:grid-cols-5"
+            )}>
+              <div className="p-3 rounded-lg bg-secondary/30">
+                <p className="text-[10px] uppercase text-muted-foreground font-bold">Advance</p>
+                <p className="text-lg font-bold">₹{student.advanceAmount || 0}</p>
+              </div>
               <div className="p-3 rounded-lg bg-secondary/30">
                 <p className="text-[10px] uppercase text-muted-foreground font-bold">Monthly Rent</p>
                 <p className="text-lg font-bold">₹{student.monthlyRent || 0}</p>
               </div>
-              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                <p className="text-[10px] uppercase text-primary font-bold">Current Food Bill</p>
-                <p className="text-lg font-bold text-primary">₹{foodBill.toLocaleString()}</p>
-                <p className="text-[9px] text-muted-foreground">
-                  {currentMonthMealRecord ? `${currentMonthMealRecord.totalMeals} Meals` : 'No logs yet'} in {currentMonth}
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-success/10 border border-success/20">
-                <p className="text-[10px] uppercase text-success font-bold">Food Balance</p>
-                <p className={`text-lg font-bold ${foodBalance < 0 ? 'text-destructive' : 'text-success'}`}>
-                  ₹{foodBalance.toLocaleString()}
-                </p>
-                <p className="text-[9px] text-muted-foreground">Advance: ₹{foodAdvance}</p>
+              <div className="p-3 rounded-lg bg-secondary/30">
+                <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p>
+                <p className="text-lg font-bold">₹{student.serviceCharge || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                <p className="text-[10px] uppercase text-destructive font-bold">Prev. Due</p>
+                <p className="text-[10px] uppercase text-destructive font-bold">Total Due</p>
                 <p className="text-lg font-bold text-destructive">₹{(student.dueAmount || 0).toLocaleString()}</p>
               </div>
+
+              {student.paymentSystem === 'non-package' && (
+                <div className="p-3 rounded-lg bg-success/10 border border-success/20">
+                  <p className="text-[10px] uppercase text-success font-bold">Food Balance</p>
+                  <p className={`text-lg font-bold ${foodBalance < 0 ? 'text-destructive' : 'text-success'}`}>
+                    ₹{foodBalance.toLocaleString()}
+                  </p>
+                  <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
+                    <span>Adv: ₹{foodAdvance}</span>
+                    <span>Bill: ₹{foodBill}</span>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
