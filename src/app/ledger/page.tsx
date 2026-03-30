@@ -19,20 +19,45 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { History, Search, Filter, Download } from "lucide-react"
+import { History, Search, Filter, Download, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-
-const ledgerData = [
-  { id: "TX1001", date: "2024-05-20", type: "income", category: "Rent", party: "John Doe", building: "Blue Heights", amount: 5500, status: "completed" },
-  { id: "TX1002", date: "2024-05-19", type: "expense", category: "Utility", party: "Electric Supply Co", building: "Blue Heights", amount: 1200, status: "completed" },
-  { id: "TX1003", date: "2024-05-19", type: "income", category: "Meal", party: "Alice Smith", building: "Serene Residency", amount: 2500, status: "completed" },
-  { id: "TX1004", date: "2024-05-18", type: "expense", category: "Market", party: "Green Grocers", building: "Victory Hostel", amount: 800, status: "completed" },
-  { id: "TX1005", date: "2024-05-18", type: "income", category: "Package", party: "Robert Brown", building: "Victory Hostel", amount: 7500, status: "completed" },
-  { id: "TX1006", date: "2024-05-17", type: "expense", category: "Salary", party: "Maria (Cook)", building: "All Buildings", amount: 15000, status: "completed" },
-]
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection, query, orderBy, limit } from "firebase/firestore"
 
 export default function LedgerPage() {
-  const [filter, setFilter] = useState("all")
+  const db = useFirestore()
+  const [searchTerm, setSearchTerm] = useState("")
+  const [typeFilter, setTypeFilter] = useState("all")
+
+  // Fetch payments (income)
+  const paymentsQuery = useMemoFirebase(() => query(collection(db, "payments"), orderBy("date", "desc"), limit(50)), [db])
+  const { data: payments, isLoading: paymentsLoading } = useCollection(paymentsQuery)
+
+  // Fetch expenses
+  const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("date", "desc"), limit(50)), [db])
+  const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
+
+  // Merge and sort all transactions
+  const allTransactions = [
+    ...(payments || []).map(p => ({ ...p, txType: 'income' })),
+    ...(expenses || []).map(e => ({ ...e, txType: 'expense' }))
+  ].sort((a, b) => {
+    const dateA = a.date?.toDate?.() || new Date(0)
+    const dateB = b.date?.toDate?.() || new Date(0)
+    return dateB.getTime() - dateA.getTime()
+  })
+
+  const filteredData = allTransactions.filter(tx => {
+    const matchesSearch = 
+      (tx.studentName || tx.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (tx.buildingName || "").toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesType = typeFilter === "all" || tx.txType === typeFilter
+    return matchesSearch && matchesType
+  })
+
+  const totalIncome = (payments || []).reduce((acc, curr) => acc + (curr.amount || 0), 0)
+  const totalExpense = (expenses || []).reduce((acc, curr) => acc + (curr.amount || 0), 0)
 
   return (
     <div className="space-y-8">
@@ -51,10 +76,15 @@ export default function LedgerPage() {
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search transactions, students, or parties..." className="pl-8" />
+              <Input 
+                placeholder="Search transactions..." 
+                className="pl-8" 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
             </div>
             <div className="flex gap-2 w-full md:w-auto">
-              <Select defaultValue="all">
+              <Select defaultValue="all" onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[130px]">
                   <Filter className="h-3 w-3 mr-2" />
                   <SelectValue placeholder="Type" />
@@ -65,51 +95,46 @@ export default function LedgerPage() {
                   <SelectItem value="expense">Expenses</SelectItem>
                 </SelectContent>
               </Select>
-              <Select defaultValue="all">
-                <SelectTrigger className="w-[130px]">
-                  <SelectValue placeholder="Building" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Buildings</SelectItem>
-                  <SelectItem value="b1">Blue Heights</SelectItem>
-                  <SelectItem value="b2">Serene Residency</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input type="date" className="w-[150px]" />
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-secondary/30">
-              <TableRow>
-                <TableHead className="w-[100px]">TX ID</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Entity / Party</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Building</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ledgerData.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{row.id}</TableCell>
-                  <TableCell className="whitespace-nowrap">{row.date}</TableCell>
-                  <TableCell className="font-medium">{row.party}</TableCell>
-                  <TableCell>
-                    <Badge variant={row.type === 'income' ? 'secondary' : 'outline'} className="font-normal">
-                      {row.category}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm">{row.building}</TableCell>
-                  <TableCell className={`text-right font-bold ${row.type === 'income' ? 'text-income' : 'text-expense'}`}>
-                    {row.type === 'income' ? '+' : '-'}₹{row.amount.toLocaleString()}
-                  </TableCell>
+          {(paymentsLoading || expensesLoading) ? (
+            <div className="flex justify-center p-12"><Loader2 className="animate-spin" /></div>
+          ) : (
+            <Table>
+              <TableHeader className="bg-secondary/30">
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Entity / Party</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Building</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredData.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="whitespace-nowrap">
+                      {row.date?.toDate?.() ? row.date.toDate().toLocaleDateString() : 'Pending'}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {row.txType === 'income' ? row.studentName : row.expensePartyName}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={row.txType === 'income' ? 'secondary' : 'outline'} className="font-normal capitalize">
+                        {row.category || row.paymentType || 'General'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">{row.buildingName}</TableCell>
+                    <TableCell className={`text-right font-bold ${row.txType === 'income' ? 'text-income' : 'text-expense'}`}>
+                      {row.txType === 'income' ? '+' : '-'}₹{row.amount?.toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -119,7 +144,7 @@ export default function LedgerPage() {
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-income uppercase tracking-wider">Total Income</p>
-                <p className="text-2xl font-bold text-income">₹15,500.00</p>
+                <p className="text-2xl font-bold text-income">₹{totalIncome.toLocaleString()}</p>
               </div>
               <div className="bg-income/20 p-2 rounded-full">
                 <History className="text-income h-5 w-5" />
@@ -132,7 +157,7 @@ export default function LedgerPage() {
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-expense uppercase tracking-wider">Total Expense</p>
-                <p className="text-2xl font-bold text-expense">₹17,000.00</p>
+                <p className="text-2xl font-bold text-expense">₹{totalExpense.toLocaleString()}</p>
               </div>
               <div className="bg-expense/20 p-2 rounded-full">
                 <History className="text-expense h-5 w-5" />
@@ -145,7 +170,7 @@ export default function LedgerPage() {
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-primary uppercase tracking-wider">Net Balance</p>
-                <p className="text-2xl font-bold text-primary">-₹1,500.00</p>
+                <p className="text-2xl font-bold text-primary">₹{(totalIncome - totalExpense).toLocaleString()}</p>
               </div>
               <div className="bg-primary/20 p-2 rounded-full">
                 <History className="text-primary h-5 w-5" />
