@@ -10,7 +10,8 @@ import {
   LayoutDashboard, 
   Contact, 
   BarChart3,
-  CircleDollarSign
+  CircleDollarSign,
+  Settings
 } from "lucide-react"
 import {
   Sidebar,
@@ -67,6 +68,11 @@ const items = [
     title: "Reports",
     url: "/reports",
     icon: BarChart3,
+  },
+  {
+    title: "Settings",
+    url: "/settings",
+    icon: Settings,
   },
 ]
 

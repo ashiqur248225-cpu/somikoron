@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo } from "react"
@@ -54,22 +53,21 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
-  const [isCalcDialogOpen, setIsCalcDialogOpen] = useState(false)
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
   
   // States
   const [logMonth, setLogMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
   const [logCount, setLogCount] = useState("")
-  const [editRate, setEditRate] = useState(false)
-  const [newRate, setNewRate] = useState("")
-  const [calcMonth, setCalcMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
-  const [calcMealCount, setCalcMealCount] = useState("")
-  const [calcRate, setCalcRate] = useState("")
 
   // Staff Data
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
   const [newStaff, setNewStaff] = useState({ name: "", phone: "" })
+
+  // Global Config Data
+  const configRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
+  const { data: config } = useDoc(configRef)
+  const globalMealRate = config?.rate || 0
 
   // Payment State
   const [paymentData, setPaymentData] = useState({
@@ -89,7 +87,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const currentMonth = new Date().toLocaleString('default', { month: 'long' })
-  const currentYear = new Date().getFullYear().toString();
 
   // 1. Calculate Food Logic
   const currentMonthMealRecord = useMemo(() => {
@@ -98,8 +95,8 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
   const foodBill = useMemo(() => {
     if (student?.paymentSystem === 'package') return 0
-    return (currentMonthMealRecord?.totalMeals || 0) * (student?.foodRate || 0)
-  }, [currentMonthMealRecord, student])
+    return (currentMonthMealRecord?.totalMeals || 0) * globalMealRate
+  }, [currentMonthMealRecord, student, globalMealRate])
 
   const foodAdvance = student?.foodCost || 0
   const foodBalance = foodAdvance - foodBill
@@ -248,7 +245,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         createdAt: serverTimestamp(),
       })
 
-      // Update student due history (the UI will recalculate total due based on paymentsHistory)
+      // Update student due history
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(paymentRecord),
         ...(student.paymentSystem === 'non-package' && {
@@ -296,15 +293,14 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
     if (!student || !logCount || !studentRef) return
     setIsUpdating(true)
     try {
-      const mealRate = student.foodRate || 0
       const totalMeals = Number(logCount)
-      const totalCost = totalMeals * mealRate
+      const totalCost = totalMeals * globalMealRate
 
       const mealEntry = {
         date: new Date().toISOString(),
         month: logMonth,
         totalMeals,
-        perMealCost: mealRate,
+        perMealCost: globalMealRate,
         totalCost
       }
 
@@ -313,7 +309,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         updatedAt: serverTimestamp()
       })
       
-      toast({ title: "Monthly Count Saved", description: `Record for ${logMonth} added to history.` })
+      toast({ title: "Monthly Count Saved", description: `Record for ${logMonth} added to history using global rate ₹${globalMealRate}.` })
       setLogCount("")
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -321,29 +317,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
       setIsUpdating(false)
     }
   }
-
-  const updateMealRate = async () => {
-    if (!student || !newRate || !studentRef) return
-    setIsUpdating(true)
-    try {
-      await updateDoc(studentRef, { 
-        foodRate: Number(newRate),
-        updatedAt: serverTimestamp() 
-      })
-      setEditRate(false)
-      toast({ title: "Rate Updated", description: `Meal rate set to ₹${newRate}` })
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsUpdating(false)
-    }
-  }
-
-  const calculatedTotal = useMemo(() => {
-    const count = Number(calcMealCount) || 0
-    const rate = Number(calcRate) || 0
-    return count * rate
-  }, [calcMealCount, calcRate])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -567,6 +540,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 <Card className="border-none shadow-sm h-fit">
                   <CardHeader>
                     <CardTitle className="text-sm">Log Monthly Count</CardTitle>
+                    <CardDescription className="text-xs">Using global rate: ₹{globalMealRate}/meal</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
@@ -585,34 +559,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                     <Button className="w-full gap-2" onClick={logMonthlyMeal} disabled={isUpdating}>
                       <Plus size={16} /> Save Record
                     </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-none shadow-sm h-fit">
-                  <CardHeader>
-                    <CardTitle className="text-sm">Meal Configuration</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {!editRate ? (
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm">
-                          <p className="text-muted-foreground text-xs">Current Rate</p>
-                          <p className="font-bold text-lg">₹{student.foodRate || 0}</p>
-                        </div>
-                        <Button variant="outline" size="sm" onClick={() => {
-                          setNewRate(student.foodRate?.toString() || "")
-                          setEditRate(true)
-                        }}>Change</Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Label className="text-xs">New Rate (₹)</Label>
-                        <div className="flex gap-2">
-                          <Input type="number" value={newRate} onChange={e => setNewRate(e.target.value)} className="h-8" />
-                          <Button size="sm" onClick={updateMealRate} disabled={isUpdating} className="h-8">Save</Button>
-                        </div>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -663,14 +609,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 p-2 space-y-1 mb-2">
-            {student.paymentSystem === 'non-package' && (
-              <DropdownMenuItem onClick={() => setIsCalcDialogOpen(true)} className="flex items-center gap-2 cursor-pointer p-3">
-                <div className="bg-primary/10 p-2 rounded-lg text-primary">
-                  <Calculator size={18} />
-                </div>
-                <span className="font-medium">Monthly Calculator</span>
-              </DropdownMenuItem>
-            )}
             <DropdownMenuItem onClick={() => setIsPaymentDialogOpen(true)} className="flex items-center gap-2 cursor-pointer p-3">
               <div className="bg-success/10 p-2 rounded-lg text-success">
                 <Wallet size={18} />
@@ -680,39 +618,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-
-      <Dialog open={isCalcDialogOpen} onOpenChange={setIsCalcDialogOpen}>
-        <DialogContent onKeyDown={handleKeyDown}>
-          <DialogHeader>
-            <DialogTitle>Monthly Meal Calculator</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label>Select Month</Label>
-              <Select value={calcMonth} onValueChange={setCalcMonth}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Total Meals</Label>
-                <Input type="number" placeholder="0" value={calcMealCount} onChange={e => setCalcMealCount(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Rate per Meal (₹)</Label>
-                <Input type="number" placeholder="0" value={calcRate} onChange={e => setCalcRate(e.target.value)} />
-              </div>
-            </div>
-            <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 flex justify-between items-center">
-              <span className="font-semibold text-muted-foreground">Total for {calcMonth}:</span>
-              <span className="text-2xl font-bold text-primary">₹{calculatedTotal.toLocaleString()}</span>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>

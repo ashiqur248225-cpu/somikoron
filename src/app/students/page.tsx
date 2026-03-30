@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -62,8 +61,7 @@ export default function StudentsPage() {
     serviceCharge: "0",
     paymentSystem: "package",
     monthlyRent: "",
-    foodCost: "0",
-    foodRate: 40
+    foodCost: "0"
   })
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -102,7 +100,6 @@ export default function StudentsPage() {
       const monthlyRent = Number(formData.monthlyRent)
       const initialRentPayment = Number(formData.initialRentPayment)
       
-      // Calculate starting due
       const startingDue = formData.type === 'new' 
         ? (monthlyRent - initialRentPayment) 
         : Number(formData.dueAmount)
@@ -157,7 +154,6 @@ export default function StudentsPage() {
         advanceAmount: Number(formData.advanceAmount),
         serviceCharge: Number(formData.serviceCharge),
         monthlyRent: monthlyRent,
-        foodRate: Number(formData.foodRate),
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
         paymentsHistory: paymentsHistory,
@@ -194,7 +190,7 @@ export default function StudentsPage() {
       setFormData({
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
         type: "new", dueAmount: "0", foodDue: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
-        paymentSystem: "package", monthlyRent: "", foodCost: "0", foodRate: 40
+        paymentSystem: "package", monthlyRent: "", foodCost: "0"
       })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
