@@ -3,8 +3,8 @@
 
 import { useParams, useRouter } from "next/navigation"
 import { useState, useMemo } from "react"
-import { useDoc, useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { doc, collection, query, where, serverTimestamp, updateDoc, setDoc, getDoc, deleteDoc, orderBy, arrayUnion } from "firebase/firestore"
+import { useDoc, useFirestore, useMemoFirebase } from "@/firebase"
+import { doc, serverTimestamp, updateDoc, setDoc, getDoc, arrayUnion, increment } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,13 +14,15 @@ import {
   UserCircle, Phone, MapPin, Building2, 
   BedDouble, CreditCard, Utensils,
   Loader2, Calculator,
-  Contact, Trash2, Plus, UserMinus
+  Contact, Plus, UserMinus, Wallet,
+  History
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
   DialogContent,
@@ -28,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter
 } from "@/components/ui/dialog"
 import {
   Select,
@@ -36,6 +39,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function StudentDetailsPage() {
   const { id } = useParams()
@@ -43,10 +52,11 @@ export default function StudentDetailsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
+  const [isCalcDialogOpen, setIsCalcDialogOpen] = useState(false)
   
   // Monthly Meal Entry State
   const [logMonth, setLogMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
-  const [logYear, setLogYear] = useState(new Date().getFullYear().toString())
   const [logCount, setLogCount] = useState("")
 
   const [editRate, setEditRate] = useState(false)
@@ -57,7 +67,18 @@ export default function StudentDetailsPage() {
   const [calcMealCount, setCalcMealCount] = useState("")
   const [calcRate, setCalcRate] = useState("")
 
-  // Fetch Student Data (Histories are now inside this document)
+  // Payment State (for FAB action)
+  const [paymentData, setPaymentData] = useState({
+    paymentType: "full",
+    month: new Date().toLocaleString('default', { month: 'long' }),
+    year: new Date().getFullYear().toString(),
+    amount: "",
+    method: "cash",
+    receiver: "",
+    description: ""
+  })
+
+  // Fetch Student Data
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id as string) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
@@ -66,8 +87,8 @@ export default function StudentDetailsPage() {
   const currentYear = new Date().getFullYear().toString()
 
   const currentMonthMealRecord = useMemo(() => {
-    return student?.mealsHistory?.find((m: any) => m.month === currentMonth && m.date.includes(currentYear))
-  }, [student, currentMonth, currentYear])
+    return student?.mealsHistory?.find((m: any) => m.month === currentMonth)
+  }, [student, currentMonth])
 
   const foodBill = useMemo(() => {
     if (student?.paymentSystem === 'package') return 0
@@ -115,6 +136,61 @@ export default function StudentDetailsPage() {
         })
       }
       toast({ title: "Student Inactivated", description: "Resident profile updated and seat vacated." })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handlePaymentSubmit = async () => {
+    if (!student || !paymentData.amount || !studentRef) return
+    setIsUpdating(true)
+    
+    const amount = Number(paymentData.amount)
+    const paymentId = doc(collection(db, "payments")).id
+    const summaryId = `${paymentData.year}-${paymentData.month}`
+
+    const paymentRecord = {
+      amount,
+      buildingId: student.buildingId,
+      buildingName: student.buildingName,
+      studentName: student.name,
+      studentId: student.id,
+      type: "income",
+      paymentType: paymentData.paymentType,
+      month: paymentData.month,
+      year: paymentData.year,
+      method: paymentData.method,
+      receiver: paymentData.receiver,
+      description: paymentData.description,
+      date: new Date().toISOString()
+    }
+
+    try {
+      // 1. Save to Global Payments
+      await setDoc(doc(db, "payments", paymentId), {
+        ...paymentRecord,
+        date: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      })
+
+      // 2. Mirror to Student's history
+      await updateDoc(studentRef, {
+        paymentsHistory: arrayUnion(paymentRecord),
+        updatedAt: serverTimestamp()
+      })
+
+      // 3. Update Summary
+      await setDoc(doc(db, "summaries", summaryId), {
+        totalIncome: increment(amount),
+        [`buildingIncome.${student.buildingName}`]: increment(amount),
+        updatedAt: serverTimestamp()
+      }, { merge: true })
+
+      toast({ title: "Payment Recorded", description: `Amount ₹${amount} added to history.` })
+      setIsPaymentDialogOpen(false)
+      setPaymentData(prev => ({ ...prev, amount: "", description: "" }))
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -179,7 +255,7 @@ export default function StudentDetailsPage() {
   if (!student) return <div className="text-center p-20">Student not found.</div>
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20 relative">
       <div className="flex flex-col md:flex-row justify-between gap-4">
         <div className="flex gap-4 items-center">
           <div className="bg-primary/10 p-4 rounded-xl text-primary">
@@ -248,46 +324,9 @@ export default function StudentDetailsPage() {
               <CardTitle className="text-lg">Financial Overview</CardTitle>
               <CardDescription>Plan and food balance calculation.</CardDescription>
             </div>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="flex gap-2">
-                  <Calculator size={14} /> Monthly Calculator
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Monthly Meal Calculator</DialogTitle>
-                  <DialogDescription>Quickly calculate food bill for any month.</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="space-y-2">
-                    <Label>Select Month</Label>
-                    <Select value={calcMonth} onValueChange={setCalcMonth}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                          <SelectItem key={m} value={m}>{m}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Total Meals</Label>
-                      <Input type="number" placeholder="0" value={calcMealCount} onChange={e => setCalcMealCount(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Rate per Meal (₹)</Label>
-                      <Input type="number" placeholder="0" value={calcRate} onChange={e => setCalcRate(e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 flex justify-between items-center">
-                    <span className="font-semibold text-muted-foreground">Total for {calcMonth}:</span>
-                    <span className="text-2xl font-bold text-primary">₹{calculatedTotal.toLocaleString()}</span>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <Button variant="outline" size="sm" className="flex gap-2" onClick={() => setIsCalcDialogOpen(true)}>
+              <Calculator size={14} /> Monthly Calculator
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -452,6 +491,135 @@ export default function StudentDetailsPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Floating Action Button */}
+      <div className="fixed bottom-8 right-8 z-50">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg border-2 border-white bg-primary hover:bg-primary/90 transition-transform active:scale-95">
+              <Plus className="h-8 w-8 text-white" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 p-2 space-y-1 mb-2">
+            <DropdownMenuItem onClick={() => setIsCalcDialogOpen(true)} className="flex items-center gap-2 cursor-pointer p-3">
+              <div className="bg-primary/10 p-2 rounded-lg text-primary">
+                <Calculator size={18} />
+              </div>
+              <span className="font-medium">Monthly Calculator</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setIsPaymentDialogOpen(true)} className="flex items-center gap-2 cursor-pointer p-3">
+              <div className="bg-success/10 p-2 rounded-lg text-success">
+                <Wallet size={18} />
+              </div>
+              <span className="font-medium">Record Payment</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Monthly Calculator Dialog */}
+      <Dialog open={isCalcDialogOpen} onOpenChange={setIsCalcDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Monthly Meal Calculator</DialogTitle>
+            <DialogDescription>Quickly calculate food bill for any month.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Month</Label>
+              <Select value={calcMonth} onValueChange={setCalcMonth}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Total Meals</Label>
+                <Input type="number" placeholder="0" value={calcMealCount} onChange={e => setCalcMealCount(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Rate per Meal (₹)</Label>
+                <Input type="number" placeholder="0" value={calcRate} onChange={e => setCalcRate(e.target.value)} />
+              </div>
+            </div>
+            <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 flex justify-between items-center">
+              <span className="font-semibold text-muted-foreground">Total for {calcMonth}:</span>
+              <span className="text-2xl font-bold text-primary">₹{calculatedTotal.toLocaleString()}</span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Record Payment for {student.name}</DialogTitle>
+            <DialogDescription>Record rent or meal payments directly to student history.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Payment For</Label>
+                <Select value={paymentData.paymentType} onValueChange={val => setPaymentData({...paymentData, paymentType: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Full Payment</SelectItem>
+                    <SelectItem value="partial">Partial Payment</SelectItem>
+                    <SelectItem value="advance">Advance Payment</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Method</Label>
+                <Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank">Bank</SelectItem>
+                    <SelectItem value="mobile">Mobile</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Month</Label>
+                <Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Amount (₹)</Label>
+                <Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Receiver Name</Label>
+              <Input value={paymentData.receiver} onChange={e => setPaymentData({...paymentData, receiver: e.target.value})} placeholder="Staff name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Any notes..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handlePaymentSubmit} className="w-full gap-2" disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="animate-spin" /> : <History size={16} />} 
+              Confirm Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
