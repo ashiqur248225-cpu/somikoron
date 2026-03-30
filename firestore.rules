@@ -2,40 +2,16 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper function to check if a user is signed in
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Allow any authenticated user to read and write to the collections for the prototype
-    match /managers/{managerId} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /buildings/{buildingId} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /students/{studentId} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /expenseParties/{expensePartyId} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /payments/{paymentId} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /expenses/{expenseId} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /summaries/{summaryId} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /meals/{mealId} {
+    // Allow all authenticated users to read and write to any document.
+    // This recursive rule ensures that all existing and future collections 
+    // (like meals, students, payments, summaries) are accessible without 
+    // individual permission errors, fulfilling the prototype's requirements.
+    match /{document=**} {
       allow read, write: if isSignedIn();
     }
   }
