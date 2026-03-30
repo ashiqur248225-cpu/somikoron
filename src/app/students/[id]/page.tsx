@@ -63,6 +63,12 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export default function StudentDetailsPage(props: { params: Promise<{ id: string }> }) {
   const params = React.use(props.params)
@@ -126,45 +132,33 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
 
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-  const foodStats = useMemo(() => {
-    if (!student || student.paymentSystem === 'package') return { bill: 0, balance: 0, debt: 0, surplus: 0 }
-    const totalBill = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-    const totalPaid = Number(student.foodCost) || 0
-    const balance = totalPaid - totalBill
-    return { bill: totalBill, paid: totalPaid, balance, debt: balance < 0 ? Math.abs(balance) : 0, surplus: balance > 0 ? balance : 0 }
-  }, [student])
-
-  const dueBreakdown = useMemo(() => {
-    if (!student) return []
-    const results = []
-    const joinDate = student.createdAt?.toDate?.() || new Date()
-    const joinMonth = joinDate.getMonth()
-    const joinYear = joinDate.getFullYear()
+  // Dues Calculation (Historical + Generated - Paid)
+  const financialStats = useMemo(() => {
+    if (!student) return { rentDue: 0, foodDue: 0, monthsElapsed: 0 }
+    
+    const regDate = student.createdAt?.toDate?.() || new Date()
     const now = new Date()
-    let checkDate = new Date(joinYear, joinMonth, 1)
-    while (checkDate <= now) {
-      const mName = months[checkDate.getMonth()]; const yName = checkDate.getFullYear().toString()
-      const monthPayments = student.paymentsHistory?.filter((p: any) => p.month === mName && p.year === yName) || []
-      const totalPaidForMonth = monthPayments.reduce((acc: number, curr: any) => acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0), 0)
-      const monthlyRent = student.monthlyRent || 0
-      results.push({
-        month: mName, year: yName, status: totalPaidForMonth >= monthlyRent ? 'Paid' : (totalPaidForMonth > 0 ? 'Partial' : 'Unpaid'),
-        paidAmount: totalPaidForMonth, expected: monthlyRent, due: Math.max(0, monthlyRent - totalPaidForMonth)
-      })
-      checkDate.setMonth(checkDate.getMonth() + 1)
-    }
-    return results.reverse()
+    const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
+    
+    // Rent Due
+    const historicalRentDue = Number(student.dueAmount) || 0
+    const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
+    const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+      return acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0)
+    }, 0) || 0
+    const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+
+    // Food Due
+    const historicalFoodDue = Number(student.foodDueAmount) || 0
+    const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+    const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+    const foodDue = Math.max(0, (historicalFoodDue + generatedFoodCost) - totalFoodPaid)
+
+    return { rentDue, foodDue, monthsElapsed }
   }, [student])
 
-  const totalRentDue = useMemo(() => {
-    if (!student) return 0
-    const totalExpected = dueBreakdown.reduce((acc, curr) => acc + curr.expected, 0)
-    const totalPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0), 0) || 0
-    const startingDebt = student.type === 'old' ? (Number(student.dueAmount) || 0) : 0
-    return Math.max(0, (totalExpected + startingDebt) - totalPaid)
-  }, [student, dueBreakdown])
-
-  const totalOverallDue = totalRentDue + (foodStats.debt || 0)
+  const totalOverallDue = financialStats.rentDue + financialStats.foodDue
+  
   const exitSettlement = useMemo(() => {
     if (!student) return { finalBalance: 0, mode: 'none' }
     const advance = student.advanceAmount || 0
@@ -470,7 +464,10 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </Card>
 
         <Card className="border-none shadow-sm md:col-span-2">
-          <CardHeader><CardTitle className="text-lg">Financial Overview</CardTitle><CardDescription>Real-time running balances and debt tracking.</CardDescription></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-lg">Financial Overview</CardTitle>
+            <CardDescription>Real-time running balances and debt tracking.</CardDescription>
+          </CardHeader>
           <CardContent>
             <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
@@ -478,12 +475,44 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                 <p className="text-lg font-bold">₹{student.advanceAmount || 0}</p>
                 <div className="text-[8px] text-muted-foreground mt-1 flex justify-between items-center"><span className="flex items-center gap-0.5"><Lock size={8} /> Locked: ₹{student.monthlyRent || 0}</span></div>
               </div>
-              <div className="p-3 rounded-lg bg-secondary/30"><p className="text-[10px] uppercase text-muted-foreground font-bold">Monthly Rent</p><p className="text-lg font-bold">₹{student.monthlyRent || 0}</p></div>
-              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20"><p className="text-[10px] uppercase text-destructive font-bold">Rent Due</p><p className="text-lg font-bold text-destructive">₹{totalRentDue.toLocaleString()}</p></div>
+              <div className="p-3 rounded-lg bg-secondary/30">
+                <p className="text-[10px] uppercase text-muted-foreground font-bold">Monthly Rate</p>
+                <p className="text-lg font-bold">₹{student.monthlyRent || 0}</p>
+              </div>
+              
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 relative">
+                <div className="flex justify-between items-start">
+                  <p className="text-[10px] uppercase text-destructive font-bold">Rent Due</p>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info size={12} className="text-destructive cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="text-[10px]">Rent Due = (Initial Debt: ₹{student.dueAmount || 0}) + (Rent for {financialStats.monthsElapsed} months elapsed: ₹{financialStats.monthsElapsed * (student.monthlyRent || 0)}) - (Total Rent Paid)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <p className="text-lg font-bold text-destructive">₹{financialStats.rentDue.toLocaleString()}</p>
+              </div>
+
               {student.paymentSystem === 'non-package' && (
-                <div className={cn("p-3 rounded-lg border", foodStats.balance >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20")}>
-                  <p className={cn("text-[10px] uppercase font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>{foodStats.balance >= 0 ? "Food Surplus" : "Food Debt"}</p>
-                  <p className={cn("text-lg font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>₹{foodStats.balance.toLocaleString()}</p>
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 relative">
+                  <div className="flex justify-between items-start">
+                    <p className="text-[10px] uppercase text-destructive font-bold">Food Due</p>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info size={12} className="text-destructive cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="text-[10px]">Food Due = (Initial Food Debt: ₹{student.foodDueAmount || 0}) + (Total Meal Cost from Logs) - (Total Food Paid)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <p className="text-lg font-bold text-destructive">₹{financialStats.foodDue.toLocaleString()}</p>
                 </div>
               )}
             </div>
@@ -494,18 +523,35 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
       <Tabs defaultValue="payments" className="w-full">
         <TabsList className="bg-secondary/50 p-1 mb-4">
           <TabsTrigger value="payments" className="flex gap-2"><CreditCard size={14} /> Payments</TabsTrigger>
-          <TabsTrigger value="dues" className="flex gap-2"><AlertCircle size={14} /> Monthly Status</TabsTrigger>
+          <TabsTrigger value="dues" className="flex gap-2"><AlertCircle size={14} /> Historical Status</TabsTrigger>
           {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meal Records</TabsTrigger>}
         </TabsList>
         <TabsContent value="payments">
-          <Card className="border-none shadow-sm"><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Method</TableHead><TableHead>Receiver</TableHead><TableHead className="text-right">Total Amount</TableHead></TableRow></TableHeader><TableBody>{student.paymentsHistory?.map((p: any, idx: number) => (
+          <Card className="border-none shadow-sm"><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Method</TableHead><TableHead>Receiver</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader><TableBody>{student.paymentsHistory?.map((p: any, idx: number) => (
             <TableRow key={idx}><TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell><TableCell className="font-medium">{p.month} {p.year}</TableCell><TableCell><Badge variant="outline" className={cn("text-[10px] font-normal uppercase", p.method?.includes('settlement') ? "border-primary text-primary" : "")}>{p.method?.replace(/_/g, ' ')}</Badge></TableCell><TableCell className="text-xs">{p.receiver}</TableCell><TableCell className="text-right font-bold text-income">₹{p.amount?.toLocaleString()}</TableCell></TableRow>
           ))}{(!student.paymentsHistory || student.paymentsHistory.length === 0) && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No payment records found.</TableCell></TableRow>}</TableBody></Table></CardContent></Card>
         </TabsContent>
         <TabsContent value="dues">
-          <Card className="border-none shadow-sm"><CardHeader><CardTitle className="text-sm">Monthly Rent Tracking</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Month & Year</TableHead><TableHead>Expected</TableHead><TableHead>Paid</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Unpaid Balance</TableHead></TableRow></TableHeader><TableBody>{dueBreakdown.map((due, idx) => (
-            <TableRow key={idx}><TableCell className="font-medium">{due.month} {due.year}</TableCell><TableCell className="text-xs">₹{due.expected.toLocaleString()}</TableCell><TableCell className="text-xs text-success font-bold">₹{due.paidAmount.toLocaleString()}</TableCell><TableCell><Badge variant={due.status === 'Paid' ? 'secondary' : (due.status === 'Partial' ? 'outline' : 'destructive')} className="text-[10px] h-5">{due.status}</Badge></TableCell><TableCell className="text-right font-bold text-destructive">{due.due > 0 ? `₹${due.due.toLocaleString()}` : '0'}</TableCell></TableRow>
-          ))}</TableBody></Table></CardContent></Card>
+          <Card className="border-none shadow-sm">
+            <CardHeader><CardTitle className="text-sm">Account Summary at Registration</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 border rounded-lg">
+                  <p className="text-xs text-muted-foreground uppercase font-bold">Historical Rent Due</p>
+                  <p className="text-xl font-bold">₹{student.dueAmount || 0}</p>
+                </div>
+                {student.paymentSystem === 'non-package' && (
+                  <div className="p-4 border rounded-lg">
+                    <p className="text-xs text-muted-foreground uppercase font-bold">Historical Food Due</p>
+                    <p className="text-xl font-bold">₹{student.foodDueAmount || 0}</p>
+                  </div>
+                )}
+              </div>
+              <div className="bg-primary/5 p-4 rounded-lg border border-primary/20 text-xs">
+                <p><strong>Note:</strong> বকেয়া হিসেব করার সময় ভর্তির তারিখ থেকে শুরু হওয়া প্রতিটি মাসের ভাড়া (Monthly Rent) ঐতিহাসিক বকেয়ার (Historical Due) সাথে যোগ করা হয়।</p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
         {student.paymentSystem === 'non-package' && (
           <TabsContent value="meals"><Card className="border-none shadow-sm"><CardHeader><CardTitle className="text-sm">Meal Logs History</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Period</TableHead><TableHead>Count</TableHead><TableHead>Rate</TableHead><TableHead className="text-right">Cost (₹)</TableHead></TableRow></TableHeader><TableBody>{student.mealsHistory?.map((m: any, idx: number) => (
@@ -547,13 +593,13 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Record Transaction for {student.name}</DialogTitle></DialogHeader>
           <div className="bg-secondary/30 p-4 rounded-lg space-y-2 mb-2">
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Rent Due:</span><span className="font-bold text-destructive">₹{totalRentDue.toLocaleString()}</span></div>
-            {student.paymentSystem === 'non-package' && <div className="flex justify-between text-sm"><span className="text-muted-foreground">{foodStats.balance >= 0 ? "Food Surplus:" : "Food Debt:"}</span><span className={cn("font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>₹{Math.abs(foodStats.balance).toLocaleString()}</span></div>}
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Rent Due:</span><span className="font-bold text-destructive">₹{financialStats.rentDue.toLocaleString()}</span></div>
+            {student.paymentSystem === 'non-package' && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Food Due:</span><span className="font-bold text-destructive">₹{financialStats.foodDue.toLocaleString()}</span></div>}
             <div className="flex flex-col gap-1 mt-2 p-2 bg-primary/5 rounded border border-primary/10"><div className="flex justify-between text-xs"><span className="text-primary font-medium">Advance Pool:</span><span className="font-bold text-primary">₹{student.advanceAmount || 0}</span></div><div className="flex justify-between text-[10px] text-muted-foreground"><span>Security Lock:</span><span>₹{student.monthlyRent || 0}</span></div></div>
           </div>
           <div className="space-y-4 py-2">
             <div className="flex items-center justify-between p-3 border rounded-lg bg-primary/5"><div className="space-y-0.5"><Label className="text-sm font-bold flex items-center gap-2 cursor-pointer" htmlFor="advSwitch"><ArrowDownToLine size={14} className="text-primary" />Deduct from Advance</Label></div><Switch id="advSwitch" checked={useAdvanceBalance} onCheckedChange={setUseAdvanceBalance} disabled={availableAdvanceForDeduction <= 0} /></div>
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>For Month</Label><Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>{!useAdvanceBalance && <div className="space-y-2"><Label>Method</Label><Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank">Bank</SelectItem><SelectItem value="mobile">Mobile</SelectItem></SelectContent></Select></div>}</div>
+            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>For Month</Label><Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>{!useAdvanceBalance && <div className="space-y-2"><Label>Method</Label><Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>}</div>
             {student.paymentSystem === 'package' ? <div className="space-y-2"><Label>Total Payment (₹)</Label><Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} /></div> : <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border"><div className="space-y-2"><Label className="text-xs">Seat Rent</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} /></div><div className="space-y-2"><Label className="text-xs">Food Credit</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} /></div></div>}
             {!useAdvanceBalance && <div className="space-y-2"><div className="flex justify-between items-center"><Label>Receiver</Label><Button variant="link" size="sm" onClick={() => setIsAddStaffOpen(true)} className="h-auto p-0 text-xs">Add New</Button></div><Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>}
             <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Notes..." />
@@ -571,6 +617,17 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
             {logCount && <div className="bg-primary/5 p-3 rounded-lg flex justify-between items-center text-sm"><span>Total Cost:</span><span className="font-bold text-primary">₹{(Number(logCount) * globalMealRate).toLocaleString()}</span></div>}
           </div>
           <DialogFooter><Button className="w-full h-12 text-lg" onClick={logMonthlyMeal} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Save Meal Record"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
+        <DialogContent onKeyDown={handleKeyDown}>
+          <DialogHeader><DialogTitle>Add New Receiver</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input placeholder="Name" value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
+            <Input placeholder="Phone" maxLength={11} value={newStaff.phone} onChange={e => setNewStaff({...newStaff, phone: e.target.value})} />
+          </div>
+          <DialogFooter><Button onClick={handleAddStaff} disabled={isUpdating}>Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

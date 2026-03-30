@@ -8,13 +8,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Filter, Building2, DoorOpen, Loader2, Eye, CircleAlert, XCircle } from "lucide-react"
+import { Users, Search, Filter, Building2, DoorOpen, Loader2, Eye, CircleAlert, XCircle, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export default function DuesPage() {
   const router = useRouter()
@@ -24,68 +30,51 @@ export default function DuesPage() {
   const [roomFilter, setRoomFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
 
-  // Data Fetching
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const studentsQuery = useMemoFirebase(() => collection(db, "students"), [db])
   const { data: students, isLoading } = useCollection(studentsQuery)
 
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-
-  // Room Options based on building filter
   const roomOptions = useMemo(() => {
     if (buildingFilter === "all" || !buildings) return []
     const b = buildings.find(b => b.id === buildingFilter)
-    return b?.roomsDetail?.map((r: any) => r.roomNo) || []
+    return b?.apartmentsDetail?.flatMap((a: any) => a.rooms?.map((r: any) => r.roomNo)) || []
   }, [buildingFilter, buildings])
 
-  // Unified Due Calculation Logic
   const studentsWithDues = useMemo(() => {
     if (!students) return []
     
     return students.map(student => {
-      const joinDate = student.createdAt?.toDate?.() || new Date()
-      const joinMonth = joinDate.getMonth()
-      const joinYear = joinDate.getFullYear()
+      const regDate = student.createdAt?.toDate?.() || new Date()
       const now = new Date()
+      const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
       
-      let totalExpectedRent = 0
-      let checkDate = new Date(joinYear, joinMonth, 1)
-      
-      while (checkDate <= now) {
-        totalExpectedRent += (student.monthlyRent || 0)
-        checkDate.setMonth(checkDate.getMonth() + 1)
-      }
-
-      const startingDebt = student.type === 'old' ? (Number(student.dueAmount) || 0) : 0
-      const totalPayments = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const historicalRentDue = Number(student.dueAmount) || 0
+      const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
+      const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
         return acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0)
       }, 0) || 0
+      const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
-      const rentDue = Math.max(0, (totalExpectedRent + startingDebt) - totalPayments)
-      
-      let foodDebt = 0
-      if (student.paymentSystem === 'non-package') {
-        const totalMealCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-        const totalFoodPaid = Number(student.foodCost) || 0
-        const foodBalance = totalFoodPaid - totalMealCost
-        foodDebt = foodBalance < 0 ? Math.abs(foodBalance) : 0
-      }
+      const historicalFoodDue = Number(student.foodDueAmount) || 0
+      const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+      const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+      const foodDue = Math.max(0, (historicalFoodDue + generatedFoodCost) - totalFoodPaid)
 
       return {
         ...student,
-        totalDue: rentDue + foodDebt,
+        totalDue: rentDue + foodDue,
         rentDue,
-        foodDebt
+        foodDue,
+        monthsElapsed
       }
     }).filter(s => s.totalDue > 0)
   }, [students])
 
   const filteredDues = useMemo(() => {
     return studentsWithDues.filter(s => {
-      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           (s.phone || "").includes(searchTerm)
+      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
       const matchesRoom = roomFilter === "all" || s.roomNumber === roomFilter
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
@@ -195,8 +184,22 @@ export default function DuesPage() {
                         <span className="text-[10px] text-muted-foreground">Room {s.roomNumber}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs">₹{s.rentDue?.toLocaleString()}</TableCell>
-                    <TableCell className="text-xs">₹{s.foodDebt?.toLocaleString() || 0}</TableCell>
+                    <TableCell className="text-xs">
+                       <div className="flex items-center gap-1">
+                        ₹{s.rentDue?.toLocaleString()}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info size={10} className="text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="text-[10px]">
+                              Historical: ₹{s.dueAmount || 0} + Generated: ₹{s.monthsElapsed * (s.monthlyRent || 0)}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                       </div>
+                    </TableCell>
+                    <TableCell className="text-xs">₹{s.foodDue?.toLocaleString() || 0}</TableCell>
                     <TableCell className="text-right font-bold text-destructive">₹{s.totalDue?.toLocaleString()}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>
