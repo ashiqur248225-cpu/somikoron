@@ -7,11 +7,25 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Force redeploy with a comment: Updating rules for meals and student management
+    
     // Allow all authenticated users to read and write to any document.
     // This recursive rule ensures that all existing and future collections 
-    // (like meals, students, payments, summaries) are accessible without 
-    // individual permission errors, fulfilling the prototype's requirements.
+    // (like meals, students, payments, summaries) are accessible.
     match /{document=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Explicit rules for core collections to ensure access
+    match /meals/{mealId} {
+      allow read, write: if isSignedIn();
+    }
+    
+    match /students/{studentId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /summaries/{summaryId} {
       allow read, write: if isSignedIn();
     }
   }

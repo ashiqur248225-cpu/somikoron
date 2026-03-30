@@ -55,17 +55,17 @@ export default function StudentDetailsPage() {
   const [calcRate, setCalcRate] = useState("")
 
   // Fetch Student Data
-  const studentRef = useMemoFirebase(() => doc(db, "students", id as string), [db, id])
+  const studentRef = useMemoFirebase(() => id ? doc(db, "students", id as string) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
-  // Fetch Payment History
+  // Fetch Payment History - Protected with id check
   const paymentsQuery = useMemoFirebase(() => 
-    query(collection(db, "payments"), where("studentId", "==", id)), [db, id])
+    id ? query(collection(db, "payments"), where("studentId", "==", id)) : null, [db, id])
   const { data: payments } = useCollection(paymentsQuery)
 
-  // Fetch Meal History
+  // Fetch Meal History - Protected with id check
   const mealsQuery = useMemoFirebase(() => 
-    query(collection(db, "meals"), where("studentId", "==", id)), [db, id])
+    id ? query(collection(db, "meals"), where("studentId", "==", id)) : null, [db, id])
   const { data: meals } = useCollection(mealsQuery)
 
   // Financial Calculations
@@ -82,7 +82,7 @@ export default function StudentDetailsPage() {
   const foodBalance = foodAdvance - foodBill
 
   const handleDeactivate = async () => {
-    if (!student || !student.isActive) return
+    if (!student || !student.isActive || !studentRef) return
     setIsUpdating(true)
     try {
       await updateDoc(studentRef, { 
@@ -149,7 +149,7 @@ export default function StudentDetailsPage() {
   }
 
   const updateMealRate = async () => {
-    if (!student || !newRate) return
+    if (!student || !newRate || !studentRef) return
     setIsUpdating(true)
     try {
       await updateDoc(studentRef, { 
@@ -202,7 +202,6 @@ export default function StudentDetailsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Profile Card */}
         <Card className="border-none shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">Contact & Details</CardTitle>
@@ -227,7 +226,6 @@ export default function StudentDetailsPage() {
           </CardContent>
         </Card>
 
-        {/* Financial Summary */}
         <Card className="border-none shadow-sm md:col-span-2">
           <CardHeader className="flex justify-between items-center">
             <div>

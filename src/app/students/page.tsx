@@ -86,7 +86,7 @@ export default function StudentsPage() {
         serviceCharge: Number(formData.serviceCharge),
         monthlyRent: Number(formData.monthlyRent),
         foodCost: formData.paymentSystem === 'package' ? 0 : Number(formData.foodCost),
-        foodRate: 0, // Set to 0 initially, will be managed in details page
+        foodRate: 0, 
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
         createdAt: serverTimestamp(),
@@ -154,7 +154,6 @@ export default function StudentsPage() {
               <DialogDescription>Assign cascading room/seat details and financial plans.</DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
-              {/* Basic Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Full Name</Label>
@@ -170,7 +169,6 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-              {/* Location Logic */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
                 <div className="space-y-2">
                   <Label>Building</Label>
@@ -209,7 +207,6 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-              {/* Type and Finances */}
               <div className="space-y-4 border-t pt-4">
                 <div className="flex items-center gap-4">
                   <Label>Resident Type:</Label>
@@ -236,18 +233,32 @@ export default function StudentsPage() {
                       <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
                     </div>
                   )}
-                  <div className="space-y-2">
-                    <Label>Advance Amount</Label>
-                    <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Service Charge</Label>
-                    <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
-                  </div>
+                  {formData.type === 'new' ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Advance Amount</Label>
+                        <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Service Charge</Label>
+                        <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Advance (Optional)</Label>
+                        <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Service (Optional)</Label>
+                        <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Billing Plan */}
               <div className="space-y-4 border-t pt-4">
                 <Label className="text-primary font-bold">Billing & Food Plan</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
