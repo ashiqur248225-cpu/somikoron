@@ -16,7 +16,8 @@
             "type": "object",
             "properties": {
               "roomNo": { "type": "string" },
-              "seats": { "type": "number" }
+              "totalSeats": { "type": "number" },
+              "occupiedSeats": { "type": "number", "default": 0 }
             }
           }
         },
@@ -34,14 +35,17 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
+        "phone": { "type": "string" },
         "buildingId": { "type": "string" },
         "buildingName": { "type": "string" },
         "roomNumber": { "type": "string" },
+        "seatNumber": { "type": "string" },
         "isActive": { "type": "boolean" },
-        "paymentSystem": { "type": "string" },
-        "monthlyAmount": { "type": "number" }
+        "paymentSystem": { "type": "string", "enum": ["package", "non-package"] },
+        "monthlyAmount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name", "buildingId"]
+      "required": ["id", "name", "buildingId", "roomNumber"]
     },
     "Payment": {
       "title": "Payment",
@@ -52,19 +56,22 @@
         "month": { "type": "string" },
         "year": { "type": "string" },
         "studentName": { "type": "string" },
+        "studentId": { "type": "string" },
+        "buildingId": { "type": "string" },
+        "buildingName": { "type": "string" },
         "date": { "type": "string", "format": "date-time" }
       }
     },
     "Summary": {
       "title": "Monthly Summary",
       "type": "object",
-      "description": "Aggregated financial data for a specific month to reduce read costs.",
+      "description": "Aggregated financial data for a specific month.",
       "properties": {
         "id": { "type": "string", "description": "Format: YYYY-MonthName" },
         "totalIncome": { "type": "number" },
         "totalExpense": { "type": "number" },
-        "buildingIncome": { "type": "object", "description": "Map of building names to income amount" },
-        "categoryExpense": { "type": "object", "description": "Map of categories to expense amount" },
+        "buildingIncome": { "type": "object" },
+        "categoryExpense": { "type": "object" },
         "updatedAt": { "type": "string", "format": "date-time" }
       }
     }
@@ -78,6 +85,7 @@
     "/students/{studentId}": { "schema": "Student", "description": "Students list" },
     "/payments/{paymentId}": { "schema": "Payment", "description": "Income records" },
     "/expenses/{expenseId}": { "schema": "Expense", "description": "Expense records" },
-    "/summaries/{summaryId}": { "schema": "Summary", "description": "Monthly aggregations" }
+    "/summaries/{summaryId}": { "schema": "Summary", "description": "Monthly aggregations" },
+    "/expenseParties/{partyId}": { "schema": "ExpenseParty", "description": "Parties for expenses" }
   }
 }

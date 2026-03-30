@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus, Trash2 } from "lucide-react"
+import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus, Trash2, Info } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
 import { collection, serverTimestamp } from "firebase/firestore"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 
 interface RoomDetail {
   roomNo: string;
@@ -56,6 +57,10 @@ export default function BuildingsPage() {
     setRooms(updatedRooms)
   }
 
+  const totalSeats = rooms.reduce((acc, curr) => acc + Number(curr.seats || 0), 0)
+  const occupiedCount = Number(newBuilding.occupiedSeats || 0)
+  const emptyCount = totalSeats - occupiedCount
+
   const handleCreate = () => {
     if (!newBuilding.name || !newBuilding.address) {
       toast({ variant: "destructive", title: "Error", description: "Please fill building name and address." })
@@ -68,28 +73,21 @@ export default function BuildingsPage() {
       return
     }
 
-    const totalSeats = validRooms.reduce((acc, curr) => acc + Number(curr.seats), 0)
-    const occupiedSeats = Number(newBuilding.occupiedSeats || 0)
-    const emptySeats = totalSeats - occupiedSeats
-
     addDocumentNonBlocking(collection(db, "buildings"), {
       ...newBuilding,
       roomsCount: validRooms.length,
-      roomsDetail: validRooms.map(r => ({ roomNo: r.roomNo, seats: Number(r.seats) })),
+      roomsDetail: validRooms.map(r => ({ roomNo: r.roomNo, totalSeats: Number(r.seats), occupiedSeats: 0 })),
       totalSeats,
-      emptySeats,
+      occupiedSeats: occupiedCount,
+      emptySeats: emptyCount,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
 
-    setNewBuilding({ 
-      name: "", 
-      address: "", 
-      occupiedSeats: "0"
-    })
+    setNewBuilding({ name: "", address: "", occupiedSeats: "0" })
     setRooms([{ roomNo: "", seats: "" }])
     setOpen(false)
-    toast({ title: "Building Created", description: "Property successfully added to database." })
+    toast({ title: "Building Created", description: "Hostel property successfully added." })
   }
 
   return (
@@ -97,7 +95,7 @@ export default function BuildingsPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-headline font-bold text-primary">Building Management</h1>
-          <p className="text-muted-foreground mt-1">Organize rooms and seat numbers per building.</p>
+          <p className="text-muted-foreground mt-1">Manage rooms, seats and occupancy for each hostel.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -108,7 +106,7 @@ export default function BuildingsPage() {
           <DialogContent className="max-w-md md:max-w-xl">
             <DialogHeader>
               <DialogTitle>Add New Building</DialogTitle>
-              <DialogDescription>Create a building and specify seat counts per room.</DialogDescription>
+              <DialogDescription>Define rooms and seats. Occupancy is auto-calculated.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -117,7 +115,7 @@ export default function BuildingsPage() {
                   <Input 
                     value={newBuilding.name} 
                     onChange={(e) => setNewBuilding({...newBuilding, name: e.target.value})}
-                    placeholder="e.g. Blue Heights" 
+                    placeholder="e.g. Dream Haven" 
                   />
                 </div>
                 <div className="space-y-2">
@@ -125,14 +123,14 @@ export default function BuildingsPage() {
                   <Input 
                     value={newBuilding.address} 
                     onChange={(e) => setNewBuilding({...newBuilding, address: e.target.value})}
-                    placeholder="Street address" 
+                    placeholder="Location details" 
                   />
                 </div>
               </div>
 
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <Label className="text-sm font-bold">Room Wise Seat Distribution</Label>
+                  <Label className="text-sm font-bold">Room & Seat Configuration</Label>
                   <Button variant="outline" size="sm" onClick={addRoomField} className="flex gap-1 h-8">
                     <Plus size={14} /> Add Room
                   </Button>
@@ -141,9 +139,9 @@ export default function BuildingsPage() {
                 <ScrollArea className="h-[250px] pr-4 border rounded-md p-2">
                   <div className="space-y-3">
                     {rooms.map((room, idx) => (
-                      <div key={idx} className="flex gap-2 items-end">
+                      <div key={idx} className="flex gap-2 items-end p-2 bg-secondary/20 rounded-lg">
                         <div className="flex-1 space-y-1">
-                          <Label className="text-[10px] uppercase">Room No.</Label>
+                          <Label className="text-[10px] uppercase font-bold">Room No.</Label>
                           <Input 
                             value={room.roomNo}
                             placeholder="e.g. 101"
@@ -151,11 +149,11 @@ export default function BuildingsPage() {
                           />
                         </div>
                         <div className="flex-1 space-y-1">
-                          <Label className="text-[10px] uppercase">Seats</Label>
+                          <Label className="text-[10px] uppercase font-bold">Total Seats</Label>
                           <Input 
                             type="number"
                             value={room.seats}
-                            placeholder="Seats"
+                            placeholder="1, 2, 4..."
                             onChange={(e) => updateRoomField(idx, "seats", e.target.value)}
                           />
                         </div>
@@ -174,21 +172,23 @@ export default function BuildingsPage() {
                 </ScrollArea>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 border-t pt-4">
-                <div className="space-y-2">
-                  <Label>Occupied Seats</Label>
+              <div className="grid grid-cols-3 gap-4 border-t pt-4">
+                <div className="bg-primary/5 p-3 rounded-lg text-center">
+                  <p className="text-[10px] uppercase text-muted-foreground font-bold">Total Seats</p>
+                  <p className="text-lg font-bold text-primary">{totalSeats}</p>
+                </div>
+                <div className="bg-success/5 p-3 rounded-lg text-center">
+                  <p className="text-[10px] uppercase text-success/80 font-bold">Occupied</p>
                   <Input 
                     type="number" 
                     value={newBuilding.occupiedSeats} 
                     onChange={(e) => setNewBuilding({...newBuilding, occupiedSeats: e.target.value})}
-                    placeholder="Occupied" 
+                    className="h-7 text-center font-bold mt-1"
                   />
                 </div>
-                <div className="space-y-2 text-right">
-                  <div className="text-xs text-muted-foreground">Auto Calculated</div>
-                  <div className="text-lg font-bold text-primary">
-                    Total Seats: {rooms.reduce((acc, curr) => acc + Number(curr.seats || 0), 0)}
-                  </div>
+                <div className="bg-destructive/5 p-3 rounded-lg text-center">
+                  <p className="text-[10px] uppercase text-destructive/80 font-bold">Empty (Auto)</p>
+                  <p className="text-lg font-bold text-destructive">{emptyCount}</p>
                 </div>
               </div>
             </div>
@@ -228,7 +228,7 @@ export default function BuildingsPage() {
                     <p className="text-[10px] text-muted-foreground uppercase font-bold">Total Rooms</p>
                     <div className="flex items-center gap-1.5 mt-0.5 font-bold text-sm">
                       <DoorOpen size={14} className="text-primary" />
-                      {building.roomsCount || building.rooms}
+                      {building.roomsCount}
                     </div>
                   </div>
                   <div className="bg-secondary/50 p-2.5 rounded-lg">
@@ -246,10 +246,10 @@ export default function BuildingsPage() {
                     </div>
                   </div>
                   <div className="bg-destructive/10 p-2.5 rounded-lg">
-                    <p className="text-[10px] text-destructive/80 uppercase font-bold">Vacant</p>
+                    <p className="text-[10px] text-destructive/80 uppercase font-bold">Empty</p>
                     <div className="flex items-center gap-1.5 mt-0.5 font-bold text-sm text-destructive">
                       <UserMinus size={14} />
-                      {(building.totalSeats || 0) - (building.occupiedSeats || 0)}
+                      {building.emptySeats || 0}
                     </div>
                   </div>
                 </div>

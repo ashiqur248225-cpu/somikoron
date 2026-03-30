@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Plus, Phone, UserCircle, Loader2 } from "lucide-react"
+import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -27,7 +28,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
-import { collection, query, where, serverTimestamp } from "firebase/firestore"
+import { collection, serverTimestamp } from "firebase/firestore"
 
 export default function StudentsPage() {
   const { toast } = useToast()
@@ -35,11 +36,9 @@ export default function StudentsPage() {
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   
-  // Fetch buildings for the dropdown
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  // Fetch all students
   const studentsQuery = useMemoFirebase(() => collection(db, "students"), [db])
   const { data: students, isLoading } = useCollection(studentsQuery)
 
@@ -48,12 +47,16 @@ export default function StudentsPage() {
     phone: "",
     buildingId: "",
     roomNumber: "",
+    seatNumber: "",
     paymentSystem: "package",
     monthlyAmount: ""
   })
 
   const handleRegister = () => {
-    if (!formData.name || !formData.buildingId) return
+    if (!formData.name || !formData.buildingId || !formData.roomNumber) {
+      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building and Room are required." })
+      return
+    }
 
     const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
 
@@ -70,24 +73,26 @@ export default function StudentsPage() {
       phone: "",
       buildingId: "",
       roomNumber: "",
+      seatNumber: "",
       paymentSystem: "package",
       monthlyAmount: ""
     })
     setOpen(false)
-    toast({ title: "Student Registered", description: "Profile created in the database." })
+    toast({ title: "Student Registered", description: "Profile and seat assignment saved." })
   }
 
   const filteredStudents = students?.filter(s => 
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.buildingName?.toLowerCase().includes(searchTerm.toLowerCase())
+    s.buildingName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.roomNumber?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-headline font-bold text-primary">Student Management</h1>
-          <p className="text-muted-foreground mt-1">Register and manage residents across all buildings.</p>
+          <h1 className="text-3xl font-headline font-bold text-primary">Student Residents</h1>
+          <p className="text-muted-foreground mt-1">Manage student profiles and their room/seat assignments.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -97,8 +102,8 @@ export default function StudentsPage() {
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>New Student Registration</DialogTitle>
-              <DialogDescription>Create a student profile and assign to a building.</DialogDescription>
+              <DialogTitle>New Resident Registration</DialogTitle>
+              <DialogDescription>Assign a student to a specific building, room, and seat.</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
               <div className="space-y-2">
@@ -106,7 +111,7 @@ export default function StudentsPage() {
                 <Input 
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
-                  placeholder="Student's legal name" 
+                  placeholder="Student Name" 
                 />
               </div>
               <div className="space-y-2">
@@ -114,13 +119,13 @@ export default function StudentsPage() {
                 <Input 
                   value={formData.phone}
                   onChange={e => setFormData({...formData, phone: e.target.value})}
-                  placeholder="Contact number" 
+                  placeholder="Contact Number" 
                 />
               </div>
               <div className="space-y-2">
                 <Label>Building</Label>
                 <Select onValueChange={val => setFormData({...formData, buildingId: val})}>
-                  <SelectTrigger><SelectValue placeholder="Assign building" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
                   <SelectContent>
                     {buildings?.map(b => (
                       <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
@@ -128,13 +133,23 @@ export default function StudentsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Room Number</Label>
-                <Input 
-                  value={formData.roomNumber}
-                  onChange={e => setFormData({...formData, roomNumber: e.target.value})}
-                  placeholder="e.g. 201-B" 
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label>Room Number</Label>
+                  <Input 
+                    value={formData.roomNumber}
+                    onChange={e => setFormData({...formData, roomNumber: e.target.value})}
+                    placeholder="e.g. 302" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Seat Number</Label>
+                  <Input 
+                    value={formData.seatNumber}
+                    onChange={e => setFormData({...formData, seatNumber: e.target.value})}
+                    placeholder="e.g. A, B, 1" 
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Payment System</Label>
@@ -147,17 +162,17 @@ export default function StudentsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Monthly Amount</Label>
+                <Label>Monthly Amount (Rent/Fee)</Label>
                 <Input 
                   type="number" 
                   value={formData.monthlyAmount}
                   onChange={e => setFormData({...formData, monthlyAmount: e.target.value})}
-                  placeholder="Fixed monthly fee" 
+                  placeholder="Fixed amount" 
                 />
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleRegister}>Save Profile</Button>
+              <Button onClick={handleRegister} className="w-full">Register & Assign Seat</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -168,7 +183,7 @@ export default function StudentsPage() {
           <div className="relative w-full md:max-w-md">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search students..." 
+              placeholder="Search by name, room or building..." 
               className="pl-8" 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -183,7 +198,8 @@ export default function StudentsPage() {
               <TableHeader className="bg-secondary/30">
                 <TableRow>
                   <TableHead>Student</TableHead>
-                  <TableHead>Building & Room</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Seat Info</TableHead>
                   <TableHead>Payment Plan</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -199,20 +215,23 @@ export default function StudentsPage() {
                         </div>
                         <div className="flex flex-col">
                           <span className="font-semibold">{student.name}</span>
-                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase">
-                            <Phone size={10} /> {student.phone}
-                          </div>
+                          <span className="text-[10px] text-muted-foreground uppercase">{student.phone}</span>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="text-sm font-medium">{student.buildingName}</span>
-                        <span className="text-xs text-muted-foreground">Room {student.roomNumber}</span>
+                        <span className="text-xs text-muted-foreground">Room: {student.roomNumber}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="capitalize font-normal border-primary/30 text-primary bg-primary/5">
+                      <Badge variant="secondary" className="flex gap-1 items-center w-fit">
+                        <BedDouble size={10} /> Seat {student.seatNumber || 'N/A'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="capitalize font-normal border-primary/30 text-primary">
                         {student.paymentSystem}
                       </Badge>
                     </TableCell>
@@ -222,7 +241,6 @@ export default function StudentsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">View Ledger</Button>
                       <Button variant="ghost" size="sm">Edit</Button>
                     </TableCell>
                   </TableRow>
