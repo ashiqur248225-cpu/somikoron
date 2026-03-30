@@ -104,10 +104,11 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const foodAdvance = student?.foodCost || 0
   const foodBalance = foodAdvance - foodBill
 
-  // Total Due Logic: only add monthly rent if not already covered by dueAmount
+  // Total Due Logic
   const totalDueAmount = useMemo(() => {
     if (!student) return 0
     const baseDue = student.dueAmount || 0
+    // If non-package and food balance is negative, add that absolute value to due
     const foodDebt = (student.paymentSystem === 'non-package' && foodBalance < 0) ? Math.abs(foodBalance) : 0
     return baseDue + foodDebt
   }, [student, foodBalance])
@@ -234,6 +235,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         createdAt: serverTimestamp(),
       })
 
+      // Update student due and food cost separately
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(paymentRecord),
         dueAmount: increment(-seatPaid),
@@ -418,7 +420,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         <Card className="border-none shadow-sm md:col-span-2">
           <CardHeader>
             <CardTitle className="text-lg">Financial Overview</CardTitle>
-            <CardDescription>Current balance and dues.</CardDescription>
+            <CardDescription>Plan and calculations.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className={cn(
@@ -434,14 +436,14 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 <p className="text-lg font-bold">₹{student.monthlyRent || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-secondary/30">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Fee</p>
+                <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p>
                 <p className="text-lg font-bold">₹{student.serviceCharge || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                 <p className="text-[10px] uppercase text-destructive font-bold">Total Due</p>
                 <p className="text-lg font-bold text-destructive">₹{totalDueAmount.toLocaleString()}</p>
                 <div className="text-[9px] text-muted-foreground mt-1">
-                   Pending: ₹{student.dueAmount || 0}
+                   Prev Due: ₹{student.dueAmount || 0}
                    {student.paymentSystem === 'non-package' && foodBalance < 0 && ` + Food: ₹${Math.abs(foodBalance)}`}
                 </div>
               </div>
@@ -467,7 +469,9 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         <TabsList className="bg-secondary/50 p-1 mb-4">
           <TabsTrigger value="payments" className="flex gap-2"><CreditCard size={14} /> Payments</TabsTrigger>
           <TabsTrigger value="dues" className="flex gap-2"><AlertCircle size={14} /> Due Details</TabsTrigger>
-          <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meal Logs</TabsTrigger>
+          {student.paymentSystem === 'non-package' && (
+            <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meal Logs</TabsTrigger>
+          )}
         </TabsList>
         
         <TabsContent value="payments">
@@ -539,97 +543,99 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
           </Card>
         </TabsContent>
 
-        <TabsContent value="meals">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-6">
-              <Card className="border-none shadow-sm h-fit">
-                <CardHeader>
-                  <CardTitle className="text-sm">Log Monthly Count</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Month</Label>
-                    <Select value={logMonth} onValueChange={setLogMonth}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Total Meals</Label>
-                    <Input type="number" placeholder="Enter count" value={logCount} onChange={e => setLogCount(e.target.value)} />
-                  </div>
-                  <Button className="w-full gap-2" onClick={logMonthlyMeal} disabled={isUpdating}>
-                    <Plus size={16} /> Save Record
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="border-none shadow-sm h-fit">
-                <CardHeader>
-                  <CardTitle className="text-sm">Meal Configuration</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {!editRate ? (
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm">
-                        <p className="text-muted-foreground text-xs">Current Rate</p>
-                        <p className="font-bold text-lg">₹{student.foodRate || 0}</p>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => {
-                        setNewRate(student.foodRate?.toString() || "")
-                        setEditRate(true)
-                      }}>Change</Button>
-                    </div>
-                  ) : (
+        {student.paymentSystem === 'non-package' && (
+          <TabsContent value="meals">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-6">
+                <Card className="border-none shadow-sm h-fit">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Log Monthly Count</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label className="text-xs">New Rate (₹)</Label>
-                      <div className="flex gap-2">
-                        <Input type="number" value={newRate} onChange={e => setNewRate(e.target.value)} className="h-8" />
-                        <Button size="sm" onClick={updateMealRate} disabled={isUpdating} className="h-8">Save</Button>
-                      </div>
+                      <Label>Month</Label>
+                      <Select value={logMonth} onValueChange={setLogMonth}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
+                    <div className="space-y-2">
+                      <Label>Total Meals</Label>
+                      <Input type="number" placeholder="Enter count" value={logCount} onChange={e => setLogCount(e.target.value)} />
+                    </div>
+                    <Button className="w-full gap-2" onClick={logMonthlyMeal} disabled={isUpdating}>
+                      <Plus size={16} /> Save Record
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-none shadow-sm h-fit">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Meal Configuration</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {!editRate ? (
+                      <div className="flex justify-between items-center">
+                        <div className="text-sm">
+                          <p className="text-muted-foreground text-xs">Current Rate</p>
+                          <p className="font-bold text-lg">₹{student.foodRate || 0}</p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => {
+                          setNewRate(student.foodRate?.toString() || "")
+                          setEditRate(true)
+                        }}>Change</Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Label className="text-xs">New Rate (₹)</Label>
+                        <div className="flex gap-2">
+                          <Input type="number" value={newRate} onChange={e => setNewRate(e.target.value)} className="h-8" />
+                          <Button size="sm" onClick={updateMealRate} disabled={isUpdating} className="h-8">Save</Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="md:col-span-2 border-none shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-sm">Monthly Records History</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Count</TableHead>
+                        <TableHead>Rate (₹)</TableHead>
+                        <TableHead className="text-right">Total (₹)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {student.mealsHistory?.map((m: any, idx: number) => (
+                        <TableRow key={idx}>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {m.date ? new Date(m.date).toLocaleDateString() : 'N/A'}
+                          </TableCell>
+                          <TableCell className="font-medium">{m.month}</TableCell>
+                          <TableCell className="font-bold">{m.totalMeals}</TableCell>
+                          <TableCell className="text-muted-foreground text-xs">₹{m.perMealCost}</TableCell>
+                          <TableCell className="text-right font-bold text-primary">
+                            ₹{m.totalCost?.toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </CardContent>
               </Card>
             </div>
-
-            <Card className="md:col-span-2 border-none shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-sm">Monthly Records History</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Period</TableHead>
-                      <TableHead>Count</TableHead>
-                      <TableHead>Rate (₹)</TableHead>
-                      <TableHead className="text-right">Total (₹)</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {student.mealsHistory?.map((m: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {m.date ? new Date(m.date).toLocaleDateString() : 'N/A'}
-                        </TableCell>
-                        <TableCell className="font-medium">{m.month}</TableCell>
-                        <TableCell className="font-bold">{m.totalMeals}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">₹{m.perMealCost}</TableCell>
-                        <TableCell className="text-right font-bold text-primary">
-                          ₹{m.totalCost?.toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+          </TabsContent>
+        )}
       </Tabs>
 
       <div className="fixed bottom-8 right-8 z-50">
@@ -640,12 +646,14 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 p-2 space-y-1 mb-2">
-            <DropdownMenuItem onClick={() => setIsCalcDialogOpen(true)} className="flex items-center gap-2 cursor-pointer p-3">
-              <div className="bg-primary/10 p-2 rounded-lg text-primary">
-                <Calculator size={18} />
-              </div>
-              <span className="font-medium">Monthly Calculator</span>
-            </DropdownMenuItem>
+            {student.paymentSystem === 'non-package' && (
+              <DropdownMenuItem onClick={() => setIsCalcDialogOpen(true)} className="flex items-center gap-2 cursor-pointer p-3">
+                <div className="bg-primary/10 p-2 rounded-lg text-primary">
+                  <Calculator size={18} />
+                </div>
+                <span className="font-medium">Monthly Calculator</span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => setIsPaymentDialogOpen(true)} className="flex items-center gap-2 cursor-pointer p-3">
               <div className="bg-success/10 p-2 rounded-lg text-success">
                 <Wallet size={18} />
