@@ -86,7 +86,7 @@ export default function StudentsPage() {
         serviceCharge: Number(formData.serviceCharge),
         monthlyRent: Number(formData.monthlyRent),
         foodCost: formData.paymentSystem === 'package' ? 0 : Number(formData.foodCost),
-        foodRate: Number(formData.foodRate),
+        foodRate: 0, // Set to 0 initially, will be managed in details page
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
         createdAt: serverTimestamp(),
@@ -230,30 +230,27 @@ export default function StudentsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {formData.type === 'old' ? (
+                  {formData.type === 'old' && (
                     <div className="space-y-2">
                       <Label>Previous Due</Label>
                       <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
                     </div>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        <Label>Advance Amount</Label>
-                        <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Service Charge</Label>
-                        <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
-                      </div>
-                    </>
                   )}
+                  <div className="space-y-2">
+                    <Label>Advance Amount</Label>
+                    <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Service Charge</Label>
+                    <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
+                  </div>
                 </div>
               </div>
 
               {/* Billing Plan */}
               <div className="space-y-4 border-t pt-4">
                 <Label className="text-primary font-bold">Billing & Food Plan</Label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Payment System</Label>
                     <Select value={formData.paymentSystem} onValueChange={val => setFormData({...formData, paymentSystem: val})}>
@@ -270,17 +267,15 @@ export default function StudentsPage() {
                   </div>
                   
                   {formData.paymentSystem === 'non-package' && (
-                    <div className="space-y-2">
+                    <div className="col-span-full space-y-2">
                       <Label>Initial Food Advance</Label>
                       <Input type="number" value={formData.foodCost} onChange={e => setFormData({...formData, foodCost: e.target.value})} />
                     </div>
                   )}
-                  
-                  <div className="space-y-2">
-                    <Label>Meal Rate (Per Meal)</Label>
-                    <Input type="number" value={formData.foodRate} onChange={e => setFormData({...formData, foodRate: e.target.value})} />
-                  </div>
                 </div>
+                <p className="text-[10px] text-muted-foreground italic">
+                  * Meal Rate can be configured from the student's profile page after registration.
+                </p>
               </div>
             </div>
             <DialogFooter className="sticky bottom-0 bg-background pt-2">
