@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useParams, useRouter } from "next/navigation"
@@ -49,7 +50,6 @@ export default function StudentDetailsPage() {
 
   // Calculator State
   const [calcMonth, setCalcMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
-  const [calcYear, setCalcYear] = useState(new Date().getFullYear().toString())
   const [calcMealCount, setCalcMealCount] = useState("")
   const [calcRate, setCalcRate] = useState("")
 
@@ -255,22 +255,16 @@ export default function StudentDetailsPage() {
                   <DialogDescription>Quickly calculate food bill for any month.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Select Month</Label>
-                      <Select value={calcMonth} onValueChange={setCalcMonth}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                            <SelectItem key={m} value={m}>{m}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Year</Label>
-                      <Input type="number" value={calcYear} onChange={e => setCalcYear(e.target.value)} />
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Select Month</Label>
+                    <Select value={calcMonth} onValueChange={setCalcMonth}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
