@@ -58,7 +58,8 @@ export default function StudentsPage() {
     serviceCharge: "0",
     paymentSystem: "package",
     monthlyRent: "",
-    foodCost: ""
+    foodCost: "0",
+    foodRate: "0"
   })
 
   // Cascading Select Helpers
@@ -84,7 +85,8 @@ export default function StudentsPage() {
         advanceAmount: Number(formData.advanceAmount),
         serviceCharge: Number(formData.serviceCharge),
         monthlyRent: Number(formData.monthlyRent),
-        foodCost: Number(formData.foodCost),
+        foodCost: formData.paymentSystem === 'package' ? 0 : Number(formData.foodCost),
+        foodRate: Number(formData.foodRate),
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
         createdAt: serverTimestamp(),
@@ -120,7 +122,7 @@ export default function StudentsPage() {
       setFormData({
         name: "", phone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
         type: "new", dueAmount: "0", advanceAmount: "0", serviceCharge: "0",
-        paymentSystem: "package", monthlyRent: "", foodCost: ""
+        paymentSystem: "package", monthlyRent: "", foodCost: "0", foodRate: "0"
       })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -266,9 +268,17 @@ export default function StudentsPage() {
                     <Label>{formData.paymentSystem === 'package' ? 'Monthly Full Rent' : 'Seat Rent'}</Label>
                     <Input type="number" value={formData.monthlyRent} onChange={e => setFormData({...formData, monthlyRent: e.target.value})} />
                   </div>
+                  
+                  {formData.paymentSystem === 'non-package' && (
+                    <div className="space-y-2">
+                      <Label>Initial Food Advance</Label>
+                      <Input type="number" value={formData.foodCost} onChange={e => setFormData({...formData, foodCost: e.target.value})} />
+                    </div>
+                  )}
+                  
                   <div className="space-y-2">
-                    <Label>Food Cost (If separate)</Label>
-                    <Input type="number" value={formData.foodCost} onChange={e => setFormData({...formData, foodCost: e.target.value})} />
+                    <Label>Meal Rate (Per Meal)</Label>
+                    <Input type="number" value={formData.foodRate} onChange={e => setFormData({...formData, foodRate: e.target.value})} />
                   </div>
                 </div>
               </div>
