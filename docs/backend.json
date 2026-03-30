@@ -2,237 +2,68 @@
 {
   "entities": {
     "Building": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Building",
       "type": "object",
       "description": "Represents a single hostel building.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Building entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "Name of the hostel building."
-        },
-        "address": {
-          "type": "string",
-          "description": "Physical address of the hostel building."
-        },
-        "description": {
-          "type": "string",
-          "description": "Brief description or additional details about the building."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the building record was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the building record was last updated.",
-          "format": "date-time"
-        }
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "rooms": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "id",
-        "name",
-        "address",
-        "createdAt",
-        "updatedAt"
-      ]
+      "required": ["id", "name", "address"]
     },
     "Student": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Student",
       "type": "object",
-      "description": "Represents a student residing in a hostel building.",
+      "description": "Represents a student resident.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Student entity."
-        },
-        "buildingId": {
-          "type": "string",
-          "description": "Reference to the Building where the student resides."
-        },
-        "name": {
-          "type": "string",
-          "description": "Full name of the student."
-        },
-        "contactNumber": {
-          "type": "string",
-          "description": "Primary contact number for the student."
-        },
-        "isActive": {
-          "type": "boolean",
-          "description": "Indicates if the student is currently active."
-        },
-        "paymentSystem": {
-          "type": "string",
-          "description": "Payment system type ('package' or 'non-package')."
-        },
-        "admissionDate": {
-          "type": "string",
-          "description": "Date of admission.",
-          "format": "date"
-        },
-        "roomNumber": {
-          "type": "string",
-          "description": "Room number assigned."
-        },
-        "buildingName": {
-          "type": "string",
-          "description": "Denormalized name of the building."
-        },
-        "monthlyAmount": {
-          "type": "number",
-          "description": "Fixed monthly amount to be paid."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Record creation timestamp.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Last update timestamp.",
-          "format": "date-time"
-        }
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "buildingId": { "type": "string" },
+        "buildingName": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "paymentSystem": { "type": "string" },
+        "monthlyAmount": { "type": "number" }
       },
-      "required": [
-        "id",
-        "buildingId",
-        "name",
-        "isActive",
-        "paymentSystem",
-        "buildingName",
-        "createdAt",
-        "updatedAt"
-      ]
+      "required": ["id", "name", "buildingId"]
     },
     "Payment": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Payment",
       "type": "object",
-      "description": "Records an income entry from a student.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier."
-        },
-        "studentId": {
-          "type": "string",
-          "description": "Reference to the Student."
-        },
-        "buildingId": {
-          "type": "string",
-          "description": "Reference to the Building."
-        },
-        "amount": {
-          "type": "number",
-          "description": "Monetary amount."
-        },
-        "paymentType": {
-          "type": "string",
-          "description": "advance, partial, or full."
-        },
-        "month": {
-          "type": "string",
-          "description": "Month name."
-        },
-        "year": {
-          "type": "string",
-          "description": "Year."
-        },
-        "date": {
-          "type": "string",
-          "description": "Payment recording timestamp.",
-          "format": "date-time"
-        },
-        "method": {
-          "type": "string",
-          "description": "cash, bank, or mobile."
-        },
-        "receiver": {
-          "type": "string",
-          "description": "Staff member name."
-        },
-        "studentName": {
-          "type": "string",
-          "description": "Denormalized student name."
-        },
-        "buildingName": {
-          "type": "string",
-          "description": "Denormalized building name."
-        }
-      },
-      "required": [
-        "id",
-        "studentId",
-        "buildingId",
-        "amount",
-        "paymentType",
-        "month",
-        "year",
-        "date",
-        "method",
-        "receiver",
-        "studentName",
-        "buildingName"
-      ]
+        "id": { "type": "string" },
+        "amount": { "type": "number" },
+        "month": { "type": "string" },
+        "year": { "type": "string" },
+        "studentName": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Summary": {
+      "title": "Monthly Summary",
+      "type": "object",
+      "description": "Aggregated financial data for a specific month to reduce read costs.",
+      "properties": {
+        "id": { "type": "string", "description": "Format: YYYY-MonthName" },
+        "totalIncome": { "type": "number" },
+        "totalExpense": { "type": "number" },
+        "buildingIncome": { "type": "object", "description": "Map of building names to income amount" },
+        "categoryExpense": { "type": "object", "description": "Map of categories to expense amount" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
+    "providers": ["password", "anonymous"]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/managers/{managerId}",
-        "definition": {
-          "entityName": "Manager",
-          "description": "Authorized administrative users."
-        }
-      },
-      {
-        "path": "/buildings/{buildingId}",
-        "definition": {
-          "entityName": "Building",
-          "description": "Hostel buildings."
-        }
-      },
-      {
-        "path": "/students/{studentId}",
-        "definition": {
-          "entityName": "Student",
-          "description": "Global student records for easier reporting and filtering."
-        }
-      },
-      {
-        "path": "/expenseParties/{expensePartyId}",
-        "definition": {
-          "entityName": "ExpenseParty",
-          "description": "Vendors and workers list."
-        }
-      },
-      {
-        "path": "/payments/{paymentId}",
-        "definition": {
-          "entityName": "Payment",
-          "description": "All student payments."
-        }
-      },
-      {
-        "path": "/expenses/{expenseId}",
-        "definition": {
-          "entityName": "Expense",
-          "description": "All operational expenses."
-        }
-      }
-    ]
+    "/managers/{managerId}": { "schema": "Manager", "description": "Managers list" },
+    "/buildings/{buildingId}": { "schema": "Building", "description": "Buildings list" },
+    "/students/{studentId}": { "schema": "Student", "description": "Students list" },
+    "/payments/{paymentId}": { "schema": "Payment", "description": "Income records" },
+    "/expenses/{expenseId}": { "schema": "Expense", "description": "Expense records" },
+    "/summaries/{summaryId}": { "schema": "Summary", "description": "Monthly aggregations" }
   }
 }

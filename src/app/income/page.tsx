@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -15,8 +16,8 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Wallet, Info, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
-import { collection, serverTimestamp } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection, serverTimestamp, doc, setDoc, increment } from "firebase/firestore"
 
 export default function IncomeEntryPage() {
   const { toast } = useToast()
@@ -46,15 +47,21 @@ export default function IncomeEntryPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.studentId || !formData.amount) return
+    if (!formData.studentId || !formData.amount || !selectedBuildingId) return
 
     setIsSubmitting(true)
     const student = students?.find(s => s.id === formData.studentId)
     const building = buildings?.find(b => b.id === selectedBuildingId)
 
-    addDocumentNonBlocking(collection(db, "payments"), {
+    const amount = Number(formData.amount)
+    const paymentId = doc(collection(db, "payments")).id
+    const summaryId = `${formData.year}-${formData.month}`
+
+    // Save Payment
+    const paymentRef = doc(db, "payments", paymentId)
+    setDoc(paymentRef, {
       ...formData,
-      amount: Number(formData.amount),
+      amount,
       buildingId: selectedBuildingId,
       buildingName: building?.name || "Unknown",
       studentName: student?.name || "Unknown",
@@ -63,12 +70,19 @@ export default function IncomeEntryPage() {
       createdAt: serverTimestamp(),
     })
 
+    // Update Summary (Reduces read cost for reports)
+    const summaryRef = doc(db, "summaries", summaryId)
+    setDoc(summaryRef, {
+      totalIncome: increment(amount),
+      [`buildingIncome.${building?.name || 'Unknown'}`]: increment(amount),
+      updatedAt: serverTimestamp()
+    }, { merge: true })
+
     toast({
       title: "Success",
-      description: "Payment record saved successfully.",
+      description: "Payment record saved and summary updated.",
     })
     
-    // Reset form
     setFormData(prev => ({...prev, amount: "", description: ""}))
     setIsSubmitting(false)
   }

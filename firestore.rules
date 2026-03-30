@@ -2,39 +2,37 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isManager() {
-      return isSignedIn() && exists(/databases/$(database)/documents/managers/$(request.auth.uid));
-    }
-
+    // Allow any authenticated user to read and write to the collections for the prototype
     match /managers/{managerId} {
-      allow get: if isSignedIn() && request.auth.uid == managerId;
-      allow create: if isSignedIn() && request.auth.uid == managerId;
-      allow read, write: if isManager();
+      allow read, write: if isSignedIn();
     }
 
     match /buildings/{buildingId} {
-      allow read, write: if isManager();
+      allow read, write: if isSignedIn();
     }
 
     match /students/{studentId} {
-      allow read, write: if isManager();
+      allow read, write: if isSignedIn();
     }
 
     match /expenseParties/{expensePartyId} {
-      allow read, write: if isManager();
+      allow read, write: if isSignedIn();
     }
 
     match /payments/{paymentId} {
-      allow read, write: if isManager();
+      allow read, write: if isSignedIn();
     }
 
     match /expenses/{expenseId} {
-      allow read, write: if isManager();
+      allow read, write: if isSignedIn();
+    }
+
+    match /summaries/{summaryId} {
+      allow read, write: if isSignedIn();
     }
   }
 }

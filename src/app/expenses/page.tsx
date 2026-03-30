@@ -25,8 +25,8 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog"
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
-import { collection, serverTimestamp } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection, serverTimestamp, doc, setDoc, increment } from "firebase/firestore"
 
 export default function ExpenseEntryPage() {
   const { toast } = useToast()
@@ -64,24 +64,42 @@ export default function ExpenseEntryPage() {
     const building = buildings?.find(b => b.id === formData.buildingId)
     const party = parties?.find(p => p.id === formData.expensePartyId)
 
-    addDocumentNonBlocking(collection(db, "expenses"), {
+    const amount = Number(formData.amount)
+    const expenseId = doc(collection(db, "expenses")).id
+    
+    // Generate Summary ID from date
+    const dateObj = new Date(formData.expenseDate)
+    const summaryId = `${dateObj.getFullYear()}-${dateObj.toLocaleString('default', { month: 'long' })}`
+
+    // Save Expense
+    const expenseRef = doc(db, "expenses", expenseId)
+    setDoc(expenseRef, {
       ...formData,
-      amount: Number(formData.amount),
+      amount,
       buildingName: building?.name || "General",
       expensePartyName: party?.name || "Anonymous",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     })
 
-    toast({ title: "Expense Logged", description: "Transaction saved to ledger." })
+    // Update Summary
+    const summaryRef = doc(db, "summaries", summaryId)
+    setDoc(summaryRef, {
+      totalExpense: increment(amount),
+      [`categoryExpense.${formData.category}`]: increment(amount),
+      updatedAt: serverTimestamp()
+    }, { merge: true })
+
+    toast({ title: "Expense Logged", description: "Transaction saved and summary updated." })
     setFormData(prev => ({ ...prev, amount: "", description: "", meterNumber: "" }))
     setIsSubmitting(false)
   }
 
-  const handleAddParty = () => {
+  const handleAddParty = async () => {
     if (!newParty.name) return
     setIsAddingParty(true)
-    addDocumentNonBlocking(collection(db, "expenseParties"), {
+    const partyId = doc(collection(db, "expenseParties")).id
+    await setDoc(doc(db, "expenseParties", partyId), {
       ...newParty,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
