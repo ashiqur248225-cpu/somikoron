@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -5,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Building2, MapPin, Plus, DoorOpen, Loader2 } from "lucide-react"
+import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -23,22 +24,47 @@ export default function BuildingsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const [open, setOpen] = useState(false)
-  const [newBuilding, setNewBuilding] = useState({ name: "", address: "", rooms: "" })
+  const [newBuilding, setNewBuilding] = useState({ 
+    name: "", 
+    address: "", 
+    rooms: "",
+    totalSeats: "",
+    occupiedSeats: "0",
+    emptySeats: ""
+  })
 
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings, isLoading } = useCollection(buildingsQuery)
 
   const handleCreate = () => {
-    if (!newBuilding.name || !newBuilding.address) return
+    if (!newBuilding.name || !newBuilding.address || !newBuilding.rooms || !newBuilding.totalSeats) {
+      toast({ variant: "destructive", title: "Error", description: "Please fill all required fields." })
+      return
+    }
+
+    const rooms = Number(newBuilding.rooms)
+    const totalSeats = Number(newBuilding.totalSeats)
+    const occupiedSeats = Number(newBuilding.occupiedSeats)
+    const emptySeats = totalSeats - occupiedSeats
 
     addDocumentNonBlocking(collection(db, "buildings"), {
       ...newBuilding,
-      rooms: Number(newBuilding.rooms),
+      rooms,
+      totalSeats,
+      occupiedSeats,
+      emptySeats,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
 
-    setNewBuilding({ name: "", address: "", rooms: "" })
+    setNewBuilding({ 
+      name: "", 
+      address: "", 
+      rooms: "", 
+      totalSeats: "", 
+      occupiedSeats: "0", 
+      emptySeats: "" 
+    })
     setOpen(false)
     toast({ title: "Building Created", description: "Property successfully added to database." })
   }
@@ -56,7 +82,7 @@ export default function BuildingsPage() {
               <Plus size={18} /> Add New Building
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Add New Building</DialogTitle>
               <DialogDescription>Create a new hostel building record.</DialogDescription>
@@ -78,18 +104,49 @@ export default function BuildingsPage() {
                   placeholder="Full street address" 
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Total Rooms</Label>
-                <Input 
-                  type="number" 
-                  value={newBuilding.rooms} 
-                  onChange={(e) => setNewBuilding({...newBuilding, rooms: e.target.value})}
-                  placeholder="Number of available rooms" 
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Total Rooms</Label>
+                  <Input 
+                    type="number" 
+                    value={newBuilding.rooms} 
+                    onChange={(e) => setNewBuilding({...newBuilding, rooms: e.target.value})}
+                    placeholder="Rooms" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Total Seats</Label>
+                  <Input 
+                    type="number" 
+                    value={newBuilding.totalSeats} 
+                    onChange={(e) => setNewBuilding({...newBuilding, totalSeats: e.target.value})}
+                    placeholder="Total Seats" 
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Occupied Seats</Label>
+                  <Input 
+                    type="number" 
+                    value={newBuilding.occupiedSeats} 
+                    onChange={(e) => setNewBuilding({...newBuilding, occupiedSeats: e.target.value})}
+                    placeholder="Occupied" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Empty Seats (Auto)</Label>
+                  <Input 
+                    type="number" 
+                    disabled 
+                    value={Number(newBuilding.totalSeats || 0) - Number(newBuilding.occupiedSeats || 0)}
+                    placeholder="Empty" 
+                  />
+                </div>
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleCreate}>Create Building</Button>
+              <Button onClick={handleCreate} className="w-full">Create Building</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -119,19 +176,33 @@ export default function BuildingsPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div className="bg-secondary/50 p-3 rounded-lg text-center">
-                    <p className="text-xs text-muted-foreground uppercase font-semibold">Total Rooms</p>
-                    <div className="flex items-center justify-center gap-1 mt-1 font-bold text-lg">
-                      <DoorOpen size={16} />
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div className="bg-secondary/50 p-2.5 rounded-lg">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Rooms</p>
+                    <div className="flex items-center gap-1.5 mt-0.5 font-bold text-sm">
+                      <DoorOpen size={14} className="text-primary" />
                       {building.rooms}
                     </div>
                   </div>
-                  <div className="bg-secondary/50 p-3 rounded-lg text-center">
-                    <p className="text-xs text-muted-foreground uppercase font-semibold">Occupied</p>
-                    <div className="flex items-center justify-center gap-1 mt-1 font-bold text-lg text-primary">
-                      {/* This would ideally be a count query or aggregate */}
-                      -
+                  <div className="bg-secondary/50 p-2.5 rounded-lg">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Total Seats</p>
+                    <div className="flex items-center gap-1.5 mt-0.5 font-bold text-sm">
+                      <Users size={14} className="text-primary" />
+                      {building.totalSeats}
+                    </div>
+                  </div>
+                  <div className="bg-success/10 p-2.5 rounded-lg">
+                    <p className="text-[10px] text-success/80 uppercase font-bold">Occupied</p>
+                    <div className="flex items-center gap-1.5 mt-0.5 font-bold text-sm text-success">
+                      <UserCheck size={14} />
+                      {building.occupiedSeats || 0}
+                    </div>
+                  </div>
+                  <div className="bg-destructive/10 p-2.5 rounded-lg">
+                    <p className="text-[10px] text-destructive/80 uppercase font-bold">Vacant</p>
+                    <div className="flex items-center gap-1.5 mt-0.5 font-bold text-sm text-destructive">
+                      <UserMinus size={14} />
+                      {(building.totalSeats || 0) - (building.occupiedSeats || 0)}
                     </div>
                   </div>
                 </div>

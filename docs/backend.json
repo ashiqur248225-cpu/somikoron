@@ -9,10 +9,13 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "address": { "type": "string" },
-        "rooms": { "type": "number" },
+        "rooms": { "type": "number", "description": "Total rooms in the building" },
+        "totalSeats": { "type": "number", "description": "Total capacity of seats" },
+        "occupiedSeats": { "type": "number", "description": "Currently occupied seats" },
+        "emptySeats": { "type": "number", "description": "Currently vacant seats" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name", "address"]
+      "required": ["id", "name", "address", "rooms", "totalSeats"]
     },
     "Student": {
       "title": "Student",
