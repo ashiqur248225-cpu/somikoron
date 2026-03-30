@@ -93,13 +93,44 @@ export default function IncomeHistoryPage() {
     return filteredPayments.reduce((acc, curr) => acc + (curr.amount || 0), 0)
   }, [filteredPayments])
 
+  // Form Memoized Helpers
+  const selectedBuildingForForm = useMemo(() => buildings?.find(b => b.id === selectedBuildingId), [buildings, selectedBuildingId])
+  const roomsInBuilding = useMemo(() => selectedBuildingForForm?.roomsDetail || [], [selectedBuildingForForm])
+  const filteredStudentsForForm = useMemo(() => {
+    return students?.filter(s => 
+      s.buildingId === selectedBuildingId && 
+      (selectedRoomNumber ? s.roomNumber === selectedRoomNumber : true) &&
+      s.isActive
+    ) || []
+  }, [students, selectedBuildingId, selectedRoomNumber])
+
+  const selectedStudent = useMemo(() => {
+    return students?.find(s => s.id === formData.studentId)
+  }, [students, formData.studentId])
+
+  const foodStats = useMemo(() => {
+    if (!selectedStudent || selectedStudent.paymentSystem === 'package') return { balance: 0 }
+    const totalBill = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+    const totalPaid = Number(selectedStudent.foodCost) || 0
+    return { balance: totalPaid - totalBill }
+  }, [selectedStudent])
+
+  const availableAdvanceForDeduction = useMemo(() => {
+    if (!selectedStudent) return 0
+    const currentAdvance = selectedStudent.advanceAmount || 0
+    const minRequired = selectedStudent.monthlyRent || 0
+    return Math.max(0, currentAdvance - minRequired)
+  }, [selectedStudent])
+
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const student = students?.find(s => s.id === formData.studentId)
-    if (!formData.studentId || !selectedBuildingId || (!useAdvanceBalance && !formData.receiver)) return
+    if (!formData.studentId || !selectedBuildingId || (!useAdvanceBalance && !formData.receiver)) {
+      toast({ variant: "destructive", title: "Error", description: "Fill required fields." })
+      return
+    }
 
-    const seatPaid = student?.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
-    const foodPaid = student?.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
+    const seatPaid = selectedStudent?.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
+    const foodPaid = selectedStudent?.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
     const totalAmount = seatPaid + foodPaid
 
     if (totalAmount <= 0) return
@@ -115,7 +146,7 @@ export default function IncomeHistoryPage() {
       foodAmount: foodPaid,
       buildingId: selectedBuildingId,
       buildingName: building?.name || "Unknown",
-      studentName: student?.name || "Unknown",
+      studentName: selectedStudent?.name || "Unknown",
       studentId: formData.studentId,
       type: "income",
       month: formData.month,
@@ -145,18 +176,58 @@ export default function IncomeHistoryPage() {
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(paymentRecord),
         ...(useAdvanceBalance && { advanceAmount: increment(-totalAmount) }),
-        ...(student?.paymentSystem === 'non-package' && foodPaid > 0 && { foodCost: increment(foodPaid) }),
+        ...(selectedStudent?.paymentSystem === 'non-package' && foodPaid > 0 && { foodCost: increment(foodPaid) }),
         updatedAt: serverTimestamp()
       })
 
       toast({ title: "Success", description: "Payment recorded." })
       setIsEntryOpen(false)
+      setFormData({ ...formData, studentId: "", amount: "", seatAmount: "", foodAmount: "", description: "" })
+      setSelectedBuildingId("")
+      setSelectedRoomNumber("")
+      setUseAdvanceBalance(false)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  const handleAddStaff = async () => {
+    if (!newStaff.name) return
+    setIsSubmitting(true)
+    try {
+      const staffId = doc(collection(db, "staff")).id
+      await setDoc(doc(db, "staff", staffId), {
+        ...newStaff,
+        createdAt: serverTimestamp()
+      })
+      toast({ title: "Success", description: "Staff added." })
+      setNewStaff({ name: "", phone: "" })
+      setIsAddStaffOpen(false)
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
 
   const resetFilters = () => {
     setMonthFilter(new Date().toLocaleString('default', { month: 'long' }))
@@ -294,16 +365,155 @@ export default function IncomeHistoryPage() {
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Record New Income</DialogTitle></DialogHeader>
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
-             {/* Same form as Dashboard Quick Payment but more detailed if needed */}
-             <div className="space-y-4">
-               <Label>Standard selection fields (Building -> Room -> Student)</Label>
-               {/* Simplified for brevity, reuse logic from page.tsx or dashboard */}
-             </div>
-             <Button type="submit" className="w-full h-12" disabled={isSubmitting}>Confirm Payment</Button>
+             <div className="grid grid-cols-1 gap-4 p-4 bg-secondary/10 rounded-xl border">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5"><Building2 size={12}/> Building</Label>
+                  <Select onValueChange={(val) => {
+                    setSelectedBuildingId(val)
+                    setSelectedRoomNumber("")
+                    setFormData({...formData, studentId: ""})
+                  }}>
+                    <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
+                    <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5"><DoorOpen size={12}/> Room No.</Label>
+                  <Select 
+                    disabled={!selectedBuildingId} 
+                    value={selectedRoomNumber}
+                    onValueChange={(val) => {
+                      setSelectedRoomNumber(val)
+                      setFormData({...formData, studentId: ""})
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger>
+                    <SelectContent>{roomsInBuilding.map(r => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">Student</Label>
+                  <Select 
+                    disabled={!selectedRoomNumber && filteredStudentsForForm.length === 0} 
+                    onValueChange={val => setFormData({...formData, studentId: val})}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
+                    <SelectContent>{filteredStudentsForForm.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {selectedStudent && (
+                <div className="bg-secondary/30 p-4 rounded-lg space-y-2 border">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Standard Rent:</span>
+                    <span className="font-bold">₹{selectedStudent.monthlyRent}</span>
+                  </div>
+                  {selectedStudent.paymentSystem === 'non-package' && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{foodStats.balance >= 0 ? "Food Surplus:" : "Food Debt:"}</span>
+                      <span className={cn("font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>₹{Math.abs(foodStats.balance)}</span>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1 p-2 bg-primary/5 rounded border border-primary/10">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-primary font-medium">Advance Pool:</span>
+                      <span className="font-bold text-primary">₹{selectedStudent.advanceAmount || 0}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground border-t pt-1">
+                      <span>Available Deduction:</span>
+                      <span className="font-bold text-success">₹{availableAdvanceForDeduction}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-primary/5">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-bold flex items-center gap-2 cursor-pointer" htmlFor="advSwitchInc">
+                    <ArrowDownToLine size={14} className="text-primary" />
+                    Deduct from Advance
+                  </Label>
+                </div>
+                <Switch 
+                  id="advSwitchInc" 
+                  checked={useAdvanceBalance} 
+                  onCheckedChange={setUseAdvanceBalance}
+                  disabled={!selectedStudent || availableAdvanceForDeduction <= 0}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Month</Label>
+                  <Select value={formData.month} onValueChange={val => setFormData({...formData, month: val})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                {!useAdvanceBalance && (
+                  <div className="space-y-2">
+                    <Label>Method</Label>
+                    <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank">Bank</SelectItem><SelectItem value="mobile">Mobile</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {selectedStudent?.paymentSystem === 'package' ? (
+                <div className="space-y-2">
+                  <Label>Amount (₹)</Label>
+                  <Input type="number" placeholder="0.00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold text-muted-foreground">SEAT RENT (₹)</Label>
+                    <Input type="number" placeholder="Rent" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold text-muted-foreground">FOOD CREDIT (₹)</Label>
+                    <Input type="number" placeholder="Food" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} />
+                  </div>
+                </div>
+              )}
+
+              {!useAdvanceBalance && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Receiver</Label>
+                    <Button variant="link" size="sm" onClick={() => setIsAddStaffOpen(true)}>Add New</Button>
+                  </div>
+                  <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
+                    <SelectTrigger><SelectValue placeholder="Select receiver" /></SelectTrigger>
+                    <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <Textarea placeholder="Notes..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+             <Button type="submit" className="w-full h-12" disabled={isSubmitting}>
+               {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirm Payment"}
+             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
+        <DialogContent onKeyDown={handleKeyDown}>
+          <DialogHeader><DialogTitle>Add New Receiver</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input placeholder="Name" value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
+            <Input placeholder="Phone" maxLength={11} value={newStaff.phone} onChange={e => setNewStaff({...newStaff, phone: e.target.value})} />
+          </div>
+          <DialogFooter><Button onClick={handleAddStaff} disabled={isSubmitting}>Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
