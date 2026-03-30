@@ -13,13 +13,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   UserCircle, Phone, MapPin, Building2, 
   BedDouble, CreditCard, Utensils,
-  Loader2, CheckCircle2, UserMinus, Calculator
+  Loader2, CheckCircle2, UserMinus, Calculator,
+  Calendar as CalendarIcon
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 export default function StudentDetailsPage() {
   const { id } = useParams()
@@ -30,6 +47,12 @@ export default function StudentDetailsPage() {
   const [mealCount, setMealCount] = useState("1")
   const [editRate, setEditRate] = useState(false)
   const [newRate, setNewRate] = useState("")
+
+  // Calculator State
+  const [calcMonth, setCalcMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
+  const [calcYear, setCalcYear] = useState(new Date().getFullYear().toString())
+  const [calcMealCount, setCalcMealCount] = useState("")
+  const [calcRate, setCalcRate] = useState("")
 
   // Fetch Student Data
   const studentRef = useMemoFirebase(() => doc(db, "students", id as string), [db, id])
@@ -142,6 +165,12 @@ export default function StudentDetailsPage() {
     }
   }
 
+  const calculatedTotal = useMemo(() => {
+    const count = Number(calcMealCount) || 0
+    const rate = Number(calcRate) || 0
+    return count * rate
+  }, [calcMealCount, calcRate])
+
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
   if (!student) return <div className="text-center p-20">Student not found.</div>
 
@@ -205,9 +234,75 @@ export default function StudentDetailsPage() {
               <CardTitle className="text-lg">Financial Overview</CardTitle>
               <CardDescription>Plan and real-time food balance.</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Calculator size={16} className="text-muted-foreground" />
-              <span className="text-xs font-bold uppercase">₹{student.foodRate || 0}/Meal</span>
+            <div className="flex items-center gap-4">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="flex gap-2">
+                    <Calculator size={14} /> Calculate Monthly Bill
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Monthly Meal Calculator</DialogTitle>
+                    <DialogDescription>Calculate the food bill for a specific month based on meals and rate.</DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Select Month</Label>
+                        <Select value={calcMonth} onValueChange={setCalcMonth}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                              <SelectItem key={m} value={m}>{m}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Year</Label>
+                        <Input type="number" value={calcYear} onChange={e => setCalcYear(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Total Meals in {calcMonth}</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="0" 
+                          value={calcMealCount} 
+                          onChange={e => setCalcMealCount(e.target.value)} 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Rate Per Meal (₹)</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="0" 
+                          value={calcRate} 
+                          onChange={e => setCalcRate(e.target.value)} 
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 flex justify-between items-center">
+                      <span className="font-semibold text-muted-foreground">Total Bill for {calcMonth}:</span>
+                      <span className="text-2xl font-bold text-primary">₹{calculatedTotal.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="secondary" onClick={() => {
+                      setCalcMealCount("")
+                      setCalcRate("")
+                    }}>Reset</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              <div className="flex items-center gap-2">
+                <Calculator size={16} className="text-muted-foreground" />
+                <span className="text-xs font-bold uppercase">₹{student.foodRate || 0}/Meal</span>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
