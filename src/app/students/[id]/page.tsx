@@ -460,6 +460,7 @@ export default function StudentDetailsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Date</TableHead>
                       <TableHead>Period</TableHead>
                       <TableHead>Count</TableHead>
                       <TableHead>Rate (₹)</TableHead>
@@ -469,6 +470,9 @@ export default function StudentDetailsPage() {
                   <TableBody>
                     {student.mealsHistory?.map((m: any, idx: number) => (
                       <TableRow key={idx}>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {m.date ? new Date(m.date).toLocaleDateString() : 'N/A'}
+                        </TableCell>
                         <TableCell className="font-medium">{m.month}</TableCell>
                         <TableCell className="font-bold">{m.totalMeals}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">₹{m.perMealCost}</TableCell>
@@ -478,7 +482,7 @@ export default function StudentDetailsPage() {
                       </TableRow>
                     ))}
                     {(!student.mealsHistory || student.mealsHistory.length === 0) && (
-                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No monthly records found in history.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No monthly records found in history.</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>

@@ -5,7 +5,7 @@ service cloud.firestore {
     // OPEN ACCESS FOR PROTOTYPING
     // This allows anyone to read and write to any collection.
     // Use this only for development/prototyping.
-    // FORCE REFRESH: 2024-05-21-05 (Security rules nudge for students and payments access)
+    // FORCE REFRESH: 2024-05-21-06 (Security rules nudge for all collections access)
     match /{document=**} {
       allow read, write: if true;
     }
