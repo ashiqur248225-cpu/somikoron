@@ -624,7 +624,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
       {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-        <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader>
             <DialogTitle>Record Transaction for {student.name}</DialogTitle>
           </DialogHeader>
@@ -747,7 +747,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                         <UserPlus size={12} className="mr-1" /> Add New
                       </Button>
                     </DialogTrigger>
-                    <DialogContent onKeyDown={handleKeyDown}>
+                    <DialogContent className="max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
                       <DialogHeader>
                         <DialogTitle>Add New Receiver</DialogTitle>
                       </DialogHeader>
@@ -790,7 +790,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
             </div>
           </div>
           
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 bg-background pt-2 border-t">
             <Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg" disabled={isUpdating}>
               {isUpdating ? <Loader2 className="animate-spin" /> : (useAdvanceBalance ? "Confirm Adjustment" : "Record Payment")}
             </Button>
@@ -800,7 +800,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
       {/* Log Meal Dialog */}
       <Dialog open={isLogMealDialogOpen} onOpenChange={setIsLogMealDialogOpen}>
-        <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader>
             <DialogTitle>Log Monthly Meals</DialogTitle>
             <DialogDescription>

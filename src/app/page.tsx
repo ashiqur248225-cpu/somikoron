@@ -377,7 +377,7 @@ export default function DashboardPage() {
               <Plus className="h-8 w-8 text-white" />
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
             <DialogHeader>
               <DialogTitle>Quick Payment Record</DialogTitle>
               <DialogDescription>Record a student payment directly from the dashboard.</DialogDescription>
@@ -453,7 +453,7 @@ export default function DashboardPage() {
                         <UserPlus size={12} className="mr-1" /> Add New
                       </Button>
                     </DialogTrigger>
-                    <DialogContent onKeyDown={handleKeyDown}>
+                    <DialogContent className="max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
                       <DialogHeader>
                         <DialogTitle>Add New Receiver</DialogTitle>
                       </DialogHeader>
@@ -493,7 +493,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 bg-background pt-2 border-t">
               <Button onClick={handleQuickPayment} className="w-full gap-2" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="animate-spin" /> : <Wallet size={16} />}
                 Confirm Quick Payment

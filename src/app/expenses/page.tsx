@@ -191,7 +191,7 @@ export default function ExpenseEntryPage() {
                         <UserPlus size={12} /> Add New Party
                       </Button>
                     </DialogTrigger>
-                    <DialogContent onKeyDown={handleKeyDown}>
+                    <DialogContent className="max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
                       <DialogHeader>
                         <DialogTitle>Add New Party</DialogTitle>
                         <DialogDescription>Create a person or entity for future expenses.</DialogDescription>
