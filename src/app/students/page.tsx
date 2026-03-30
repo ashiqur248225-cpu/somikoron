@@ -334,51 +334,6 @@ export default function StudentsPage() {
               </div>
 
               <div className="space-y-4 border-t pt-4">
-                <div className="flex items-center gap-4">
-                  <Label>Resident Type:</Label>
-                  <RadioGroup 
-                    value={formData.type}
-                    onValueChange={val => setFormData({...formData, type: val})}
-                    className="flex gap-4"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="new" id="new" />
-                      <Label htmlFor="new">New Student</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="old" id="old" />
-                      <Label htmlFor="old">Old Student</Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {formData.type === 'old' && (
-                    <>
-                      <div className="space-y-2">
-                        <Label>Previous Seat Rent Due</Label>
-                        <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
-                      </div>
-                      {formData.paymentSystem === 'non-package' && (
-                        <div className="space-y-2">
-                          <Label>Previous Food Due</Label>
-                          <Input type="number" value={formData.foodDue} onChange={e => setFormData({...formData, foodDue: e.target.value})} />
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <div className="space-y-2">
-                    <Label>Advance Amount</Label>
-                    <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Service Charge</Label>
-                    <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4 border-t pt-4">
                 <Label className="text-primary font-bold">Billing & Food Plan</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -425,6 +380,51 @@ export default function StudentsPage() {
                       />
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div className="space-y-4 border-t pt-4">
+                <div className="flex items-center gap-4">
+                  <Label>Resident Type:</Label>
+                  <RadioGroup 
+                    value={formData.type}
+                    onValueChange={val => setFormData({...formData, type: val})}
+                    className="flex gap-4"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="new" id="new" />
+                      <Label htmlFor="new">New Student</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="old" id="old" />
+                      <Label htmlFor="old">Old Student</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {formData.type === 'old' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Previous Seat Rent Due</Label>
+                        <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} />
+                      </div>
+                      {formData.paymentSystem === 'non-package' && (
+                        <div className="space-y-2">
+                          <Label>Previous Food Due</Label>
+                          <Input type="number" value={formData.foodDue} onChange={e => setFormData({...formData, foodDue: e.target.value})} />
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <div className="space-y-2">
+                    <Label>Advance / Security Deposit</Label>
+                    <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} placeholder="e.g. 10000" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Service Charge</Label>
+                    <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
+                  </div>
                 </div>
               </div>
             </div>

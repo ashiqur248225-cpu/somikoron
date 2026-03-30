@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo } from "react"
@@ -14,7 +15,8 @@ import {
   BedDouble, CreditCard, Utensils,
   Loader2, Calculator,
   Contact, Plus, UserMinus, Wallet,
-  UserPlus, AlertCircle, CheckCircle
+  UserPlus, AlertCircle, CheckCircle,
+  ArrowDownToLine
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -44,6 +46,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
 export default function StudentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -54,6 +57,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const [isUpdating, setIsUpdating] = useState(false)
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
+  const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
   
   // States
   const [logMonth, setLogMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
@@ -138,14 +142,9 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
   const totalRentDue = useMemo(() => {
     if (!student) return 0
-    // Total expected rent since joining
     const totalExpected = dueBreakdown.reduce((acc, curr) => acc + curr.expected, 0)
-    // Total paid rent since joining (excluding food portions)
     const totalPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || curr.amount || 0), 0) || 0
-    
-    // Add old student's starting debt if applicable
     const startingDebt = student.type === 'old' ? (student.dueAmount || 0) : 0
-    
     return Math.max(0, (totalExpected + startingDebt) - totalPaid)
   }, [student, dueBreakdown])
 
@@ -212,7 +211,12 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
       return
     }
 
-    if (!paymentData.receiver) {
+    if (useAdvanceBalance && (student.advanceAmount || 0) < totalAmount) {
+      toast({ variant: "destructive", title: "Insufficient Advance", description: "Student does not have enough advance balance to cover this amount." })
+      return
+    }
+
+    if (!paymentData.receiver && !useAdvanceBalance) {
       toast({ variant: "destructive", title: "Error", description: "Please select a receiver." })
       return
     }
@@ -232,36 +236,46 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
       type: "income",
       month: paymentData.month,
       year: paymentData.year,
-      method: paymentData.method,
-      receiver: paymentData.receiver,
-      description: paymentData.description,
+      method: useAdvanceBalance ? "advance_deduction" : paymentData.method,
+      receiver: useAdvanceBalance ? "System (Advance Deduction)" : paymentData.receiver,
+      description: (useAdvanceBalance ? "[Deducted from Advance Balance] " : "") + paymentData.description,
       date: new Date().toISOString()
     }
 
     try {
-      await setDoc(doc(db, "payments", paymentId), {
-        ...paymentRecord,
-        date: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      })
+      // If not advance deduction, record in global summaries/payments
+      if (!useAdvanceBalance) {
+        await setDoc(doc(db, "payments", paymentId), {
+          ...paymentRecord,
+          date: serverTimestamp(),
+          createdAt: serverTimestamp(),
+        })
 
-      // Update student due history
+        await setDoc(doc(db, "summaries", summaryId), {
+          totalIncome: increment(totalAmount),
+          [`buildingIncome.${student.buildingName}`]: increment(totalAmount),
+          updatedAt: serverTimestamp()
+        }, { merge: true })
+      }
+
+      // Update student due history and advance pool
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(paymentRecord),
+        ...(useAdvanceBalance && {
+          advanceAmount: increment(-totalAmount)
+        }),
         ...(student.paymentSystem === 'non-package' && {
           foodCost: increment(foodPaid)
         }),
         updatedAt: serverTimestamp()
       })
 
-      await setDoc(doc(db, "summaries", summaryId), {
-        totalIncome: increment(totalAmount),
-        [`buildingIncome.${student.buildingName}`]: increment(totalAmount),
-        updatedAt: serverTimestamp()
-      }, { merge: true })
-
-      toast({ title: "Payment Recorded", description: `Amount ₹${totalAmount} saved and balances updated.` })
+      toast({ 
+        title: useAdvanceBalance ? "Advance Deducted" : "Payment Recorded", 
+        description: `Amount ₹${totalAmount} processed for ${paymentData.month}.` 
+      })
       setIsPaymentDialogOpen(false)
+      setUseAdvanceBalance(false)
       setPaymentData(prev => ({ ...prev, amount: "", seatAmount: "", foodAmount: "", description: "" }))
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -408,13 +422,11 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
             <CardDescription>Plan and calculations (Auto-monthly updates).</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className={cn(
-              "grid gap-4",
-              student.paymentSystem === 'package' ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2 md:grid-cols-5"
-            )}>
-              <div className="p-3 rounded-lg bg-secondary/30">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold">Advance</p>
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
+              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <p className="text-[10px] uppercase text-primary font-bold">Advance Balance</p>
                 <p className="text-lg font-bold">₹{student.advanceAmount || 0}</p>
+                <p className="text-[8px] text-muted-foreground mt-1">Available for auto-deduction</p>
               </div>
               <div className="p-3 rounded-lg bg-secondary/30">
                 <p className="text-[10px] uppercase text-muted-foreground font-bold">{student.paymentSystem === 'package' ? 'Rent' : 'Seat Rent'}</p>
@@ -477,7 +489,11 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                     <TableRow key={idx}>
                       <TableCell>{new Date(p.date).toLocaleDateString()}</TableCell>
                       <TableCell>{p.month} {p.year}</TableCell>
-                      <TableCell className="capitalize">{p.method}</TableCell>
+                      <TableCell className="capitalize">
+                        {p.method === 'advance_deduction' ? (
+                          <Badge variant="outline" className="text-primary border-primary">Advance Deducted</Badge>
+                        ) : p.method}
+                      </TableCell>
                       <TableCell className="text-xs">{p.receiver}</TableCell>
                       <TableCell className="text-right font-bold text-success">₹{p.amount?.toLocaleString()}</TableCell>
                     </TableRow>
@@ -640,9 +656,24 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
               <span className="font-semibold">Total Payable:</span>
               <span className="font-bold text-primary">₹{totalDueAmount.toLocaleString()}</span>
             </div>
+            <div className="flex justify-between text-xs mt-2 p-2 bg-primary/5 rounded border border-primary/10">
+              <span className="text-primary font-medium">Available Advance:</span>
+              <span className="font-bold text-primary">₹{student.advanceAmount || 0}</span>
+            </div>
           </div>
 
           <div className="space-y-4 py-2">
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-primary/5">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-bold flex items-center gap-2">
+                  <ArrowDownToLine size={14} className="text-primary" />
+                  Deduct from Advance Balance
+                </Label>
+                <p className="text-[10px] text-muted-foreground">Use student's advance pool instead of cash</p>
+              </div>
+              <Switch checked={useAdvanceBalance} onCheckedChange={setUseAdvanceBalance} />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Month</Label>
@@ -653,22 +684,24 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Method</Label>
-                <Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bank">Bank</SelectItem>
-                    <SelectItem value="mobile">Mobile</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!useAdvanceBalance && (
+                <div className="space-y-2">
+                  <Label>Method</Label>
+                  <Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bank">Bank</SelectItem>
+                      <SelectItem value="mobile">Mobile</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             {student.paymentSystem === 'package' ? (
               <div className="space-y-2">
-                <Label>Amount Paid (₹)</Label>
+                <Label>Amount to Deduct/Pay (₹)</Label>
                 <Input 
                   type="number" 
                   value={paymentData.amount} 
@@ -679,72 +712,74 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
             ) : (
               <div className="grid grid-cols-2 gap-4 p-3 bg-primary/5 rounded-lg border border-primary/10">
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase">Seat Rent Paid</Label>
+                  <Label className="text-xs font-bold uppercase">Seat Rent Portion</Label>
                   <Input 
                     type="number" 
                     value={paymentData.seatAmount} 
                     onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} 
-                    placeholder="Rent portion" 
+                    placeholder="Rent amount" 
                     className="h-9"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase">Food Payment</Label>
+                  <Label className="text-xs font-bold uppercase">Food Portion</Label>
                   <Input 
                     type="number" 
                     value={paymentData.foodAmount} 
                     onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} 
-                    placeholder="Food portion" 
+                    placeholder="Food amount" 
                     className="h-9"
                   />
                 </div>
               </div>
             )}
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Receiver</Label>
-                <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="link" size="sm" className="h-auto p-0 text-xs">
-                      <UserPlus size={12} className="mr-1" /> Add New
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent onKeyDown={handleKeyDown}>
-                    <DialogHeader>
-                      <DialogTitle>Add New Receiver</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label>Full Name</Label>
-                        <Input value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
+            {!useAdvanceBalance && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Receiver</Label>
+                  <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="link" size="sm" className="h-auto p-0 text-xs">
+                        <UserPlus size={12} className="mr-1" /> Add New
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent onKeyDown={handleKeyDown}>
+                      <DialogHeader>
+                        <DialogTitle>Add New Receiver</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Full Name</Label>
+                          <Input value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Phone Number</Label>
+                          <Input 
+                            value={newStaff.phone} 
+                            maxLength={11}
+                            onChange={e => setNewStaff({...newStaff, phone: e.target.value})} 
+                          />
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Phone Number</Label>
-                        <Input 
-                          value={newStaff.phone} 
-                          maxLength={11}
-                          onChange={e => setNewStaff({...newStaff, phone: e.target.value})} 
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button onClick={handleAddStaff} disabled={isUpdating}>Save Receiver</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                      <DialogFooter>
+                        <Button onClick={handleAddStaff} disabled={isUpdating}>Save Receiver</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                <Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select receiver" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staffList?.map(s => (
+                      <SelectItem key={s.id} value={s.name}>{s.name} ({s.phone})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select receiver" />
-                </SelectTrigger>
-                <SelectContent>
-                  {staffList?.map(s => (
-                    <SelectItem key={s.id} value={s.name}>{s.name} ({s.phone})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            )}
 
             <div className="space-y-2">
               <Label>Notes</Label>
@@ -755,7 +790,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
           <DialogFooter>
             <Button onClick={handlePaymentSubmit} className="w-full gap-2" disabled={isUpdating}>
               {isUpdating ? <Loader2 className="animate-spin" /> : <Wallet size={16} />} 
-              Confirm Payment
+              {useAdvanceBalance ? "Confirm Advance Deduction" : "Confirm Payment"}
             </Button>
           </DialogFooter>
         </DialogContent>
