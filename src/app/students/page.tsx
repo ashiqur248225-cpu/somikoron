@@ -83,7 +83,6 @@ export default function StudentsPage() {
     }
   };
 
-  // Cascading Select Helpers
   const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
   const rooms = selectedBuilding?.roomsDetail || []
   const selectedRoom = rooms.find((r: any) => r.roomNo === formData.roomNumber)
@@ -108,14 +107,12 @@ export default function StudentsPage() {
         ? (monthlyRent - initialRentPayment) 
         : Number(formData.dueAmount)
 
-      // Calculate starting food cost (balance)
       const foodCostVal = formData.paymentSystem === 'package' 
         ? 0 
         : (formData.type === 'old' ? -Number(formData.foodDue) : Number(formData.foodCost))
 
       const paymentsHistory = []
       
-      // If there's an initial payment, create a payment record
       if (initialRentPayment > 0 && formData.type === 'new') {
         const paymentId = doc(collection(db, "payments")).id
         const currentMonth = new Date().toLocaleString('default', { month: 'long' })
@@ -364,13 +361,13 @@ export default function StudentsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>
-                      {formData.paymentSystem === 'package' ? 'Fixed Monthly Rent (Full)' : 'Fixed Monthly Seat Rent'}
+                      {formData.paymentSystem === 'package' ? 'Fixed Monthly Rent' : 'Fixed Monthly Seat Rent'}
                     </Label>
                     <Input 
                       type="number" 
                       value={formData.monthlyRent} 
                       onChange={e => setFormData({...formData, monthlyRent: e.target.value})} 
-                      placeholder="Enter fixed monthly amount"
+                      placeholder="Enter fixed amount"
                     />
                   </div>
                   
@@ -413,7 +410,7 @@ export default function StudentsPage() {
           <div className="relative w-full md:max-w-md">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search by name, phone or parent contact..." 
+              placeholder="Search students..." 
               className="pl-8" 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}

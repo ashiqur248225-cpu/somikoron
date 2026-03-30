@@ -15,7 +15,7 @@ import {
   BedDouble, CreditCard, Utensils,
   Loader2, Calculator,
   Contact, Plus, UserMinus, Wallet,
-  UserPlus
+  UserPlus, AlertCircle, CheckCircle
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -57,14 +57,11 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const [isCalcDialogOpen, setIsCalcDialogOpen] = useState(false)
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
   
-  // Monthly Meal Entry State
+  // States
   const [logMonth, setLogMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
   const [logCount, setLogCount] = useState("")
-
   const [editRate, setEditRate] = useState(false)
   const [newRate, setNewRate] = useState("")
-
-  // Calculator State
   const [calcMonth, setCalcMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
   const [calcMealCount, setCalcMealCount] = useState("")
   const [calcRate, setCalcRate] = useState("")
@@ -90,8 +87,11 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const currentMonth = new Date().toLocaleString('default', { month: 'long' })
+  const currentYear = new Date().getFullYear().toString();
 
+  // Financial Calculations
   const currentMonthMealRecord = useMemo(() => {
     return student?.mealsHistory?.find((m: any) => m.month === currentMonth)
   }, [student, currentMonth])
@@ -104,18 +104,45 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const foodAdvance = student?.foodCost || 0
   const foodBalance = foodAdvance - foodBill
 
-  // Updated Total Due Logic
+  // Total Due Logic: only add monthly rent if not already covered by dueAmount
   const totalDueAmount = useMemo(() => {
     if (!student) return 0
-    const baseDue = (student.dueAmount || 0) + (student.monthlyRent || 0)
-    if (student.paymentSystem === 'package') {
-      return baseDue
-    } else {
-      // For non-package: Monthly Seat Rent + Food Overspent (if any)
-      const foodDebt = foodBalance < 0 ? Math.abs(foodBalance) : 0
-      return baseDue + foodDebt
-    }
+    const baseDue = student.dueAmount || 0
+    const foodDebt = (student.paymentSystem === 'non-package' && foodBalance < 0) ? Math.abs(foodBalance) : 0
+    return baseDue + foodDebt
   }, [student, foodBalance])
+
+  // Due Breakdown Logic
+  const dueBreakdown = useMemo(() => {
+    if (!student) return []
+    const results = []
+    const joinDate = student.createdAt?.toDate?.() || new Date()
+    const joinMonth = joinDate.getMonth()
+    const joinYear = joinDate.getFullYear()
+    
+    // Check months from joining till now
+    const now = new Date()
+    let checkDate = new Date(joinYear, joinMonth, 1)
+    
+    while (checkDate <= now) {
+      const mName = months[checkDate.getMonth()]
+      const yName = checkDate.getFullYear().toString()
+      
+      const payment = student.paymentsHistory?.find((p: any) => p.month === mName && p.year === yName)
+      
+      results.push({
+        month: mName,
+        year: yName,
+        status: payment ? 'Paid' : 'Unpaid',
+        amount: payment?.amount || 0,
+        type: student.paymentSystem
+      })
+      
+      checkDate.setMonth(checkDate.getMonth() + 1)
+    }
+    
+    return results.reverse()
+  }, [student, months])
 
   const handleDeactivate = async () => {
     if (!student || !student.isActive || !studentRef) return
@@ -180,7 +207,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
     }
 
     setIsUpdating(true)
-    
     const paymentId = doc(collection(db, "payments")).id
     const summaryId = `${paymentData.year}-${paymentData.month}`
 
@@ -208,7 +234,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         createdAt: serverTimestamp(),
       })
 
-      // Update student document: decrement dueAmount and increment foodCost
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(paymentRecord),
         dueAmount: increment(-seatPaid),
@@ -224,7 +249,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         updatedAt: serverTimestamp()
       }, { merge: true })
 
-      toast({ title: "Payment Recorded", description: `Amount ₹${totalAmount} added to history and balances updated.` })
+      toast({ title: "Payment Recorded", description: `Amount ₹${totalAmount} saved and balances updated.` })
       setIsPaymentDialogOpen(false)
       setPaymentData(prev => ({ ...prev, amount: "", seatAmount: "", foodAmount: "", description: "" }))
     } catch (e: any) {
@@ -306,6 +331,23 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
     return count * rate
   }, [calcMealCount, calcRate])
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
+
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
   if (!student) return <div className="text-center p-20">Student not found.</div>
 
@@ -354,7 +396,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 <Contact className="text-primary" size={16} />
                 <div className="flex flex-col">
                   <span className="font-bold">{student.parentPhone}</span>
-                  <span className="text-[10px] text-muted-foreground uppercase">Parent/Guardian Contact</span>
+                  <span className="text-[10px] text-muted-foreground uppercase">Parent Contact</span>
                 </div>
               </div>
             )}
@@ -374,11 +416,9 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         </Card>
 
         <Card className="border-none shadow-sm md:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle className="text-lg">Financial Overview</CardTitle>
-              <CardDescription>Plan and calculations.</CardDescription>
-            </div>
+          <CardHeader>
+            <CardTitle className="text-lg">Financial Overview</CardTitle>
+            <CardDescription>Current balance and dues.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className={cn(
@@ -390,18 +430,18 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 <p className="text-lg font-bold">₹{student.advanceAmount || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-secondary/30">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold">{student.paymentSystem === 'package' ? 'Monthly Rent' : 'Seat Rent'}</p>
+                <p className="text-[10px] uppercase text-muted-foreground font-bold">{student.paymentSystem === 'package' ? 'Rent' : 'Seat Rent'}</p>
                 <p className="text-lg font-bold">₹{student.monthlyRent || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-secondary/30">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p>
+                <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Fee</p>
                 <p className="text-lg font-bold">₹{student.serviceCharge || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                 <p className="text-[10px] uppercase text-destructive font-bold">Total Due</p>
                 <p className="text-lg font-bold text-destructive">₹{totalDueAmount.toLocaleString()}</p>
                 <div className="text-[9px] text-muted-foreground mt-1">
-                   Prev Due: ₹{student.dueAmount || 0} + Rent: ₹{student.monthlyRent || 0}
+                   Pending: ₹{student.dueAmount || 0}
                    {student.paymentSystem === 'non-package' && foodBalance < 0 && ` + Food: ₹${Math.abs(foodBalance)}`}
                 </div>
               </div>
@@ -413,7 +453,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                     ₹{foodBalance.toLocaleString()}
                   </p>
                   <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
-                    <span>Adv: ₹{foodAdvance}</span>
+                    <span>Paid: ₹{foodAdvance}</span>
                     <span>Bill: ₹{foodBill}</span>
                   </div>
                 </div>
@@ -425,8 +465,9 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
 
       <Tabs defaultValue="payments" className="w-full">
         <TabsList className="bg-secondary/50 p-1 mb-4">
-          <TabsTrigger value="payments" className="flex gap-2"><CreditCard size={14} /> Payment History</TabsTrigger>
-          <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Monthly Meal Logs</TabsTrigger>
+          <TabsTrigger value="payments" className="flex gap-2"><CreditCard size={14} /> Payments</TabsTrigger>
+          <TabsTrigger value="dues" className="flex gap-2"><AlertCircle size={14} /> Due Details</TabsTrigger>
+          <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meal Logs</TabsTrigger>
         </TabsList>
         
         <TabsContent value="payments">
@@ -436,7 +477,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead>Month/Year</TableHead>
+                    <TableHead>Period</TableHead>
                     <TableHead>Method</TableHead>
                     <TableHead>Receiver</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
@@ -453,8 +494,45 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                     </TableRow>
                   ))}
                   {(!student.paymentsHistory || student.paymentsHistory.length === 0) && (
-                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No payments recorded in history.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No payments found.</TableCell></TableRow>
                   )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="dues">
+          <Card className="border-none shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm">Monthly Status (Rent/Seat)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Month & Year</TableHead>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Paid Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dueBreakdown.map((due, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell className="font-medium">{due.month} {due.year}</TableCell>
+                      <TableCell className="capitalize text-xs">{due.type}</TableCell>
+                      <TableCell>
+                        <Badge variant={due.status === 'Paid' ? 'secondary' : 'destructive'} className="flex items-center gap-1 w-fit">
+                          {due.status === 'Paid' ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                          {due.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-bold">
+                        {due.amount > 0 ? `₹${due.amount.toLocaleString()}` : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </CardContent>
@@ -467,25 +545,20 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
               <Card className="border-none shadow-sm h-fit">
                 <CardHeader>
                   <CardTitle className="text-sm">Log Monthly Count</CardTitle>
-                  <CardDescription>Enter total meals for a specific month.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-4">
-                    <div className="space-y-2">
-                      <Label>Month</Label>
-                      <Select value={logMonth} onValueChange={setLogMonth}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                            <SelectItem key={m} value={m}>{m}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Total Meals</Label>
-                      <Input type="number" placeholder="Enter count" value={logCount} onChange={e => setLogCount(e.target.value)} />
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Month</Label>
+                    <Select value={logMonth} onValueChange={setLogMonth}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Total Meals</Label>
+                    <Input type="number" placeholder="Enter count" value={logCount} onChange={e => setLogCount(e.target.value)} />
                   </div>
                   <Button className="w-full gap-2" onClick={logMonthlyMeal} disabled={isUpdating}>
                     <Plus size={16} /> Save Record
@@ -551,9 +624,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                         </TableCell>
                       </TableRow>
                     ))}
-                    {(!student.mealsHistory || student.mealsHistory.length === 0) && (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No monthly records found in history.</TableCell></TableRow>
-                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -562,7 +632,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         </TabsContent>
       </Tabs>
 
-      {/* Floating Action Button */}
       <div className="fixed bottom-8 right-8 z-50">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -587,12 +656,10 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         </DropdownMenu>
       </div>
 
-      {/* Monthly Calculator Dialog */}
       <Dialog open={isCalcDialogOpen} onOpenChange={setIsCalcDialogOpen}>
-        <DialogContent>
+        <DialogContent onKeyDown={handleKeyDown}>
           <DialogHeader>
             <DialogTitle>Monthly Meal Calculator</DialogTitle>
-            <DialogDescription>Quickly calculate food bill for any month.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
@@ -600,9 +667,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
               <Select value={calcMonth} onValueChange={setCalcMonth}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
+                  {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -624,24 +689,16 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         </DialogContent>
       </Dialog>
 
-      {/* Record Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
           <DialogHeader>
             <DialogTitle>Record Payment for {student.name}</DialogTitle>
-            <DialogDescription>
-              {student.paymentSystem === 'package' ? 'Record full monthly package payment.' : 'Record seat rent and food advance separately.'}
-            </DialogDescription>
           </DialogHeader>
           
           <div className="bg-secondary/30 p-4 rounded-lg space-y-2 mb-2">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Previous Due:</span>
+              <span className="text-muted-foreground">Outstanding Due:</span>
               <span className="font-bold text-destructive">₹{student.dueAmount || 0}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Fixed Monthly Rent ({student.paymentSystem}):</span>
-              <span className="font-bold">₹{student.monthlyRent || 0}</span>
             </div>
             {student.paymentSystem === 'non-package' && foodBalance < 0 && (
               <div className="flex justify-between text-sm">
@@ -662,9 +719,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 <Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                      <SelectItem key={m} value={m}>{m}</SelectItem>
-                    ))}
+                    {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -704,7 +759,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase">Food Cost Paid</Label>
+                  <Label className="text-xs font-bold uppercase">Food Payment</Label>
                   <Input 
                     type="number" 
                     value={paymentData.foodAmount} 
@@ -725,7 +780,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                       <UserPlus size={12} className="mr-1" /> Add New
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent onKeyDown={handleKeyDown}>
                     <DialogHeader>
                       <DialogTitle>Add New Receiver</DialogTitle>
                     </DialogHeader>
@@ -757,9 +812,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                   {staffList?.map(s => (
                     <SelectItem key={s.id} value={s.name}>{s.name} ({s.phone})</SelectItem>
                   ))}
-                  {staffList?.length === 0 && (
-                    <div className="p-2 text-xs text-muted-foreground text-center">No staff found. Please add one.</div>
-                  )}
                 </SelectContent>
               </Select>
             </div>
