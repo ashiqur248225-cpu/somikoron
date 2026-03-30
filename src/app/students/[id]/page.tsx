@@ -91,7 +91,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const currentMonth = new Date().toLocaleString('default', { month: 'long' })
   const currentYear = new Date().getFullYear().toString();
 
-  // Financial Calculations
+  // 1. Calculate Food Logic
   const currentMonthMealRecord = useMemo(() => {
     return student?.mealsHistory?.find((m: any) => m.month === currentMonth)
   }, [student, currentMonth])
@@ -104,16 +104,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
   const foodAdvance = student?.foodCost || 0
   const foodBalance = foodAdvance - foodBill
 
-  // Total Due Logic
-  const totalDueAmount = useMemo(() => {
-    if (!student) return 0
-    const baseDue = student.dueAmount || 0
-    // If non-package and food balance is negative, add that absolute value to due
-    const foodDebt = (student.paymentSystem === 'non-package' && foodBalance < 0) ? Math.abs(foodBalance) : 0
-    return baseDue + foodDebt
-  }, [student, foodBalance])
-
-  // Due Breakdown Logic
+  // 2. Automatic Rent Due Calculation (Monthly Accumulation)
   const dueBreakdown = useMemo(() => {
     if (!student) return []
     const results = []
@@ -121,7 +112,6 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
     const joinMonth = joinDate.getMonth()
     const joinYear = joinDate.getFullYear()
     
-    // Check months from joining till now
     const now = new Date()
     let checkDate = new Date(joinYear, joinMonth, 1)
     
@@ -129,14 +119,18 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
       const mName = months[checkDate.getMonth()]
       const yName = checkDate.getFullYear().toString()
       
-      const payment = student.paymentsHistory?.find((p: any) => p.month === mName && p.year === yName)
+      // Find all payments for this specific month/year
+      const monthPayments = student.paymentsHistory?.filter((p: any) => p.month === mName && p.year === yName) || []
+      const totalPaidForMonth = monthPayments.reduce((acc: number, curr: any) => acc + (curr.seatAmount || curr.amount || 0), 0)
+      const monthlyRent = student.monthlyRent || 0
       
       results.push({
         month: mName,
         year: yName,
-        status: payment ? 'Paid' : 'Unpaid',
-        amount: payment?.amount || 0,
-        type: student.paymentSystem
+        status: totalPaidForMonth >= monthlyRent ? 'Paid' : (totalPaidForMonth > 0 ? 'Partial' : 'Unpaid'),
+        paidAmount: totalPaidForMonth,
+        expected: monthlyRent,
+        due: Math.max(0, monthlyRent - totalPaidForMonth)
       })
       
       checkDate.setMonth(checkDate.getMonth() + 1)
@@ -144,6 +138,25 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
     
     return results.reverse()
   }, [student, months])
+
+  const totalRentDue = useMemo(() => {
+    if (!student) return 0
+    // Total expected rent since joining
+    const totalExpected = dueBreakdown.reduce((acc, curr) => acc + curr.expected, 0)
+    // Total paid rent since joining (excluding food portions)
+    const totalPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || curr.amount || 0), 0) || 0
+    
+    // Add old student's starting debt if applicable
+    const startingDebt = student.type === 'old' ? (student.dueAmount || 0) : 0
+    
+    return Math.max(0, (totalExpected + startingDebt) - totalPaid)
+  }, [student, dueBreakdown])
+
+  const totalDueAmount = useMemo(() => {
+    if (!student) return 0
+    const foodDebt = (student.paymentSystem === 'non-package' && foodBalance < 0) ? Math.abs(foodBalance) : 0
+    return totalRentDue + foodDebt
+  }, [totalRentDue, foodBalance, student])
 
   const handleDeactivate = async () => {
     if (!student || !student.isActive || !studentRef) return
@@ -235,10 +248,9 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         createdAt: serverTimestamp(),
       })
 
-      // Update student due and food cost separately
+      // Update student due history (the UI will recalculate total due based on paymentsHistory)
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(paymentRecord),
-        dueAmount: increment(-seatPaid),
         ...(student.paymentSystem === 'non-package' && {
           foodCost: increment(foodPaid)
         }),
@@ -420,7 +432,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         <Card className="border-none shadow-sm md:col-span-2">
           <CardHeader>
             <CardTitle className="text-lg">Financial Overview</CardTitle>
-            <CardDescription>Plan and calculations.</CardDescription>
+            <CardDescription>Plan and calculations (Auto-monthly updates).</CardDescription>
           </CardHeader>
           <CardContent>
             <div className={cn(
@@ -443,7 +455,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
                 <p className="text-[10px] uppercase text-destructive font-bold">Total Due</p>
                 <p className="text-lg font-bold text-destructive">₹{totalDueAmount.toLocaleString()}</p>
                 <div className="text-[9px] text-muted-foreground mt-1">
-                   Prev Due: ₹{student.dueAmount || 0}
+                   Prev Due: ₹{student.type === 'old' ? (student.dueAmount || 0) : 0}
                    {student.paymentSystem === 'non-package' && foodBalance < 0 && ` + Food: ₹${Math.abs(foodBalance)}`}
                 </div>
               </div>
@@ -509,31 +521,36 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
         <TabsContent value="dues">
           <Card className="border-none shadow-sm">
             <CardHeader>
-              <CardTitle className="text-sm">Monthly Status (Rent/Seat)</CardTitle>
+              <CardTitle className="text-sm">Monthly Rent/Seat Status (Auto-accumulated)</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Month & Year</TableHead>
-                    <TableHead>Plan</TableHead>
+                    <TableHead>Expected</TableHead>
+                    <TableHead>Paid</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Paid Amount</TableHead>
+                    <TableHead className="text-right">Balance Due</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {dueBreakdown.map((due, idx) => (
                     <TableRow key={idx}>
                       <TableCell className="font-medium">{due.month} {due.year}</TableCell>
-                      <TableCell className="capitalize text-xs">{due.type}</TableCell>
+                      <TableCell className="text-xs">₹{due.expected.toLocaleString()}</TableCell>
+                      <TableCell className="text-xs text-success font-bold">₹{due.paidAmount.toLocaleString()}</TableCell>
                       <TableCell>
-                        <Badge variant={due.status === 'Paid' ? 'secondary' : 'destructive'} className="flex items-center gap-1 w-fit">
-                          {due.status === 'Paid' ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                        <Badge 
+                          variant={due.status === 'Paid' ? 'secondary' : (due.status === 'Partial' ? 'outline' : 'destructive')} 
+                          className="flex items-center gap-1 w-fit text-[10px]"
+                        >
+                          {due.status === 'Paid' ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
                           {due.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right font-bold">
-                        {due.amount > 0 ? `₹${due.amount.toLocaleString()}` : '-'}
+                      <TableCell className="text-right font-bold text-destructive">
+                        {due.due > 0 ? `₹${due.due.toLocaleString()}` : '-'}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -705,8 +722,8 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
           
           <div className="bg-secondary/30 p-4 rounded-lg space-y-2 mb-2">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Outstanding Due:</span>
-              <span className="font-bold text-destructive">₹{student.dueAmount || 0}</span>
+              <span className="text-muted-foreground">Outstanding Rent Due:</span>
+              <span className="font-bold text-destructive">₹{totalRentDue.toLocaleString()}</span>
             </div>
             {student.paymentSystem === 'non-package' && foodBalance < 0 && (
               <div className="flex justify-between text-sm">
@@ -716,7 +733,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
             )}
             <div className="flex justify-between text-sm border-t pt-2">
               <span className="font-semibold">Total Payable:</span>
-              <span className="font-bold text-primary">₹{totalDueAmount}</span>
+              <span className="font-bold text-primary">₹{totalDueAmount.toLocaleString()}</span>
             </div>
           </div>
 
