@@ -640,7 +640,7 @@ export default function StudentDetailsPage({ params }: { params: Promise<{ id: s
               <span className="font-bold text-destructive">₹{student.dueAmount || 0}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Monthly Rent ({student.paymentSystem}):</span>
+              <span className="text-muted-foreground">Fixed Monthly Rent ({student.paymentSystem}):</span>
               <span className="font-bold">₹{student.monthlyRent || 0}</span>
             </div>
             {student.paymentSystem === 'non-package' && foodBalance < 0 && (

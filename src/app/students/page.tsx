@@ -279,8 +279,15 @@ export default function StudentsPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>{formData.paymentSystem === 'package' ? 'Monthly Full Rent' : 'Seat Rent'}</Label>
-                    <Input type="number" value={formData.monthlyRent} onChange={e => setFormData({...formData, monthlyRent: e.target.value})} />
+                    <Label>
+                      {formData.paymentSystem === 'package' ? 'Fixed Monthly Rent (Full)' : 'Fixed Monthly Seat Rent'}
+                    </Label>
+                    <Input 
+                      type="number" 
+                      value={formData.monthlyRent} 
+                      onChange={e => setFormData({...formData, monthlyRent: e.target.value})} 
+                      placeholder="Enter fixed monthly amount"
+                    />
                   </div>
                   
                   {formData.paymentSystem === 'non-package' && (
