@@ -56,6 +56,23 @@ export default function DashboardPage() {
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
   const [newStaff, setNewStaff] = useState({ name: "", phone: "" })
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
+
   // Data for Dashboard
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
@@ -354,7 +371,7 @@ export default function DashboardPage() {
               <Plus className="h-8 w-8 text-white" />
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
             <DialogHeader>
               <DialogTitle>Quick Payment Record</DialogTitle>
               <DialogDescription>Record a student payment directly from the dashboard.</DialogDescription>
@@ -430,7 +447,7 @@ export default function DashboardPage() {
                         <UserPlus size={12} className="mr-1" /> Add New
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent onKeyDown={handleKeyDown}>
                       <DialogHeader>
                         <DialogTitle>Add New Receiver</DialogTitle>
                       </DialogHeader>

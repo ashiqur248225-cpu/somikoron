@@ -46,6 +46,23 @@ export default function BuildingsPage() {
   })
   const [rooms, setRooms] = useState<RoomDetail[]>([{ roomNo: "", seatCount: "", seats: [] }])
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT') {
+        e.preventDefault();
+        const container = target.closest('.space-y-6') || target.closest('.grid') || target.closest('[role="dialog"]');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"]')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
+
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings, isLoading } = useCollection(buildingsQuery)
 
@@ -144,7 +161,7 @@ export default function BuildingsPage() {
               <Plus size={18} /> Add New Building
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
             <DialogHeader>
               <DialogTitle>Add New Building</DialogTitle>
               <DialogDescription>Define rooms, auto-generate seats, and mark their current status.</DialogDescription>

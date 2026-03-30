@@ -53,6 +53,23 @@ export default function ExpenseEntryPage() {
 
   const [newParty, setNewParty] = useState({ name: "", role: "", phone: "" })
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const form = target.closest('form');
+        if (form) {
+          const focusables = Array.from(form.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.buildingId || !formData.amount) {
@@ -125,7 +142,7 @@ export default function ExpenseEntryPage() {
           <CardDescription>Track money outflow with specific categorizations.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" onKeyDown={handleKeyDown}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="category">Expense Category</Label>
@@ -174,7 +191,7 @@ export default function ExpenseEntryPage() {
                         <UserPlus size={12} /> Add New Party
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent onKeyDown={handleKeyDown}>
                       <DialogHeader>
                         <DialogTitle>Add New Party</DialogTitle>
                         <DialogDescription>Create a person or entity for future expenses.</DialogDescription>
@@ -200,6 +217,7 @@ export default function ExpenseEntryPage() {
                           <Label>Phone</Label>
                           <Input 
                             value={newParty.phone}
+                            maxLength={11}
                             onChange={e => setNewParty({...newParty, phone: e.target.value})}
                             placeholder="Phone number" 
                           />
