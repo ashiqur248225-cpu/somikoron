@@ -78,7 +78,7 @@ export default function StudentDetailsPage() {
   }, [meals, currentMonth, currentYear])
 
   const foodBill = currentMonthMeals * (student?.foodRate || 0)
-  const foodAdvance = student?.foodCost || 0
+  const foodAdvance = student?.foodCost || student?.advanceAmount || 0
   const foodBalance = foodAdvance - foodBill
 
   const handleDeactivate = async () => {

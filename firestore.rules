@@ -2,8 +2,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Prototyping rules: Allowing full read/write access to unblock development as requested.
-    // This removes the need for auth checks or session validation during the prototype phase.
+    // OPEN ACCESS FOR PROTOTYPING
+    // Allowing full read/write access to all collections (buildings, students, meals, payments, expenses, etc.)
+    // This removes the need for auth checks to unblock development as requested.
+    // FORCE REFRESH: 2024-05-20-01
     match /{document=**} {
       allow read, write: if true;
     }
