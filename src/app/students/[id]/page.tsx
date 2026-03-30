@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useParams, useRouter } from "next/navigation"
@@ -8,6 +7,7 @@ import { doc, collection, query, where, serverTimestamp, updateDoc, setDoc, incr
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   UserCircle, Phone, MapPin, Building2, 
@@ -55,11 +55,9 @@ export default function StudentDetailsPage() {
 
       // 2. Free up the seat in Building
       const buildingRef = doc(db, "buildings", student.buildingId)
-      // Fetch building to find the seat detail
-      // (Normally we'd use a transaction here, but for simplicity:)
-      // This logic assumes we have the building data or can fetch it
-      // Let's assume the building structure needs the seat status reset
-      toast({ title: "Student Inactivated", description: "Seat is now free." })
+      // Logic to find the building and update the seat status to 'empty'
+      // We need the full building data to update the nested array
+      toast({ title: "Student Inactivated", description: "Profile marked as left. Please manually update building seat if needed in this prototype." })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -102,10 +100,10 @@ export default function StudentDetailsPage() {
           <div>
             <h1 className="text-3xl font-bold">{student.name}</h1>
             <div className="flex gap-2 items-center mt-1">
-              <Badge variant={student.isActive ? "success" : "destructive"}>
+              <Badge variant={student.isActive ? "default" : "destructive"} className={student.isActive ? "bg-success hover:bg-success/80" : ""}>
                 {student.isActive ? "Active Resident" : "Inactive / Left"}
               </Badge>
-              <Badge variant="outline">{student.paymentSystem.toUpperCase()}</Badge>
+              <Badge variant="outline">{student.paymentSystem?.toUpperCase()}</Badge>
             </div>
           </div>
         </div>
@@ -155,19 +153,19 @@ export default function StudentDetailsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-3 rounded-lg bg-secondary/30">
                 <p className="text-[10px] uppercase text-muted-foreground font-bold">Monthly Rent</p>
-                <p className="text-lg font-bold">₹{student.monthlyRent}</p>
+                <p className="text-lg font-bold">₹{student.monthlyRent || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-secondary/30">
                 <p className="text-[10px] uppercase text-muted-foreground font-bold">Food Cost</p>
-                <p className="text-lg font-bold">₹{student.foodCost}</p>
+                <p className="text-lg font-bold">₹{student.foodCost || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-success/10 border border-success/20">
                 <p className="text-[10px] uppercase text-success font-bold">Advance Paid</p>
-                <p className="text-lg font-bold text-success">₹{student.advanceAmount}</p>
+                <p className="text-lg font-bold text-success">₹{student.advanceAmount || 0}</p>
               </div>
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                 <p className="text-[10px] uppercase text-destructive font-bold">Current Due</p>
-                <p className="text-lg font-bold text-destructive">₹{student.dueAmount}</p>
+                <p className="text-lg font-bold text-destructive">₹{student.dueAmount || 0}</p>
               </div>
             </div>
           </CardContent>
@@ -198,7 +196,7 @@ export default function StudentDetailsPage() {
                       <TableCell>{p.date?.toDate()?.toLocaleDateString() || "N/A"}</TableCell>
                       <TableCell>{p.month} {p.year}</TableCell>
                       <TableCell><Badge variant="outline">{p.paymentType}</Badge></TableCell>
-                      <TableCell className="text-right font-bold text-success">₹{p.amount.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-bold text-success">₹{p.amount?.toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                   {payments?.length === 0 && (
