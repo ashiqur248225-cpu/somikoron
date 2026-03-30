@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { 
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Receipt, Search, UserPlus, Loader2, Plus, Filter, Calendar, TrendingDown } from "lucide-react"
+import { TrendingDown, Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -26,23 +26,35 @@ import {
   DialogFooter
 } from "@/components/ui/dialog"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, increment, query, orderBy, limit } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, query, orderBy, limit, Timestamp } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
+
+const EXPENSE_CATEGORIES = [
+  { id: "rent", label: "Building Rent", icon: Building2 },
+  { id: "electricity", label: "Electricity Bill", icon: Lightbulb },
+  { id: "water", label: "Water & Gas Bill", icon: Receipt },
+  { id: "maintenance", label: "Maintenance/Repair", icon: Wrench },
+  { id: "market", label: "Market/Food", icon: Utensils },
+  { id: "internet", label: "Internet Bill", icon: Wifi },
+  { id: "salary", label: "Staff Salary", icon: UserCircle },
+  { id: "others", label: "Others", icon: Wallet },
+]
 
 export default function ExpenseHistoryPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isEntryOpen, setIsEntryOpen] = useState(false)
+  const [isAddPartyOpen, setIsAddPartyOpen] = useState(false)
   
   // Filters
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [methodFilter, setMethodFilter] = useState("all")
-  const [partyFilter, setPartyFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
 
   // Data Fetching
@@ -51,6 +63,9 @@ export default function ExpenseHistoryPage() {
 
   const partiesQuery = useMemoFirebase(() => collection(db, "expenseParties"), [db])
   const { data: parties } = useCollection(partiesQuery)
+
+  const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
+  const { data: staffList } = useCollection(staffQuery)
 
   const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("expenseDate", "desc"), limit(200)), [db])
   const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
@@ -62,9 +77,13 @@ export default function ExpenseHistoryPage() {
     expensePartyId: "",
     amount: "",
     method: "cash",
+    paidBy: "", // Who from staff paid this
     description: "",
+    meterNumber: "", // Only for utility
     expenseDate: new Date().toISOString().split('T')[0],
   })
+
+  const [newParty, setNewParty] = useState({ name: "", role: "", phone: "" })
 
   const filteredExpenses = useMemo(() => {
     if (!expenses) return []
@@ -72,12 +91,12 @@ export default function ExpenseHistoryPage() {
       const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
       const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
       const matchesMethod = methodFilter === "all" || e.method === methodFilter
-      const matchesParty = partyFilter === "all" || e.expensePartyId === partyFilter
       const matchesSearch = e.expensePartyName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           e.description?.toLowerCase().includes(searchTerm.toLowerCase())
-      return matchesCategory && matchesBuilding && matchesMethod && matchesParty && matchesSearch
+                           e.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           e.category?.toLowerCase().includes(searchTerm.toLowerCase())
+      return matchesCategory && matchesBuilding && matchesMethod && matchesSearch
     })
-  }, [expenses, categoryFilter, buildingFilter, methodFilter, partyFilter, searchTerm])
+  }, [expenses, categoryFilter, buildingFilter, methodFilter, searchTerm])
 
   const totalFilteredExpense = useMemo(() => {
     return filteredExpenses.reduce((acc, curr) => acc + (curr.amount || 0), 0)
@@ -85,7 +104,10 @@ export default function ExpenseHistoryPage() {
 
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.buildingId || !formData.amount) return
+    if (!formData.buildingId || !formData.amount || !formData.expensePartyId) {
+      toast({ variant: "destructive", title: "Error", description: "Building, Party and Amount are required." })
+      return
+    }
 
     setIsSubmitting(true)
     const building = buildings?.find(b => b.id === formData.buildingId)
@@ -98,11 +120,22 @@ export default function ExpenseHistoryPage() {
         ...formData,
         amount,
         buildingName: building?.name || "General",
-        expensePartyName: party?.name || "Anonymous",
+        expensePartyName: party?.name || "Unknown",
         createdAt: serverTimestamp(),
       })
-      toast({ title: "Success", description: "Expense logged." })
+      toast({ title: "Success", description: "Expense successfully recorded." })
       setIsEntryOpen(false)
+      setFormData({
+        category: "market",
+        buildingId: "",
+        expensePartyId: "",
+        amount: "",
+        method: "cash",
+        paidBy: "",
+        description: "",
+        meterNumber: "",
+        expenseDate: new Date().toISOString().split('T')[0],
+      })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -110,11 +143,46 @@ export default function ExpenseHistoryPage() {
     }
   }
 
+  const handleAddParty = async () => {
+    if (!newParty.name) return
+    setIsSubmitting(true)
+    try {
+      const partyId = doc(collection(db, "expenseParties")).id
+      await setDoc(doc(db, "expenseParties", partyId), {
+        ...newParty,
+        createdAt: serverTimestamp()
+      })
+      toast({ title: "Success", description: "New party added to master list." })
+      setNewParty({ name: "", role: "", phone: "" })
+      setIsAddPartyOpen(false)
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
+
   const resetFilters = () => {
     setCategoryFilter("all")
     setBuildingFilter("all")
     setMethodFilter("all")
-    setPartyFilter("all")
     setSearchTerm("")
   }
 
@@ -126,7 +194,7 @@ export default function ExpenseHistoryPage() {
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Expense History</h1>
-            <p className="text-muted-foreground mt-1">Review operational costs and market expenses.</p>
+            <p className="text-muted-foreground mt-1">Review operational costs and maintenance expenses.</p>
           </div>
         </div>
       </div>
@@ -144,7 +212,7 @@ export default function ExpenseHistoryPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 bg-secondary/20 p-4 rounded-xl border">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Search</Label>
           <Input placeholder="Recipient or notes..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
@@ -155,10 +223,9 @@ export default function ExpenseHistoryPage() {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              <SelectItem value="utility">Utility Bills</SelectItem>
-              <SelectItem value="market">Market</SelectItem>
-              <SelectItem value="salary">Salaries</SelectItem>
-              <SelectItem value="maintenance">Maintenance</SelectItem>
+              {EXPENSE_CATEGORIES.map(cat => (
+                <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -185,17 +252,7 @@ export default function ExpenseHistoryPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Party</Label>
-          <Select value={partyFilter} onValueChange={setPartyFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Parties</SelectItem>
-              {parties?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button variant="ghost" className="h-10 mt-auto" onClick={resetFilters}>Reset</Button>
+        <Button variant="ghost" className="h-10 mt-auto" onClick={resetFilters}>Reset Filters</Button>
       </div>
 
       {expensesLoading ? (
@@ -207,6 +264,7 @@ export default function ExpenseHistoryPage() {
               <TableHeader className="bg-secondary/30">
                 <TableRow>
                   <TableHead>Date</TableHead>
+                  <TableHead>Category</TableHead>
                   <TableHead>Party / Recipient</TableHead>
                   <TableHead>Building</TableHead>
                   <TableHead>Method</TableHead>
@@ -217,6 +275,11 @@ export default function ExpenseHistoryPage() {
                 {filteredExpenses.map((e: any) => (
                   <TableRow key={e.id}>
                     <TableCell className="text-xs">{new Date(e.expenseDate).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="capitalize text-[10px]">
+                        {EXPENSE_CATEGORIES.find(cat => cat.id === e.category)?.label || e.category}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="font-medium">{e.expensePartyName}</TableCell>
                     <TableCell className="text-xs">{e.buildingName}</TableCell>
                     <TableCell>
@@ -226,7 +289,7 @@ export default function ExpenseHistoryPage() {
                   </TableRow>
                 ))}
                 {filteredExpenses.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No expenses found.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No expense records found.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -236,28 +299,37 @@ export default function ExpenseHistoryPage() {
 
       {/* FAB */}
       <div className="fixed bottom-8 right-8 z-50">
-        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive">
+        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:bg-destructive/90 transition-transform active:scale-95">
           <Plus className="h-8 w-8 text-white" />
         </Button>
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Log New Expense</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
+          <DialogHeader>
+            <DialogTitle>Log New Expense</DialogTitle>
+            <DialogDescription>Record hostel operational or maintenance costs.</DialogDescription>
+          </DialogHeader>
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Method</Label>
-              <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
+              <Label>Category</Label>
+              <Select value={formData.category} onValueChange={val => setFormData({...formData, category: val})}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bkash">Bkash</SelectItem>
-                  <SelectItem value="nagad">Nagad</SelectItem>
-                  <SelectItem value="bank">Bank</SelectItem>
+                  {EXPENSE_CATEGORIES.map(cat => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            {/* ... other fields can be added here as needed ... */}
+
+            {formData.category === 'electricity' && (
+              <div className="space-y-2">
+                <Label>Meter Number</Label>
+                <Input placeholder="Enter meter no." value={formData.meterNumber} onChange={e => setFormData({...formData, meterNumber: e.target.value})} />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Building</Label>
               <Select onValueChange={val => setFormData({...formData, buildingId: val})}>
@@ -265,12 +337,83 @@ export default function ExpenseHistoryPage() {
                 <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
-              <Label>Amount (₹)</Label>
-              <Input type="number" placeholder="0.00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
+              <div className="flex items-center justify-between">
+                <Label>Recipient / Party</Label>
+                <Button variant="link" size="sm" onClick={() => setIsAddPartyOpen(true)} className="h-auto p-0 text-xs">Add New</Button>
+              </div>
+              <Select onValueChange={val => setFormData({...formData, expensePartyId: val})}>
+                <SelectTrigger><SelectValue placeholder="Select party" /></SelectTrigger>
+                <SelectContent>
+                  {parties?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.role})</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <Button type="submit" className="w-full bg-expense" disabled={isSubmitting}>Confirm Expense</Button>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Amount (₹)</Label>
+                <Input type="number" placeholder="0.00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Expense Date</Label>
+                <Input type="date" value={formData.expenseDate} onChange={e => setFormData({...formData, expenseDate: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Payment Method</Label>
+                <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bkash">Bkash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="bank">Bank</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Paid By (Staff)</Label>
+                <Select onValueChange={val => setFormData({...formData, paidBy: val})}>
+                  <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
+                  <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Detailed Description</Label>
+              <Textarea placeholder="Voucher details, reason for expense, etc." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+            </div>
+
+            <Button type="submit" className="w-full bg-expense h-12 text-lg" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirm Expense Entry"}
+            </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isAddPartyOpen} onOpenChange={setIsAddPartyOpen}>
+        <DialogContent onKeyDown={handleKeyDown}>
+          <DialogHeader><DialogTitle>Add New Party / Vendor</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input placeholder="Electrician Name, Vendor Shop, etc." value={newParty.name} onChange={e => setNewParty({...newParty, name: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <Label>Role / Category</Label>
+              <Input placeholder="e.g. Mistri, Cook, Landlord" value={newParty.role} onChange={e => setNewParty({...newParty, role: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <Label>Phone (Optional)</Label>
+              <Input placeholder="Contact number" value={newParty.phone} onChange={e => setNewParty({...newParty, phone: e.target.value})} />
+            </div>
+          </div>
+          <DialogFooter><Button onClick={handleAddParty} disabled={isSubmitting}>Save Master Party</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
