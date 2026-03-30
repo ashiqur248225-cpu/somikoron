@@ -17,13 +17,22 @@
             "properties": {
               "roomNo": { "type": "string" },
               "totalSeats": { "type": "number" },
-              "occupiedSeats": { "type": "number", "default": 0 }
+              "seats": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "seatNo": { "type": "string" },
+                    "status": { "type": "string", "enum": ["empty", "occupied"] }
+                  }
+                }
+              }
             }
           }
         },
-        "totalSeats": { "type": "number", "description": "Total capacity of seats" },
-        "occupiedSeats": { "type": "number", "description": "Currently occupied seats" },
-        "emptySeats": { "type": "number", "description": "Currently vacant seats" },
+        "totalSeats": { "type": "number" },
+        "occupiedSeats": { "type": "number" },
+        "emptySeats": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name", "address", "roomsCount", "totalSeats"]

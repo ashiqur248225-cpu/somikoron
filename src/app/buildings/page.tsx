@@ -1,12 +1,12 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus, Trash2, Info } from "lucide-react"
+import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus, Trash2, CheckCircle2, Circle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -21,10 +21,17 @@ import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } 
 import { collection, serverTimestamp } from "firebase/firestore"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
+
+interface SeatDetail {
+  seatNo: string;
+  status: 'empty' | 'occupied';
+}
 
 interface RoomDetail {
   roomNo: string;
-  seats: string;
+  seatCount: string;
+  seats: SeatDetail[];
 }
 
 export default function BuildingsPage() {
@@ -33,16 +40,15 @@ export default function BuildingsPage() {
   const [open, setOpen] = useState(false)
   const [newBuilding, setNewBuilding] = useState({ 
     name: "", 
-    address: "", 
-    occupiedSeats: "0"
+    address: ""
   })
-  const [rooms, setRooms] = useState<RoomDetail[]>([{ roomNo: "", seats: "" }])
+  const [rooms, setRooms] = useState<RoomDetail[]>([{ roomNo: "", seatCount: "", seats: [] }])
 
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings, isLoading } = useCollection(buildingsQuery)
 
   const addRoomField = () => {
-    setRooms([...rooms, { roomNo: "", seats: "" }])
+    setRooms([...rooms, { roomNo: "", seatCount: "", seats: [] }])
   }
 
   const removeRoomField = (index: number) => {
@@ -53,13 +59,42 @@ export default function BuildingsPage() {
 
   const updateRoomField = (index: number, field: keyof RoomDetail, value: string) => {
     const updatedRooms = [...rooms]
-    updatedRooms[index][field] = value
+    if (field === "seatCount") {
+      const count = parseInt(value) || 0
+      const currentSeats = updatedRooms[index].seats
+      
+      // Generate or update seats
+      const newSeats: SeatDetail[] = Array.from({ length: count }, (_, i) => ({
+        seatNo: (i + 1).toString(),
+        status: currentSeats[i]?.status || 'empty'
+      }))
+      
+      updatedRooms[index].seats = newSeats
+      updatedRooms[index].seatCount = value
+    } else if (field === "roomNo") {
+      updatedRooms[index].roomNo = value
+    }
     setRooms(updatedRooms)
   }
 
-  const totalSeats = rooms.reduce((acc, curr) => acc + Number(curr.seats || 0), 0)
-  const occupiedCount = Number(newBuilding.occupiedSeats || 0)
-  const emptyCount = totalSeats - occupiedCount
+  const toggleSeatStatus = (roomIdx: number, seatIdx: number) => {
+    const updatedRooms = [...rooms]
+    const currentStatus = updatedRooms[roomIdx].seats[seatIdx].status
+    updatedRooms[roomIdx].seats[seatIdx].status = currentStatus === 'empty' ? 'occupied' : 'empty'
+    setRooms(updatedRooms)
+  }
+
+  const stats = useMemo(() => {
+    let total = 0
+    let occupied = 0
+    rooms.forEach(room => {
+      room.seats.forEach(seat => {
+        total++
+        if (seat.status === 'occupied') occupied++
+      })
+    })
+    return { total, occupied, empty: total - occupied }
+  }, [rooms])
 
   const handleCreate = () => {
     if (!newBuilding.name || !newBuilding.address) {
@@ -67,25 +102,29 @@ export default function BuildingsPage() {
       return
     }
 
-    const validRooms = rooms.filter(r => r.roomNo && r.seats)
+    const validRooms = rooms.filter(r => r.roomNo && r.seats.length > 0)
     if (validRooms.length === 0) {
-      toast({ variant: "destructive", title: "Error", description: "Please add at least one room with seat count." })
+      toast({ variant: "destructive", title: "Error", description: "Please add at least one room with seats." })
       return
     }
 
     addDocumentNonBlocking(collection(db, "buildings"), {
       ...newBuilding,
       roomsCount: validRooms.length,
-      roomsDetail: validRooms.map(r => ({ roomNo: r.roomNo, totalSeats: Number(r.seats), occupiedSeats: 0 })),
-      totalSeats,
-      occupiedSeats: occupiedCount,
-      emptySeats: emptyCount,
+      roomsDetail: validRooms.map(r => ({ 
+        roomNo: r.roomNo, 
+        totalSeats: r.seats.length,
+        seats: r.seats 
+      })),
+      totalSeats: stats.total,
+      occupiedSeats: stats.occupied,
+      emptySeats: stats.empty,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
 
-    setNewBuilding({ name: "", address: "", occupiedSeats: "0" })
-    setRooms([{ roomNo: "", seats: "" }])
+    setNewBuilding({ name: "", address: "" })
+    setRooms([{ roomNo: "", seatCount: "", seats: [] }])
     setOpen(false)
     toast({ title: "Building Created", description: "Hostel property successfully added." })
   }
@@ -95,7 +134,7 @@ export default function BuildingsPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-headline font-bold text-primary">Building Management</h1>
-          <p className="text-muted-foreground mt-1">Manage rooms, seats and occupancy for each hostel.</p>
+          <p className="text-muted-foreground mt-1">Manage rooms and seat assignments.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -103,12 +142,12 @@ export default function BuildingsPage() {
               <Plus size={18} /> Add New Building
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md md:max-w-xl">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add New Building</DialogTitle>
-              <DialogDescription>Define rooms and seats. Occupancy is auto-calculated.</DialogDescription>
+              <DialogDescription>Define rooms, auto-generate seats, and mark their current status.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-6 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Building Name</Label>
@@ -128,7 +167,7 @@ export default function BuildingsPage() {
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <Label className="text-sm font-bold">Room & Seat Configuration</Label>
                   <Button variant="outline" size="sm" onClick={addRoomField} className="flex gap-1 h-8">
@@ -136,36 +175,61 @@ export default function BuildingsPage() {
                   </Button>
                 </div>
                 
-                <ScrollArea className="h-[250px] pr-4 border rounded-md p-2">
-                  <div className="space-y-3">
-                    {rooms.map((room, idx) => (
-                      <div key={idx} className="flex gap-2 items-end p-2 bg-secondary/20 rounded-lg">
-                        <div className="flex-1 space-y-1">
-                          <Label className="text-[10px] uppercase font-bold">Room No.</Label>
-                          <Input 
-                            value={room.roomNo}
-                            placeholder="e.g. 101"
-                            onChange={(e) => updateRoomField(idx, "roomNo", e.target.value)}
-                          />
+                <ScrollArea className="h-[350px] pr-4 border rounded-md p-4">
+                  <div className="space-y-6">
+                    {rooms.map((room, roomIdx) => (
+                      <div key={roomIdx} className="space-y-4 p-4 border rounded-lg bg-secondary/10">
+                        <div className="flex gap-4 items-end">
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-[10px] uppercase font-bold">Room No.</Label>
+                            <Input 
+                              value={room.roomNo}
+                              placeholder="e.g. 101"
+                              onChange={(e) => updateRoomField(roomIdx, "roomNo", e.target.value)}
+                            />
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-[10px] uppercase font-bold">No. of Seats</Label>
+                            <Input 
+                              type="number"
+                              value={room.seatCount}
+                              placeholder="Enter count"
+                              onChange={(e) => updateRoomField(roomIdx, "seatCount", e.target.value)}
+                            />
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-destructive" 
+                            onClick={() => removeRoomField(roomIdx)}
+                            disabled={rooms.length === 1}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
                         </div>
-                        <div className="flex-1 space-y-1">
-                          <Label className="text-[10px] uppercase font-bold">Total Seats</Label>
-                          <Input 
-                            type="number"
-                            value={room.seats}
-                            placeholder="1, 2, 4..."
-                            onChange={(e) => updateRoomField(idx, "seats", e.target.value)}
-                          />
-                        </div>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-destructive" 
-                          onClick={() => removeRoomField(idx)}
-                          disabled={rooms.length === 1}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
+
+                        {room.seats.length > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-[10px] uppercase font-bold">Generated Seats (Click to toggle status)</Label>
+                            <div className="flex flex-wrap gap-2">
+                              {room.seats.map((seat, seatIdx) => (
+                                <button
+                                  key={seatIdx}
+                                  onClick={() => toggleSeatStatus(roomIdx, seatIdx)}
+                                  className={cn(
+                                    "flex flex-col items-center justify-center p-2 rounded-md border w-14 transition-all",
+                                    seat.status === 'occupied' 
+                                      ? "bg-success/10 border-success text-success" 
+                                      : "bg-secondary border-muted text-muted-foreground"
+                                  )}
+                                >
+                                  <span className="text-[10px] font-bold">S-{seat.seatNo}</span>
+                                  {seat.status === 'occupied' ? <CheckCircle2 size={12} /> : <Circle size={12} />}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -173,27 +237,22 @@ export default function BuildingsPage() {
               </div>
 
               <div className="grid grid-cols-3 gap-4 border-t pt-4">
-                <div className="bg-primary/5 p-3 rounded-lg text-center">
+                <div className="bg-primary/5 p-3 rounded-lg text-center border">
                   <p className="text-[10px] uppercase text-muted-foreground font-bold">Total Seats</p>
-                  <p className="text-lg font-bold text-primary">{totalSeats}</p>
+                  <p className="text-xl font-bold text-primary">{stats.total}</p>
                 </div>
-                <div className="bg-success/5 p-3 rounded-lg text-center">
-                  <p className="text-[10px] uppercase text-success/80 font-bold">Occupied</p>
-                  <Input 
-                    type="number" 
-                    value={newBuilding.occupiedSeats} 
-                    onChange={(e) => setNewBuilding({...newBuilding, occupiedSeats: e.target.value})}
-                    className="h-7 text-center font-bold mt-1"
-                  />
+                <div className="bg-success/5 p-3 rounded-lg text-center border">
+                  <p className="text-[10px] uppercase text-success font-bold">Occupied</p>
+                  <p className="text-xl font-bold text-success">{stats.occupied}</p>
                 </div>
-                <div className="bg-destructive/5 p-3 rounded-lg text-center">
-                  <p className="text-[10px] uppercase text-destructive/80 font-bold">Empty (Auto)</p>
-                  <p className="text-lg font-bold text-destructive">{emptyCount}</p>
+                <div className="bg-destructive/5 p-3 rounded-lg text-center border">
+                  <p className="text-[10px] uppercase text-destructive font-bold">Empty</p>
+                  <p className="text-xl font-bold text-destructive">{stats.empty}</p>
                 </div>
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleCreate} className="w-full">Save Building & Rooms</Button>
+              <Button onClick={handleCreate} className="w-full h-12 text-lg">Save Building & Configuration</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -225,7 +284,7 @@ export default function BuildingsPage() {
               <CardContent>
                 <div className="grid grid-cols-2 gap-3 mt-4">
                   <div className="bg-secondary/50 p-2.5 rounded-lg">
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Total Rooms</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Rooms</p>
                     <div className="flex items-center gap-1.5 mt-0.5 font-bold text-sm">
                       <DoorOpen size={14} className="text-primary" />
                       {building.roomsCount}
@@ -239,14 +298,14 @@ export default function BuildingsPage() {
                     </div>
                   </div>
                   <div className="bg-success/10 p-2.5 rounded-lg">
-                    <p className="text-[10px] text-success/80 uppercase font-bold">Occupied</p>
+                    <p className="text-[10px] text-success font-bold uppercase">Occupied</p>
                     <div className="flex items-center gap-1.5 mt-0.5 font-bold text-sm text-success">
                       <UserCheck size={14} />
                       {building.occupiedSeats || 0}
                     </div>
                   </div>
                   <div className="bg-destructive/10 p-2.5 rounded-lg">
-                    <p className="text-[10px] text-destructive/80 uppercase font-bold">Empty</p>
+                    <p className="text-[10px] text-destructive font-bold uppercase">Empty</p>
                     <div className="flex items-center gap-1.5 mt-0.5 font-bold text-sm text-destructive">
                       <UserMinus size={14} />
                       {building.emptySeats || 0}
@@ -255,13 +314,13 @@ export default function BuildingsPage() {
                 </div>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button variant="outline" className="w-full">Manage Residents</Button>
+                <Button variant="outline" className="w-full">View Details</Button>
               </CardFooter>
             </Card>
           ))}
           {buildings?.length === 0 && (
-            <div className="col-span-full text-center py-12 text-muted-foreground">
-              No buildings found. Add your first building to get started.
+            <div className="col-span-full text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
+              No buildings found. Add your first building to start managing rooms.
             </div>
           )}
         </div>
