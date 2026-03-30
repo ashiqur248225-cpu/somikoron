@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +37,7 @@ interface RoomDetail {
 
 export default function BuildingsPage() {
   const { toast } = useToast()
+  const router = useRouter()
   const db = useFirestore()
   const [open, setOpen] = useState(false)
   const [newBuilding, setNewBuilding] = useState({ 
@@ -315,7 +317,7 @@ export default function BuildingsPage() {
                 </div>
               </CardContent>
               <CardFooter className="pt-0">
-                <Button variant="outline" className="w-full">View Details</Button>
+                <Button variant="outline" className="w-full" onClick={() => router.push(`/buildings/${building.id}`)}>View Details</Button>
               </CardFooter>
             </Card>
           ))}
