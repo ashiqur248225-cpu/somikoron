@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -11,7 +12,8 @@ import {
   Contact, 
   BarChart3,
   CircleDollarSign,
-  Settings
+  Settings,
+  CircleAlert
 } from "lucide-react"
 import {
   Sidebar,
@@ -45,14 +47,19 @@ const items = [
     icon: Users,
   },
   {
-    title: "Income Entry",
+    title: "Income History",
     url: "/income",
     icon: Wallet,
   },
   {
-    title: "Expense Entry",
+    title: "Expense History",
     url: "/expenses",
     icon: Receipt,
+  },
+  {
+    title: "Dues Tracking",
+    url: "/dues",
+    icon: CircleAlert,
   },
   {
     title: "Ledgers",
