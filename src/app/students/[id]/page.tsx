@@ -13,8 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   UserCircle, Phone, MapPin, Building2, 
   BedDouble, CreditCard, Utensils,
-  Loader2, CheckCircle2, UserMinus, Calculator,
-  Calendar as CalendarIcon, Contact, Trash2, Plus
+  Loader2, Calculator,
+  Contact, Trash2, Plus, UserMinus
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -28,7 +28,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogFooter
 } from "@/components/ui/dialog"
 import {
   Select,
@@ -53,7 +52,7 @@ export default function StudentDetailsPage() {
   const [editRate, setEditRate] = useState(false)
   const [newRate, setNewRate] = useState("")
 
-  // Calculator State
+  // Calculator State (Year removed as requested)
   const [calcMonth, setCalcMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
   const [calcMealCount, setCalcMealCount] = useState("")
   const [calcRate, setCalcRate] = useState("")
@@ -137,7 +136,6 @@ export default function StudentDetailsPage() {
     if (!student || !logCount) return
     setIsUpdating(true)
     try {
-      // Check if a record already exists for this month/year to update it instead of adding a new one
       const existing = meals?.find(m => m.month === logMonth && m.year === logYear)
       
       if (existing) {
