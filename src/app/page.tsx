@@ -13,7 +13,9 @@ import {
   Plus,
   Wallet,
   Check,
-  UserPlus
+  UserPlus,
+  Lock,
+  ArrowDownToLine
 } from "lucide-react"
 import { 
   Table, 
@@ -27,6 +29,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
@@ -49,6 +52,7 @@ import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, orderBy, limit, where, Timestamp, doc, setDoc, updateDoc, arrayUnion, increment } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 
 export default function DashboardPage() {
   const db = useFirestore()
@@ -57,6 +61,7 @@ export default function DashboardPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
   const [newStaff, setNewStaff] = useState({ name: "", phone: "" })
+  const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -75,7 +80,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Data for Dashboard
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
@@ -93,13 +97,14 @@ export default function DashboardPage() {
     query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(5)), [db])
   const { data: recentExpenses, isLoading: expensesLoading } = useCollection(recentExpensesQuery)
 
-  // Quick Payment Form State
   const [selectedBuildingId, setSelectedBuildingId] = useState("")
   const [paymentForm, setPaymentForm] = useState({
     studentId: "",
     month: new Date().toLocaleString('default', { month: 'long' }),
     year: new Date().getFullYear().toString(),
     amount: "",
+    seatAmount: "",
+    foodAmount: "",
     method: "cash",
     receiver: "",
     description: ""
@@ -112,6 +117,20 @@ export default function DashboardPage() {
   const selectedStudent = useMemo(() => {
     return students?.find(s => s.id === paymentForm.studentId)
   }, [students, paymentForm.studentId])
+
+  const foodStats = useMemo(() => {
+    if (!selectedStudent || selectedStudent.paymentSystem === 'package') return { balance: 0 }
+    const totalBill = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+    const totalPaid = Number(selectedStudent.foodCost) || 0
+    return { balance: totalPaid - totalBill }
+  }, [selectedStudent])
+
+  const availableAdvanceForDeduction = useMemo(() => {
+    if (!selectedStudent) return 0
+    const currentAdvance = selectedStudent.advanceAmount || 0
+    const minRequired = selectedStudent.monthlyRent || 0
+    return Math.max(0, currentAdvance - minRequired)
+  }, [selectedStudent])
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -128,32 +147,27 @@ export default function DashboardPage() {
       .reduce((acc, curr) => acc + (curr.amount || 0), 0)
   }, [recentExpenses, today])
 
-  const recentActivity = useMemo(() => {
-    const combined = [
-      ...(recentPayments || []).map(p => ({ ...p, type: 'income', title: `${p.studentName} - Rent` })),
-      ...(recentExpenses || []).map(e => ({ ...e, type: 'expense', title: e.description, date: e.createdAt }))
-    ].sort((a, b) => {
-      const dateA = a.date?.toDate?.() || new Date(0)
-      const dateB = b.date?.toDate?.() || new Date(0)
-      return dateB.getTime() - dateA.getTime()
-    }).slice(0, 5)
-    return combined
-  }, [recentPayments, recentExpenses])
-
   const handleQuickPayment = async () => {
-    if (!paymentForm.studentId || !paymentForm.amount || !paymentForm.receiver) {
-      toast({ variant: "destructive", title: "Error", description: "Please fill required fields (Student, Amount, Receiver)." })
+    if (!paymentForm.studentId || (!useAdvanceBalance && !paymentForm.receiver)) {
+      toast({ variant: "destructive", title: "Error", description: "Fill required fields." })
       return
     }
 
+    const seatPaid = selectedStudent?.paymentSystem === 'package' ? Number(paymentForm.amount) : Number(paymentForm.seatAmount)
+    const foodPaid = selectedStudent?.paymentSystem === 'non-package' ? Number(paymentForm.foodAmount) : 0
+    const totalAmount = seatPaid + foodPaid
+
+    if (totalAmount <= 0) return
+
     setIsSubmitting(true)
     const building = buildings?.find(b => b.id === selectedBuildingId)
-    const amount = Number(paymentForm.amount)
     const paymentId = doc(collection(db, "payments")).id
     const summaryId = `${paymentForm.year}-${paymentForm.month}`
 
     const paymentRecord = {
-      amount,
+      amount: totalAmount,
+      seatAmount: seatPaid,
+      foodAmount: foodPaid,
       buildingId: selectedBuildingId,
       buildingName: building?.name || "Unknown",
       studentName: selectedStudent?.name || "Unknown",
@@ -161,43 +175,38 @@ export default function DashboardPage() {
       type: "income",
       month: paymentForm.month,
       year: paymentForm.year,
-      method: paymentForm.method,
-      receiver: paymentForm.receiver,
-      description: paymentForm.description,
+      method: useAdvanceBalance ? "advance_deduction" : paymentForm.method,
+      receiver: useAdvanceBalance ? "System (Advance Deduction)" : paymentForm.receiver,
+      description: (useAdvanceBalance ? "[Deducted from Advance] " : "") + paymentForm.description,
       date: new Date().toISOString()
     }
 
     try {
-      await setDoc(doc(db, "payments", paymentId), {
-        ...paymentRecord,
-        date: Timestamp.now(),
-        createdAt: Timestamp.now(),
-      })
+      if (!useAdvanceBalance) {
+        await setDoc(doc(db, "payments", paymentId), {
+          ...paymentRecord,
+          date: Timestamp.now(),
+          createdAt: Timestamp.now(),
+        })
 
-      // Update student: decrement dueAmount
+        await setDoc(doc(db, "summaries", summaryId), {
+          totalIncome: increment(totalAmount),
+          [`buildingIncome.${building?.name || 'Unknown'}`]: increment(totalAmount),
+          updatedAt: Timestamp.now()
+        }, { merge: true })
+      }
+
       await updateDoc(doc(db, "students", paymentForm.studentId), {
         paymentsHistory: arrayUnion(paymentRecord),
-        dueAmount: increment(-amount),
+        ...(useAdvanceBalance && { advanceAmount: increment(-totalAmount) }),
+        ...(selectedStudent?.paymentSystem === 'non-package' && foodPaid > 0 && { foodCost: increment(foodPaid) }),
         updatedAt: Timestamp.now()
       })
 
-      await setDoc(doc(db, "summaries", summaryId), {
-        totalIncome: increment(amount),
-        [`buildingIncome.${building?.name || 'Unknown'}`]: increment(amount),
-        updatedAt: Timestamp.now()
-      }, { merge: true })
-
-      toast({ title: "Payment Recorded", description: `Quick payment of ₹${amount} saved and student due updated.` })
+      toast({ title: "Success", description: `Processed ₹${totalAmount}.` })
       setIsPaymentOpen(false)
-      setPaymentForm({
-        studentId: "",
-        month: new Date().toLocaleString('default', { month: 'long' }),
-        year: new Date().getFullYear().toString(),
-        amount: "",
-        method: "cash",
-        receiver: "",
-        description: ""
-      })
+      setPaymentForm({ ...paymentForm, amount: "", seatAmount: "", foodAmount: "", description: "" })
+      setUseAdvanceBalance(false)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -214,7 +223,7 @@ export default function DashboardPage() {
         ...newStaff,
         createdAt: Timestamp.now()
       })
-      toast({ title: "Success", description: "Staff added to receivers list." })
+      toast({ title: "Success", description: "Staff added." })
       setNewStaff({ name: "", phone: "" })
       setIsAddStaffOpen(false)
     } catch (e: any) {
@@ -225,34 +234,10 @@ export default function DashboardPage() {
   }
 
   const stats = [
-    {
-      title: "Today's Income",
-      amount: `₹${todayIncome.toLocaleString()}`,
-      change: "Recorded today",
-      icon: ArrowUpCircle,
-      color: "text-income"
-    },
-    {
-      title: "Today's Expenses",
-      amount: `₹${todayExpense.toLocaleString()}`,
-      change: "Logged today",
-      icon: ArrowDownCircle,
-      color: "text-expense"
-    },
-    {
-      title: "Active Students",
-      amount: students?.filter(s => s.isActive).length || 0,
-      change: "Current residents",
-      icon: TrendingUp,
-      color: "text-primary"
-    },
-    {
-      title: "Total Buildings",
-      amount: buildings?.length || 0,
-      change: `${buildings?.reduce((acc, b) => acc + (b.roomsCount || 0), 0) || 0} Rooms total`,
-      icon: Building2,
-      color: "text-primary"
-    }
+    { title: "Today's Income", amount: `₹${todayIncome.toLocaleString()}`, change: "Recorded today", icon: ArrowUpCircle, color: "text-income" },
+    { title: "Today's Expenses", amount: `₹${todayExpense.toLocaleString()}`, change: "Logged today", icon: ArrowDownCircle, color: "text-expense" },
+    { title: "Active Students", amount: students?.filter(s => s.isActive).length || 0, change: "Current residents", icon: TrendingUp, color: "text-primary" },
+    { title: "Total Buildings", amount: buildings?.length || 0, change: "Buildings count", icon: Building2, color: "text-primary" }
   ]
 
   return (
@@ -261,8 +246,8 @@ export default function DashboardPage() {
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 h-4" />
         <div>
-          <h1 className="text-3xl font-headline font-bold tracking-tight text-primary">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Daily overview and quick insights for your hostel network.</p>
+          <h1 className="text-3xl font-headline font-bold text-primary">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Real-time overview of your hostel network.</p>
         </div>
       </div>
 
@@ -283,225 +268,186 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 md:grid-cols-7">
         <Card className="col-span-4 shadow-sm border-none">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="space-y-1">
-              <CardTitle>Recent Transactions</CardTitle>
-              <p className="text-sm text-muted-foreground">Latest income and expenses recorded.</p>
-            </div>
-            <History className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
+          <CardHeader><CardTitle>Recent Activity</CardTitle></CardHeader>
           <CardContent>
-            {paymentsLoading || expensesLoading ? (
-              <div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary" /></div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentPayments?.slice(0, 5).map((p, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>{p.studentName}</TableCell>
+                    <TableCell className="text-right text-income font-bold">₹{p.amount?.toLocaleString()}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentActivity.map((tx, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-medium">
-                        <div className="flex flex-col">
-                          <span className="truncate max-w-[150px] font-bold">{tx.title}</span>
-                          <span className="text-[10px] text-muted-foreground uppercase">
-                            {tx.date?.toDate?.().toLocaleDateString() || 'N/A'}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="font-normal capitalize">
-                          {tx.category || tx.paymentType || 'General'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className={`text-right font-bold ${tx.type === 'income' ? 'text-income' : 'text-expense'}`}>
-                        {tx.type === 'income' ? '+' : '-'}₹{tx.amount?.toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {recentActivity.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No recent activity.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
 
         <Card className="col-span-3 shadow-sm border-none">
-          <CardHeader>
-            <CardTitle>Building Occupancy</CardTitle>
-            <p className="text-sm text-muted-foreground">Room usage across properties.</p>
-          </CardHeader>
+          <CardHeader><CardTitle>Occupancy</CardTitle></CardHeader>
           <CardContent className="space-y-6">
-            {buildings?.map((building: any) => {
-              const occupiedCount = building.occupiedSeats || 0;
-              const totalSeats = building.totalSeats || 1;
-              const percentage = Math.min((occupiedCount / totalSeats) * 100, 100);
-              
-              return (
-                <div key={building.id} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{building.name}</span>
-                    <span className="text-muted-foreground">
-                      {occupiedCount}/{totalSeats} Students
-                    </span>
-                  </div>
-                  <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-primary transition-all duration-500" 
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
+            {buildings?.map(b => (
+              <div key={b.id} className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>{b.name}</span>
+                  <span>{b.occupiedSeats}/{b.totalSeats}</span>
                 </div>
-              )
-            })}
-            {(!buildings || buildings.length === 0) && (
-              <div className="text-center py-8 text-muted-foreground">No building data available.</div>
-            )}
+                <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                  <div className="h-full bg-primary" style={{ width: `${(b.occupiedSeats / (b.totalSeats || 1)) * 100}%` }} />
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
 
-      {/* Floating Action Button */}
       <div className="fixed bottom-8 right-8 z-50">
         <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
           <DialogTrigger asChild>
-            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg border-2 border-white bg-primary hover:bg-primary/90 transition-transform active:scale-95">
+            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary">
               <Plus className="h-8 w-8 text-white" />
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
-            <DialogHeader>
-              <DialogTitle>Quick Payment Record</DialogTitle>
-              <DialogDescription>Record a student payment directly from the dashboard.</DialogDescription>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>Quick Payment Record</DialogTitle></DialogHeader>
             
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Select Building</Label>
-                <Select onValueChange={setSelectedBuildingId}>
-                  <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
-                  <SelectContent>
-                    {buildings?.map(b => (
-                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Select Student</Label>
-                <Select 
-                  disabled={!selectedBuildingId} 
-                  onValueChange={val => setPaymentForm({...paymentForm, studentId: val})}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
-                  <SelectContent>
-                    {filteredStudents.map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.name} ({s.paymentSystem})</SelectItem>
-                    ))}
-                    {filteredStudents.length === 0 && selectedBuildingId && (
-                      <div className="p-2 text-xs text-center text-muted-foreground">No active students in this building</div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {selectedStudent && (
-                <div className="bg-primary/5 p-3 rounded-lg border border-primary/20 text-xs flex justify-between">
-                  <span>Standard Rent: <strong>₹{selectedStudent.monthlyRent}</strong></span>
-                  <span>Prev. Due: <strong className="text-destructive">₹{selectedStudent.dueAmount || 0}</strong></span>
-                </div>
-              )}
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Amount (₹)</Label>
-                  <Input 
-                    type="number" 
-                    placeholder="0.00" 
-                    value={paymentForm.amount}
-                    onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})}
-                  />
+                  <Label>Building</Label>
+                  <Select onValueChange={setSelectedBuildingId}>
+                    <SelectTrigger><SelectValue placeholder="Building" /></SelectTrigger>
+                    <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Month</Label>
-                  <Select value={paymentForm.month} onValueChange={val => setPaymentForm({...paymentForm, month: val})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                        <SelectItem key={m} value={m}>{m}</SelectItem>
-                      ))}
-                    </SelectContent>
+                  <Label>Student</Label>
+                  <Select disabled={!selectedBuildingId} onValueChange={val => setPaymentForm({...paymentForm, studentId: val})}>
+                    <SelectTrigger><SelectValue placeholder="Student" /></SelectTrigger>
+                    <SelectContent>{filteredStudents.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R: {s.roomNumber})</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Receiver Name</Label>
-                  <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="link" size="sm" className="h-auto p-0 text-xs">
-                        <UserPlus size={12} className="mr-1" /> Add New
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
-                      <DialogHeader>
-                        <DialogTitle>Add New Receiver</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label>Full Name</Label>
-                          <Input value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Phone Number</Label>
-                          <Input 
-                            value={newStaff.phone} 
-                            maxLength={11}
-                            onChange={e => setNewStaff({...newStaff, phone: e.target.value})} 
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button onClick={handleAddStaff} disabled={isSubmitting}>Save Receiver</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+              {selectedStudent && (
+                <div className="bg-secondary/30 p-4 rounded-lg space-y-2 border">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Standard Rent:</span>
+                    <span className="font-bold">₹{selectedStudent.monthlyRent}</span>
+                  </div>
+                  {selectedStudent.paymentSystem === 'non-package' && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{foodStats.balance >= 0 ? "Food Surplus:" : "Food Debt:"}</span>
+                      <span className={cn("font-bold", foodStats.balance >= 0 ? "text-success" : "text-destructive")}>₹{Math.abs(foodStats.balance)}</span>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1 p-2 bg-primary/5 rounded border border-primary/10">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-primary font-medium">Advance Pool:</span>
+                      <span className="font-bold text-primary">₹{selectedStudent.advanceAmount || 0}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground border-t pt-1">
+                      <span>Available Deduction:</span>
+                      <span className="font-bold text-success">₹{availableAdvanceForDeduction}</span>
+                    </div>
+                  </div>
                 </div>
-                <Select value={paymentForm.receiver} onValueChange={val => setPaymentForm({...paymentForm, receiver: val})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select receiver" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {staffList?.map(s => (
-                      <SelectItem key={s.id} value={s.name}>{s.name} ({s.phone})</SelectItem>
-                    ))}
-                    {(!staffList || staffList.length === 0) && (
-                      <div className="p-2 text-xs text-muted-foreground text-center">No staff found. Please add one.</div>
-                    )}
-                  </SelectContent>
-                </Select>
+              )}
+
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-primary/5">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-bold flex items-center gap-2 cursor-pointer" htmlFor="advSwitchDash">
+                    <ArrowDownToLine size={14} className="text-primary" />
+                    Deduct from Advance
+                  </Label>
+                </div>
+                <Switch 
+                  id="advSwitchDash" 
+                  checked={useAdvanceBalance} 
+                  onCheckedChange={setUseAdvanceBalance}
+                  disabled={!selectedStudent || availableAdvanceForDeduction <= 0}
+                />
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Month</Label>
+                  <Select value={paymentForm.month} onValueChange={val => setPaymentForm({...paymentForm, month: val})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                {!useAdvanceBalance && (
+                  <div className="space-y-2">
+                    <Label>Method</Label>
+                    <Select value={paymentForm.method} onValueChange={val => setPaymentForm({...paymentForm, method: val})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank">Bank</SelectItem><SelectItem value="mobile">Mobile</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {selectedStudent?.paymentSystem === 'package' ? (
+                <div className="space-y-2">
+                  <Label>Amount (₹)</Label>
+                  <Input type="number" placeholder="0.00" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold text-muted-foreground">SEAT RENT (₹)</Label>
+                    <Input type="number" placeholder="Rent" value={paymentForm.seatAmount} onChange={e => setPaymentForm({...paymentForm, seatAmount: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold text-muted-foreground">FOOD CREDIT (₹)</Label>
+                    <Input type="number" placeholder="Food" value={paymentForm.foodAmount} onChange={e => setPaymentForm({...paymentForm, foodAmount: e.target.value})} />
+                  </div>
+                </div>
+              )}
+
+              {!useAdvanceBalance && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Receiver</Label>
+                    <Button variant="link" size="sm" onClick={() => setIsAddStaffOpen(true)}>Add New</Button>
+                  </div>
+                  <Select value={paymentForm.receiver} onValueChange={val => setPaymentForm({...paymentForm, receiver: val})}>
+                    <SelectTrigger><SelectValue placeholder="Select receiver" /></SelectTrigger>
+                    <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <Textarea placeholder="Notes..." value={paymentForm.description} onChange={e => setPaymentForm({...paymentForm, description: e.target.value})} />
             </div>
 
             <DialogFooter className="sticky bottom-0 bg-background pt-2 border-t">
               <Button onClick={handleQuickPayment} className="w-full gap-2" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="animate-spin" /> : <Wallet size={16} />}
-                Confirm Quick Payment
+                Confirm Payment
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
+
+      <Dialog open={isAddStaffOpen} onOpenChange={setIsAddStaffOpen}>
+        <DialogContent onKeyDown={handleKeyDown}>
+          <DialogHeader><DialogTitle>Add New Receiver</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input placeholder="Name" value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
+            <Input placeholder="Phone" maxLength={11} value={newStaff.phone} onChange={e => setNewStaff({...newStaff, phone: e.target.value})} />
+          </div>
+          <DialogFooter><Button onClick={handleAddStaff} disabled={isSubmitting}>Save</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
