@@ -32,6 +32,7 @@ import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, updateDoc, increment } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
 
 export default function StudentsPage() {
   const { toast } = useToast()
@@ -43,7 +44,7 @@ export default function StudentsPage() {
 
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [roomFilter, setRoomFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("active")
   const [planFilter, setPlanFilter] = useState("all")
 
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
@@ -58,12 +59,10 @@ export default function StudentsPage() {
     parentPhone: "",
     address: "",
     buildingId: "",
-    apartmentName: "",
     roomNumber: "",
     seatNumber: "",
     type: "new", 
     dueAmount: "0",
-    foodDue: "0",
     initialRentPayment: "0",
     advanceAmount: "0",
     serviceCharge: "0",
@@ -75,7 +74,6 @@ export default function StudentsPage() {
   // Cascading Selection Logic for Form (Building -> Room -> Seat)
   const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
   
-  // Flatten all rooms from all apartments in the building
   const allRoomsInSelectedBuilding = useMemo(() => {
     if (!selectedBuilding) return []
     return selectedBuilding.apartmentsDetail?.flatMap((apt: any) => 
@@ -107,9 +105,8 @@ export default function StudentsPage() {
       const initialRentPayment = Number(formData.initialRentPayment)
       
       const startingDue = formData.type === 'new' ? (monthlyRent - initialRentPayment) : Number(formData.dueAmount)
-      const foodCostVal = formData.paymentSystem === 'package' ? 0 : (formData.type === 'old' ? -Number(formData.foodDue) : Number(formData.foodCost))
+      const foodCostVal = formData.paymentSystem === 'package' ? 0 : Number(formData.foodCost)
 
-      // Important: Save the apartment name derived from the room
       const apartmentName = selectedRoom?.aptName || "General"
 
       const paymentRecord = (initialRentPayment > 0 && formData.type === 'new') ? {
@@ -120,7 +117,6 @@ export default function StudentsPage() {
         studentName: formData.name,
         studentId: studentId,
         type: "income",
-        paymentType: "registration_rent",
         month: new Date().toLocaleString('default', { month: 'long' }),
         year: new Date().getFullYear().toString(),
         method: "cash",
@@ -135,12 +131,6 @@ export default function StudentsPage() {
           date: serverTimestamp(),
           createdAt: serverTimestamp(),
         })
-        const summaryId = `${paymentRecord.year}-${paymentRecord.month}`
-        await setDoc(doc(db, "summaries", summaryId), {
-          totalIncome: increment(initialRentPayment),
-          [`buildingIncome.${selectedBuilding?.name}`]: increment(initialRentPayment),
-          updatedAt: serverTimestamp()
-        }, { merge: true })
       }
 
       await setDoc(studentRef, {
@@ -158,7 +148,6 @@ export default function StudentsPage() {
         updatedAt: serverTimestamp(),
       })
 
-      // Update building occupied status
       const buildingRef = doc(db, "buildings", formData.buildingId)
       const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
         if (apt.name === apartmentName) {
@@ -188,11 +177,11 @@ export default function StudentsPage() {
         updatedAt: serverTimestamp()
       })
 
-      toast({ title: "Registered", description: "Seat occupied successfully." })
+      toast({ title: "Registered", description: "Resident registered successfully." })
       setOpen(false)
       setFormData({
-        name: "", phone: "", parentPhone: "", address: "", buildingId: "", apartmentName: "", roomNumber: "", seatNumber: "",
-        type: "new", dueAmount: "0", foodDue: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
+        name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
+        type: "new", dueAmount: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
         paymentSystem: "package", monthlyRent: "", foodCost: "0"
       })
     } catch (e: any) {
@@ -214,14 +203,6 @@ export default function StudentsPage() {
     })
   }, [students, searchTerm, buildingFilter, roomFilter, statusFilter, planFilter])
 
-  const handleResetFilters = () => {
-    setBuildingFilter("all")
-    setRoomFilter("all")
-    setSearchTerm("")
-    setStatusFilter("all")
-    setPlanFilter("all")
-  }
-
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -238,6 +219,58 @@ export default function StudentsPage() {
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Register Resident</DialogTitle></DialogHeader>
             <div className="space-y-6 py-4">
+              
+              {/* Student Type Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-secondary/20 rounded-lg border">
+                <div className="space-y-2">
+                  <Label className="font-bold">Student Type</Label>
+                  <RadioGroup 
+                    value={formData.type} 
+                    onValueChange={val => setFormData({...formData, type: val})}
+                    className="flex gap-6 pt-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="new" id="new-std" />
+                      <Label htmlFor="new-std" className="cursor-pointer">New Student</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="old" id="old-std" />
+                      <Label htmlFor="old-std" className="cursor-pointer">Old Student</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+                {formData.type === 'old' && (
+                  <div className="space-y-2">
+                    <Label className="font-bold">Previous Due (₹)</Label>
+                    <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
+                  </div>
+                )}
+              </div>
+
+              {/* Personal Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Student Name</Label>
+                  <Input placeholder="Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Student Phone</Label>
+                  <Input placeholder="Mobile Number" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Parent's Phone</Label>
+                  <Input placeholder="Emergency Contact" value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Permanent Address</Label>
+                  <Textarea placeholder="Full Address Details" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                </div>
+              </div>
+
+              {/* Billing & Plan */}
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
                 <Label className="font-bold">Billing & Food Plan</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -245,63 +278,68 @@ export default function StudentsPage() {
                      <Label>Payment System</Label>
                      <Select value={formData.paymentSystem} onValueChange={val => setFormData({...formData, paymentSystem: val})}>
                        <SelectTrigger><SelectValue /></SelectTrigger>
-                       <SelectContent><SelectItem value="package">Package</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent>
+                       <SelectContent>
+                         <SelectItem value="package">Package Plan</SelectItem>
+                         <SelectItem value="non-package">Non-Package (Food Tracker)</SelectItem>
+                       </SelectContent>
                      </Select>
                    </div>
                    <div className="space-y-2">
-                     <Label>Monthly Rent</Label>
+                     <Label>Monthly Rent (₹)</Label>
                      <Input type="number" value={formData.monthlyRent} onChange={e => setFormData({...formData, monthlyRent: e.target.value})} />
                    </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input placeholder="Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                <Input placeholder="Phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-              </div>
-
+              {/* Location Selection */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
                  <div className="space-y-1">
                     <Label className="text-[10px] font-bold flex items-center gap-1"><Building2 size={10}/> Building</Label>
                     <Select onValueChange={val => setFormData({...formData, buildingId: val, roomNumber: "", seatNumber: ""})}>
-                      <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                     </Select>
                  </div>
                  <div className="space-y-1">
                     <Label className="text-[10px] font-bold flex items-center gap-1"><DoorOpen size={10}/> Room No.</Label>
                     <Select disabled={!formData.buildingId} onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}>
-                      <SelectTrigger><SelectValue placeholder="Select Room" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>{allRoomsInSelectedBuilding.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
                     </Select>
                  </div>
                  <div className="space-y-1">
                     <Label className="text-[10px] font-bold">Seat</Label>
                     <Select disabled={!formData.roomNumber} onValueChange={val => setFormData({...formData, seatNumber: val})}>
-                      <SelectTrigger><SelectValue placeholder="Select Seat" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>{emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
                     </Select>
                  </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+              {/* Financials at Registration */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
                  <div className="space-y-2">
-                    <Label>Advance / Security</Label>
+                    <Label>Advance Amount (₹)</Label>
                     <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} />
                  </div>
                  <div className="space-y-2">
-                    <Label>Rent Paid at Registration</Label>
+                    <Label>Rent Paid Now (₹)</Label>
                     <Input type="number" value={formData.initialRentPayment} onChange={e => setFormData({...formData, initialRentPayment: e.target.value})} />
+                 </div>
+                 <div className="space-y-2">
+                    <Label>Service Charge (₹)</Label>
+                    <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} />
                  </div>
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleRegister} className="w-full h-12" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : "Register & Occupy Seat"}</Button>
+              <Button onClick={handleRegister} className="w-full h-12 text-lg" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : "Register & Occupy Seat"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
+      {/* Filtering Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Search</Label>
@@ -343,58 +381,62 @@ export default function StudentsPage() {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="ghost" className="h-10" onClick={handleResetFilters}>
-          <XCircle size={14} className="mr-1" /> Reset Filters
+        <Button variant="ghost" className="h-10" onClick={() => { setBuildingFilter("all"); setRoomFilter("all"); setSearchTerm(""); setStatusFilter("active"); setPlanFilter("all"); }}>
+          <XCircle size={14} className="mr-1" /> Reset
         </Button>
       </div>
 
       {isLoading ? (
         <div className="flex justify-center p-12"><Loader2 className="animate-spin" /></div>
       ) : (
-        <Table>
-          <TableHeader className="bg-secondary/30">
-            <TableRow>
-              <TableHead>Student</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Plan</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredStudents.map((s: any) => (
-              <TableRow key={s.id}>
-                <TableCell>
-                   <div className="flex items-center gap-3">
-                      <UserCircle size={32} className="text-primary/40" />
+        <Card className="border-none shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-secondary/30">
+                <TableRow>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredStudents.map((s: any) => (
+                  <TableRow key={s.id}>
+                    <TableCell>
+                       <div className="flex items-center gap-3">
+                          <UserCircle size={32} className="text-primary/40" />
+                          <div className="flex flex-col">
+                            <span className="font-bold">{s.name}</span>
+                            <span className="text-[10px] text-muted-foreground">{s.phone}</span>
+                          </div>
+                       </div>
+                    </TableCell>
+                    <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-bold">{s.name}</span>
-                        <span className="text-[10px] text-muted-foreground">{s.phone}</span>
+                        <span className="text-sm font-medium">{s.buildingName}</span>
+                        <span className="text-[10px] text-muted-foreground">Room {s.roomNumber} | Seat {s.seatNumber}</span>
                       </div>
-                   </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">{s.buildingName}</span>
-                    <span className="text-[10px] text-muted-foreground">Room {s.roomNumber} | Seat {s.seatNumber}</span>
-                  </div>
-                </TableCell>
-                <TableCell><Badge variant="outline" className="capitalize">{s.paymentSystem}</Badge></TableCell>
-                <TableCell>
-                  <Badge variant={s.isActive ? "default" : "secondary"} className={s.isActive ? "bg-success text-white" : ""}>
-                    {s.isActive ? "Active" : "Left"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} className="mr-1" /> View</Button></TableCell>
-              </TableRow>
-            ))}
-            {filteredStudents.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found with the selected filters.</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                    </TableCell>
+                    <TableCell><Badge variant="outline" className="capitalize">{s.paymentSystem}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant={s.isActive ? "default" : "secondary"} className={s.isActive ? "bg-success text-white" : ""}>
+                        {s.isActive ? "Active" : "Left"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} className="mr-1" /> View</Button></TableCell>
+                  </TableRow>
+                ))}
+                {filteredStudents.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
