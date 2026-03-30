@@ -7,7 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus, Trash2, CheckCircle2, Circle, XCircle } from "lucide-react"
+import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus, Trash2, CheckCircle2, XCircle, Zap } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,6 @@ import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
 import { collection, serverTimestamp } from "firebase/firestore"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
@@ -33,6 +32,7 @@ interface SeatDetail {
 
 interface RoomDetail {
   roomNo: string;
+  meterNo: string;
   seatCount: string;
   seats: SeatDetail[];
 }
@@ -46,7 +46,7 @@ export default function BuildingsPage() {
     name: "", 
     address: ""
   })
-  const [rooms, setRooms] = useState<RoomDetail[]>([{ roomNo: "", seatCount: "", seats: [] }])
+  const [rooms, setRooms] = useState<RoomDetail[]>([{ roomNo: "", meterNo: "", seatCount: "", seats: [] }])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -69,7 +69,7 @@ export default function BuildingsPage() {
   const { data: buildings, isLoading } = useCollection(buildingsQuery)
 
   const addRoomField = () => {
-    setRooms([...rooms, { roomNo: "", seatCount: "", seats: [] }])
+    setRooms([...rooms, { roomNo: "", meterNo: "", seatCount: "", seats: [] }])
   }
 
   const removeRoomField = (index: number) => {
@@ -84,7 +84,6 @@ export default function BuildingsPage() {
       const count = parseInt(value) || 0
       const currentSeats = updatedRooms[index].seats
       
-      // Generate or update seats
       const newSeats: SeatDetail[] = Array.from({ length: count }, (_, i) => ({
         seatNo: (i + 1).toString(),
         status: currentSeats[i]?.status || 'empty'
@@ -92,8 +91,8 @@ export default function BuildingsPage() {
       
       updatedRooms[index].seats = newSeats
       updatedRooms[index].seatCount = value
-    } else if (field === "roomNo") {
-      updatedRooms[index].roomNo = value
+    } else {
+      (updatedRooms[index] as any)[field] = value
     }
     setRooms(updatedRooms)
   }
@@ -134,6 +133,7 @@ export default function BuildingsPage() {
       roomsCount: validRooms.length,
       roomsDetail: validRooms.map(r => ({ 
         roomNo: r.roomNo, 
+        meterNo: r.meterNo,
         totalSeats: r.seats.length,
         seats: r.seats 
       })),
@@ -145,7 +145,7 @@ export default function BuildingsPage() {
     })
 
     setNewBuilding({ name: "", address: "" })
-    setRooms([{ roomNo: "", seatCount: "", seats: [] }])
+    setRooms([{ roomNo: "", meterNo: "", seatCount: "", seats: [] }])
     setOpen(false)
     toast({ title: "Building Created", description: "Hostel property successfully added." })
   }
@@ -170,7 +170,7 @@ export default function BuildingsPage() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
             <DialogHeader>
               <DialogTitle>Add New Building</DialogTitle>
-              <DialogDescription>Define rooms, auto-generate seats, and mark their current status.</DialogDescription>
+              <DialogDescription>Define rooms, assign meter numbers, and auto-generate seats.</DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -200,42 +200,54 @@ export default function BuildingsPage() {
                   </Button>
                 </div>
                 
-                <ScrollArea className="h-[350px] pr-4 border rounded-md p-4">
+                <ScrollArea className="h-[350px] border rounded-md p-4">
                   <div className="space-y-6">
                     {rooms.map((room, roomIdx) => (
                       <div key={roomIdx} className="space-y-4 p-4 border rounded-lg bg-secondary/10">
-                        <div className="flex gap-4 items-end">
-                          <div className="flex-1 space-y-1">
-                            <Label className="text-[10px] uppercase font-bold">Room No.</Label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase font-bold">Room/Apt No.</Label>
                             <Input 
                               value={room.roomNo}
                               placeholder="e.g. 101"
                               onChange={(e) => updateRoomField(roomIdx, "roomNo", e.target.value)}
                             />
                           </div>
-                          <div className="flex-1 space-y-1">
-                            <Label className="text-[10px] uppercase font-bold">No. of Seats</Label>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase font-bold flex items-center gap-1">
+                              <Zap size={10} className="text-primary" /> Meter No.
+                            </Label>
                             <Input 
-                              type="number"
-                              value={room.seatCount}
-                              placeholder="Enter count"
-                              onChange={(e) => updateRoomField(roomIdx, "seatCount", e.target.value)}
+                              value={room.meterNo}
+                              placeholder="e.g. 123456"
+                              onChange={(e) => updateRoomField(roomIdx, "meterNo", e.target.value)}
                             />
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="text-destructive" 
-                            onClick={() => removeRoomField(roomIdx)}
-                            disabled={rooms.length === 1}
-                          >
-                            <Trash2 size={16} />
-                          </Button>
+                          <div className="flex gap-2">
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-[10px] uppercase font-bold">Seats</Label>
+                              <Input 
+                                type="number"
+                                value={room.seatCount}
+                                placeholder="Count"
+                                onChange={(e) => updateRoomField(roomIdx, "seatCount", e.target.value)}
+                              />
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-destructive mt-auto" 
+                              onClick={() => removeRoomField(roomIdx)}
+                              disabled={rooms.length === 1}
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </div>
                         </div>
 
                         {room.seats.length > 0 && (
                           <div className="space-y-2">
-                            <Label className="text-[10px] uppercase font-bold">Generated Seats (Click to toggle status)</Label>
+                            <Label className="text-[10px] uppercase font-bold">Generated Seats (Toggle status)</Label>
                             <div className="flex flex-wrap gap-2">
                               {room.seats.map((seat, seatIdx) => (
                                 <button
@@ -344,11 +356,6 @@ export default function BuildingsPage() {
               </CardFooter>
             </Card>
           ))}
-          {buildings?.length === 0 && (
-            <div className="col-span-full text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
-              No buildings found. Add your first building to start managing rooms.
-            </div>
-          )}
         </div>
       )}
     </div>

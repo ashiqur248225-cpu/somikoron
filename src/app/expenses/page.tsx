@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { TrendingDown, Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet } from "lucide-react"
+import { TrendingDown, Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, DoorOpen } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -26,12 +26,11 @@ import {
   DialogFooter
 } from "@/components/ui/dialog"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, query, orderBy, limit, Timestamp } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, query, orderBy, limit } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
 
 const EXPENSE_CATEGORIES = [
   { id: "rent", label: "Building Rent", icon: Building2 },
@@ -51,13 +50,11 @@ export default function ExpenseHistoryPage() {
   const [isEntryOpen, setIsEntryOpen] = useState(false)
   const [isAddPartyOpen, setIsAddPartyOpen] = useState(false)
   
-  // Filters
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [methodFilter, setMethodFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
 
-  // Data Fetching
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
@@ -70,20 +67,23 @@ export default function ExpenseHistoryPage() {
   const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("expenseDate", "desc"), limit(200)), [db])
   const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
-  // Entry Form State
   const [formData, setFormData] = useState({
     category: "market",
     buildingId: "",
     expensePartyId: "",
     amount: "",
     method: "cash",
-    paidBy: "", // Who from staff paid this
+    paidBy: "",
     description: "",
-    meterNumber: "", // Only for utility
+    meterNumber: "",
+    roomNo: "",
     expenseDate: new Date().toISOString().split('T')[0],
   })
 
   const [newParty, setNewParty] = useState({ name: "", role: "", phone: "" })
+
+  const selectedBuildingForForm = useMemo(() => buildings?.find(b => b.id === formData.buildingId), [buildings, formData.buildingId])
+  const roomsInBuilding = useMemo(() => selectedBuildingForForm?.roomsDetail || [], [selectedBuildingForForm])
 
   const filteredExpenses = useMemo(() => {
     if (!expenses) return []
@@ -104,8 +104,8 @@ export default function ExpenseHistoryPage() {
 
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.buildingId || !formData.amount || !formData.expensePartyId) {
-      toast({ variant: "destructive", title: "Error", description: "Building, Party and Amount are required." })
+    if (!formData.buildingId || !formData.amount) {
+      toast({ variant: "destructive", title: "Error", description: "Building and Amount are required." })
       return
     }
 
@@ -120,7 +120,7 @@ export default function ExpenseHistoryPage() {
         ...formData,
         amount,
         buildingName: building?.name || "General",
-        expensePartyName: party?.name || "Unknown",
+        expensePartyName: party?.name || "Self/General",
         createdAt: serverTimestamp(),
       })
       toast({ title: "Success", description: "Expense successfully recorded." })
@@ -134,6 +134,7 @@ export default function ExpenseHistoryPage() {
         paidBy: "",
         description: "",
         meterNumber: "",
+        roomNo: "",
         expenseDate: new Date().toISOString().split('T')[0],
       })
     } catch (e: any) {
@@ -178,13 +179,6 @@ export default function ExpenseHistoryPage() {
       }
     }
   };
-
-  const resetFilters = () => {
-    setCategoryFilter("all")
-    setBuildingFilter("all")
-    setMethodFilter("all")
-    setSearchTerm("")
-  }
 
   return (
     <div className="space-y-8 pb-20">
@@ -252,7 +246,7 @@ export default function ExpenseHistoryPage() {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="ghost" className="h-10 mt-auto" onClick={resetFilters}>Reset Filters</Button>
+        <Button variant="ghost" className="h-10 mt-auto" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setMethodFilter("all"); setSearchTerm("") }}>Reset</Button>
       </div>
 
       {expensesLoading ? (
@@ -297,9 +291,8 @@ export default function ExpenseHistoryPage() {
         </Card>
       )}
 
-      {/* FAB */}
       <div className="fixed bottom-8 right-8 z-50">
-        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:bg-destructive/90 transition-transform active:scale-95">
+        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:bg-destructive/90">
           <Plus className="h-8 w-8 text-white" />
         </Button>
       </div>
@@ -308,7 +301,7 @@ export default function ExpenseHistoryPage() {
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader>
             <DialogTitle>Log New Expense</DialogTitle>
-            <DialogDescription>Record hostel operational or maintenance costs.</DialogDescription>
+            <DialogDescription>Record hostel costs. Select building to pick meter numbers for electricity bills.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
             <div className="space-y-2">
@@ -323,29 +316,47 @@ export default function ExpenseHistoryPage() {
               </Select>
             </div>
 
-            {formData.category === 'electricity' && (
-              <div className="space-y-2">
-                <Label>Meter Number</Label>
-                <Input placeholder="Enter meter no." value={formData.meterNumber} onChange={e => setFormData({...formData, meterNumber: e.target.value})} />
-              </div>
-            )}
-
             <div className="space-y-2">
               <Label>Building</Label>
-              <Select onValueChange={val => setFormData({...formData, buildingId: val})}>
+              <Select onValueChange={val => setFormData({...formData, buildingId: val, meterNumber: "", roomNo: ""})}>
                 <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
                 <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
 
+            {formData.category === 'electricity' && formData.buildingId && (
+              <div className="space-y-2 p-3 bg-primary/5 border rounded-lg">
+                <Label className="flex items-center gap-1.5"><Zap size={12} className="text-primary"/> Select Apartment/Meter</Label>
+                <Select onValueChange={val => {
+                  const room = roomsInBuilding.find(r => r.roomNo === val)
+                  setFormData({...formData, roomNo: val, meterNumber: room?.meterNo || ""})
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select Unit" /></SelectTrigger>
+                  <SelectContent>
+                    {roomsInBuilding.map(r => (
+                      <SelectItem key={r.roomNo} value={r.roomNo}>
+                        Room {r.roomNo} {r.meterNo ? `(M: ${r.meterNo})` : "(No Meter)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {formData.meterNumber && (
+                  <p className="text-[10px] text-muted-foreground mt-2 font-bold uppercase">
+                    Meter Number: <span className="text-primary">{formData.meterNumber}</span>
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Recipient / Party</Label>
-                <Button variant="link" size="sm" onClick={() => setIsAddPartyOpen(true)} className="h-auto p-0 text-xs">Add New</Button>
+                <Label>Recipient / Vendor (Optional)</Label>
+                <Button variant="link" size="sm" onClick={() => setIsAddPartyOpen(true)} className="h-auto p-0 text-xs">Add New Party</Button>
               </div>
               <Select onValueChange={val => setFormData({...formData, expensePartyId: val})}>
-                <SelectTrigger><SelectValue placeholder="Select party" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="General / Unspecified" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="">General / Unspecified</SelectItem>
                   {parties?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.role})</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -385,7 +396,7 @@ export default function ExpenseHistoryPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Detailed Description</Label>
+              <Label>Description</Label>
               <Textarea placeholder="Voucher details, reason for expense, etc." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
             </div>
 
@@ -402,7 +413,7 @@ export default function ExpenseHistoryPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input placeholder="Electrician Name, Vendor Shop, etc." value={newParty.name} onChange={e => setNewParty({...newParty, name: e.target.value})} />
+              <Input placeholder="Electrician, Vendor Shop, etc." value={newParty.name} onChange={e => setNewParty({...newParty, name: e.target.value})} />
             </div>
             <div className="space-y-2">
               <Label>Role / Category</Label>

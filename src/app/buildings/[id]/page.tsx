@@ -5,12 +5,12 @@ import React, { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase } from "@/firebase"
 import { doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Building2, MapPin, DoorOpen, Users, UserCheck, UserMinus, Trash2, Edit, Loader2, Plus, Circle, CheckCircle2, XCircle } from "lucide-react"
+import { Building2, MapPin, DoorOpen, Users, UserCheck, UserMinus, Trash2, Edit, Loader2, Plus, CheckCircle2, XCircle, Zap } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -30,7 +30,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -42,6 +41,7 @@ interface SeatDetail {
 
 interface RoomDetail {
   roomNo: string;
+  meterNo?: string;
   totalSeats: number;
   seats: SeatDetail[];
 }
@@ -55,15 +55,12 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
-  // Fetch Building Data
   const buildingRef = useMemoFirebase(() => id ? doc(db, "buildings", id) : null, [db, id])
   const { data: building, isLoading } = useDoc(buildingRef)
 
-  // Edit State
   const [editForm, setEditForm] = useState({ name: "", address: "" })
   const [editRooms, setEditRooms] = useState<RoomDetail[]>([])
 
-  // Initialize edit form when building data loads
   useMemo(() => {
     if (building) {
       setEditForm({ name: building.name, address: building.address })
@@ -75,7 +72,6 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
     if (!buildingRef || !editForm.name || !editForm.address) return
     setIsUpdating(true)
     
-    // Recalculate stats
     let total = 0
     let occupied = 0
     editRooms.forEach(room => {
@@ -125,9 +121,9 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
     setEditRooms(updated)
   }
 
-  const updateRoomNo = (idx: number, val: string) => {
+  const updateRoomField = (idx: number, field: keyof RoomDetail, val: string) => {
     const updated = [...editRooms]
-    updated[idx].roomNo = val
+    (updated[idx] as any)[field] = val
     setEditRooms(updated)
   }
 
@@ -136,7 +132,7 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
   }
 
   const addRoom = () => {
-    setEditRooms([...editRooms, { roomNo: "", totalSeats: 1, seats: [{ seatNo: "1", status: "empty" }] }])
+    setEditRooms([...editRooms, { roomNo: "", meterNo: "", totalSeats: 1, seats: [{ seatNo: "1", status: "empty" }] }])
   }
 
   if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
@@ -167,7 +163,7 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Edit Building Information</DialogTitle>
-                <DialogDescription>Update rooms, addresses, or seat configurations.</DialogDescription>
+                <DialogDescription>Update rooms, meter numbers, or seat configurations.</DialogDescription>
               </DialogHeader>
               <div className="space-y-6 py-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -183,26 +179,38 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
 
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <Label className="font-bold">Rooms & Seats</Label>
+                    <Label className="font-bold">Rooms & Meter Configuration</Label>
                     <Button variant="outline" size="sm" onClick={addRoom} className="h-8 gap-1">
                       <Plus size={14} /> Add Room
                     </Button>
                   </div>
-                  <ScrollArea className="h-[300px] border rounded-md p-4">
+                  <ScrollArea className="h-[350px] border rounded-md p-4">
                     <div className="space-y-6">
                       {editRooms.map((room, rIdx) => (
                         <div key={rIdx} className="p-4 border rounded-lg bg-secondary/10 space-y-4">
-                          <div className="flex items-center gap-4">
-                            <Input 
-                              className="w-24" 
-                              placeholder="Room #" 
-                              value={room.roomNo} 
-                              onChange={e => updateRoomNo(rIdx, e.target.value)}
-                            />
-                            <span className="text-xs text-muted-foreground">{room.seats.length} Seats</span>
-                            <Button variant="ghost" size="icon" className="ml-auto text-destructive" onClick={() => removeRoom(rIdx)}>
-                              <Trash2 size={16} />
-                            </Button>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold">Room/Apt #</Label>
+                              <Input 
+                                value={room.roomNo} 
+                                onChange={e => updateRoomField(rIdx, "roomNo", e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold flex items-center gap-1">
+                                <Zap size={10} className="text-primary" /> Meter No.
+                              </Label>
+                              <Input 
+                                value={room.meterNo || ""} 
+                                onChange={e => updateRoomField(rIdx, "meterNo", e.target.value)}
+                                placeholder="Meter ID"
+                              />
+                            </div>
+                            <div className="flex items-center justify-end">
+                               <Button variant="ghost" size="icon" className="text-destructive" onClick={() => removeRoom(rIdx)}>
+                                <Trash2 size={16} />
+                              </Button>
+                            </div>
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {room.seats.map((seat, sIdx) => (
@@ -227,7 +235,7 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={handleUpdate} disabled={isUpdating} className="w-full">
+                <Button onClick={handleUpdate} disabled={isUpdating} className="w-full h-12 text-lg">
                   {isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}
                 </Button>
               </DialogFooter>
@@ -235,11 +243,9 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
           </Dialog>
 
           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" className="gap-2">
-                <Trash2 size={16} /> Delete
-              </Button>
-            </AlertDialogTrigger>
+            <Button variant="destructive" asChild className="gap-2">
+              <Trash2 size={16} />
+            </Button>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
@@ -311,10 +317,16 @@ export default function BuildingDetailsPage(props: { params: Promise<{ id: strin
           <Card key={idx} className="border-none shadow-sm overflow-hidden">
             <div className="h-1.5 bg-primary/20 w-full" />
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex justify-between items-center">
-                Room {room.roomNo}
+              <div className="flex justify-between items-start">
+                <CardTitle className="text-lg">Room {room.roomNo}</CardTitle>
                 <Badge variant="secondary">{room.totalSeats} Seats</Badge>
-              </CardTitle>
+              </div>
+              {room.meterNo && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                  <Zap size={12} className="text-primary" />
+                  <span>Meter: {room.meterNo}</span>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2 mt-2">
