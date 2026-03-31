@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
@@ -70,9 +69,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-export default function StudentDetailsPage(props: { params: Promise<{ id: string }> }) {
-  const params = React.use(props.params)
-  const id = params.id
+export default function StudentDetailsPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const { id } = React.use(paramsPromise)
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -424,23 +422,21 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
               <AlertDialogContent className="max-w-md">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Resident Exit Settlement</AlertDialogTitle>
-                  <AlertDialogDescription asChild>
-                    <div className="mt-4 space-y-3">
-                      <p className="text-sm font-medium">System will perform automatic background settlement:</p>
-                      <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
-                        <div className="flex justify-between"><span>Total Dues (Rent + Food):</span><span className="font-bold text-destructive">₹{exitSettlement.dues.toLocaleString()}</span></div>
-                        <div className="flex justify-between"><span>Advance Pool:</span><span className="font-bold text-primary">₹{exitSettlement.advance.toLocaleString()}</span></div>
-                        <Separator />
-                        <div className="flex justify-between font-bold text-sm pt-1">
-                          <span>{exitSettlement.mode === 'refund' ? 'Refund to Student:' : 'Net Deficit (Remaining Due):'}</span>
-                          <span className={exitSettlement.mode === 'refund' ? 'text-success' : 'text-destructive'}>₹{Math.abs(exitSettlement.finalBalance).toLocaleString()}</span>
-                        </div>
+                  <div className="mt-4 space-y-3">
+                    <p className="text-sm font-medium">System will perform automatic background settlement:</p>
+                    <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
+                      <div className="flex justify-between"><span>Total Dues (Rent + Food):</span><span className="font-bold text-destructive">₹{exitSettlement.dues.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span>Advance Pool:</span><span className="font-bold text-primary">₹{exitSettlement.advance.toLocaleString()}</span></div>
+                      <Separator />
+                      <div className="flex justify-between font-bold text-sm pt-1">
+                        <span>{exitSettlement.mode === 'refund' ? 'Refund to Student:' : 'Net Deficit (Remaining Due):'}</span>
+                        <span className={exitSettlement.mode === 'refund' ? 'text-success' : 'text-destructive'}>₹{Math.abs(exitSettlement.finalBalance).toLocaleString()}</span>
                       </div>
-                      <p className="p-3 bg-primary/5 rounded border border-primary/20 text-[10px] text-muted-foreground italic">
-                        * Confirming will vacate the seat, adjust advance against dues, and mark the resident as inactive.
-                      </p>
                     </div>
-                  </AlertDialogDescription>
+                    <p className="p-3 bg-primary/5 rounded border border-primary/20 text-[10px] text-muted-foreground italic">
+                      * Confirming will vacate the seat, adjust advance against dues, and mark the resident as inactive.
+                    </p>
+                  </div>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>

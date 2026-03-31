@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -96,9 +95,6 @@ export function AppSidebar() {
     <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader className="border-b px-4 py-4">
         <div className="flex items-center gap-2 font-headline font-bold text-primary">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <CircleDollarSign size={20} />
-          </div>
           <span className="text-xl tracking-tight group-data-[collapsible=icon]:hidden">Somikoron</span>
         </div>
       </SidebarHeader>

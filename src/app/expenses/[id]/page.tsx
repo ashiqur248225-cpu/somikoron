@@ -48,9 +48,8 @@ const EXPENSE_CATEGORIES = [
   { id: "others", label: "Others" },
 ]
 
-export default function ExpenseDetailsPage(props: { params: Promise<{ id: string }> }) {
-  const params = React.use(props.params)
-  const id = params.id
+export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = React.use(params)
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()
