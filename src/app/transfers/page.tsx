@@ -26,7 +26,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, query, orderBy, limit } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
@@ -77,7 +77,8 @@ export default function TransfersPage() {
       const receiver = staff?.find(s => s.id === formData.receiverId)
       
       const transferId = doc(collection(db, "transfers")).id
-      await setDoc(doc(db, "transfers", transferId), {
+      const transferData = {
+        id: transferId,
         amount: Number(formData.amount),
         fromAccount: formData.fromAccount,
         toAccount: formData.toAccount,
@@ -87,7 +88,9 @@ export default function TransfersPage() {
         receiverName: receiver?.name || "Unknown",
         description: formData.description,
         date: serverTimestamp()
-      })
+      }
+
+      setDocumentNonBlocking(doc(db, "transfers", transferId), transferData, { merge: true })
 
       toast({ title: "Success", description: "Transfer recorded successfully." })
       setFormData({

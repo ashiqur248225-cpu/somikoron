@@ -89,6 +89,9 @@ export default function DashboardPage() {
   const allExpensesQuery = useMemoFirebase(() => collection(db, "expenses"), [db])
   const { data: allExpenses } = useCollection(allExpensesQuery)
 
+  const allTransfersQuery = useMemoFirebase(() => collection(db, "transfers"), [db])
+  const { data: allTransfers } = useCollection(allTransfersQuery)
+
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances } = useDoc(balancesRef)
 
@@ -154,7 +157,6 @@ export default function DashboardPage() {
       .reduce((acc, e) => acc + (e.amount || 0), 0)
 
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, student) => {
-      // Logic alignment with Student Profile and Dues Tracking
       const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
       const now = new Date()
       const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
@@ -204,8 +206,16 @@ export default function DashboardPage() {
       if (fund[m] !== undefined) fund[m] -= (e.amount || 0)
     });
 
+    // Incorporate Internal Transfers into Balances
+    (allTransfers || []).forEach(t => {
+      const from = t.fromAccount as keyof typeof fund
+      const to = t.toAccount as keyof typeof fund
+      if (fund[from] !== undefined) fund[from] -= (t.amount || 0)
+      if (fund[to] !== undefined) fund[to] += (t.amount || 0)
+    });
+
     return { income, expense, dues: totalDues, fund }
-  }, [allPayments, allExpenses, students, timeFilter, openingBalances])
+  }, [allPayments, allExpenses, allTransfers, students, timeFilter, openingBalances])
 
   const handleQuickPayment = async () => {
     if (!paymentForm.studentId || (!useAdvanceBalance && !paymentForm.receiver)) {
@@ -391,7 +401,7 @@ export default function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg">Total Fund Status</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Opening + Transactions.</p>
+              <p className="text-xs text-muted-foreground mt-1">Opening + Transactions (including transfers).</p>
             </div>
             <div className="bg-primary/10 p-2 rounded-lg text-primary">
               <CircleDollarSign size={20} />
