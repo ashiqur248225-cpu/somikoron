@@ -554,7 +554,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                           <p className="font-bold border-b pb-1 text-[11px]">Rent Calculation Breakdown:</p>
                           <p className="text-[10px] flex justify-between"><span>Initial Starting Debt:</span> <span>৳{student.dueAmount || 0}</span></p>
                           <p className="text-[10px] flex justify-between"><span>Months Elapsed ({financialStats.monthsElapsed}):</span> <span>+৳{financialStats.monthsElapsed * (student.monthlyRent || 0)}</span></p>
-                          <p className="text-[10px] flex justify-between text-success"><span>Rent Paid So Far:</span> <span>-৳{financialStats.rentDue + (student.dueAmount || 0) + (financialStats.monthsElapsed * (student.monthlyRent || 0)) === 0 ? 0 : (student.dueAmount || 0) + (financialStats.monthsElapsed * (student.monthlyRent || 0)) - financialStats.rentDue}</span></p>
+                          <p className="text-[10px] flex justify-between text-success"><span>Rent Paid So Far:</span> <span>-৳{(student.dueAmount || 0) + (financialStats.monthsElapsed * (student.monthlyRent || 0)) - financialStats.rentDue}</span></p>
                           <Separator className="my-1" />
                           <p className="text-[10px] font-bold flex justify-between"><span>Total Rent Due:</span> <span>৳{financialStats.rentDue.toLocaleString()}</span></p>
                         </div>

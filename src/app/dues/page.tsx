@@ -49,11 +49,13 @@ export default function DuesPage() {
     return students.map(student => {
       const regDate = student.createdAt?.toDate?.() || new Date()
       const now = new Date()
+      // Robust month difference calculation
       const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
       
       const historicalRentDue = Number(student.dueAmount) || 0
       const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
       
+      // Calculate total rent paid by summing 'seatAmount' from history
       const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
         const rentPortion = (curr.seatAmount !== undefined) 
           ? Number(curr.seatAmount) 
