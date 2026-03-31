@@ -21,7 +21,8 @@ import {
   HelpCircle,
   Info,
   Zap,
-  Calendar
+  Calendar,
+  Banknote
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -88,6 +89,14 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const [logMonth, setLogMonth] = useState(new Date().toLocaleString('default', { month: 'long' }))
   const [logCount, setLogCount] = useState("")
 
+  // Exit Settlement States
+  const [exitPayment, setExitPayment] = useState({
+    amount: "0",
+    method: "cash",
+    receiver: "",
+    description: ""
+  })
+
   const [editForm, setEditForm] = useState({
     name: "",
     phone: "",
@@ -146,15 +155,11 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const financialStats = useMemo(() => {
     if (!student) return { rentDue: 0, foodBalance: 0, monthsElapsed: 0 }
     
-    // Use billingStartDate if available, else fallback to createdAt
     const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
     const now = new Date()
-    
-    // Precise month difference calculation for billing cycles
     const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
     
     const historicalRentDue = Number(student.dueAmount) || 0
-    // generatedRent starts from the billingStartDate
     const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
     
     const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
@@ -191,10 +196,14 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     return {
       advance,
       dues: totalOverallDue,
-      finalBalance: balance,
+      finalBalance: balance, // if positive: refund to student, if negative: student owes
       mode: balance >= 0 ? 'refund' : 'deficit'
     }
   }, [student, totalOverallDue])
+
+  const currentExitDeficit = Math.max(0, -exitSettlement.finalBalance)
+  const remainingDueAtExit = Math.max(0, currentExitDeficit - Number(exitPayment.amount))
+  const canConfirmExit = exitSettlement.mode === 'refund' || remainingDueAtExit === 0;
 
   const availableAdvanceForDeduction = useMemo(() => {
     if (!student) return 0
@@ -262,15 +271,21 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   }
 
   const handleDeactivate = async () => {
-    if (!student || !student.isActive || !studentRef) return
+    if (!student || !student.isActive || !studentRef || !canConfirmExit) return
+    
+    if (exitSettlement.mode === 'deficit' && Number(exitPayment.amount) > 0 && !exitPayment.receiver) {
+      toast({ variant: "destructive", title: "Error", description: "Please select a receiver for the exit payment." })
+      return
+    }
+
     setIsUpdating(true)
     try {
-      const settlement = exitSettlement
       const settlementRecords = []
-
-      if (settlement.advance > 0 && settlement.dues > 0) {
-        const adjustAmount = Math.min(settlement.advance, settlement.dues)
-        const paymentRecord = {
+      
+      // 1. Automatic adjustment of advance against dues
+      if (exitSettlement.advance > 0 && exitSettlement.dues > 0) {
+        const adjustAmount = Math.min(exitSettlement.advance, exitSettlement.dues)
+        const adjRecord = {
           amount: adjustAmount,
           buildingId: student.buildingId,
           buildingName: student.buildingName,
@@ -284,24 +299,47 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           description: `Automatic adjustment from advance on exit. Settled ৳${adjustAmount} of dues.`,
           date: new Date().toISOString()
         }
-        settlementRecords.push(paymentRecord)
-        
-        const pId = doc(collection(db, "payments")).id
-        await setDoc(doc(db, "payments", pId), { ...paymentRecord, date: serverTimestamp() })
+        settlementRecords.push(adjRecord)
+        // No global income impact for auto-adjustment
       }
 
+      // 2. Manual payment received at exit (if any)
+      const manualPaid = Number(exitPayment.amount)
+      if (manualPaid > 0) {
+        const manualRecord = {
+          amount: manualPaid,
+          buildingId: student.buildingId,
+          buildingName: student.buildingName,
+          studentName: student.name,
+          studentId: student.id,
+          type: "income",
+          month: months[new Date().getMonth()],
+          year: new Date().getFullYear().toString(),
+          method: exitPayment.method,
+          receiver: exitPayment.receiver,
+          description: `Exit Payment: ${exitPayment.description || "Cleared remaining dues at exit."}`,
+          date: new Date().toISOString()
+        }
+        settlementRecords.push(manualRecord)
+        
+        const pId = doc(collection(db, "payments")).id
+        await setDoc(doc(db, "payments", pId), { ...manualRecord, date: serverTimestamp() })
+      }
+
+      // Final status update
       await updateDoc(studentRef, { 
         isActive: false, 
-        advanceAmount: settlement.mode === 'refund' ? 0 : settlement.advance - Math.min(settlement.advance, settlement.dues),
+        advanceAmount: exitSettlement.mode === 'refund' ? 0 : exitSettlement.advance - Math.min(exitSettlement.advance, exitSettlement.dues),
         paymentsHistory: arrayUnion(...settlementRecords),
         updatedAt: serverTimestamp(),
-        leftAt: serverTimestamp()
+        leftAt: serverTimestamp(),
+        exitNote: exitPayment.description
       })
 
-      const buildingRef = doc(db, "buildings", student.buildingId)
-      const buildingSnap = await getDoc(buildingRef)
-      if (buildingSnap.exists()) {
-        const bData = buildingSnap.data()
+      const bRef = doc(db, "buildings", student.buildingId)
+      const bSnap = await getDoc(bRef)
+      if (bSnap.exists()) {
+        const bData = bSnap.data()
         const updatedApts = bData.apartmentsDetail.map((apt: any) => {
           if (apt.name === student.apartmentName) {
             return {
@@ -316,9 +354,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           }
           return apt
         })
-        await updateDoc(buildingRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1) })
+        await updateDoc(bRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1) })
       }
-      toast({ title: "Settled & Deactivated", description: "Student marked as left. Seat vacated and advance adjusted." })
+      toast({ title: "Settled & Deactivated", description: "Resident vacated seat and account settled." })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -451,28 +489,96 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                   <UserMinus size={18} /> Mark as Left
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent className="max-w-md">
+              <AlertDialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Resident Exit Settlement</AlertDialogTitle>
-                  <div className="mt-4 space-y-3">
-                    <p className="text-sm font-medium">System will perform automatic background settlement:</p>
+                  <div className="mt-4 space-y-4">
                     <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
-                      <div className="flex justify-between"><span>Total Dues (Rent + Food):</span><span className="font-bold text-destructive">৳{exitSettlement.dues.toLocaleString()}</span></div>
-                      <div className="flex justify-between"><span>Advance Pool:</span><span className="font-bold text-primary">৳{exitSettlement.advance.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span>Total Unpaid Dues:</span><span className="font-bold text-destructive">৳{exitSettlement.dues.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span>Available Advance:</span><span className="font-bold text-primary">৳{exitSettlement.advance.toLocaleString()}</span></div>
                       <Separator />
                       <div className="flex justify-between font-bold text-sm pt-1">
-                        <span>{exitSettlement.mode === 'refund' ? 'Refund to Student:' : 'Net Deficit (Remaining Due):'}</span>
+                        <span>{exitSettlement.mode === 'refund' ? 'Net Refundable:' : 'Net Deficit (Owed):'}</span>
                         <span className={exitSettlement.mode === 'refund' ? 'text-success' : 'text-destructive'}>৳{Math.abs(exitSettlement.finalBalance).toLocaleString()}</span>
                       </div>
                     </div>
-                    <p className="p-3 bg-primary/5 rounded border border-primary/20 text-[10px] text-muted-foreground italic">
-                      * Confirming will vacate the seat, adjust advance against dues, and mark the resident as inactive.
-                    </p>
+
+                    <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
+                       <Label className="font-bold text-primary flex items-center gap-2">
+                         <Calculator size={14} /> 
+                         {exitSettlement.mode === 'refund' ? 'Refund Details' : 'Final Payment Settlement'}
+                       </Label>
+                       
+                       <div className="space-y-2">
+                          <Label className="text-[10px] uppercase font-bold">{exitSettlement.mode === 'refund' ? 'Refunded to Student (৳)' : 'Payment Received Now (৳)'}</Label>
+                          <Input 
+                            type="number" 
+                            placeholder="0.00" 
+                            value={exitPayment.amount} 
+                            onChange={e => setExitPayment({...exitPayment, amount: e.target.value})}
+                          />
+                       </div>
+
+                       {exitSettlement.mode === 'deficit' && (
+                         <div className="p-3 bg-white rounded border space-y-1">
+                            <div className="flex justify-between text-xs">
+                               <span>Remaining Dues after this payment:</span>
+                               <span className={cn("font-bold", remainingDueAtExit > 0 ? "text-destructive" : "text-success")}>
+                                 ৳{remainingDueAtExit.toLocaleString()}
+                               </span>
+                            </div>
+                            {remainingDueAtExit > 0 && (
+                              <p className="text-[9px] text-destructive flex items-center gap-1"><AlertCircle size={8}/> বকেয়া বাকি থাকলে এক্সিট করা যাবে না।</p>
+                            )}
+                         </div>
+                       )}
+
+                       {Number(exitPayment.amount) > 0 && (
+                         <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                               <Label className="text-[10px] uppercase font-bold">Method</Label>
+                               <Select value={exitPayment.method} onValueChange={val => setExitPayment({...exitPayment, method: val})}>
+                                 <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                 <SelectContent>
+                                   <SelectItem value="cash">Cash</SelectItem>
+                                   <SelectItem value="bkash">Bkash</SelectItem>
+                                   <SelectItem value="nagad">Nagad</SelectItem>
+                                   <SelectItem value="bank">Bank</SelectItem>
+                                 </SelectContent>
+                               </Select>
+                            </div>
+                            <div className="space-y-1">
+                               <Label className="text-[10px] uppercase font-bold">Receiver</Label>
+                               <Select value={exitPayment.receiver} onValueChange={val => setExitPayment({...exitPayment, receiver: val})}>
+                                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Staff" /></SelectTrigger>
+                                 <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                               </Select>
+                            </div>
+                         </div>
+                       )}
+
+                       <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold">Exit Note / Description</Label>
+                          <Textarea 
+                            className="text-xs min-h-[60px]" 
+                            placeholder="Reason for leaving or settlement notes..." 
+                            value={exitPayment.description}
+                            onChange={e => setExitPayment({...exitPayment, description: e.target.value})}
+                          />
+                       </div>
+                    </div>
                   </div>
                 </AlertDialogHeader>
-                <AlertDialogFooter>
+                <AlertDialogFooter className="mt-4">
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeactivate} className="bg-destructive">Confirm Settlement & Exit</AlertDialogAction>
+                  <AlertDialogAction 
+                    onClick={handleDeactivate} 
+                    className={cn("bg-destructive", !canConfirmExit && "opacity-50 cursor-not-allowed")}
+                    disabled={!canConfirmExit || isUpdating}
+                  >
+                    {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle size={16} className="mr-2" />}
+                    Confirm Settlement & Exit
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
