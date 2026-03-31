@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -128,7 +129,7 @@ export default function LedgerPage() {
                     </TableCell>
                     <TableCell className="text-sm">{row.buildingName}</TableCell>
                     <TableCell className={`text-right font-bold ${row.txType === 'income' ? 'text-income' : 'text-expense'}`}>
-                      {row.txType === 'income' ? '+' : '-'}₹{row.amount?.toLocaleString()}
+                      {row.txType === 'income' ? '+' : '-'}tk{row.amount?.toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -144,7 +145,7 @@ export default function LedgerPage() {
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-income uppercase tracking-wider">Total Income</p>
-                <p className="text-2xl font-bold text-income">₹{totalIncome.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-income">tk{totalIncome.toLocaleString()}</p>
               </div>
               <div className="bg-income/20 p-2 rounded-full">
                 <History className="text-income h-5 w-5" />
@@ -157,7 +158,7 @@ export default function LedgerPage() {
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-expense uppercase tracking-wider">Total Expense</p>
-                <p className="text-2xl font-bold text-expense">₹{totalExpense.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-expense">tk{totalExpense.toLocaleString()}</p>
               </div>
               <div className="bg-expense/20 p-2 rounded-full">
                 <History className="text-expense h-5 w-5" />
@@ -170,7 +171,7 @@ export default function LedgerPage() {
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-sm font-medium text-primary uppercase tracking-wider">Net Balance</p>
-                <p className="text-2xl font-bold text-primary">₹{(totalIncome - totalExpense).toLocaleString()}</p>
+                <p className="text-2xl font-bold text-primary">tk{(totalIncome - totalExpense).toLocaleString()}</p>
               </div>
               <div className="bg-primary/20 p-2 rounded-full">
                 <History className="text-primary h-5 w-5" />

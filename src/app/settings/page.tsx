@@ -111,7 +111,7 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="mealRate">Standard Meal Rate (₹)</Label>
+            <Label htmlFor="mealRate">Standard Meal Rate (tk)</Label>
             <div className="flex gap-4">
               <Input 
                 id="mealRate" 

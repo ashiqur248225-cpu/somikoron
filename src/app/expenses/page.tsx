@@ -207,7 +207,7 @@ export default function ExpenseHistoryPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-destructive">₹{totalFilteredExpense.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-destructive">tk{totalFilteredExpense.toLocaleString()}</p>
           </CardContent>
         </Card>
       </div>
@@ -301,7 +301,7 @@ export default function ExpenseHistoryPage() {
                       {e.apartmentName && e.apartmentName !== 'none' && <span className="text-[10px] text-muted-foreground">{e.apartmentName} {e.roomNumber ? `| Room ${e.roomNumber}` : ''}</span>}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-bold text-expense">₹{e.amount?.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-bold text-expense">tk{e.amount?.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
               {filteredExpenses?.length === 0 && !expensesLoading && (
@@ -345,14 +345,14 @@ export default function ExpenseHistoryPage() {
                 <td className="border p-2 capitalize">{e.category}</td>
                 <td className="border p-2 uppercase">{e.method}</td>
                 <td className="border p-2">{e.buildingName} {e.apartmentName !== 'none' ? '| ' + e.apartmentName : ''}</td>
-                <td className="border p-2 text-right">₹{e.amount?.toLocaleString()}</td>
+                <td className="border p-2 text-right">tk{e.amount?.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="font-bold bg-gray-50">
               <td colSpan={6} className="border p-2 text-right">TOTAL EXPENSES</td>
-              <td className="border p-2 text-right">₹{totalFilteredExpense.toLocaleString()}</td>
+              <td className="border p-2 text-right">tk{totalFilteredExpense.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
@@ -432,7 +432,7 @@ export default function ExpenseHistoryPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Amount (₹)</Label>
+                <Label>Amount (tk)</Label>
                 <Input type="number" placeholder="0.00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
               </div>
               <div className="space-y-2">

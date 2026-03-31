@@ -124,7 +124,7 @@ export default function TransfersPage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Transfer Amount (₹)</Label>
+                <Label>Transfer Amount (tk)</Label>
                 <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
               </div>
               
@@ -217,7 +217,7 @@ export default function TransfersPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-bold text-primary">
-                      ₹{t.amount?.toLocaleString()}
+                      tk{t.amount?.toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}

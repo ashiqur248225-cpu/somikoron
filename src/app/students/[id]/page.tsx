@@ -263,7 +263,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           year: new Date().getFullYear().toString(),
           method: "exit_settlement_advance",
           receiver: "System (Auto Settlement)",
-          description: `Automatic adjustment from advance on exit. Settled ₹${adjustAmount} of dues.`,
+          description: `Automatic adjustment from advance on exit. Settled tk${adjustAmount} of dues.`,
           date: new Date().toISOString()
         }
         settlementRecords.push(paymentRecord)
@@ -325,9 +325,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       
       // Breakdown description
       let detailsArr = []
-      if (seatPaid > 0) detailsArr.push(`Rent: ₹${seatPaid}`)
-      if (foodPaid > 0) detailsArr.push(`Food: ₹${foodPaid}`)
-      if (addAdvance > 0) detailsArr.push(`Advance: ₹${addAdvance}`)
+      if (seatPaid > 0) detailsArr.push(`Rent: tk${seatPaid}`)
+      if (foodPaid > 0) detailsArr.push(`Food: tk${foodPaid}`)
+      if (addAdvance > 0) detailsArr.push(`Advance: tk${addAdvance}`)
       const breakdown = detailsArr.join(', ')
       const fullDesc = useAdvanceBalance 
         ? `[Deducted from Advance] ${breakdown}. ${paymentData.description}`
@@ -438,12 +438,12 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                   <div className="mt-4 space-y-3">
                     <p className="text-sm font-medium">System will perform automatic background settlement:</p>
                     <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
-                      <div className="flex justify-between"><span>Total Dues (Rent + Food):</span><span className="font-bold text-destructive">₹{exitSettlement.dues.toLocaleString()}</span></div>
-                      <div className="flex justify-between"><span>Advance Pool:</span><span className="font-bold text-primary">₹{exitSettlement.advance.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span>Total Dues (Rent + Food):</span><span className="font-bold text-destructive">tk{exitSettlement.dues.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span>Advance Pool:</span><span className="font-bold text-primary">tk{exitSettlement.advance.toLocaleString()}</span></div>
                       <Separator />
                       <div className="flex justify-between font-bold text-sm pt-1">
                         <span>{exitSettlement.mode === 'refund' ? 'Refund to Student:' : 'Net Deficit (Remaining Due):'}</span>
-                        <span className={exitSettlement.mode === 'refund' ? 'text-success' : 'text-destructive'}>₹{Math.abs(exitSettlement.finalBalance).toLocaleString()}</span>
+                        <span className={exitSettlement.mode === 'refund' ? 'text-success' : 'text-destructive'}>tk{Math.abs(exitSettlement.finalBalance).toLocaleString()}</span>
                       </div>
                     </div>
                     <p className="p-3 bg-primary/5 rounded border border-primary/20 text-[10px] text-muted-foreground italic">
@@ -513,19 +513,19 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
                 <p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p>
-                <p className="text-lg font-bold">₹{student.advanceAmount || 0}</p>
-                <div className="text-[8px] text-muted-foreground mt-1 flex justify-between items-center"><span className="flex items-center gap-0.5"><Lock size={8} /> Locked: ₹{student.monthlyRent || 0}</span></div>
+                <p className="text-lg font-bold">tk{student.advanceAmount || 0}</p>
+                <div className="text-[8px] text-muted-foreground mt-1 flex justify-between items-center"><span className="flex items-center gap-0.5"><Lock size={8} /> Locked: tk{student.monthlyRent || 0}</span></div>
               </div>
               
               <div className="p-3 rounded-lg bg-secondary/50 border border-secondary">
                 <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p>
-                <p className="text-lg font-bold">₹{student.serviceCharge || 0}</p>
+                <p className="text-lg font-bold">tk{student.serviceCharge || 0}</p>
                 <div className="text-[8px] text-muted-foreground mt-1 flex items-center gap-0.5"><Zap size={8} /> One-time fee</div>
               </div>
 
               <div className="p-3 rounded-lg bg-secondary/30">
                 <p className="text-[10px] uppercase text-muted-foreground font-bold">Monthly Rate</p>
-                <p className="text-lg font-bold">₹{student.monthlyRent || 0}</p>
+                <p className="text-lg font-bold">tk{student.monthlyRent || 0}</p>
               </div>
               
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 relative">
@@ -537,12 +537,12 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                         <Info size={12} className="text-destructive cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p className="text-[10px]">Rent Due = (Initial Debt: ₹{student.dueAmount || 0}) + (Rent for {financialStats.monthsElapsed} months: ₹{financialStats.monthsElapsed * (student.monthlyRent || 0)}) - (Paid)</p>
+                        <p className="text-[10px]">Rent Due = (Initial Debt: tk{student.dueAmount || 0}) + (Rent for {financialStats.monthsElapsed} months: tk{financialStats.monthsElapsed * (student.monthlyRent || 0)}) - (Paid)</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <p className="text-lg font-bold text-destructive">₹{financialStats.rentDue.toLocaleString()}</p>
+                <p className="text-lg font-bold text-destructive">tk{financialStats.rentDue.toLocaleString()}</p>
               </div>
 
               {student.paymentSystem === 'non-package' && (
@@ -561,7 +561,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                           <Info size={12} className={cn("cursor-help", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")} />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p className="text-[10px]">Food Balance = (Paid) - (Initial Food Debt: ₹{student.foodDueAmount || 0}) - (Logs Cost)</p>
+                          <p className="text-[10px]">Food Balance = (Paid) - (Initial Food Debt: tk{student.foodDueAmount || 0}) - (Logs Cost)</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -569,7 +569,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                   <p className={cn(
                     "text-lg font-bold",
                     financialStats.foodBalance >= 0 ? "text-success" : "text-destructive"
-                  )}>₹{financialStats.foodBalance.toLocaleString()}</p>
+                  )}>tk{financialStats.foodBalance.toLocaleString()}</p>
                 </div>
               )}
             </div>
@@ -611,7 +611,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                         {p.description || "-"}
                       </TableCell>
                       <TableCell className="text-xs">{p.receiver}</TableCell>
-                      <TableCell className="text-right font-bold text-income">₹{p.amount?.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-bold text-income">tk{p.amount?.toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                   {(!student.paymentsHistory || student.paymentsHistory.length === 0) && (
@@ -631,12 +631,12 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 border rounded-lg">
                   <p className="text-xs text-muted-foreground uppercase font-bold">Historical Rent Due</p>
-                  <p className="text-xl font-bold">₹{student.dueAmount || 0}</p>
+                  <p className="text-xl font-bold">tk{student.dueAmount || 0}</p>
                 </div>
                 {student.paymentSystem === 'non-package' && (
                   <div className="p-4 border rounded-lg">
                     <p className="text-xs text-muted-foreground uppercase font-bold">Historical Food Due</p>
-                    <p className="text-xl font-bold">₹{student.foodDueAmount || 0}</p>
+                    <p className="text-xl font-bold">tk{student.foodDueAmount || 0}</p>
                   </div>
                 )}
               </div>
@@ -647,8 +647,8 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           </Card>
         </TabsContent>
         {student.paymentSystem === 'non-package' && (
-          <TabsContent value="meals"><Card className="border-none shadow-sm"><CardHeader><CardTitle className="text-sm">Meal Logs History</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Period</TableHead><TableHead>Count</TableHead><TableHead>Rate</TableHead><TableHead className="text-right">Cost (₹)</TableHead></TableRow></TableHeader><TableBody>{student.mealsHistory?.map((m: any, idx: number) => (
-            <TableRow key={idx}><TableCell className="font-medium">{m.month}</TableCell><TableCell className="font-bold">{m.totalMeals}</TableCell><TableCell className="text-xs text-muted-foreground">₹{m.perMealCost}</TableCell><TableCell className="text-right font-bold">₹{m.totalCost?.toLocaleString()}</TableCell></TableRow>
+          <TabsContent value="meals"><Card className="border-none shadow-sm"><CardHeader><CardTitle className="text-sm">Meal Logs History</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Period</TableHead><TableHead>Count</TableHead><TableHead>Rate</TableHead><TableHead className="text-right">Cost (tk)</TableHead></TableRow></TableHeader><TableBody>{student.mealsHistory?.map((m: any, idx: number) => (
+            <TableRow key={idx}><TableCell className="font-medium">{m.month}</TableCell><TableCell className="font-bold">{m.totalMeals}</TableCell><TableCell className="text-xs text-muted-foreground">tk{m.perMealCost}</TableCell><TableCell className="text-right font-bold">tk{m.totalCost?.toLocaleString()}</TableCell></TableRow>
           ))}{(!student.mealsHistory || student.mealsHistory.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No meal records found.</TableCell></TableRow>}</TableBody></Table></CardContent></Card></TabsContent>
         )}
       </Tabs>
@@ -673,7 +673,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
               <div className="space-y-2"><Label>Parent Phone</Label><Input maxLength={11} value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})}/></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Monthly Rent (₹)</Label><Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: e.target.value})}/></div>
+              <div className="space-y-2"><Label>Monthly Rent (tk)</Label><Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: e.target.value})}/></div>
               <div className="space-y-2"><Label>Plan</Label><Select value={editForm.paymentSystem} onValueChange={val => setEditForm({...editForm, paymentSystem: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="package">Package</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent></Select></div>
             </div>
             <div className="space-y-2"><Label>Address</Label><Textarea value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})}/></div>
@@ -686,16 +686,16 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Record Transaction for {student.name}</DialogTitle></DialogHeader>
           <div className="bg-secondary/30 p-4 rounded-lg space-y-2 mb-2">
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Rent Due:</span><span className="font-bold text-destructive">₹{financialStats.rentDue.toLocaleString()}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Rent Due:</span><span className="font-bold text-destructive">tk{financialStats.rentDue.toLocaleString()}</span></div>
             {student.paymentSystem === 'non-package' && (
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Food {financialStats.foodBalance >= 0 ? "Balance" : "Debt"}:</span>
                 <span className={cn("font-bold", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")}>
-                  ₹{Math.abs(financialStats.foodBalance).toLocaleString()}
+                  tk{Math.abs(financialStats.foodBalance).toLocaleString()}
                 </span>
               </div>
             )}
-            <div className="flex flex-col gap-1 mt-2 p-2 bg-primary/5 rounded border border-primary/10"><div className="flex justify-between text-xs"><span className="text-primary font-medium">Advance Pool:</span><span className="font-bold text-primary">₹{student.advanceAmount || 0}</span></div><div className="flex justify-between text-[10px] text-muted-foreground"><span>Security Lock:</span><span>₹{student.monthlyRent || 0}</span></div></div>
+            <div className="flex flex-col gap-1 mt-2 p-2 bg-primary/5 rounded border border-primary/10"><div className="flex justify-between text-xs"><span className="text-primary font-medium">Advance Pool:</span><span className="font-bold text-primary">tk{student.advanceAmount || 0}</span></div><div className="flex justify-between text-[10px] text-muted-foreground"><span>Security Lock:</span><span>tk{student.monthlyRent || 0}</span></div></div>
           </div>
           <div className="space-y-4 py-2">
             <div className="flex items-center justify-between p-3 border rounded-lg bg-primary/5"><div className="space-y-0.5"><Label className="text-sm font-bold flex items-center gap-2 cursor-pointer" htmlFor="advSwitch"><ArrowDownToLine size={14} className="text-primary" />Deduct from Advance</Label></div><Switch id="advSwitch" checked={useAdvanceBalance} onCheckedChange={setUseAdvanceBalance} disabled={availableAdvanceForDeduction <= 0} /></div>
@@ -726,7 +726,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
 
             {student.paymentSystem === 'package' ? (
               <div className="space-y-2">
-                <Label>Monthly Package Payment (₹)</Label>
+                <Label>Monthly Package Payment (tk)</Label>
                 <Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" />
               </div>
             ) : (
@@ -738,7 +738,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
 
             {!useAdvanceBalance && (
               <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-2">
-                <Label className="text-xs font-bold text-primary flex items-center gap-1"><Plus size={12}/> Add to Advance Pool (₹)</Label>
+                <Label className="text-xs font-bold text-primary flex items-center gap-1"><Plus size={12}/> Add to Advance Pool (tk)</Label>
                 <Input type="number" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} placeholder="Extra amount to save" />
                 <p className="text-[9px] text-muted-foreground">* This money will be added to student's advance and your net balance.</p>
               </div>
@@ -761,11 +761,11 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
 
       <Dialog open={isLogMealDialogOpen} onOpenChange={setIsLogMealDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
-          <DialogHeader><DialogTitle>Log Monthly Meals</DialogTitle><DialogDescription>Rate: ₹{globalMealRate}/meal.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Log Monthly Meals</DialogTitle><DialogDescription>Rate: tk{globalMealRate}/meal.</DialogDescription></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Month</Label><Select value={logMonth} onValueChange={setLogMonth}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Total Meals</Label><Input type="number" value={logCount} onChange={e => setLogCount(e.target.value)} /></div>
-            {logCount && <div className="bg-primary/5 p-3 rounded-lg flex justify-between items-center text-sm"><span>Total Cost:</span><span className="font-bold text-primary">₹{(Number(logCount) * globalMealRate).toLocaleString()}</span></div>}
+            {logCount && <div className="bg-primary/5 p-3 rounded-lg flex justify-between items-center text-sm"><span>Total Cost:</span><span className="font-bold text-primary">tk{(Number(logCount) * globalMealRate).toLocaleString()}</span></div>}
           </div>
           <DialogFooter><Button className="w-full h-12 text-lg" onClick={logMonthlyMeal} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Save Meal Record"}</Button></DialogFooter>
         </DialogContent>

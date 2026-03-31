@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo } from "react"
@@ -158,7 +159,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
           <div className="flex justify-between items-start">
             <div>
               <Badge variant="secondary" className="capitalize mb-2">{expense.category}</Badge>
-              <CardTitle className="text-3xl font-bold text-destructive">₹{expense.amount?.toLocaleString()}</CardTitle>
+              <CardTitle className="text-3xl font-bold text-destructive">tk{expense.amount?.toLocaleString()}</CardTitle>
             </div>
             <div className="bg-destructive/10 p-3 rounded-xl text-destructive"><Receipt size={32} /></div>
           </div>
@@ -253,7 +254,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Amount (₹)</Label><Input type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Amount (tk)</Label><Input type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: e.target.value})} /></div>
                 <div className="space-y-2">
                   <Label>Method</Label>
                   <Select value={editForm.method} onValueChange={val => setEditForm({...editForm, method: val})}>

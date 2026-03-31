@@ -119,8 +119,8 @@ export default function IncomeHistoryPage() {
 
     // Detailed description
     let detailsArr = []
-    if (seatPaid > 0) detailsArr.push(`Rent: ₹${seatPaid}`)
-    if (foodPaid > 0) detailsArr.push(`Food: ₹${foodPaid}`)
+    if (seatPaid > 0) detailsArr.push(`Rent: tk${seatPaid}`)
+    if (foodPaid > 0) detailsArr.push(`Food: tk${foodPaid}`)
     const breakdown = detailsArr.join(', ')
 
     const paymentRecord = {
@@ -149,7 +149,7 @@ export default function IncomeHistoryPage() {
         updatedAt: serverTimestamp()
       })
 
-      toast({ title: "Success", description: `Processed ₹${totalAmount} for Room ${selectedRoomNumber}.` })
+      toast({ title: "Success", description: `Processed tk${totalAmount} for Room ${selectedRoomNumber}.` })
       setIsEntryOpen(false)
       setFormData({ ...formData, studentId: "", amount: "", seatAmount: "", foodAmount: "", description: "" })
       setSelectedBuildingId(""); setSelectedRoomNumber("")
@@ -230,7 +230,7 @@ export default function IncomeHistoryPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-income">₹{totalFilteredIncome.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-income">tk{totalFilteredIncome.toLocaleString()}</p>
           </CardContent>
         </Card>
       </div>
@@ -257,7 +257,7 @@ export default function IncomeHistoryPage() {
          </div>
          <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground uppercase font-bold">Method</Label>
-            <Select value={methodFilter} onValueChange={setMethodFilter}>
+            <Select value={methodFilter} onValueChange={methodFilter}>
               <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Methods</SelectItem>
@@ -308,7 +308,7 @@ export default function IncomeHistoryPage() {
                   </TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
                   <TableCell className="text-xs">{p.receiver}</TableCell>
-                  <TableCell className="text-right font-bold text-income">₹{p.amount?.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-bold text-income">tk{p.amount?.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
               {filteredPayments.length === 0 && (
@@ -354,14 +354,14 @@ export default function IncomeHistoryPage() {
                 <td className="border p-2 uppercase">{p.method}</td>
                 <td className="border p-2">{p.receiver}</td>
                 <td className="border p-2">{p.buildingName}</td>
-                <td className="border p-2 text-right">₹{p.amount?.toLocaleString()}</td>
+                <td className="border p-2 text-right">tk{p.amount?.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="font-bold bg-gray-50">
               <td colSpan={7} className="border p-2 text-right">TOTAL COLLECTIONS</td>
-              <td className="border p-2 text-right">₹{totalFilteredIncome.toLocaleString()}</td>
+              <td className="border p-2 text-right">tk{totalFilteredIncome.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
@@ -401,8 +401,8 @@ export default function IncomeHistoryPage() {
 
              {selectedStudent && (
                <div className="bg-primary/5 p-3 rounded-lg border text-sm space-y-2">
-                  <div className="flex justify-between font-bold"><span>Monthly Rent:</span><span>₹{selectedStudent.monthlyRent}</span></div>
-                  <div className="flex justify-between text-xs text-primary"><span>Advance Balance:</span><span>₹{selectedStudent.advanceAmount || 0}</span></div>
+                  <div className="flex justify-between font-bold"><span>Monthly Rent:</span><span>tk{selectedStudent.monthlyRent}</span></div>
+                  <div className="flex justify-between text-xs text-primary"><span>Advance Balance:</span><span>tk{selectedStudent.advanceAmount || 0}</span></div>
                </div>
              )}
 
