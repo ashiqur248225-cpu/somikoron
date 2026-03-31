@@ -1,7 +1,8 @@
+
 "use client"
 
-import React, { useState, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import React, { useState, useMemo, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, setDoc, getDoc, arrayUnion, increment, collection, deleteDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -73,6 +74,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
   const params = React.use(props.params)
   const id = params.id
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
@@ -115,6 +117,13 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
 
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
+
+  // Handle URL actions
+  useEffect(() => {
+    const action = searchParams.get('action')
+    if (action === 'payment') setIsPaymentDialogOpen(true)
+    if (action === 'meals') setIsLogMealDialogOpen(true)
+  }, [searchParams])
 
   useMemo(() => {
     if (student) {

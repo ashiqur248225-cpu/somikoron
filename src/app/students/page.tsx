@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -13,7 +14,12 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Plus, Phone, UserCircle, Loader2, BedDouble, MapPin, Eye, Contact, Filter, XCircle, Building2, DoorOpen, LayoutGrid } from "lucide-react"
+import { 
+  Users, Search, Plus, Phone, UserCircle, Loader2, 
+  BedDouble, MapPin, Eye, Contact, Filter, XCircle, 
+  Building2, DoorOpen, LayoutGrid, MoreVertical,
+  Wallet, Utensils
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -24,6 +30,12 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -424,7 +436,11 @@ export default function StudentsPage() {
               </TableHeader>
               <TableBody>
                 {filteredStudents.map((s: any) => (
-                  <TableRow key={s.id}>
+                  <TableRow 
+                    key={s.id} 
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => router.push(`/students/${s.id}`)}
+                  >
                     <TableCell>
                        <div className="flex items-center gap-3">
                           <UserCircle size={32} className="text-primary/40" />
@@ -446,7 +462,28 @@ export default function StudentsPage() {
                         {s.isActive ? "Active" : "Left"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} className="mr-1" /> View</Button></TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onClick={() => router.push(`/students/${s.id}`)} className="cursor-pointer gap-2">
+                            <Eye size={14} /> View Profile
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=payment`)} className="cursor-pointer gap-2">
+                            <Wallet size={14} className="text-success" /> Process Payment
+                          </DropdownMenuItem>
+                          {s.paymentSystem === 'non-package' && (
+                            <DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=meals`)} className="cursor-pointer gap-2">
+                              <Utensils size={14} className="text-primary" /> Log Meals
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
                   </TableRow>
                 ))}
                 {filteredStudents.length === 0 && (
