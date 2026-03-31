@@ -1,133 +1,337 @@
 
 "use client"
 
-import { useMemo } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Badge } from "@/components/ui/badge"
-import { BarChart3, Download, Calendar, ArrowRight, Loader2 } from "lucide-react"
+import { 
+  BarChart3, 
+  Download, 
+  Calendar, 
+  ArrowRight, 
+  Loader2, 
+  TrendingUp, 
+  TrendingDown, 
+  Wallet, 
+  Receipt,
+  Filter,
+  FileSpreadsheet,
+  Printer,
+  XCircle,
+  Building2
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, orderBy, limit } from "firebase/firestore"
+import { collection, query, orderBy } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 
 export default function ReportsPage() {
   const db = useFirestore()
+  
+  // States for filtering
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  const [buildingFilter, setBuildingFilter] = useState("all")
 
-  // Optimization: Read from 'summaries' collection instead of aggregating individual transactions
-  // This drastically reduces read costs (1 document per month vs potentially thousands)
-  const summariesQuery = useMemoFirebase(() => query(collection(db, "summaries"), orderBy("updatedAt", "desc"), limit(6)), [db])
-  const { data: summaries, isLoading } = useCollection(summariesQuery)
-
+  // Data Fetching
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  const chartData = useMemo(() => {
-    if (!summaries) return []
-    return summaries.map(s => ({
-      name: s.id, // e.g., 2024-January
-      income: s.totalIncome || 0,
-      expense: s.totalExpense || 0
-    })).reverse()
-  }, [summaries])
+  const paymentsQuery = useMemoFirebase(() => query(collection(db, "payments"), orderBy("date", "desc")), [db])
+  const { data: payments, isLoading: paymentsLoading } = useCollection(paymentsQuery)
 
-  const buildingBreakdown = useMemo(() => {
-    if (!summaries || summaries.length === 0) return []
-    const latest = summaries[0]
-    if (!latest.buildingIncome) return []
-    return Object.entries(latest.buildingIncome)
-      .map(([name, amt]: [string, any]) => ({ name, amt }))
-      .sort((a, b) => b.amt - a.amt)
-  }, [summaries])
+  const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("expenseDate", "desc")), [db])
+  const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
+
+  // Filtered Data Logic
+  const filteredData = useMemo(() => {
+    if (!payments || !expenses) return { income: [], expense: [] }
+
+    const sDate = new Date(startDate)
+    const eDate = new Date(new Date(endDate).setHours(23, 59, 59))
+
+    const isMatch = (item: any, dateKey: string) => {
+      const itemDate = item[dateKey]?.toDate ? item[dateKey].toDate() : new Date(item[dateKey])
+      const matchesDate = itemDate >= sDate && itemDate <= eDate
+      const matchesBuilding = buildingFilter === "all" || item.buildingId === buildingFilter
+      return matchesDate && matchesBuilding
+    }
+
+    return {
+      income: payments.filter(p => isMatch(p, 'date')),
+      expense: expenses.filter(e => isMatch(e, 'expenseDate'))
+    }
+  }, [payments, expenses, startDate, endDate, buildingFilter])
+
+  // Calculation Aggregates
+  const stats = useMemo(() => {
+    const totalIncome = filteredData.income.reduce((acc, curr) => acc + (curr.amount || 0), 0)
+    const totalExpense = filteredData.expense.reduce((acc, curr) => acc + (curr.amount || 0), 0)
+    return {
+      totalIncome,
+      totalExpense,
+      netProfit: totalIncome - totalExpense
+    }
+  }, [filteredData])
+
+  // Prepare Chart Data (Grouped by Date)
+  const chartData = useMemo(() => {
+    const dailyMap: Record<string, { name: string, income: number, expense: number }> = {}
+    
+    filteredData.income.forEach(p => {
+      const d = p.date?.toDate ? p.date.toDate().toLocaleDateString() : new Date(p.date).toLocaleDateString()
+      if (!dailyMap[d]) dailyMap[d] = { name: d, income: 0, expense: 0 }
+      dailyMap[d].income += (p.amount || 0)
+    })
+
+    filteredData.expense.forEach(e => {
+      const d = new Date(e.expenseDate).toLocaleDateString()
+      if (!dailyMap[d]) dailyMap[d] = { name: d, income: 0, expense: 0 }
+      dailyMap[d].expense += (e.amount || 0)
+    })
+
+    return Object.values(dailyMap).sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime())
+  }, [filteredData])
+
+  // CSV Export Logic
+  const handleExportCSV = () => {
+    const headers = ["Type", "Date", "Entity", "Category", "Building", "Amount"]
+    const rows = [
+      ...filteredData.income.map(p => ["Income", p.date?.toDate ? p.date.toDate().toLocaleDateString() : new Date(p.date).toLocaleDateString(), p.studentName, "Rent/Food", p.buildingName, p.amount]),
+      ...filteredData.expense.map(e => ["Expense", new Date(e.expenseDate).toLocaleDateString(), e.expensePartyName, e.category, e.buildingName, e.amount])
+    ]
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(",") + "\n"
+      + rows.map(e => e.join(",")).join("\n")
+
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", `Somikoron_Report_${startDate}_to_${endDate}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  const handleReset = () => {
+    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+    setEndDate(new Date().toISOString().split('T')[0])
+    setBuildingFilter("all")
+  }
+
+  if (paymentsLoading || expensesLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-8 pb-20 print:p-0">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Financial Reports</h1>
-            <p className="text-muted-foreground mt-1">Aggregated insights from optimized monthly summaries.</p>
+            <h1 className="text-3xl font-headline font-bold text-primary">Advanced Reports</h1>
+            <p className="text-muted-foreground mt-1">Granular financial insights with custom filtering.</p>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="flex gap-2">
-            <Calendar size={18} /> Last 6 Months
+          <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
+            <FileSpreadsheet size={16} /> Export CSV
           </Button>
-          <Button className="flex gap-2">
-            <Download size={18} /> Export PDF
+          <Button className="gap-2" onClick={handlePrint}>
+            <Printer size={16} /> Print/PDF
           </Button>
         </div>
       </div>
 
+      {/* Filter Section */}
+      <Card className="border-none shadow-sm bg-secondary/20 print:hidden">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase font-bold text-muted-foreground flex items-center gap-1.5"><Calendar size={12}/> From Date</Label>
+              <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase font-bold text-muted-foreground flex items-center gap-1.5"><Calendar size={12}/> To Date</Label>
+              <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase font-bold text-muted-foreground flex items-center gap-1.5"><Building2 size={12}/> Building</Label>
+              <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Properties</SelectItem>
+                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="ghost" className="h-10" onClick={handleReset}>
+              <XCircle size={14} className="mr-1" /> Reset Filters
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-none shadow-sm bg-income/5 border-l-4 border-l-income">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-xs font-bold uppercase text-income">Total Income</CardTitle>
+            <TrendingUp className="text-income h-4 w-4" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black">₹{stats.totalIncome.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Based on {filteredData.income.length} transactions</p>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm bg-expense/5 border-l-4 border-l-expense">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-xs font-bold uppercase text-expense">Total Expenses</CardTitle>
+            <TrendingDown className="text-expense h-4 w-4" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black">₹{stats.totalExpense.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Based on {filteredData.expense.length} transactions</p>
+          </CardContent>
+        </Card>
+        <Card className={cn(
+          "border-none shadow-sm border-l-4",
+          stats.netProfit >= 0 ? "bg-primary/5 border-l-primary" : "bg-destructive/5 border-l-destructive"
+        )}>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-xs font-bold uppercase">Net Profit/Loss</CardTitle>
+            <Wallet className="h-4 w-4" />
+          </CardHeader>
+          <CardContent>
+            <div className={cn(
+              "text-3xl font-black",
+              stats.netProfit >= 0 ? "text-primary" : "text-destructive"
+            )}>
+              {stats.netProfit < 0 ? '-' : ''}₹{Math.abs(stats.netProfit).toLocaleString()}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">For selected period</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 border-none shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg">Monthly Cash Flow</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <BarChart3 size={18} className="text-primary" />
+              Cash Flow Trend
+            </CardTitle>
           </CardHeader>
-          <CardContent className="h-[350px]">
-            {isLoading ? (
-              <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin" /></div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" fontSize={10} />
-                  <YAxis />
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  />
-                  <Legend />
-                  <Bar dataKey="income" name="Income" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="expense" name="Expense" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+          <CardContent className="h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted))" />
+                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
+                <YAxis fontSize={10} axisLine={false} tickLine={false} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                />
+                <Legend iconType="circle" />
+                <Bar dataKey="income" name="Income" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="expense" name="Expense" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
         <div className="space-y-6">
-          <Card className="border-none shadow-sm bg-primary text-primary-foreground">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm uppercase tracking-wider opacity-80">Latest Collections (Monthly)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {buildingBreakdown.map((b) => (
-                  <div key={b.name} className="flex justify-between items-center border-b border-primary-foreground/20 pb-2 last:border-0">
-                    <span className="text-sm">{b.name}</span>
-                    <span className="font-bold">₹{b.amt.toLocaleString()}</span>
-                  </div>
-                ))}
-                {buildingBreakdown.length === 0 && (
-                  <p className="text-sm opacity-60">No collection data for this month.</p>
-                )}
-                <Button variant="secondary" size="sm" className="w-full mt-4 bg-white/10 hover:bg-white/20 border-none text-white">
-                  Full Building Report <ArrowRight size={14} className="ml-2" />
-                </Button>
+          <Card className="border-none shadow-sm">
+            <CardHeader><CardTitle className="text-sm">Summary Details</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Transactions</span>
+                <Badge variant="secondary">{filteredData.income.length + filteredData.expense.length}</Badge>
+              </div>
+              <div className="flex justify-between items-center text-sm border-t pt-4">
+                <span className="text-muted-foreground font-medium">Income Streams</span>
+                <span className="font-bold text-income">₹{stats.totalIncome.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground font-medium">Expenses</span>
+                <span className="font-bold text-expense">₹{stats.totalExpense.toLocaleString()}</span>
+              </div>
+              <Separator />
+              <div className="bg-primary/5 p-4 rounded-xl space-y-2">
+                <p className="text-[10px] uppercase font-bold text-primary">Efficiency Ratio</p>
+                <div className="text-xl font-bold">
+                  {stats.totalIncome > 0 ? ((stats.netProfit / stats.totalIncome) * 100).toFixed(1) : 0}% 
+                  <span className="text-xs font-normal text-muted-foreground ml-1">Margin</span>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-sm">Quick Aggregates</CardTitle>
+          <Card className="border-none shadow-sm bg-primary text-primary-foreground overflow-hidden relative">
+            <div className="absolute top-0 right-0 p-4 opacity-10"><TrendingUp size={80} /></div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm uppercase tracking-widest opacity-80">Report Period</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Buildings</span>
-                <Badge variant="secondary">{buildings?.length || 0}</Badge>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Total Income (Period)</span>
-                <span className="font-bold text-income">₹{summaries?.reduce((acc, s) => acc + (s.totalIncome || 0), 0).toLocaleString()}</span>
-              </div>
+            <CardContent>
+              <div className="text-lg font-bold">{new Date(startDate).toLocaleDateString()}</div>
+              <div className="flex items-center gap-2 text-xs opacity-60 my-1"><ArrowRight size={12}/> to</div>
+              <div className="text-lg font-bold">{new Date(endDate).toLocaleDateString()}</div>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* Hidden summary for Print */}
+      <div className="hidden print:block space-y-8 mt-8 border-t pt-8">
+        <h2 className="text-2xl font-bold text-center">Financial Performance Report</h2>
+        <div className="grid grid-cols-2 gap-8 text-sm">
+          <div>
+            <p><strong>Period:</strong> {startDate} to {endDate}</p>
+            <p><strong>Building:</strong> {buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+          </div>
+          <div className="text-right">
+            <p><strong>Generated on:</strong> {new Date().toLocaleString()}</p>
+          </div>
+        </div>
+        <Table className="border mt-4">
+          <TableRow>
+            <TableCell className="font-bold">Category</TableCell>
+            <TableCell className="text-right font-bold">Total (₹)</TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell>Total Income</TableCell>
+            <TableCell className="text-right">₹{stats.totalIncome.toLocaleString()}</TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell>Total Expense</TableCell>
+            <TableCell className="text-right">₹{stats.totalExpense.toLocaleString()}</TableCell>
+          </TableRow>
+          <TableRow className="bg-secondary/20">
+            <TableCell className="font-black">Net Profit</TableCell>
+            <TableCell className="text-right font-black">₹{stats.netProfit.toLocaleString()}</TableCell>
+          </TableRow>
+        </Table>
+      </div>
     </div>
   )
+}
+
+function Table({ children, className }: { children: React.ReactNode, className?: string }) {
+  return <table className={cn("w-full border-collapse", className)}>{children}</table>
+}
+function TableRow({ children, className }: { children: React.ReactNode, className?: string }) {
+  return <tr className={cn("border-b", className)}>{children}</tr>
+}
+function TableCell({ children, className }: { children: React.ReactNode, className?: string }) {
+  return <td className={cn("p-3", className)}>{children}</td>
 }
