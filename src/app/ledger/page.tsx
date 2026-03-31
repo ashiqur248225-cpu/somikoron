@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Table, 
@@ -31,34 +31,44 @@ export default function LedgerPage() {
   const [typeFilter, setTypeFilter] = useState("all")
 
   // Fetch payments (income)
-  const paymentsQuery = useMemoFirebase(() => query(collection(db, "payments"), orderBy("date", "desc"), limit(50)), [db])
+  const paymentsQuery = useMemoFirebase(() => query(collection(db, "payments"), orderBy("date", "desc"), limit(500)), [db])
   const { data: payments, isLoading: paymentsLoading } = useCollection(paymentsQuery)
 
-  // Fetch expenses
-  const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("date", "desc"), limit(50)), [db])
+  // Fetch expenses - Fixed: Use createdAt for ordering as expenses don't have 'date' field
+  const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(500)), [db])
   const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
+  // Helper function to get a Date object from various formats
+  const getTransactionDate = (tx: any) => {
+    if (tx.date?.toDate) return tx.date.toDate()
+    if (tx.date) return new Date(tx.date)
+    if (tx.expenseDate) return new Date(tx.expenseDate)
+    if (tx.createdAt?.toDate) return tx.createdAt.toDate()
+    return new Date(0)
+  }
+
   // Merge and sort all transactions
-  const allTransactions = [
-    ...(payments || []).map(p => ({ ...p, txType: 'income' })),
-    ...(expenses || []).map(e => ({ ...e, txType: 'expense' }))
-  ].sort((a, b) => {
-    const dateA = a.date?.toDate?.() || new Date(0)
-    const dateB = b.date?.toDate?.() || new Date(0)
-    return dateB.getTime() - dateA.getTime()
-  })
+  const allTransactions = useMemo(() => {
+    const combined = [
+      ...(payments || []).map(p => ({ ...p, txType: 'income' })),
+      ...(expenses || []).map(e => ({ ...e, txType: 'expense' }))
+    ]
+    return combined.sort((a, b) => getTransactionDate(b).getTime() - getTransactionDate(a).getTime())
+  }, [payments, expenses])
 
-  const filteredData = allTransactions.filter(tx => {
-    const matchesSearch = 
-      (tx.studentName || tx.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (tx.buildingName || "").toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesType = typeFilter === "all" || tx.txType === typeFilter
-    return matchesSearch && matchesType
-  })
+  const filteredData = useMemo(() => {
+    return allTransactions.filter(tx => {
+      const matchesSearch = 
+        (tx.studentName || tx.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (tx.buildingName || "").toLowerCase().includes(searchTerm.toLowerCase())
+      
+      const matchesType = typeFilter === "all" || tx.txType === typeFilter
+      return matchesSearch && matchesType
+    })
+  }, [allTransactions, searchTerm, typeFilter])
 
-  const totalIncome = (payments || []).reduce((acc, curr) => acc + (curr.amount || 0), 0)
-  const totalExpense = (expenses || []).reduce((acc, curr) => acc + (curr.amount || 0), 0)
+  const totalIncome = useMemo(() => (payments || []).reduce((acc, curr) => acc + (curr.amount || 0), 0), [payments])
+  const totalExpense = useMemo(() => (expenses || []).reduce((acc, curr) => acc + (curr.amount || 0), 0), [expenses])
 
   return (
     <div className="space-y-8">
@@ -72,7 +82,49 @@ export default function LedgerPage() {
         </Button>
       </div>
 
-      <Card className="border-none shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="border-none shadow-sm bg-income/5 border-l-4 border-l-income">
+          <CardContent className="pt-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm font-medium text-income uppercase tracking-wider">Total Income</p>
+                <p className="text-2xl font-bold text-income">৳{totalIncome.toLocaleString()}</p>
+              </div>
+              <div className="bg-income/20 p-2 rounded-full">
+                <History className="text-income h-5 w-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm bg-expense/5 border-l-4 border-l-expense">
+          <CardContent className="pt-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm font-medium text-expense uppercase tracking-wider">Total Expense</p>
+                <p className="text-2xl font-bold text-expense">৳{totalExpense.toLocaleString()}</p>
+              </div>
+              <div className="bg-expense/20 p-2 rounded-full">
+                <History className="text-expense h-5 w-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm bg-primary/5 border-l-4 border-l-primary">
+          <CardContent className="pt-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm font-medium text-primary uppercase tracking-wider">Net Balance</p>
+                <p className="text-2xl font-bold text-primary">৳{(totalIncome - totalExpense).toLocaleString()}</p>
+              </div>
+              <div className="bg-primary/20 p-2 rounded-full">
+                <History className="text-primary h-5 w-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-none shadow-sm overflow-hidden">
         <CardHeader className="pb-4 border-b">
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
@@ -116,70 +168,33 @@ export default function LedgerPage() {
               <TableBody>
                 {filteredData.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell className="whitespace-nowrap">
-                      {row.date?.toDate?.() ? row.date.toDate().toLocaleDateString() : 'Pending'}
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {getTransactionDate(row).toLocaleDateString()}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium text-sm">
                       {row.txType === 'income' ? row.studentName : row.expensePartyName}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={row.txType === 'income' ? 'secondary' : 'outline'} className="font-normal capitalize">
+                      <Badge variant={row.txType === 'income' ? 'secondary' : 'outline'} className="font-normal capitalize text-[10px]">
                         {row.category || row.paymentType || 'General'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm">{row.buildingName}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{row.buildingName}</TableCell>
                     <TableCell className={`text-right font-bold ${row.txType === 'income' ? 'text-income' : 'text-expense'}`}>
                       {row.txType === 'income' ? '+' : '-'}৳{row.amount?.toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
+                {filteredData.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No transactions found.</TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="border-none bg-income/10">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-medium text-income uppercase tracking-wider">Total Income</p>
-                <p className="text-2xl font-bold text-income">৳{totalIncome.toLocaleString()}</p>
-              </div>
-              <div className="bg-income/20 p-2 rounded-full">
-                <History className="text-income h-5 w-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-none bg-expense/10">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-medium text-expense uppercase tracking-wider">Total Expense</p>
-                <p className="text-2xl font-bold text-expense">৳{totalExpense.toLocaleString()}</p>
-              </div>
-              <div className="bg-expense/20 p-2 rounded-full">
-                <History className="text-expense h-5 w-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-none bg-primary/10">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-medium text-primary uppercase tracking-wider">Net Balance</p>
-                <p className="text-2xl font-bold text-primary">৳{(totalIncome - totalExpense).toLocaleString()}</p>
-              </div>
-              <div className="bg-primary/20 p-2 rounded-full">
-                <History className="text-primary h-5 w-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   )
 }
