@@ -110,6 +110,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     amount: "",
     seatAmount: "",
     foodAmount: "",
+    addAdvanceAmount: "0",
     method: "cash",
     receiver: "",
     description: ""
@@ -140,7 +141,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
 
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-  // Dues & Balance Calculation (Historical + Generated - Paid)
   const financialStats = useMemo(() => {
     if (!student) return { rentDue: 0, foodBalance: 0, monthsElapsed: 0 }
     
@@ -148,7 +148,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     const now = new Date()
     const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
     
-    // Rent Due
     const historicalRentDue = Number(student.dueAmount) || 0
     const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
     const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
@@ -156,7 +155,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     }, 0) || 0
     const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
-    // Food Balance (Prepaid style: Total Paid - (Historical Debt + Actual Cost))
     const historicalFoodDue = Number(student.foodDueAmount) || 0
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
     const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
@@ -314,30 +312,48 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     if (!student || !studentRef) return
     const seatPaid = student.paymentSystem === 'package' ? Number(paymentData.amount) : Number(paymentData.seatAmount)
     const foodPaid = student.paymentSystem === 'non-package' ? Number(paymentData.foodAmount) : 0
-    const totalAmount = seatPaid + foodPaid
-    if (totalAmount <= 0) { toast({ variant: "destructive", title: "Error", description: "Enter valid amount." }); return }
-    if (useAdvanceBalance && availableAdvanceForDeduction < totalAmount) { toast({ variant: "destructive", title: "Error", description: "Security lock violation." }); return }
+    const addAdvance = Number(paymentData.addAdvanceAmount)
+    const totalCashAmount = seatPaid + foodPaid + addAdvance
+    
+    if (totalCashAmount <= 0 && !useAdvanceBalance) { toast({ variant: "destructive", title: "Error", description: "Enter valid amount." }); return }
+    if (useAdvanceBalance && availableAdvanceForDeduction < (seatPaid + foodPaid)) { toast({ variant: "destructive", title: "Error", description: "Security lock violation." }); return }
     if (!paymentData.receiver && !useAdvanceBalance) { toast({ variant: "destructive", title: "Error", description: "Select receiver." }); return }
+    
     setIsUpdating(true)
     try {
       const pId = doc(collection(db, "payments")).id
       const pRecord = {
-        amount: totalAmount, seatAmount: seatPaid, foodAmount: foodPaid, buildingId: student.buildingId,
-        buildingName: student.buildingName, studentName: student.name, studentId: student.id, type: "income",
-        month: paymentData.month, year: paymentData.year, method: useAdvanceBalance ? "advance_deduction" : paymentData.method,
+        amount: totalCashAmount, 
+        seatAmount: seatPaid, 
+        foodAmount: foodPaid, 
+        advanceAmount: addAdvance,
+        buildingId: student.buildingId,
+        buildingName: student.buildingName, 
+        studentName: student.name, 
+        studentId: student.id, 
+        type: "income",
+        month: paymentData.month, 
+        year: paymentData.year, 
+        method: useAdvanceBalance ? "advance_deduction" : paymentData.method,
         receiver: useAdvanceBalance ? "System (Advance Deduction)" : paymentData.receiver,
         description: (useAdvanceBalance ? "[Deducted from Advance] " : "") + paymentData.description,
         date: new Date().toISOString()
       }
-      if (!useAdvanceBalance) { await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() }) }
+      
+      if (!useAdvanceBalance && totalCashAmount > 0) { 
+        await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() }) 
+      }
+      
       await updateDoc(studentRef, {
         paymentsHistory: arrayUnion(pRecord),
-        ...(useAdvanceBalance && { advanceAmount: increment(-totalAmount) }),
+        advanceAmount: increment((useAdvanceBalance ? -(seatPaid + foodPaid) : addAdvance)),
         ...(student.paymentSystem === 'non-package' && foodPaid > 0 && { foodCost: increment(foodPaid) }),
         updatedAt: serverTimestamp()
       })
+      
       toast({ title: "Success", description: "Payment processed." })
       setIsPaymentDialogOpen(false)
+      setPaymentData({...paymentData, amount: "", seatAmount: "", foodAmount: "", addAdvanceAmount: "0", description: ""})
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } finally { setIsUpdating(false) }
   }
 
@@ -420,9 +436,9 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                           <span className={exitSettlement.mode === 'refund' ? 'text-success' : 'text-destructive'}>₹{Math.abs(exitSettlement.finalBalance).toLocaleString()}</span>
                         </div>
                       </div>
-                      <div className="p-3 bg-primary/5 rounded border border-primary/20 text-[10px] text-muted-foreground italic">
+                      <p className="p-3 bg-primary/5 rounded border border-primary/20 text-[10px] text-muted-foreground italic">
                         * Confirming will vacate the seat, adjust advance against dues, and mark the resident as inactive.
-                      </div>
+                      </p>
                     </div>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -505,7 +521,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                         <Info size={12} className="text-destructive cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p className="text-[10px]">Rent Due = (Initial Debt: ₹{student.dueAmount || 0}) + (Rent for {financialStats.monthsElapsed} months elapsed: ₹{financialStats.monthsElapsed * (student.monthlyRent || 0)}) - (Total Rent Paid)</p>
+                        <p className="text-[10px]">Rent Due = (Initial Debt: ₹{student.dueAmount || 0}) + (Rent for {financialStats.monthsElapsed} months: ₹{financialStats.monthsElapsed * (student.monthlyRent || 0)}) - (Paid)</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -529,7 +545,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                           <Info size={12} className={cn("cursor-help", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")} />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p className="text-[10px]">Food Balance = (Total Food Paid) - (Initial Food Debt: ₹{student.foodDueAmount || 0}) - (Total Meal Cost from Logs)</p>
+                          <p className="text-[10px]">Food Balance = (Paid) - (Initial Food Debt: ₹{student.foodDueAmount || 0}) - (Logs Cost)</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -663,9 +679,60 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           </div>
           <div className="space-y-4 py-2">
             <div className="flex items-center justify-between p-3 border rounded-lg bg-primary/5"><div className="space-y-0.5"><Label className="text-sm font-bold flex items-center gap-2 cursor-pointer" htmlFor="advSwitch"><ArrowDownToLine size={14} className="text-primary" />Deduct from Advance</Label></div><Switch id="advSwitch" checked={useAdvanceBalance} onCheckedChange={setUseAdvanceBalance} disabled={availableAdvanceForDeduction <= 0} /></div>
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>For Month</Label><Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>{!useAdvanceBalance && <div className="space-y-2"><Label>Method</Label><Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>}</div>
-            {student.paymentSystem === 'package' ? <div className="space-y-2"><Label>Total Payment (₹)</Label><Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} /></div> : <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border"><div className="space-y-2"><Label className="text-xs">Seat Rent</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} /></div><div className="space-y-2"><Label className="text-xs">Food Credit</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} /></div></div>}
-            {!useAdvanceBalance && <div className="space-y-2"><div className="flex justify-between items-center"><Label>Receiver</Label><Button variant="link" size="sm" onClick={() => setIsAddStaffOpen(true)} className="h-auto p-0 text-xs">Add New</Button></div><Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>}
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>For Month</Label>
+                <Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              {!useAdvanceBalance && (
+                <div className="space-y-2">
+                  <Label>Method</Label>
+                  <Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bkash">Bkash</SelectItem>
+                      <SelectItem value="nagad">Nagad</SelectItem>
+                      <SelectItem value="bank">Bank</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {student.paymentSystem === 'package' ? (
+              <div className="space-y-2">
+                <Label>Monthly Package Payment (₹)</Label>
+                <Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border">
+                <div className="space-y-2"><Label className="text-xs">Seat Rent Paid</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder="0.00" /></div>
+                <div className="space-y-2"><Label className="text-xs">Food Credit Paid</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} placeholder="0.00" /></div>
+              </div>
+            )}
+
+            {!useAdvanceBalance && (
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-2">
+                <Label className="text-xs font-bold text-primary flex items-center gap-1"><Plus size={12}/> Add to Advance Pool (₹)</Label>
+                <Input type="number" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} placeholder="Extra amount to save" />
+                <p className="text-[9px] text-muted-foreground">* This money will be added to student's advance and your net balance.</p>
+              </div>
+            )}
+
+            {!useAdvanceBalance && (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center"><Label>Receiver</Label><Button variant="link" size="sm" onClick={() => setIsAddStaffOpen(true)} className="h-auto p-0 text-xs">Add New</Button></div>
+                <Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}>
+                  <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
+                  <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
             <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Notes..." />
           </div>
           <DialogFooter className="sticky bottom-0 bg-background pt-2 border-t"><Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg" disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Transaction"}</Button></DialogFooter>

@@ -119,8 +119,9 @@ export default function StudentsPage() {
       return
     }
 
-    const hasInitialPayment = Number(formData.initialRentPayment) > 0 || Number(formData.initialFoodPayment) > 0
-    if (hasInitialPayment && !formData.receiver) {
+    const totalInitialReceived = Number(formData.initialRentPayment) + Number(formData.initialFoodPayment) + Number(formData.advanceAmount) + Number(formData.serviceCharge)
+    
+    if (totalInitialReceived > 0 && !formData.receiver) {
       toast({ variant: "destructive", title: "Missing Info", description: "Please select a receiver for the initial payment." })
       return
     }
@@ -130,17 +131,17 @@ export default function StudentsPage() {
       const studentId = doc(collection(db, "students")).id
       const studentRef = doc(db, "students", studentId)
       const monthlyRent = Number(formData.monthlyRent)
-      const initialRentPayment = Number(formData.initialRentPayment)
-      const initialFoodPayment = Number(formData.initialFoodPayment)
       const apartmentName = selectedRoom?.aptName || "General"
 
       const startingRentDue = formData.type === 'old' ? Number(formData.dueAmount) : monthlyRent
       const startingFoodDue = formData.type === 'old' ? Number(formData.foodDueAmount) : 0
 
-      const paymentRecord = hasInitialPayment ? {
-        amount: initialRentPayment + initialFoodPayment,
-        seatAmount: initialRentPayment,
-        foodAmount: initialFoodPayment,
+      const paymentRecord = totalInitialReceived > 0 ? {
+        amount: totalInitialReceived,
+        seatAmount: Number(formData.initialRentPayment),
+        foodAmount: Number(formData.initialFoodPayment),
+        advanceAmount: Number(formData.advanceAmount),
+        serviceCharge: Number(formData.serviceCharge),
         buildingId: formData.buildingId,
         buildingName: selectedBuilding?.name || "Unknown",
         studentName: formData.name,
@@ -150,7 +151,7 @@ export default function StudentsPage() {
         year: new Date().getFullYear().toString(),
         method: formData.method,
         receiver: formData.receiver,
-        description: "Initial payment at registration",
+        description: "Initial payment at registration (Rent/Food + Advance + Service)",
         date: new Date().toISOString()
       } : null
 
@@ -169,6 +170,7 @@ export default function StudentsPage() {
         foodDueAmount: startingFoodDue,
         advanceAmount: Number(formData.advanceAmount),
         serviceCharge: Number(formData.serviceCharge),
+        monthlyRent: Number(formData.monthlyRent),
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
         paymentsHistory: paymentRecord ? [paymentRecord] : [],
