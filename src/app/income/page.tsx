@@ -49,6 +49,7 @@ export default function IncomeHistoryPage() {
     amount: "",
     seatAmount: "",
     foodAmount: "",
+    addAdvanceAmount: "0",
     method: "cash",
     receiver: "",
     description: ""
@@ -129,7 +130,10 @@ export default function IncomeHistoryPage() {
 
     const seatPaid = selectedStudent?.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
     const foodPaid = selectedStudent?.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
-    const totalAmount = seatPaid + foodPaid
+    const addAdvance = Number(formData.addAdvanceAmount)
+    const totalAmount = seatPaid + foodPaid + addAdvance
+
+    if (totalAmount <= 0) return
 
     setIsSubmitting(true)
     const paymentId = doc(collection(db, "payments")).id
@@ -137,12 +141,14 @@ export default function IncomeHistoryPage() {
     let detailsArr = []
     if (seatPaid > 0) detailsArr.push(`Rent: ৳${seatPaid}`)
     if (foodPaid > 0) detailsArr.push(`Food: ৳${foodPaid}`)
+    if (addAdvance > 0) detailsArr.push(`Advance: ৳${addAdvance}`)
     const breakdown = detailsArr.join(', ')
 
     const paymentRecord = {
       amount: totalAmount,
       seatAmount: seatPaid,
       foodAmount: foodPaid,
+      advanceAmount: addAdvance,
       buildingId: selectedBuildingId,
       buildingName: selectedBuildingForForm?.name || "Unknown",
       studentName: selectedStudent?.name || "Unknown",
@@ -161,13 +167,14 @@ export default function IncomeHistoryPage() {
 
       await updateDoc(doc(db, "students", formData.studentId), {
         paymentsHistory: arrayUnion(paymentRecord),
+        advanceAmount: increment(addAdvance),
         ...(selectedStudent?.paymentSystem === 'non-package' && foodPaid > 0 && { foodCost: increment(foodPaid) }),
         updatedAt: serverTimestamp()
       })
 
       toast({ title: "Success", description: `Processed ৳${totalAmount} for Room ${selectedRoomNumber}.` })
       setIsEntryOpen(false)
-      setFormData({ ...formData, studentId: "", amount: "", seatAmount: "", foodAmount: "", description: "" })
+      setFormData({ ...formData, studentId: "", amount: "", seatAmount: "", foodAmount: "", addAdvanceAmount: "0", description: "" })
       setSelectedBuildingId(""); setSelectedRoomNumber("")
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -319,8 +326,16 @@ export default function IncomeHistoryPage() {
                     {p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A')}
                   </TableCell>
                   <TableCell className="font-medium">{p.studentName}</TableCell>
-                  <TableCell className="text-[10px] text-muted-foreground max-w-[200px] truncate" title={p.description}>
-                    {p.description || "-"}
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1 max-w-[250px]">
+                      {p.seatAmount > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1">Rent: ৳{p.seatAmount}</Badge>}
+                      {p.foodAmount > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1">Food: ৳{p.foodAmount}</Badge>}
+                      {p.advanceAmount > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1 border-primary text-primary">Adv: ৳{p.advanceAmount}</Badge>}
+                      {p.serviceCharge > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1 border-orange-500 text-orange-500">Svc: ৳{p.serviceCharge}</Badge>}
+                      {!p.seatAmount && !p.foodAmount && !p.advanceAmount && !p.serviceCharge && (
+                        <span className="text-[10px] text-muted-foreground truncate" title={p.description}>{p.description || "-"}</span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
                   <TableCell className="text-xs">{p.receiver}</TableCell>
@@ -424,15 +439,20 @@ export default function IncomeHistoryPage() {
              <div className="grid grid-cols-2 gap-4">
                {selectedStudent?.paymentSystem === 'package' ? (
                  <div className="col-span-2 space-y-2">
-                   <Label>Amount</Label>
+                   <Label>Rent/Package Amount (৳)</Label>
                    <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
                  </div>
                ) : (
                  <>
-                   <div className="space-y-2"><Label>Seat Rent</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} /></div>
-                   <div className="space-y-2"><Label>Food Credit</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} /></div>
+                   <div className="space-y-2"><Label>Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} /></div>
+                   <div className="space-y-2"><Label>Food Credit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} /></div>
                  </>
                )}
+             </div>
+
+             <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-2">
+                <Label className="text-xs font-bold text-primary flex items-center gap-1"><Plus size={12}/> Add to Advance Pool (৳)</Label>
+                <Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} placeholder="Extra amount to save" />
              </div>
 
              <div className="grid grid-cols-2 gap-4">

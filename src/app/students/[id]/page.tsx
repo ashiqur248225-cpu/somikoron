@@ -592,7 +592,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                     <TableHead>Date</TableHead>
                     <TableHead>Period</TableHead>
                     <TableHead>Method</TableHead>
-                    <TableHead>Details</TableHead>
+                    <TableHead>Breakdown / Purpose</TableHead>
                     <TableHead>Receiver</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
@@ -607,8 +607,16 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                           {p.method?.replace(/_/g, ' ')}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-[10px] text-muted-foreground max-w-[200px] truncate" title={p.description}>
-                        {p.description || "-"}
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1 max-w-[250px]">
+                          {p.seatAmount > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1">Rent: ৳{p.seatAmount}</Badge>}
+                          {p.foodAmount > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1">Food: ৳{p.foodAmount}</Badge>}
+                          {p.advanceAmount > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1 border-primary text-primary">Adv: ৳{p.advanceAmount}</Badge>}
+                          {p.serviceCharge > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1 border-orange-500 text-orange-500">Svc: ৳{p.serviceCharge}</Badge>}
+                          {!p.seatAmount && !p.foodAmount && !p.advanceAmount && !p.serviceCharge && (
+                            <span className="text-[10px] text-muted-foreground truncate" title={p.description}>{p.description || "-"}</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs">{p.receiver}</TableCell>
                       <TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell>
@@ -731,8 +739,8 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border">
-                <div className="space-y-2"><Label className="text-xs">Seat Rent Paid</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder="0.00" /></div>
-                <div className="space-y-2"><Label className="text-xs">Food Credit Paid</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} placeholder="0.00" /></div>
+                <div className="space-y-2"><Label className="text-xs">Seat Rent Paid (৳)</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder="0.00" /></div>
+                <div className="space-y-2"><Label className="text-xs">Food Credit Paid (৳)</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} placeholder="0.00" /></div>
               </div>
             )}
 

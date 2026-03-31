@@ -99,6 +99,7 @@ export default function DashboardPage() {
     amount: "",
     seatAmount: "",
     foodAmount: "",
+    addAdvanceAmount: "0",
     method: "cash",
     receiver: "",
     description: ""
@@ -195,18 +196,26 @@ export default function DashboardPage() {
 
     const seatPaid = selectedStudent?.paymentSystem === 'package' ? Number(paymentForm.amount) : Number(paymentForm.seatAmount)
     const foodPaid = selectedStudent?.paymentSystem === 'non-package' ? Number(paymentForm.foodAmount) : 0
-    const totalAmount = seatPaid + foodPaid
+    const addAdvance = Number(paymentForm.addAdvanceAmount)
+    const totalCashAmount = seatPaid + foodPaid + addAdvance
 
-    if (totalAmount <= 0) return
+    if (totalCashAmount <= 0 && !useAdvanceBalance) return
 
     setIsSubmitting(true)
     const building = buildings?.find(b => b.id === selectedBuildingId)
     const paymentId = doc(collection(db, "payments")).id
 
+    let detailsArr = []
+    if (seatPaid > 0) detailsArr.push(`Rent: ৳${seatPaid}`)
+    if (foodPaid > 0) detailsArr.push(`Food: ৳${foodPaid}`)
+    if (addAdvance > 0) detailsArr.push(`Advance: ৳${addAdvance}`)
+    const breakdown = detailsArr.join(', ')
+
     const paymentRecord = {
-      amount: totalAmount,
+      amount: totalCashAmount,
       seatAmount: seatPaid,
       foodAmount: foodPaid,
+      advanceAmount: addAdvance,
       buildingId: selectedBuildingId,
       buildingName: building?.name || "Unknown",
       studentName: selectedStudent?.name || "Unknown",
@@ -216,7 +225,7 @@ export default function DashboardPage() {
       year: paymentForm.year,
       method: useAdvanceBalance ? "advance_deduction" : paymentForm.method,
       receiver: useAdvanceBalance ? "System (Advance Deduction)" : paymentForm.receiver,
-      description: (useAdvanceBalance ? "[Deducted from Advance] " : "") + paymentForm.description,
+      description: `${breakdown}. ${paymentForm.description}`,
       date: new Date().toISOString()
     }
 
@@ -231,14 +240,14 @@ export default function DashboardPage() {
 
       await updateDoc(doc(db, "students", paymentForm.studentId), {
         paymentsHistory: arrayUnion(paymentRecord),
-        ...(useAdvanceBalance && { advanceAmount: increment(-totalAmount) }),
+        advanceAmount: increment((useAdvanceBalance ? -(seatPaid + foodPaid) : addAdvance)),
         ...(selectedStudent?.paymentSystem === 'non-package' && foodPaid > 0 && { foodCost: increment(foodPaid) }),
         updatedAt: Timestamp.now()
       })
 
-      toast({ title: "Success", description: `Processed ৳${totalAmount}.` })
+      toast({ title: "Success", description: `Processed ৳${totalCashAmount}.` })
       setIsPaymentOpen(false)
-      setPaymentForm({ ...paymentForm, amount: "", seatAmount: "", foodAmount: "", description: "" })
+      setPaymentForm({ ...paymentForm, amount: "", seatAmount: "", foodAmount: "", addAdvanceAmount: "0", description: "" })
       setSelectedBuildingId("")
       setSelectedRoomNumber("")
       setUseAdvanceBalance(false)
@@ -537,7 +546,7 @@ export default function DashboardPage() {
 
               {selectedStudent?.paymentSystem === 'package' ? (
                 <div className="space-y-2">
-                  <Label>Amount (৳)</Label>
+                  <Label>Rent/Package Amount (৳)</Label>
                   <Input type="number" placeholder="0.00" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} />
                 </div>
               ) : (
@@ -550,6 +559,13 @@ export default function DashboardPage() {
                     <Label className="text-[10px] font-bold text-muted-foreground">FOOD CREDIT (৳)</Label>
                     <Input type="number" placeholder="Food" value={paymentForm.foodAmount} onChange={e => setPaymentForm({...paymentForm, foodAmount: e.target.value})} />
                   </div>
+                </div>
+              )}
+
+              {!useAdvanceBalance && (
+                <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-2">
+                  <Label className="text-xs font-bold text-primary flex items-center gap-1"><Plus size={12}/> Add to Advance Pool (৳)</Label>
+                  <Input type="number" value={paymentForm.addAdvanceAmount} onChange={e => setPaymentForm({...paymentForm, addAdvanceAmount: e.target.value})} placeholder="Extra amount to save" />
                 </div>
               )}
 
