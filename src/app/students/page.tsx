@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
@@ -90,6 +90,13 @@ export default function StudentsPage() {
     method: "cash"
   })
 
+  // When monthly rent or type changes, update the default due amount
+  useEffect(() => {
+    if (formData.type === 'new') {
+      setFormData(prev => ({ ...prev, dueAmount: prev.monthlyRent || "0" }))
+    }
+  }, [formData.monthlyRent, formData.type])
+
   const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
   
   const allRoomsInSelectedBuilding = useMemo(() => {
@@ -154,8 +161,9 @@ export default function StudentsPage() {
       const monthlyRent = Number(formData.monthlyRent)
       const apartmentName = selectedRoom?.aptName || "General"
 
-      const startingRentDue = formData.type === 'old' ? Number(formData.dueAmount) : monthlyRent
-      const startingFoodDue = formData.type === 'old' ? Number(formData.foodDueAmount) : 0
+      // Use what's in the box, converted to number
+      const startingRentDue = Number(formData.dueAmount) || 0
+      const startingFoodDue = Number(formData.foodDueAmount) || 0
 
       let detailsArr = []
       if (rentPaid > 0) detailsArr.push(`Rent: ৳${rentPaid}`)
@@ -280,7 +288,7 @@ export default function StudentsPage() {
             <div className="space-y-6 py-4">
               
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
-                <Label className="font-bold">Billing & Food Plan</Label>
+                <Label className="font-bold text-primary">Billing & Food Plan</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div className="space-y-2">
                      <Label>Payment System</Label>
@@ -300,38 +308,41 @@ export default function StudentsPage() {
               </div>
 
               <div className="p-4 bg-secondary/20 rounded-lg border space-y-4">
-                <div className="space-y-2">
-                  <Label className="font-bold">Student Type</Label>
-                  <RadioGroup 
-                    value={formData.type} 
-                    onValueChange={val => setFormData({...formData, type: val})}
-                    className="flex gap-6 pt-2"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="new" id="new-std" />
-                      <Label htmlFor="new-std" className="cursor-pointer">New Student</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="old" id="old-std" />
-                      <Label htmlFor="old-std" className="cursor-pointer">Old Student (Existing Data)</Label>
-                    </div>
-                  </RadioGroup>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-2">
+                    <Label className="font-bold">Student Type</Label>
+                    <RadioGroup 
+                      value={formData.type} 
+                      onValueChange={val => setFormData({...formData, type: val})}
+                      className="flex gap-6 pt-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="new" id="new-std" />
+                        <Label htmlFor="new-std" className="cursor-pointer">New Student</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="old" id="old-std" />
+                        <Label htmlFor="old-std" className="cursor-pointer">Old Student (Existing Data)</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
                 </div>
 
-                {formData.type === 'old' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-                    <div className="space-y-2">
-                      <Label className="font-bold text-destructive">Previous RENT Due (৳)</Label>
-                      <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
-                    </div>
-                    {formData.paymentSystem === 'non-package' && (
-                      <div className="space-y-2">
-                        <Label className="font-bold text-destructive">Previous FOOD Due (৳)</Label>
-                        <Input type="number" value={formData.foodDueAmount} onChange={e => setFormData({...formData, foodDueAmount: e.target.value})} placeholder="0.00" />
-                      </div>
-                    )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                  <div className="space-y-2">
+                    <Label className="font-bold text-destructive">Initial/Previous RENT Due (৳)</Label>
+                    <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
+                    <p className="text-[10px] text-muted-foreground italic">
+                      * New student: Default is one month's rent. Old student: Total debt at entry.
+                    </p>
                   </div>
-                )}
+                  {formData.paymentSystem === 'non-package' && (
+                    <div className="space-y-2">
+                      <Label className="font-bold text-destructive">Previous FOOD Due (৳)</Label>
+                      <Input type="number" value={formData.foodDueAmount} onChange={e => setFormData({...formData, foodDueAmount: e.target.value})} placeholder="0.00" />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -381,7 +392,7 @@ export default function StudentsPage() {
               </div>
 
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
-                <Label className="font-bold">Initial Payments & Fees</Label>
+                <Label className="font-bold text-success">Initial Payments & Fees</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Initial Rent Payment (৳)</Label>
@@ -430,7 +441,7 @@ export default function StudentsPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleRegister} className="w-full h-12 text-lg" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : "Register & Occupy Seat"}</Button>
+              <Button onClick={handleRegister} className="w-full h-12 text-lg font-bold" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : "Register & Occupy Seat"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

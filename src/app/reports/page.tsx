@@ -76,7 +76,7 @@ export default function ReportsPage() {
     const totalIncome = filteredData.income.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     const totalExpense = filteredData.expense.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     
-    // Current Dues calculation for filtered building
+    // Current Dues calculation for filtered building (consistent logic)
     const totalDues = (students || []).filter(s => s.isActive && (buildingFilter === 'all' || s.buildingId === buildingFilter)).reduce((acc, student) => {
       const regDate = student.createdAt?.toDate?.() || new Date()
       const now = new Date()
@@ -84,14 +84,26 @@ export default function ReportsPage() {
       
       const historicalRentDue = Number(student.dueAmount) || 0
       const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
-      const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
-        return acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0)
+      
+      const totalRentPaid = student.paymentsHistory?.reduce((pAcc: number, curr: any) => {
+        const rentPortion = (curr.seatAmount !== undefined) 
+          ? Number(curr.seatAmount) 
+          : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
+        return pAcc + rentPortion
       }, 0) || 0
+      
       const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
       const historicalFoodDue = Number(student.foodDueAmount) || 0
-      const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-      const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+      const generatedFoodCost = student.mealsHistory?.reduce((fAcc: number, curr: any) => fAcc + (curr.totalCost || 0), 0) || 0
+      
+      const totalFoodPaid = student.paymentsHistory?.reduce((fAcc: number, curr: any) => {
+        const foodPortion = (curr.foodAmount !== undefined) 
+          ? Number(curr.foodAmount) 
+          : (student.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
+        return fAcc + foodPortion
+      }, 0) || 0
+      
       const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
       const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
 
@@ -129,7 +141,6 @@ export default function ReportsPage() {
   const handleExportCSV = () => {
     const headers = ["Type", "Date", "Receiver/Expenser", "Category", "Payment Method", "Location (Bldg/Unit/Room)", "Amount"]
     
-    // Formatting rows for CSV
     const incomeRows = filteredData.income.map(p => [
       "INCOME",
       p.date?.toDate ? p.date.toDate().toLocaleDateString() : new Date(p.date).toLocaleDateString(),
@@ -150,25 +161,21 @@ export default function ReportsPage() {
       e.amount
     ])
 
-    // Building the CSV content with sections and totals
     let csvContent = "data:text/csv;charset=utf-8," 
     csvContent += "SOMIKORON FINANCIAL REPORT\n"
     csvContent += `Period: ${startDate} to ${endDate}\n`
     csvContent += `Building Filter: ${buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}\n\n`
 
-    // Income Section
     csvContent += "SECTION: INCOME RECORDS\n"
     csvContent += headers.join(",") + "\n"
     incomeRows.forEach(row => { csvContent += row.join(",") + "\n" })
     csvContent += `,,,,,SUBTOTAL INCOME,${stats.totalIncome}\n\n`
 
-    // Expense Section
     csvContent += "SECTION: EXPENSE RECORDS\n"
     csvContent += headers.join(",") + "\n"
     expenseRows.forEach(row => { csvContent += row.join(",") + "\n" })
     csvContent += `,,,,,SUBTOTAL EXPENSE,${stats.totalExpense}\n\n`
 
-    // Summary Section
     csvContent += "FINAL SUMMARY\n"
     csvContent += `Total Income,,,,,,${stats.totalIncome}\n`
     csvContent += `Total Expense,,,,,,${stats.totalExpense}\n`
@@ -219,7 +226,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Filter Section */}
       <Card className="border-none shadow-sm bg-secondary/20 print:hidden">
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
@@ -248,7 +254,6 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
 
-      {/* Stats Grid */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
         <Card className="border-none shadow-sm bg-income/5 border-l-4 border-l-income">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -303,7 +308,6 @@ export default function ReportsPage() {
         </Card>
       </div>
 
-      {/* Main Charts - Hidden on Print */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
         <Card className="lg:col-span-2 border-none shadow-sm">
           <CardHeader>
@@ -370,7 +374,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Visible summary for Print only */}
       <div className="hidden print:block print-only space-y-8 mt-8">
         <h2 className="text-2xl font-bold text-center">Somikoron Financial Performance Report</h2>
         <div className="grid grid-cols-2 gap-8 text-sm">

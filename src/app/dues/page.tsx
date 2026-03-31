@@ -53,14 +53,26 @@ export default function DuesPage() {
       
       const historicalRentDue = Number(student.dueAmount) || 0
       const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
+      
       const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
-        return acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0)
+        const rentPortion = (curr.seatAmount !== undefined) 
+          ? Number(curr.seatAmount) 
+          : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
+        return acc + rentPortion
       }, 0) || 0
+      
       const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
       const historicalFoodDue = Number(student.foodDueAmount) || 0
       const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-      const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+      
+      const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+        const foodPortion = (curr.foodAmount !== undefined) 
+          ? Number(curr.foodAmount) 
+          : (student.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
+        return acc + foodPortion
+      }, 0) || 0
+      
       const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
       const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
 
@@ -70,7 +82,10 @@ export default function DuesPage() {
         rentDue,
         foodDue,
         foodBalance,
-        monthsElapsed
+        monthsElapsed,
+        historicalRentDue,
+        generatedRent,
+        totalRentPaid
       }
     }).filter(s => s.totalDue > 0)
   }, [students])
@@ -236,8 +251,14 @@ export default function DuesPage() {
                           <TooltipTrigger asChild>
                             <Info size={10} className="text-muted-foreground cursor-help" />
                           </TooltipTrigger>
-                          <TooltipContent className="text-[10px]">
-                            Historical: ৳{s.dueAmount || 0} + Generated: ৳{s.monthsElapsed * (s.monthlyRent || 0)}
+                          <TooltipContent className="text-[10px] p-3">
+                            <div className="space-y-1">
+                              <p className="flex justify-between gap-4"><span>Initial Starting Debt:</span> <span>৳{s.historicalRentDue}</span></p>
+                              <p className="flex justify-between gap-4"><span>Months Elapsed ({s.monthsElapsed}):</span> <span>+৳{s.generatedRent}</span></p>
+                              <p className="flex justify-between gap-4 text-success font-medium"><span>Rent Paid So Far:</span> <span>-৳{s.totalRentPaid}</span></p>
+                              <Separator className="my-1" />
+                              <p className="font-bold flex justify-between gap-4"><span>Total Due:</span> <span>৳{s.rentDue}</span></p>
+                            </div>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

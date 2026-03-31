@@ -149,14 +149,27 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     
     const historicalRentDue = Number(student.dueAmount) || 0
     const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
+    
+    // Standardized logic: subtract seatAmount if it exists, fallback to total amount for package students
     const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
-      return acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0)
+      const rentPortion = (curr.seatAmount !== undefined) 
+        ? Number(curr.seatAmount) 
+        : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
+      return acc + rentPortion
     }, 0) || 0
+    
     const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
     const historicalFoodDue = Number(student.foodDueAmount) || 0
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-    const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+    
+    const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const foodPortion = (curr.foodAmount !== undefined) 
+        ? Number(curr.foodAmount) 
+        : (student.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
+      return acc + foodPortion
+    }, 0) || 0
+    
     const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
 
     return { rentDue, foodBalance, monthsElapsed }
@@ -536,8 +549,15 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                       <TooltipTrigger asChild>
                         <Info size={12} className="text-destructive cursor-help" />
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p className="text-[10px]">Rent Due = (Initial Debt: ৳{student.dueAmount || 0}) + (Rent for {financialStats.monthsElapsed} months: ৳{financialStats.monthsElapsed * (student.monthlyRent || 0)}) - (Paid)</p>
+                      <TooltipContent className="max-w-xs p-3">
+                        <div className="space-y-1.5">
+                          <p className="font-bold border-b pb-1 text-[11px]">Rent Calculation Breakdown:</p>
+                          <p className="text-[10px] flex justify-between"><span>Initial Starting Debt:</span> <span>৳{student.dueAmount || 0}</span></p>
+                          <p className="text-[10px] flex justify-between"><span>Months Elapsed ({financialStats.monthsElapsed}):</span> <span>+৳{financialStats.monthsElapsed * (student.monthlyRent || 0)}</span></p>
+                          <p className="text-[10px] flex justify-between text-success"><span>Rent Paid So Far:</span> <span>-৳{financialStats.rentDue + (student.dueAmount || 0) + (financialStats.monthsElapsed * (student.monthlyRent || 0)) === 0 ? 0 : (student.dueAmount || 0) + (financialStats.monthsElapsed * (student.monthlyRent || 0)) - financialStats.rentDue}</span></p>
+                          <Separator className="my-1" />
+                          <p className="text-[10px] font-bold flex justify-between"><span>Total Rent Due:</span> <span>৳{financialStats.rentDue.toLocaleString()}</span></p>
+                        </div>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -560,8 +580,15 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                         <TooltipTrigger asChild>
                           <Info size={12} className={cn("cursor-help", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")} />
                         </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          <p className="text-[10px]">Food Balance = (Paid) - (Initial Food Debt: ৳{student.foodDueAmount || 0}) - (Logs Cost)</p>
+                        <TooltipContent className="max-w-xs p-3">
+                          <div className="space-y-1.5">
+                            <p className="font-bold border-b pb-1 text-[11px]">Food Calculation Breakdown:</p>
+                            <p className="text-[10px] flex justify-between"><span>Starting Debt:</span> <span>-৳{student.foodDueAmount || 0}</span></p>
+                            <p className="text-[10px] flex justify-between"><span>Monthly Meal Cost:</span> <span>-৳{student.mealsHistory?.reduce((a: any, c: any) => a + (c.totalCost || 0), 0)}</span></p>
+                            <p className="text-[10px] flex justify-between text-success"><span>Food Credit Paid:</span> <span>+৳{student.paymentsHistory?.reduce((a: any, c: any) => a + (c.foodAmount || 0), 0)}</span></p>
+                            <Separator className="my-1" />
+                            <p className="text-[10px] font-bold flex justify-between"><span>Net Balance:</span> <span>৳{financialStats.foodBalance.toLocaleString()}</span></p>
+                          </div>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -649,7 +676,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                 )}
               </div>
               <div className="bg-primary/5 p-4 rounded-lg border border-primary/20 text-xs">
-                <p><strong>Note:</strong> বকেয়া হিসেব করার সময় ভর্তির তারিখ থেকে শুরু হওয়া প্রতিটি মাসের ভাড়া (Monthly Rent) ঐতিহাসিক বকেয়ার (Historical Due) সাথে যোগ করা হয়।</p>
+                <p><strong>Note:</strong> বকেয়া হিসেব করার সময় ভর্তির তারিখ থেকে শুরু হওয়া প্রতিটি মাসের ভাড়া (Monthly Rent) ঐতিহাসিক বকেয়ার (Historical Due) সাথে যোগ করা হয় এবং শুধুমাত্র 'ভাড়া' বাবদ দেওয়া টাকাগুলো বিয়োগ করা হয়।</p>
               </div>
             </CardContent>
           </Card>
