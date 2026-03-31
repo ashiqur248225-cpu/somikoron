@@ -86,7 +86,8 @@ export default function StudentsPage() {
     paymentSystem: "package",
     monthlyRent: "",
     foodCost: "0",
-    receiver: ""
+    receiver: "",
+    method: "cash"
   })
 
   const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
@@ -147,7 +148,7 @@ export default function StudentsPage() {
         type: "income",
         month: new Date().toLocaleString('default', { month: 'long' }),
         year: new Date().getFullYear().toString(),
-        method: "cash",
+        method: formData.method,
         receiver: formData.receiver,
         description: "Initial payment at registration",
         date: new Date().toISOString()
@@ -210,7 +211,7 @@ export default function StudentsPage() {
       setFormData({
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
         type: "new", dueAmount: "0", foodDueAmount: "0", initialRentPayment: "0", initialFoodPayment: "0", advanceAmount: "0", serviceCharge: "0",
-        paymentSystem: "package", monthlyRent: "", foodCost: "0", receiver: ""
+        paymentSystem: "package", monthlyRent: "", foodCost: "0", receiver: "", method: "cash"
       })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -373,14 +374,28 @@ export default function StudentsPage() {
                     <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} placeholder="0.00" />
                   </div>
                 </div>
-                <div className="space-y-2 border-t pt-4">
-                  <Label>Payment Receiver</Label>
-                  <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
-                    <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
-                    <SelectContent>
-                      {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                  <div className="space-y-2">
+                    <Label>Payment Method</Label>
+                    <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="bkash">Bkash</SelectItem>
+                        <SelectItem value="nagad">Nagad</SelectItem>
+                        <SelectItem value="bank">Bank</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Payment Receiver</Label>
+                    <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
+                      <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                      <SelectContent>
+                        {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
             </div>
