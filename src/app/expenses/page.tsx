@@ -56,7 +56,7 @@ export default function ExpenseHistoryPage() {
     roomNumber: "",
     amount: "",
     method: "cash",
-    expensePartyName: "", // Ke expense korece/Party name
+    expensePartyName: "", // Ke expense korece - Now from staff
     receiver: "", // Staff who handled/received
     description: "",
     expenseDate: new Date().toISOString().split('T')[0],
@@ -77,9 +77,8 @@ export default function ExpenseHistoryPage() {
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validation logic based on category
     if (!formData.amount || !formData.expensePartyName) {
-      toast({ variant: "destructive", title: "Error", description: "Amount and Expenser Name are required." })
+      toast({ variant: "destructive", title: "Error", description: "Amount and Expenser (Staff) are required." })
       return
     }
 
@@ -248,10 +247,15 @@ export default function ExpenseHistoryPage() {
               </div>
             )}
 
-            {/* Expenser Name - Ke expense korece */}
+            {/* Expenser Name - Ke expense korece - FETCHED FROM STAFF */}
             <div className="space-y-2">
-              <Label className="flex items-center gap-1.5 font-bold"><UserCheck size={14} className="text-primary"/> Expenser / Party Name</Label>
-              <Input placeholder="Name of person or vendor" value={formData.expensePartyName} onChange={e => setFormData({...formData, expensePartyName: e.target.value})} />
+              <Label className="flex items-center gap-1.5 font-bold"><UserCheck size={14} className="text-primary"/> Expenser (Staff Name)</Label>
+              <Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}>
+                <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                <SelectContent>
+                  {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Conditional Receiver (Staff) Selection */}
