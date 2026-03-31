@@ -3,23 +3,21 @@
 
 import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Badge } from "@/components/ui/badge"
 import { 
   BarChart3, 
-  Download, 
   Calendar, 
   ArrowRight, 
   Loader2, 
   TrendingUp, 
   TrendingDown, 
   Wallet, 
-  Receipt,
-  Filter,
   FileSpreadsheet,
   Printer,
   XCircle,
-  Building2
+  Building2,
+  Info
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -101,20 +99,57 @@ export default function ReportsPage() {
 
   // CSV Export Logic
   const handleExportCSV = () => {
-    const headers = ["Type", "Date", "Entity", "Category", "Building", "Amount"]
-    const rows = [
-      ...filteredData.income.map(p => ["Income", p.date?.toDate ? p.date.toDate().toLocaleDateString() : new Date(p.date).toLocaleDateString(), p.studentName, "Rent/Food", p.buildingName, p.amount]),
-      ...filteredData.expense.map(e => ["Expense", new Date(e.expenseDate).toLocaleDateString(), e.expensePartyName, e.category, e.buildingName, e.amount])
-    ]
+    const headers = ["Type", "Date", "Receiver/Expenser", "Category", "Payment Method", "Location (Bldg/Unit/Room)", "Amount"]
+    
+    // Formatting rows for CSV
+    const incomeRows = filteredData.income.map(p => [
+      "INCOME",
+      p.date?.toDate ? p.date.toDate().toLocaleDateString() : new Date(p.date).toLocaleDateString(),
+      p.receiver || "N/A",
+      "Rent/Food Collection",
+      p.method || "N/A",
+      p.buildingName || "N/A",
+      p.amount
+    ])
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + headers.join(",") + "\n"
-      + rows.map(e => e.join(",")).join("\n")
+    const expenseRows = filteredData.expense.map(e => [
+      "EXPENSE",
+      new Date(e.expenseDate).toLocaleDateString(),
+      e.expensePartyName || "N/A",
+      e.category || "N/A",
+      e.method || "N/A",
+      `${e.buildingName || 'General'}${e.apartmentName && e.apartmentName !== 'none' ? ' / ' + e.apartmentName : ''}${e.roomNumber ? ' / Room ' + e.roomNumber : ''}`,
+      e.amount
+    ])
+
+    // Building the CSV content with sections and totals
+    let csvContent = "data:text/csv;charset=utf-8," 
+    csvContent += "SOMIKORON FINANCIAL REPORT\n"
+    csvContent += `Period: ${startDate} to ${endDate}\n`
+    csvContent += `Building Filter: ${buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}\n\n`
+
+    // Income Section
+    csvContent += "SECTION: INCOME RECORDS\n"
+    csvContent += headers.join(",") + "\n"
+    incomeRows.forEach(row => { csvContent += row.join(",") + "\n" })
+    csvContent += `,,,,,SUBTOTAL INCOME,${stats.totalIncome}\n\n`
+
+    // Expense Section
+    csvContent += "SECTION: EXPENSE RECORDS\n"
+    csvContent += headers.join(",") + "\n"
+    expenseRows.forEach(row => { csvContent += row.join(",") + "\n" })
+    csvContent += `,,,,,SUBTOTAL EXPENSE,${stats.totalExpense}\n\n`
+
+    // Summary Section
+    csvContent += "FINAL SUMMARY\n"
+    csvContent += `Total Income,,,,,,${stats.totalIncome}\n`
+    csvContent += `Total Expense,,,,,,${stats.totalExpense}\n`
+    csvContent += `Net Profit/Loss,,,,,,${stats.netProfit}\n`
 
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
-    link.setAttribute("download", `Somikoron_Report_${startDate}_to_${endDate}.csv`)
+    link.setAttribute("download", `Somikoron_Detailed_Report_${startDate}_to_${endDate}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -139,7 +174,7 @@ export default function ReportsPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Advanced Reports</h1>
+            <h1 className="text-3xl font-headline font-bold text-primary">Financial Reports</h1>
             <p className="text-muted-foreground mt-1">Granular financial insights with custom filtering.</p>
           </div>
         </div>
@@ -191,7 +226,7 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-black">₹{stats.totalIncome.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Based on {filteredData.income.length} transactions</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Based on {filteredData.income.length} collections</p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-sm bg-expense/5 border-l-4 border-l-expense">
@@ -201,7 +236,7 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-black">₹{stats.totalExpense.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Based on {filteredData.expense.length} transactions</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Based on {filteredData.expense.length} payments</p>
           </CardContent>
         </Card>
         <Card className={cn(
@@ -303,35 +338,73 @@ export default function ReportsPage() {
             <p><strong>Generated on:</strong> {new Date().toLocaleString()}</p>
           </div>
         </div>
-        <Table className="border mt-4">
-          <TableRow>
-            <TableCell className="font-bold">Category</TableCell>
-            <TableCell className="text-right font-bold">Total (₹)</TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>Total Income</TableCell>
-            <TableCell className="text-right">₹{stats.totalIncome.toLocaleString()}</TableCell>
-          </TableRow>
-          <TableRow>
-            <TableCell>Total Expense</TableCell>
-            <TableCell className="text-right">₹{stats.totalExpense.toLocaleString()}</TableCell>
-          </TableRow>
-          <TableRow className="bg-secondary/20">
-            <TableCell className="font-black">Net Profit</TableCell>
-            <TableCell className="text-right font-black">₹{stats.netProfit.toLocaleString()}</TableCell>
-          </TableRow>
-        </Table>
+        
+        <div className="space-y-4">
+          <h3 className="font-bold border-b pb-1">Summary Aggregates</h3>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="border p-2">
+              <p className="text-xs uppercase">Total Income</p>
+              <p className="text-lg font-bold">₹{stats.totalIncome.toLocaleString()}</p>
+            </div>
+            <div className="border p-2">
+              <p className="text-xs uppercase">Total Expense</p>
+              <p className="text-lg font-bold text-destructive">₹{stats.totalExpense.toLocaleString()}</p>
+            </div>
+            <div className="border p-2">
+              <p className="text-xs uppercase">Net Balance</p>
+              <p className="text-lg font-bold text-primary">₹{stats.netProfit.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <h3 className="font-bold border-b pb-1">Income Details</h3>
+          <table className="w-full text-xs border">
+            <thead>
+              <tr className="bg-secondary/20">
+                <th className="border p-1 text-left">Date</th>
+                <th className="border p-1 text-left">Receiver</th>
+                <th className="border p-1 text-left">Bldg</th>
+                <th className="border p-1 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredData.income.map((p, i) => (
+                <tr key={i}>
+                  <td className="border p-1">{p.date?.toDate ? p.date.toDate().toLocaleDateString() : new Date(p.date).toLocaleDateString()}</td>
+                  <td className="border p-1">{p.receiver}</td>
+                  <td className="border p-1">{p.buildingName}</td>
+                  <td className="border p-1 text-right">₹{p.amount?.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="space-y-4">
+          <h3 className="font-bold border-b pb-1">Expense Details</h3>
+          <table className="w-full text-xs border">
+            <thead>
+              <tr className="bg-secondary/20">
+                <th className="border p-1 text-left">Date</th>
+                <th className="border p-1 text-left">Expenser</th>
+                <th className="border p-1 text-left">Category</th>
+                <th className="border p-1 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredData.expense.map((e, i) => (
+                <tr key={i}>
+                  <td className="border p-1">{new Date(e.expenseDate).toLocaleDateString()}</td>
+                  <td className="border p-1">{e.expensePartyName}</td>
+                  <td className="border p-1">{e.category}</td>
+                  <td className="border p-1 text-right text-destructive">₹{e.amount?.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
-}
-
-function Table({ children, className }: { children: React.ReactNode, className?: string }) {
-  return <table className={cn("w-full border-collapse", className)}>{children}</table>
-}
-function TableRow({ children, className }: { children: React.ReactNode, className?: string }) {
-  return <tr className={cn("border-b", className)}>{children}</tr>
-}
-function TableCell({ children, className }: { children: React.ReactNode, className?: string }) {
-  return <td className={cn("p-3", className)}>{children}</td>
 }
