@@ -136,21 +136,23 @@ export default function DashboardPage() {
     if (timeFilter === "lastMonth") filterDate = startOfLastMonth
     if (timeFilter === "year") filterDate = startOfYear
 
-    const isWithinRange = (date: any) => {
-      const d = date?.toDate ? date.toDate() : new Date(date)
+    const isWithinRange = (dateValue: any) => {
+      if (!dateValue) return false
+      const d = dateValue?.toDate ? dateValue.toDate() : new Date(dateValue)
       if (timeFilter === "lastMonth") return d >= startOfLastMonth && d <= endOfLastMonth
       return d >= filterDate
     }
 
-    const income = allPayments.filter(isWithinRange).reduce((acc, p) => acc + (p.amount || 0), 0)
-    const expense = allExpenses.filter(isWithinRange).reduce((acc, e) => acc + (e.amount || 0), 0)
+    const income = allPayments.filter(p => isWithinRange(p.date)).reduce((acc, p) => acc + (p.amount || 0), 0)
+    const expense = allExpenses.filter(e => isWithinRange(e.expenseDate)).reduce((acc, e) => acc + (e.amount || 0), 0)
 
     const totalDues = students.filter(s => s.isActive).reduce((sAcc, student) => {
-      const joinDate = student.createdAt?.toDate?.() || new Date()
-      const monthsSinceJoin = (now.getFullYear() - joinDate.getFullYear()) * 12 + (now.getMonth() - joinDate.getMonth()) + 1
+      const regDate = student.createdAt?.toDate?.() || new Date()
+      const now = new Date()
+      const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
       
       const historicalRentDue = Number(student.dueAmount) || 0
-      const totalExpectedRent = monthsSinceJoin * (student.monthlyRent || 0)
+      const totalExpectedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
       const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0), 0) || 0
       const rentDue = Math.max(0, (historicalRentDue + totalExpectedRent) - totalRentPaid)
 
@@ -548,7 +550,7 @@ export default function DashboardPage() {
                   <Label>Receiver</Label>
                   <Select value={paymentForm.receiver} onValueChange={val => setPaymentForm({...paymentForm, receiver: val})}>
                     <SelectTrigger><SelectValue placeholder="Select receiver" /></SelectTrigger>
-                    <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               )}
