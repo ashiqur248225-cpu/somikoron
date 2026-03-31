@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -213,10 +212,10 @@ export default function IncomeHistoryPage() {
           <h1 className="text-3xl font-headline font-bold text-primary">Income History</h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
+          <Button variant="outline" type="button" className="gap-2" onClick={handleExportCSV}>
             <FileSpreadsheet size={16} /> Export CSV
           </Button>
-          <Button className="gap-2" onClick={handlePrint}>
+          <Button type="button" className="gap-2" onClick={handlePrint}>
             <Printer size={16} /> Print Report
           </Button>
         </div>
@@ -278,7 +277,7 @@ export default function IncomeHistoryPage() {
               </SelectContent>
             </Select>
          </div>
-         <Button variant="ghost" className="h-10" onClick={handleResetFilters}>
+         <Button variant="ghost" type="button" className="h-10" onClick={handleResetFilters}>
            <XCircle size={14} className="mr-1" /> Reset
          </Button>
       </div>
@@ -316,7 +315,7 @@ export default function IncomeHistoryPage() {
       </Card>
 
       {/* Hidden print section */}
-      <div className="hidden print:block space-y-6">
+      <div className="hidden print:block print-only space-y-6">
         <h2 className="text-2xl font-bold text-center">Somikoron Income Collection Report</h2>
         <div className="flex justify-between text-sm border-b pb-2">
           <div>

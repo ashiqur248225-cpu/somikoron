@@ -209,10 +209,10 @@ export default function ReportsPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
+          <Button variant="outline" type="button" className="gap-2" onClick={handleExportCSV}>
             <FileSpreadsheet size={16} /> Export CSV
           </Button>
-          <Button className="gap-2" onClick={handlePrint}>
+          <Button type="button" className="gap-2" onClick={handlePrint}>
             <Printer size={16} /> Print Report
           </Button>
         </div>
@@ -240,7 +240,7 @@ export default function ReportsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="ghost" className="h-10" onClick={handleReset}>
+            <Button variant="ghost" type="button" className="h-10" onClick={handleReset}>
               <XCircle size={14} className="mr-1" /> Reset Filters
             </Button>
           </div>
@@ -370,7 +370,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Visible summary for Print only */}
-      <div className="hidden print:block space-y-8 mt-8 border-t pt-8">
+      <div className="hidden print:block print-only space-y-8 mt-8">
         <h2 className="text-2xl font-bold text-center">Somikoron Financial Performance Report</h2>
         <div className="grid grid-cols-2 gap-8 text-sm">
           <div>
