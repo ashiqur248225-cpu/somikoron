@@ -20,7 +20,7 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { History, Search, Filter, Download, Loader2 } from "lucide-react"
+import { History, Search, Filter, Download, Loader2, FileSpreadsheet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, orderBy, limit } from "firebase/firestore"
@@ -34,7 +34,7 @@ export default function LedgerPage() {
   const paymentsQuery = useMemoFirebase(() => query(collection(db, "payments"), orderBy("date", "desc"), limit(500)), [db])
   const { data: payments, isLoading: paymentsLoading } = useCollection(paymentsQuery)
 
-  // Fetch expenses - Fixed: Use createdAt for ordering as expenses don't have 'date' field
+  // Fetch expenses
   const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("createdAt", "desc"), limit(500)), [db])
   const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
@@ -70,6 +70,33 @@ export default function LedgerPage() {
   const totalIncome = useMemo(() => (payments || []).reduce((acc, curr) => acc + (curr.amount || 0), 0), [payments])
   const totalExpense = useMemo(() => (expenses || []).reduce((acc, curr) => acc + (curr.amount || 0), 0), [expenses])
 
+  const handleExportCSV = () => {
+    const headers = ["Date", "Type", "Entity/Party", "Category", "Building", "Amount"]
+    const rows = filteredData.map(tx => [
+      getTransactionDate(tx).toLocaleDateString(),
+      tx.txType.toUpperCase(),
+      tx.txType === 'income' ? tx.studentName : tx.expensePartyName,
+      tx.category || tx.paymentType || 'General',
+      tx.buildingName || "General",
+      tx.txType === 'income' ? tx.amount : -tx.amount
+    ])
+
+    let csvContent = "data:text/csv;charset=utf-8,"
+    csvContent += "SOMIKORON ACCOUNTING LEDGER\n"
+    csvContent += `Generated on: ${new Date().toLocaleString()}\n\n`
+    csvContent += headers.join(",") + "\n"
+    rows.forEach(row => { csvContent += row.join(",") + "\n" })
+    csvContent += `\n,,,,NET BALANCE,${totalIncome - totalExpense}`
+
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", `Ledger_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -77,8 +104,8 @@ export default function LedgerPage() {
           <h1 className="text-3xl font-headline font-bold text-primary">Accounting Ledger</h1>
           <p className="text-muted-foreground mt-1">Unified history of all income and expenses.</p>
         </div>
-        <Button className="flex gap-2">
-          <Download size={18} /> Export CSV
+        <Button onClick={handleExportCSV} className="flex gap-2">
+          <FileSpreadsheet size={18} /> Export CSV
         </Button>
       </div>
 
