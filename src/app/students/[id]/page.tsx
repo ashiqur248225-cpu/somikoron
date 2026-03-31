@@ -19,7 +19,8 @@ import {
   ArrowDownToLine, Lock,
   History, MoreVertical, Edit, Trash2,
   HelpCircle,
-  Info
+  Info,
+  Zap
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -509,12 +510,19 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             <CardDescription>Real-time running balances and debt tracking.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
                 <p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p>
                 <p className="text-lg font-bold">₹{student.advanceAmount || 0}</p>
                 <div className="text-[8px] text-muted-foreground mt-1 flex justify-between items-center"><span className="flex items-center gap-0.5"><Lock size={8} /> Locked: ₹{student.monthlyRent || 0}</span></div>
               </div>
+              
+              <div className="p-3 rounded-lg bg-secondary/50 border border-secondary">
+                <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p>
+                <p className="text-lg font-bold">₹{student.serviceCharge || 0}</p>
+                <div className="text-[8px] text-muted-foreground mt-1 flex items-center gap-0.5"><Zap size={8} /> One-time fee</div>
+              </div>
+
               <div className="p-3 rounded-lg bg-secondary/30">
                 <p className="text-[10px] uppercase text-muted-foreground font-bold">Monthly Rate</p>
                 <p className="text-lg font-bold">₹{student.monthlyRent || 0}</p>
