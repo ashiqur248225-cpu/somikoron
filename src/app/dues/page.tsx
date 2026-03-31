@@ -52,42 +52,47 @@ export default function DuesPage() {
   const processedStudents = useMemo(() => {
     if (!students) return []
     
-    return students.map(student => {
-      const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
+    return students.map(s => {
+      const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
       const now = new Date()
-      const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
+      // Stop months counting if student has exited
+      const endDate = s.isActive ? now : (s.leftAt?.toDate?.() || now)
       
-      const historicalRentDue = Number(student.dueAmount) || 0
-      const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
+      const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
       
-      const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const historicalRentDue = Number(s.dueAmount) || 0
+      const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (s.monthlyRent || 0)
+      
+      const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
+        const isRefund = curr.type === 'refund'
         const rentPortion = (curr.seatAmount !== undefined) 
           ? Number(curr.seatAmount) 
-          : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
-        return acc + rentPortion
+          : (s.paymentSystem === 'package' ? Number(curr.amount) : 0)
+        return acc + (isRefund ? -rentPortion : rentPortion)
       }, 0) || 0
       
       const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
-      const historicalFoodDue = Number(student.foodDueAmount) || 0
-      const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+      const historicalFoodDue = Number(s.foodDueAmount) || 0
+      const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
       
-      const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
+        const isRefund = curr.type === 'refund'
         const foodPortion = (curr.foodAmount !== undefined) 
           ? Number(curr.foodAmount) 
-          : (student.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
-        return acc + foodPortion
+          : (s.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
+        return acc + (isRefund ? -foodPortion : foodPortion)
       }, 0) || 0
       
       const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
       const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
       const totalDue = rentDue + foodDue
 
-      // Updated logic: Paid means Total Due is 0
-      const isPaid = totalDue <= 0
+      // Updated logic: Paid means Total Due and Rent Due are both 0
+      const isPaid = totalDue <= 0 && rentDue <= 0
 
       return {
-        ...student,
+        ...s,
         totalDue,
         rentDue,
         foodDue,
@@ -112,7 +117,6 @@ export default function DuesPage() {
         ? true 
         : (paymentStatusFilter === "paid" ? s.isPaid : !s.isPaid);
 
-      // By default, if everything is 'all', show only those with totalDue > 0
       const hasDues = paymentStatusFilter === "all" && searchTerm === "" && buildingFilter === "all" && roomFilter === "all" 
         ? s.totalDue > 0 
         : true;
@@ -175,9 +179,7 @@ export default function DuesPage() {
           text: `Check out the outstanding dues report for ${buildingFilter === 'all' ? 'All Buildings' : 'selected property'}.`,
           url: window.location.href,
         });
-      } catch (err) {
-        // Share cancelled
-      }
+      } catch (err) { }
     } else {
       toast({ title: "Share not supported", description: "Sharing is not supported on this browser." });
     }
@@ -277,13 +279,13 @@ export default function DuesPage() {
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Status</Label>
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Payment (This Month)</Label>
           <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="paid">Paid Only</SelectItem>
+              <SelectItem value="pending">Pending Only</SelectItem>
             </SelectContent>
           </Select>
         </div>

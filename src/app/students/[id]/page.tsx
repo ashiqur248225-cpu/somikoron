@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
@@ -157,7 +156,10 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     
     const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
     const now = new Date()
-    const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
+    // CRITICAL: If student is inactive, months calculation stops at exit date
+    const endDate = student.isActive ? now : (student.leftAt?.toDate?.() || now)
+    
+    const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
     
     const historicalRentDue = Number(student.dueAmount) || 0
     const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
@@ -295,8 +297,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     try {
       const settlementRecords = []
       
-      // Calculate how much advance is consumed to cover rent or food debts
-      // For simplicity, we just save the final manual transaction if any
       const manualAmt = Number(exitPayment.amount)
       if (manualAmt > 0) {
         const isRefund = exitSettlement.mode === 'refund'
@@ -333,7 +333,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         }
       }
 
-      // Final status update
+      // Final status update - Set leftAt to stop rent growth
       await updateDoc(studentRef, { 
         isActive: false, 
         advanceAmount: 0, // Advance is cleared at exit
@@ -642,6 +642,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             <div className="flex items-center gap-3 text-sm"><Building2 className="text-primary" size={16} /><span className="font-semibold">{student.buildingName}</span></div>
             <div className="flex items-center gap-3 text-sm"><BedDouble className="text-primary" size={16} /><span>Room {student.roomNumber} | Seat {student.seatNumber}</span></div>
             <div className="flex items-center gap-3 text-sm"><Calendar className="text-primary" size={16} /><span>Billing Start: {student.billingStartDate || student.createdAt?.toDate?.().toLocaleDateString() || 'N/A'}</span></div>
+            {!student.isActive && student.leftAt && (
+              <div className="flex items-center gap-3 text-sm text-destructive"><UserMinus size={16} /><span>Exited On: {student.leftAt.toDate().toLocaleDateString()}</span></div>
+            )}
           </CardContent>
         </Card>
 

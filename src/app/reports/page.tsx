@@ -89,19 +89,26 @@ export default function ReportsPage() {
     const totalDues = (students || []).filter(s => s.isActive && (buildingFilter === 'all' || s.buildingId === buildingFilter)).reduce((acc, student) => {
       const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
       const now = new Date()
-      const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
+      // Respect exit date for months elapsed
+      const calcEndDate = student.isActive ? now : (student.leftAt?.toDate?.() || now)
+      
+      const monthsElapsed = (calcEndDate.getFullYear() - billingStart.getFullYear()) * 12 + (calcEndDate.getMonth() - billingStart.getMonth())
       const historicalRentDue = Number(student.dueAmount) || 0
       const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
+      
       const totalRentPaid = student.paymentsHistory?.reduce((pAcc: number, curr: any) => {
+        const isRefund = curr.type === 'refund'
         const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
-        return pAcc + rentPortion
+        return pAcc + (isRefund ? -rentPortion : rentPortion)
       }, 0) || 0
       const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+      
       const historicalFoodDue = Number(student.foodDueAmount) || 0
       const generatedFoodCost = student.mealsHistory?.reduce((fAcc: number, curr: any) => fAcc + (curr.totalCost || 0), 0) || 0
       const totalFoodPaid = student.paymentsHistory?.reduce((fAcc: number, curr: any) => {
+        const isRefund = curr.type === 'refund'
         const foodPortion = (curr.foodAmount !== undefined) ? Number(curr.foodAmount) : (student.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
-        return fAcc + foodPortion
+        return fAcc + (isRefund ? -foodPortion : foodPortion)
       }, 0) || 0
       const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
       const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
