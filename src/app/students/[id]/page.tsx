@@ -119,7 +119,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
-  // Handle URL actions
   useEffect(() => {
     const action = searchParams.get('action')
     if (action === 'payment') setIsPaymentDialogOpen(true)
@@ -323,7 +322,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     try {
       const pId = doc(collection(db, "payments")).id
       
-      // Breakdown description
       let detailsArr = []
       if (seatPaid > 0) detailsArr.push(`Rent: ৳${seatPaid}`)
       if (foodPaid > 0) detailsArr.push(`Food: ৳${foodPaid}`)
@@ -400,7 +398,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         if (container) {
           const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
           const index = focusables.indexOf(target);
-          if (index > -1 && index < focusables.length - 1) focusables[index + 1].focus();
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
         }
       }
     }

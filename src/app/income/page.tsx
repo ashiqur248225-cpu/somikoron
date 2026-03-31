@@ -103,6 +103,23 @@ export default function IncomeHistoryPage() {
     return filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
   }, [filteredPayments])
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
+
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.studentId || !selectedBuildingId || !selectedRoomNumber || !formData.receiver) {
@@ -117,7 +134,6 @@ export default function IncomeHistoryPage() {
     setIsSubmitting(true)
     const paymentId = doc(collection(db, "payments")).id
 
-    // Detailed description
     let detailsArr = []
     if (seatPaid > 0) detailsArr.push(`Rent: ৳${seatPaid}`)
     if (foodPaid > 0) detailsArr.push(`Food: ৳${foodPaid}`)
@@ -319,7 +335,6 @@ export default function IncomeHistoryPage() {
         </CardContent>
       </Card>
 
-      {/* Hidden print section */}
       <div className="hidden print:block print-only space-y-6">
         <h2 className="text-2xl font-bold text-center">Somikoron Income Collection Report</h2>
         <div className="flex justify-between text-sm border-b pb-2">
@@ -372,7 +387,7 @@ export default function IncomeHistoryPage() {
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Record Income Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
              <div className="space-y-4 p-4 bg-secondary/10 rounded-xl border">

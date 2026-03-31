@@ -168,7 +168,6 @@ export default function DashboardPage() {
       return sAcc + rentDue + foodDue
     }, 0)
 
-    // Calculate Global Fund Status using Opening Balances + Transactions
     const fund = { 
       cash: Number(openingBalances?.cash || 0), 
       bkash: Number(openingBalances?.bkash || 0), 
@@ -431,7 +430,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Quick Action FAB */}
       <div className="fixed bottom-8 right-8 z-50">
         <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
           <DialogTrigger asChild>

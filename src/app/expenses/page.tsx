@@ -104,6 +104,23 @@ export default function ExpenseHistoryPage() {
     return filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
   }, [filteredExpenses])
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
+
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -312,7 +329,6 @@ export default function ExpenseHistoryPage() {
         </CardContent>
       </Card>
 
-      {/* Hidden print section */}
       <div className="hidden print:block space-y-6">
         <h2 className="text-2xl font-bold text-center">Somikoron Expense Report</h2>
         <div className="flex justify-between text-sm border-b pb-2">
@@ -363,7 +379,7 @@ export default function ExpenseHistoryPage() {
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Log Expense Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
             

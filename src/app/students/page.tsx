@@ -108,6 +108,23 @@ export default function StudentsPage() {
     return b?.apartmentsDetail?.flatMap((a: any) => a.rooms?.map((r: any) => r.roomNo)) || []
   }, [buildingFilter, buildings])
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
+
   const handleRegister = async () => {
     if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber || !formData.monthlyRent) {
       toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Room, Seat and Monthly Rent are required." })
@@ -140,7 +157,6 @@ export default function StudentsPage() {
       const startingRentDue = formData.type === 'old' ? Number(formData.dueAmount) : monthlyRent
       const startingFoodDue = formData.type === 'old' ? Number(formData.foodDueAmount) : 0
 
-      // Detailed Description for Initial Payment
       let detailsArr = []
       if (rentPaid > 0) detailsArr.push(`Rent: ৳${rentPaid}`)
       if (foodPaid > 0) detailsArr.push(`Food: ৳${foodPaid}`)
@@ -259,7 +275,7 @@ export default function StudentsPage() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button className="gap-2"><Plus size={18} /> Register Student</Button></DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
             <DialogHeader><DialogTitle>Register Resident</DialogTitle></DialogHeader>
             <div className="space-y-6 py-4">
               
