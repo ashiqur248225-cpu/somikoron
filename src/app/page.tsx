@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useDoc, useMemoFirebase } from "@/firebase"
 import { collection, query, orderBy, limit, where, Timestamp, doc, setDoc, updateDoc, arrayUnion, increment } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
@@ -88,6 +88,9 @@ export default function DashboardPage() {
 
   const allExpensesQuery = useMemoFirebase(() => collection(db, "expenses"), [db])
   const { data: allExpenses } = useCollection(allExpensesQuery)
+
+  const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
+  const { data: openingBalances } = useDoc(balancesRef)
 
   const [paymentForm, setPaymentForm] = useState({
     studentId: "",
@@ -165,7 +168,14 @@ export default function DashboardPage() {
       return sAcc + rentDue + foodDue
     }, 0)
 
-    const fund = { cash: 0, bkash: 0, nagad: 0, bank: 0 }
+    // Calculate Global Fund Status using Opening Balances + Transactions
+    const fund = { 
+      cash: Number(openingBalances?.cash || 0), 
+      bkash: Number(openingBalances?.bkash || 0), 
+      nagad: Number(openingBalances?.nagad || 0), 
+      bank: Number(openingBalances?.bank || 0) 
+    }
+
     allPayments.forEach(p => {
       const m = p.method as keyof typeof fund
       if (fund[m] !== undefined) fund[m] += (p.amount || 0)
@@ -176,7 +186,7 @@ export default function DashboardPage() {
     })
 
     return { income, expense, dues: totalDues, fund }
-  }, [allPayments, allExpenses, students, timeFilter])
+  }, [allPayments, allExpenses, students, timeFilter, openingBalances])
 
   const handleQuickPayment = async () => {
     if (!paymentForm.studentId || (!useAdvanceBalance && !paymentForm.receiver)) {
@@ -354,7 +364,7 @@ export default function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg">Total Fund Status</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Available balance across accounts.</p>
+              <p className="text-xs text-muted-foreground mt-1">Opening + Transactions.</p>
             </div>
             <div className="bg-primary/10 p-2 rounded-lg text-primary">
               <CircleDollarSign size={20} />
