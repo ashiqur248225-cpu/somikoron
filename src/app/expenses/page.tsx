@@ -54,6 +54,9 @@ export default function ExpenseHistoryPage() {
   // Filters State
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
+  const [buildingFilter, setBuildingFilter] = useState("all")
+  const [expenserFilter, setExpenserFilter] = useState("all")
+  const [methodFilter, setMethodFilter] = useState("all")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
 
@@ -92,12 +95,15 @@ export default function ExpenseHistoryPage() {
         (e.buildingName || "").toLowerCase().includes(searchTerm.toLowerCase())
       
       const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
+      const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
+      const matchesExpenser = expenserFilter === "all" || e.expensePartyName === expenserFilter
+      const matchesMethod = methodFilter === "all" || e.method === methodFilter
       const matchesStartDate = !startDate || eDate >= new Date(startDate)
       const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
 
-      return matchesSearch && matchesCategory && matchesStartDate && matchesEndDate
+      return matchesSearch && matchesCategory && matchesBuilding && matchesExpenser && matchesMethod && matchesStartDate && matchesEndDate
     })
-  }, [expenses, searchTerm, categoryFilter, startDate, endDate])
+  }, [expenses, searchTerm, categoryFilter, buildingFilter, expenserFilter, methodFilter, startDate, endDate])
 
   const totalFilteredExpense = useMemo(() => {
     return filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
@@ -140,6 +146,9 @@ export default function ExpenseHistoryPage() {
   const handleResetFilters = () => {
     setSearchTerm("")
     setCategoryFilter("all")
+    setBuildingFilter("all")
+    setExpenserFilter("all")
+    setMethodFilter("all")
     setStartDate("")
     setEndDate("")
   }
@@ -167,7 +176,7 @@ export default function ExpenseHistoryPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
          <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground uppercase font-bold">Search</Label>
             <Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
@@ -179,6 +188,40 @@ export default function ExpenseHistoryPage() {
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
                 {EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+         </div>
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">Building</Label>
+            <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+              <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Buildings</SelectItem>
+                <SelectItem value="none">General</SelectItem>
+                {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+         </div>
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">Expenser</Label>
+            <Select value={expenserFilter} onValueChange={setExpenserFilter}>
+              <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Staff</SelectItem>
+                {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+         </div>
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">Method</Label>
+            <Select value={methodFilter} onValueChange={setMethodFilter}>
+              <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Methods</SelectItem>
+                <SelectItem value="cash">Cash</SelectItem>
+                <SelectItem value="bkash">Bkash</SelectItem>
+                <SelectItem value="nagad">Nagad</SelectItem>
+                <SelectItem value="bank">Bank</SelectItem>
               </SelectContent>
             </Select>
          </div>
