@@ -155,6 +155,7 @@ export default function DashboardPage() {
 
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, student) => {
       const regDate = student.createdAt?.toDate?.() || new Date()
+      const now = new Date()
       const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
       
       const historicalRentDue = Number(student.dueAmount) || 0
@@ -190,16 +191,17 @@ export default function DashboardPage() {
       bkash: Number(openingBalances?.bkash || 0), 
       nagad: Number(openingBalances?.nagad || 0), 
       bank: Number(openingBalances?.bank || 0) 
-    }
+    };
 
     (allPayments || []).forEach(p => {
       const m = p.method as keyof typeof fund
       if (fund[m] !== undefined) fund[m] += (p.amount || 0)
-    })
+    });
+    
     (allExpenses || []).forEach(e => {
       const m = e.method as keyof typeof fund
       if (fund[m] !== undefined) fund[m] -= (e.amount || 0)
-    })
+    });
 
     return { income, expense, dues: totalDues, fund }
   }, [allPayments, allExpenses, students, timeFilter, openingBalances])
