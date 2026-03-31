@@ -17,7 +17,10 @@ import {
   XCircle,
   Building2,
   Info,
-  CircleAlert
+  CircleAlert,
+  Download,
+  Share2,
+  FileText
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,6 +31,12 @@ import { collection, query, orderBy } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function ReportsPage() {
   const db = useFirestore()
@@ -141,6 +150,22 @@ export default function ReportsPage() {
     document.body.removeChild(link)
   }
 
+  const handleShare = async () => {
+    if (typeof window !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Somikoron Financial Summary',
+          text: `Financial report summary for period ${startDate} to ${endDate}.`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        // Share cancelled
+      }
+    } else {
+      toast({ title: "Share not supported", description: "Sharing is not supported on this browser." });
+    }
+  }
+
   if (paymentsLoading || expensesLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
 
   return (
@@ -158,9 +183,21 @@ export default function ReportsPage() {
           <Button variant="outline" type="button" className="gap-2" onClick={handleExportCSV}>
             <FileSpreadsheet size={16} /> Export CSV
           </Button>
-          <Button type="button" className="gap-2" onClick={handlePrint}>
-            <Printer size={16} /> Print Report
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="gap-2">
+                <Download size={16} /> Export / Share
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer">
+                <FileText size={14} className="mr-2" /> Download PDF (Print)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleShare} className="cursor-pointer">
+                <Share2 size={14} className="mr-2" /> Share Report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

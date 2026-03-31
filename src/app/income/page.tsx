@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer } from "lucide-react"
+import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Share2, FileText } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, orderBy, limit } from "firebase/firestore"
@@ -23,6 +23,12 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function IncomeHistoryPage() {
   const { toast } = useToast()
@@ -227,6 +233,22 @@ export default function IncomeHistoryPage() {
     }
   }
 
+  const handleShare = async () => {
+    if (typeof window !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Somikoron Income Report',
+          text: `Check out the income collection report for ${startDate || 'All Time'} to ${endDate || 'Today'}.`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        // Share cancelled
+      }
+    } else {
+      toast({ title: "Share not supported", description: "Sharing is not supported on this browser." });
+    }
+  }
+
   return (
     <div className="space-y-8 pb-20 print:p-0">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
@@ -239,9 +261,21 @@ export default function IncomeHistoryPage() {
           <Button variant="outline" type="button" className="gap-2" onClick={handleExportCSV}>
             <FileSpreadsheet size={16} /> Export CSV
           </Button>
-          <Button type="button" className="gap-2" onClick={handlePrint}>
-            <Printer size={16} /> Print Report
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="gap-2">
+                <Download size={16} /> Export / Share
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer">
+                <FileText size={14} className="mr-2" /> Download PDF (Print)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleShare} className="cursor-pointer">
+                <Share2 size={14} className="mr-2" /> Share Report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
