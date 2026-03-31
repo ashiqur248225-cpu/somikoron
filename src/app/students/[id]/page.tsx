@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
@@ -320,6 +321,17 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     setIsUpdating(true)
     try {
       const pId = doc(collection(db, "payments")).id
+      
+      // Breakdown description
+      let detailsArr = []
+      if (seatPaid > 0) detailsArr.push(`Rent: ₹${seatPaid}`)
+      if (foodPaid > 0) detailsArr.push(`Food: ₹${foodPaid}`)
+      if (addAdvance > 0) detailsArr.push(`Advance: ₹${addAdvance}`)
+      const breakdown = detailsArr.join(', ')
+      const fullDesc = useAdvanceBalance 
+        ? `[Deducted from Advance] ${breakdown}. ${paymentData.description}`
+        : `${breakdown}. ${paymentData.description}`
+
       const pRecord = {
         amount: totalCashAmount, 
         seatAmount: seatPaid, 
@@ -334,7 +346,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         year: paymentData.year, 
         method: useAdvanceBalance ? "advance_deduction" : paymentData.method,
         receiver: useAdvanceBalance ? "System (Advance Deduction)" : paymentData.receiver,
-        description: (useAdvanceBalance ? "[Deducted from Advance] " : "") + paymentData.description,
+        description: fullDesc,
         date: new Date().toISOString()
       }
       
@@ -572,6 +584,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                     <TableHead>Date</TableHead>
                     <TableHead>Period</TableHead>
                     <TableHead>Method</TableHead>
+                    <TableHead>Details</TableHead>
                     <TableHead>Receiver</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
@@ -586,13 +599,16 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                           {p.method?.replace(/_/g, ' ')}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground max-w-[200px] truncate" title={p.description}>
+                        {p.description || "-"}
+                      </TableCell>
                       <TableCell className="text-xs">{p.receiver}</TableCell>
                       <TableCell className="text-right font-bold text-income">₹{p.amount?.toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                   {(!student.paymentsHistory || student.paymentsHistory.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No payment records found.</TableCell>
+                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No payment records found.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

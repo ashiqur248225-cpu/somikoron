@@ -117,6 +117,12 @@ export default function IncomeHistoryPage() {
     setIsSubmitting(true)
     const paymentId = doc(collection(db, "payments")).id
 
+    // Detailed description
+    let detailsArr = []
+    if (seatPaid > 0) detailsArr.push(`Rent: ₹${seatPaid}`)
+    if (foodPaid > 0) detailsArr.push(`Food: ₹${foodPaid}`)
+    const breakdown = detailsArr.join(', ')
+
     const paymentRecord = {
       amount: totalAmount,
       seatAmount: seatPaid,
@@ -130,7 +136,7 @@ export default function IncomeHistoryPage() {
       year: formData.year,
       method: formData.method,
       receiver: formData.receiver,
-      description: formData.description,
+      description: `${breakdown}. ${formData.description}`,
       date: new Date().toISOString()
     }
 
@@ -164,11 +170,12 @@ export default function IncomeHistoryPage() {
   }
 
   const handleExportCSV = () => {
-    const headers = ["Type", "Date", "Student", "Method", "Receiver", "Building", "Amount"]
+    const headers = ["Type", "Date", "Student", "Details", "Method", "Receiver", "Building", "Amount"]
     const rows = filteredPayments.map(p => [
       "INCOME",
       p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A'),
       p.studentName,
+      p.description || "-",
       p.method,
       p.receiver,
       p.buildingName,
@@ -180,7 +187,7 @@ export default function IncomeHistoryPage() {
     csvContent += `Generated on: ${new Date().toLocaleString()}\n\n`
     csvContent += headers.join(",") + "\n"
     rows.forEach(row => { csvContent += row.join(",") + "\n" })
-    csvContent += `\n,,,,,TOTAL COLLECTIONS,${totalFilteredIncome}`
+    csvContent += `\n,,,,,,,TOTAL COLLECTIONS,${totalFilteredIncome}`
 
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
@@ -283,6 +290,7 @@ export default function IncomeHistoryPage() {
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Student</TableHead>
+                <TableHead>Details</TableHead>
                 <TableHead>Method</TableHead>
                 <TableHead>Receiver</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
@@ -295,13 +303,16 @@ export default function IncomeHistoryPage() {
                     {p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A')}
                   </TableCell>
                   <TableCell className="font-medium">{p.studentName}</TableCell>
+                  <TableCell className="text-[10px] text-muted-foreground max-w-[200px] truncate" title={p.description}>
+                    {p.description || "-"}
+                  </TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
                   <TableCell className="text-xs">{p.receiver}</TableCell>
                   <TableCell className="text-right font-bold text-income">₹{p.amount?.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
               {filteredPayments.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No income records found for these filters.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No income records found for these filters.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -326,6 +337,7 @@ export default function IncomeHistoryPage() {
               <th className="border p-2 text-left">Type</th>
               <th className="border p-2 text-left">Date</th>
               <th className="border p-2 text-left">Student</th>
+              <th className="border p-2 text-left">Purpose/Details</th>
               <th className="border p-2 text-left">Method</th>
               <th className="border p-2 text-left">Receiver</th>
               <th className="border p-2 text-left">Building</th>
@@ -338,6 +350,7 @@ export default function IncomeHistoryPage() {
                 <td className="border p-2">INCOME</td>
                 <td className="border p-2">{p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A')}</td>
                 <td className="border p-2 font-medium">{p.studentName}</td>
+                <td className="border p-2">{p.description || "-"}</td>
                 <td className="border p-2 uppercase">{p.method}</td>
                 <td className="border p-2">{p.receiver}</td>
                 <td className="border p-2">{p.buildingName}</td>
@@ -347,7 +360,7 @@ export default function IncomeHistoryPage() {
           </tbody>
           <tfoot>
             <tr className="font-bold bg-gray-50">
-              <td colSpan={6} className="border p-2 text-right">TOTAL COLLECTIONS</td>
+              <td colSpan={7} className="border p-2 text-right">TOTAL COLLECTIONS</td>
               <td className="border p-2 text-right">₹{totalFilteredIncome.toLocaleString()}</td>
             </tr>
           </tfoot>
