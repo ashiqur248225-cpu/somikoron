@@ -163,10 +163,11 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
     
     const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const isRefund = curr.type === 'refund'
       const rentPortion = (curr.seatAmount !== undefined) 
         ? Number(curr.seatAmount) 
         : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
-      return acc + rentPortion
+      return acc + (isRefund ? -rentPortion : rentPortion)
     }, 0) || 0
     
     const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
@@ -175,10 +176,11 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
     
     const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const isRefund = curr.type === 'refund'
       const foodPortion = (curr.foodAmount !== undefined) 
         ? Number(curr.foodAmount) 
         : (student.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
-      return acc + foodPortion
+      return acc + (isRefund ? -foodPortion : foodPortion)
     }, 0) || 0
     
     const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
@@ -278,6 +280,11 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       return
     }
 
+    if (exitSettlement.mode === 'refund' && Number(exitPayment.amount) > 0 && !exitPayment.receiver) {
+      toast({ variant: "destructive", title: "Error", description: "Please select who is refunding the money." })
+      return
+    }
+
     setIsUpdating(true)
     try {
       const settlementRecords = []
@@ -291,7 +298,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           buildingName: student.buildingName,
           studentName: student.name,
           studentId: student.id,
-          type: "income",
+          type: "adjustment",
           month: months[new Date().getMonth()],
           year: new Date().getFullYear().toString(),
           method: "exit_settlement_advance",
@@ -300,30 +307,45 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           date: new Date().toISOString()
         }
         settlementRecords.push(adjRecord)
-        // No global income impact for auto-adjustment
       }
 
-      // 2. Manual payment received at exit (if any)
-      const manualPaid = Number(exitPayment.amount)
-      if (manualPaid > 0) {
+      // 2. Manual payment received OR refunded at exit
+      const manualAmt = Number(exitPayment.amount)
+      if (manualAmt > 0) {
+        const isRefund = exitSettlement.mode === 'refund'
+        
         const manualRecord = {
-          amount: manualPaid,
+          amount: manualAmt,
           buildingId: student.buildingId,
           buildingName: student.buildingName,
           studentName: student.name,
           studentId: student.id,
-          type: "income",
+          type: isRefund ? "refund" : "income",
           month: months[new Date().getMonth()],
           year: new Date().getFullYear().toString(),
           method: exitPayment.method,
           receiver: exitPayment.receiver,
-          description: `Exit Payment: ${exitPayment.description || "Cleared remaining dues at exit."}`,
+          description: isRefund ? `Refund at Exit: ${exitPayment.description || "Returned surplus advance."}` : `Exit Payment: ${exitPayment.description || "Cleared remaining dues at exit."}`,
           date: new Date().toISOString()
         }
         settlementRecords.push(manualRecord)
         
-        const pId = doc(collection(db, "payments")).id
-        await setDoc(doc(db, "payments", pId), { ...manualRecord, date: serverTimestamp() })
+        if (isRefund) {
+          // It's a refund! Save to 'expenses' to subtract from net balance and avoid global income inflation
+          const expId = doc(collection(db, "expenses")).id
+          await setDoc(doc(db, "expenses", expId), {
+            ...manualRecord,
+            id: expId,
+            category: "others",
+            expenseDate: new Date().toISOString().split('T')[0],
+            expensePartyName: student.name,
+            createdAt: serverTimestamp()
+          })
+        } else {
+          // It's income! Save to 'payments'
+          const pId = doc(collection(db, "payments")).id
+          await setDoc(doc(db, "payments", pId), { ...manualRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
+        }
       }
 
       // Final status update
@@ -743,8 +765,12 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                       <TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell>
                       <TableCell className="font-medium">{p.month} {p.year}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={cn("text-[10px] font-normal uppercase", p.method?.includes('settlement') || p.method?.includes('historical') ? "border-primary text-primary" : "")}>
-                          {p.method?.replace(/_/g, ' ')}
+                        <Badge variant="outline" className={cn(
+                          "text-[10px] font-normal uppercase", 
+                          p.type === 'refund' ? "border-destructive text-destructive" : "",
+                          p.method?.includes('settlement') || p.method?.includes('historical') ? "border-primary text-primary" : ""
+                        )}>
+                          {p.type === 'refund' ? 'REFUND' : p.method?.replace(/_/g, ' ')}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -759,7 +785,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                         </div>
                       </TableCell>
                       <TableCell className="text-xs">{p.receiver}</TableCell>
-                      <TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell>
+                      <TableCell className={cn("text-right font-bold", p.type === 'refund' ? "text-destructive" : "text-income")}>
+                        {p.type === 'refund' ? '-' : ''}৳{p.amount?.toLocaleString()}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {(!student.paymentsHistory || student.paymentsHistory.length === 0) && (
