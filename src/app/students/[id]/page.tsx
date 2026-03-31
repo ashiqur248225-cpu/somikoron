@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo } from "react"
@@ -217,6 +216,10 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
 
   const handleUpdateStudent = async () => {
     if (!studentRef) return
+    if (editForm.phone.length !== 11) {
+      toast({ variant: "destructive", title: "Invalid Phone", description: "Phone number must be exactly 11 digits." })
+      return
+    }
     setIsUpdating(true)
     try {
       await updateDoc(studentRef, {
@@ -330,7 +333,10 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
   }
 
   const handleAddStaff = async () => {
-    if (!newStaff.name) return
+    if (!newStaff.name || newStaff.phone.length !== 11) {
+      toast({ variant: "destructive", title: "Error", description: "Valid name and 11 digit phone required." })
+      return
+    }
     setIsUpdating(true)
     try {
       await setDoc(doc(collection(db, "staff")), { ...newStaff, createdAt: serverTimestamp() })
@@ -620,8 +626,8 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Full Name</Label><Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})}/></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Phone</Label><Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})}/></div>
-              <div className="space-y-2"><Label>Parent Phone</Label><Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})}/></div>
+              <div className="space-y-2"><Label>Phone</Label><Input maxLength={11} value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})}/></div>
+              <div className="space-y-2"><Label>Parent Phone</Label><Input maxLength={11} value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})}/></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Monthly Rent (₹)</Label><Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: e.target.value})}/></div>

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -246,7 +245,10 @@ export default function DashboardPage() {
   }
 
   const handleAddStaff = async () => {
-    if (!newStaff.name) return
+    if (!newStaff.name || newStaff.phone.length !== 11) {
+      toast({ variant: "destructive", title: "Error", description: "Name and exactly 11 digit phone required." })
+      return
+    }
     setIsSubmitting(true)
     try {
       const staffId = doc(collection(db, "staff")).id
@@ -575,7 +577,7 @@ export default function DashboardPage() {
           <DialogHeader><DialogTitle>Add New Receiver</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <Input placeholder="Name" value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} />
-            <Input placeholder="Phone" maxLength={11} value={newStaff.phone} onChange={e => setNewStaff({...newStaff, phone: e.target.value})} />
+            <Input placeholder="11 Digit Phone" maxLength={11} value={newStaff.phone} onChange={e => setNewStaff({...newStaff, phone: e.target.value})} />
           </div>
           <DialogFooter><Button onClick={handleAddStaff} disabled={isSubmitting}>Save</Button></DialogFooter>
         </DialogContent>

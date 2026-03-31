@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -95,6 +94,11 @@ export default function StudentsPage() {
   const handleRegister = async () => {
     if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber || !formData.monthlyRent) {
       toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Room, Seat and Monthly Rent are required." })
+      return
+    }
+
+    if (formData.phone.length !== 11) {
+      toast({ variant: "destructive", title: "Invalid Phone", description: "Phone number must be exactly 11 digits." })
       return
     }
 
@@ -285,14 +289,14 @@ export default function StudentsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Student Phone</Label>
-                  <Input placeholder="Mobile Number" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                  <Input placeholder="11 Digit Mobile Number" maxLength={11} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Parent's Phone</Label>
-                  <Input placeholder="Emergency Contact" value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} />
+                  <Input placeholder="11 Digit Contact" maxLength={11} value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Permanent Address</Label>

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react"
@@ -53,6 +52,10 @@ export default function StaffPage() {
 
   const handleCreate = async () => {
     if (!formData.name || !formData.phone) return
+    if (formData.phone.length !== 11) {
+      toast({ variant: "destructive", title: "Error", description: "Phone must be exactly 11 digits." })
+      return
+    }
     setIsSubmitting(true)
     try {
       const staffId = doc(collection(db, "staff")).id
@@ -107,7 +110,7 @@ export default function StaffPage() {
               </div>
               <div className="space-y-2">
                 <Label>Phone Number</Label>
-                <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="01XXXXXXXXX" maxLength={11} />
+                <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="11 Digit Mobile" maxLength={11} />
               </div>
               <div className="space-y-2">
                 <Label>Role / Position</Label>
