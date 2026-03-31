@@ -192,20 +192,26 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const totalOverallDue = financialStats.rentDue + foodDue
   
   const exitSettlement = useMemo(() => {
-    if (!student) return { advance: 0, dues: 0, finalBalance: 0, mode: 'none' }
+    if (!student) return { advance: 0, rentDue: 0, foodBalance: 0, finalBalance: 0, mode: 'none' }
     const advance = student.advanceAmount || 0
-    const balance = advance - totalOverallDue
+    const rentDue = financialStats.rentDue || 0
+    const foodBalance = student.paymentSystem === 'non-package' ? financialStats.foodBalance : 0
+    
+    // Net Formula: (Advance + Food Balance) - Rent Due
+    const balance = (advance + foodBalance) - rentDue
+    
     return {
       advance,
-      dues: totalOverallDue,
+      rentDue,
+      foodBalance,
       finalBalance: balance, // if positive: refund to student, if negative: student owes
       mode: balance >= 0 ? 'refund' : 'deficit'
     }
-  }, [student, totalOverallDue])
+  }, [student, financialStats])
 
   const currentExitDeficit = Math.max(0, -exitSettlement.finalBalance)
   const remainingDueAtExit = Math.max(0, currentExitDeficit - Number(exitPayment.amount))
-  const canConfirmExit = exitSettlement.mode === 'refund' || remainingDueAtExit === 0;
+  const canConfirmExit = exitSettlement.mode === 'refund' || remainingDueAtExit <= 0;
 
   const availableAdvanceForDeduction = useMemo(() => {
     if (!student) return 0
@@ -289,27 +295,8 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     try {
       const settlementRecords = []
       
-      // 1. Automatic adjustment of advance against dues
-      if (exitSettlement.advance > 0 && exitSettlement.dues > 0) {
-        const adjustAmount = Math.min(exitSettlement.advance, exitSettlement.dues)
-        const adjRecord = {
-          amount: adjustAmount,
-          buildingId: student.buildingId,
-          buildingName: student.buildingName,
-          studentName: student.name,
-          studentId: student.id,
-          type: "adjustment",
-          month: months[new Date().getMonth()],
-          year: new Date().getFullYear().toString(),
-          method: "exit_settlement_advance",
-          receiver: "System (Auto Settlement)",
-          description: `Automatic adjustment from advance on exit. Settled ৳${adjustAmount} of dues.`,
-          date: new Date().toISOString()
-        }
-        settlementRecords.push(adjRecord)
-      }
-
-      // 2. Manual payment received OR refunded at exit
+      // Calculate how much advance is consumed to cover rent or food debts
+      // For simplicity, we just save the final manual transaction if any
       const manualAmt = Number(exitPayment.amount)
       if (manualAmt > 0) {
         const isRefund = exitSettlement.mode === 'refund'
@@ -325,13 +312,12 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           year: new Date().getFullYear().toString(),
           method: exitPayment.method,
           receiver: exitPayment.receiver,
-          description: isRefund ? `Refund at Exit: ${exitPayment.description || "Returned surplus advance."}` : `Exit Payment: ${exitPayment.description || "Cleared remaining dues at exit."}`,
+          description: isRefund ? `Refund at Exit: ${exitPayment.description || "Returned surplus balance."}` : `Exit Payment: ${exitPayment.description || "Cleared remaining deficit at exit."}`,
           date: new Date().toISOString()
         }
         settlementRecords.push(manualRecord)
         
         if (isRefund) {
-          // It's a refund! Save to 'expenses' to subtract from net balance and avoid global income inflation
           const expId = doc(collection(db, "expenses")).id
           await setDoc(doc(db, "expenses", expId), {
             ...manualRecord,
@@ -342,7 +328,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             createdAt: serverTimestamp()
           })
         } else {
-          // It's income! Save to 'payments'
           const pId = doc(collection(db, "payments")).id
           await setDoc(doc(db, "payments", pId), { ...manualRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
         }
@@ -351,7 +336,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       // Final status update
       await updateDoc(studentRef, { 
         isActive: false, 
-        advanceAmount: exitSettlement.mode === 'refund' ? 0 : exitSettlement.advance - Math.min(exitSettlement.advance, exitSettlement.dues),
+        advanceAmount: 0, // Advance is cleared at exit
         paymentsHistory: arrayUnion(...settlementRecords),
         updatedAt: serverTimestamp(),
         leftAt: serverTimestamp(),
@@ -516,8 +501,16 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                   <AlertDialogTitle>Resident Exit Settlement</AlertDialogTitle>
                   <div className="mt-4 space-y-4">
                     <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
-                      <div className="flex justify-between"><span>Total Unpaid Dues:</span><span className="font-bold text-destructive">৳{exitSettlement.dues.toLocaleString()}</span></div>
                       <div className="flex justify-between"><span>Available Advance:</span><span className="font-bold text-primary">৳{exitSettlement.advance.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span>Rent Due:</span><span className="font-bold text-destructive">৳{exitSettlement.rentDue.toLocaleString()}</span></div>
+                      {student.paymentSystem === 'non-package' && (
+                        <div className="flex justify-between">
+                          <span>Food Balance ({exitSettlement.foodBalance >= 0 ? 'Credit' : 'Due'}):</span>
+                          <span className={cn("font-bold", exitSettlement.foodBalance >= 0 ? "text-success" : "text-destructive")}>
+                            ৳{Math.abs(exitSettlement.foodBalance).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
                       <Separator />
                       <div className="flex justify-between font-bold text-sm pt-1">
                         <span>{exitSettlement.mode === 'refund' ? 'Net Refundable:' : 'Net Deficit (Owed):'}</span>
@@ -528,7 +521,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                     <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
                        <Label className="font-bold text-primary flex items-center gap-2">
                          <Calculator size={14} /> 
-                         {exitSettlement.mode === 'refund' ? 'Refund Details' : 'Final Payment Settlement'}
+                         {exitSettlement.mode === 'refund' ? 'Refund Details' : 'Final Settlement Payment'}
                        </Label>
                        
                        <div className="space-y-2">
@@ -544,7 +537,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                        {exitSettlement.mode === 'deficit' && (
                          <div className="p-3 bg-white rounded border space-y-1">
                             <div className="flex justify-between text-xs">
-                               <span>Remaining Dues after this payment:</span>
+                               <span>Remaining Deficit after this payment:</span>
                                <span className={cn("font-bold", remainingDueAtExit > 0 ? "text-destructive" : "text-success")}>
                                  ৳{remainingDueAtExit.toLocaleString()}
                                </span>
