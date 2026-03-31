@@ -18,7 +18,7 @@ import {
   Users, Search, Plus, Phone, UserCircle, Loader2, 
   BedDouble, MapPin, Eye, Contact, Filter, XCircle, 
   Building2, DoorOpen, LayoutGrid, MoreVertical,
-  Wallet, Utensils
+  Wallet, Utensils, Calendar
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -87,7 +87,8 @@ export default function StudentsPage() {
     monthlyRent: "",
     foodCost: "0",
     receiver: "",
-    method: "cash"
+    method: "cash",
+    billingStartDate: new Date().toISOString().split('T')[0]
   })
 
   // Dynamic Due Logic for New Students
@@ -143,8 +144,8 @@ export default function StudentsPage() {
   };
 
   const handleRegister = async () => {
-    if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber || !formData.monthlyRent) {
-      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Room, Seat and Monthly Rent are required." })
+    if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber || !formData.monthlyRent || !formData.billingStartDate) {
+      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Room, Seat, Rent and Billing Start Date are required." })
       return
     }
 
@@ -159,7 +160,6 @@ export default function StudentsPage() {
     const svcPaid = Number(formData.serviceCharge) || 0
     const totalInitialReceived = rentPaid + foodPaid + advPaid + svcPaid
     
-    // Receiver is only required if it's a NEW student paying money TODAY
     if (formData.type === 'new' && totalInitialReceived > 0 && !formData.receiver) {
       toast({ variant: "destructive", title: "Missing Info", description: "Please select a receiver for the initial payment." })
       return
@@ -204,8 +204,6 @@ export default function StudentsPage() {
         date: new Date().toISOString()
       } : null
 
-      // CRITICAL: Only add to global payments collection if it's a NEW student.
-      // For OLD students, we skip this setDoc so it doesn't affect Today's Income or Net Balance.
       if (paymentRecord && formData.type === 'new') {
         await setDoc(doc(db, "payments", doc(collection(db, "payments")).id), {
           ...paymentRecord,
@@ -224,7 +222,6 @@ export default function StudentsPage() {
         apartmentName: apartmentName,
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
-        // We still keep the record in the student's personal history for their own audit trail
         paymentsHistory: paymentRecord ? [paymentRecord] : [],
         mealsHistory: [],
         createdAt: serverTimestamp(),
@@ -265,7 +262,8 @@ export default function StudentsPage() {
       setFormData({
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
         type: "new", dueAmount: "0", foodDueAmount: "0", initialRentPayment: "0", initialFoodPayment: "0", advanceAmount: "0", serviceCharge: "0",
-        paymentSystem: "package", monthlyRent: "", foodCost: "0", receiver: "", method: "cash"
+        paymentSystem: "package", monthlyRent: "", foodCost: "0", receiver: "", method: "cash",
+        billingStartDate: new Date().toISOString().split('T')[0]
       })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -321,6 +319,11 @@ export default function StudentsPage() {
                      <Input type="number" value={formData.monthlyRent} onChange={e => setFormData({...formData, monthlyRent: e.target.value})} placeholder="0.00" />
                    </div>
                 </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2"><Calendar size={14} className="text-primary"/> Billing Start Date (Hostel Entry Date)</Label>
+                  <Input type="date" value={formData.billingStartDate} onChange={e => setFormData({...formData, billingStartDate: e.target.value})} />
+                  <p className="text-[10px] text-muted-foreground italic">* ভাড়া গণনার সময় এই তারিখ থেকে প্রতি মাস হিসাব করা হবে।</p>
+                </div>
               </div>
 
               <div className="p-4 bg-secondary/20 rounded-lg border space-y-4">
@@ -351,7 +354,7 @@ export default function StudentsPage() {
                     <p className="text-[10px] text-muted-foreground italic">
                       {formData.type === 'new' 
                         ? "* Auto-calculated: 0 if initial rent paid, else 1 month rent."
-                        : "* Enter total previous debt at the time of app entry."}
+                        : "* অ্যাপ ব্যবহারের আগে থেকে থাকা মোট বকেয়া ভাড়া।"}
                     </p>
                   </div>
                   {formData.paymentSystem === 'non-package' && (

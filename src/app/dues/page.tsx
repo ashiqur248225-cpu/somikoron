@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Filter, Building2, DoorOpen, Loader2, Eye, CircleAlert, XCircle, Info, FileSpreadsheet, Printer } from "lucide-react"
+import { Users, Search, Filter, Building2, DoorOpen, Loader2, Eye, CircleAlert, XCircle, Info, FileSpreadsheet, Printer, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -47,15 +47,14 @@ export default function DuesPage() {
     if (!students) return []
     
     return students.map(student => {
-      const regDate = student.createdAt?.toDate?.() || new Date()
+      // Logic alignment with Student Profile and Dashboard
+      const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
       const now = new Date()
-      // Robust month difference calculation
-      const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
+      const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
       
       const historicalRentDue = Number(student.dueAmount) || 0
-      const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
+      const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
       
-      // Calculate total rent paid by summing 'seatAmount' from history
       const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
         const rentPortion = (curr.seatAmount !== undefined) 
           ? Number(curr.seatAmount) 
@@ -221,7 +220,7 @@ export default function DuesPage() {
             <TableHeader className="bg-secondary/30">
               <TableRow>
                 <TableHead>Resident</TableHead>
-                <TableHead>Building / Room</TableHead>
+                <TableHead>Billing Start</TableHead>
                 <TableHead>Rent Due</TableHead>
                 <TableHead>Food Balance/Due</TableHead>
                 <TableHead className="text-right">Total Due</TableHead>
@@ -236,13 +235,13 @@ export default function DuesPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-semibold text-sm">{s.name}</span>
-                      <span className="text-[10px] text-muted-foreground">{s.phone}</span>
+                      <span className="text-[10px] text-muted-foreground">Room {s.roomNumber} | {s.buildingName}</span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-medium">{s.buildingName}</span>
-                      <span className="text-[10px] text-muted-foreground">Room {s.roomNumber}</span>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <Calendar size={12} className="text-muted-foreground" />
+                      {s.billingStartDate || 'N/A'}
                     </div>
                   </TableCell>
                   <TableCell className="text-xs">
@@ -255,11 +254,11 @@ export default function DuesPage() {
                           </TooltipTrigger>
                           <TooltipContent className="text-[10px] p-3">
                             <div className="space-y-1">
-                              <p className="flex justify-between gap-4"><span>Initial Starting Debt:</span> <span>৳{s.historicalRentDue}</span></p>
-                              <p className="flex justify-between gap-4"><span>Months Elapsed ({s.monthsElapsed}):</span> <span>+৳{s.generatedRent}</span></p>
-                              <p className="flex justify-between gap-4 text-success font-medium"><span>Rent Paid So Far:</span> <span>-৳{s.totalRentPaid}</span></p>
+                              <p className="flex justify-between gap-4"><span>Historical Starting Debt:</span> <span>৳{s.historicalRentDue}</span></p>
+                              <p className="flex justify-between gap-4"><span>Billing Months ({s.monthsElapsed}):</span> <span>+৳{(s.monthsElapsed > 0 ? s.monthsElapsed : 0) * (s.monthlyRent || 0)}</span></p>
+                              <p className="flex justify-between gap-4 text-success font-medium"><span>Rent Paid So Far:</span> <span>-৳{(Number(s.historicalRentDue) || 0) + ((s.monthsElapsed > 0 ? s.monthsElapsed : 0) * (s.monthlyRent || 0)) - s.rentDue}</span></p>
                               <Separator className="my-1" />
-                              <p className="font-bold flex justify-between gap-4"><span>Total Due:</span> <span>৳{s.rentDue}</span></p>
+                              <p className="font-bold flex justify-between gap-4"><span>Total Rent Due:</span> <span>৳{s.rentDue}</span></p>
                             </div>
                           </TooltipContent>
                         </Tooltip>

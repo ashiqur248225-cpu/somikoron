@@ -154,9 +154,10 @@ export default function DashboardPage() {
       .reduce((acc, e) => acc + (e.amount || 0), 0)
 
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, student) => {
-      const regDate = student.createdAt?.toDate?.() || new Date()
+      // Logic alignment with Student Profile and Dues Tracking
+      const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
       const now = new Date()
-      const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
+      const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
       
       const historicalRentDue = Number(student.dueAmount) || 0
       const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)

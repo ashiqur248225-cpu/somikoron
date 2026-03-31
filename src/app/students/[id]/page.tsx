@@ -20,7 +20,8 @@ import {
   History, MoreVertical, Edit, Trash2,
   HelpCircle,
   Info,
-  Zap
+  Zap,
+  Calendar
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -93,7 +94,8 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     parentPhone: "",
     address: "",
     monthlyRent: "",
-    paymentSystem: "package"
+    paymentSystem: "package",
+    billingStartDate: ""
   })
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
@@ -133,7 +135,8 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         parentPhone: student.parentPhone || "",
         address: student.address || "",
         monthlyRent: (student.monthlyRent || 0).toString(),
-        paymentSystem: student.paymentSystem || "package"
+        paymentSystem: student.paymentSystem || "package",
+        billingStartDate: student.billingStartDate || student.createdAt?.toDate?.().toISOString().split('T')[0] || new Date().toISOString().split('T')[0]
       })
     }
   }, [student])
@@ -143,14 +146,17 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const financialStats = useMemo(() => {
     if (!student) return { rentDue: 0, foodBalance: 0, monthsElapsed: 0 }
     
-    const regDate = student.createdAt?.toDate?.() || new Date()
+    // Use billingStartDate if available, else fallback to createdAt
+    const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
     const now = new Date()
-    const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
+    
+    // Precise month difference calculation for billing cycles
+    const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
     
     const historicalRentDue = Number(student.dueAmount) || 0
-    const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
+    // generatedRent starts from the billingStartDate
+    const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
     
-    // Standardized logic: subtract seatAmount if it exists, fallback to total amount for package students
     const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
       const rentPortion = (curr.seatAmount !== undefined) 
         ? Number(curr.seatAmount) 
@@ -514,6 +520,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             {student.parentPhone && <div className="flex items-center gap-3 text-sm"><Contact className="text-primary" size={16} /><span className="font-bold">{student.parentPhone} (Parent)</span></div>}
             <div className="flex items-center gap-3 text-sm"><Building2 className="text-primary" size={16} /><span className="font-semibold">{student.buildingName}</span></div>
             <div className="flex items-center gap-3 text-sm"><BedDouble className="text-primary" size={16} /><span>Room {student.roomNumber} | Seat {student.seatNumber}</span></div>
+            <div className="flex items-center gap-3 text-sm"><Calendar className="text-primary" size={16} /><span>Billing Start: {student.billingStartDate || student.createdAt?.toDate?.().toLocaleDateString() || 'N/A'}</span></div>
           </CardContent>
         </Card>
 
@@ -552,9 +559,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                       <TooltipContent className="max-w-xs p-3">
                         <div className="space-y-1.5">
                           <p className="font-bold border-b pb-1 text-[11px]">Rent Calculation Breakdown:</p>
-                          <p className="text-[10px] flex justify-between"><span>Initial Starting Debt:</span> <span>৳{student.dueAmount || 0}</span></p>
-                          <p className="text-[10px] flex justify-between"><span>Months Elapsed ({financialStats.monthsElapsed}):</span> <span>+৳{financialStats.monthsElapsed * (student.monthlyRent || 0)}</span></p>
-                          <p className="text-[10px] flex justify-between text-success"><span>Rent Paid So Far:</span> <span>-৳{(student.dueAmount || 0) + (financialStats.monthsElapsed * (student.monthlyRent || 0)) - financialStats.rentDue}</span></p>
+                          <p className="text-[10px] flex justify-between"><span>Historical Starting Debt:</span> <span>৳{student.dueAmount || 0}</span></p>
+                          <p className="text-[10px] flex justify-between"><span>Billing Months ({financialStats.monthsElapsed}):</span> <span>+৳{(financialStats.monthsElapsed > 0 ? financialStats.monthsElapsed : 0) * (student.monthlyRent || 0)}</span></p>
+                          <p className="text-[10px] flex justify-between text-success"><span>Rent Paid So Far:</span> <span>-৳{(Number(student.dueAmount) || 0) + ((financialStats.monthsElapsed > 0 ? financialStats.monthsElapsed : 0) * (student.monthlyRent || 0)) - financialStats.rentDue}</span></p>
                           <Separator className="my-1" />
                           <p className="text-[10px] font-bold flex justify-between"><span>Total Rent Due:</span> <span>৳{financialStats.rentDue.toLocaleString()}</span></p>
                         </div>
@@ -630,7 +637,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                       <TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell>
                       <TableCell className="font-medium">{p.month} {p.year}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={cn("text-[10px] font-normal uppercase", p.method?.includes('settlement') ? "border-primary text-primary" : "")}>
+                        <Badge variant="outline" className={cn("text-[10px] font-normal uppercase", p.method?.includes('settlement') || p.method?.includes('historical') ? "border-primary text-primary" : "")}>
                           {p.method?.replace(/_/g, ' ')}
                         </Badge>
                       </TableCell>
@@ -676,7 +683,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                 )}
               </div>
               <div className="bg-primary/5 p-4 rounded-lg border border-primary/20 text-xs">
-                <p><strong>Note:</strong> বকেয়া হিসেব করার সময় ভর্তির তারিখ থেকে শুরু হওয়া প্রতিটি মাসের ভাড়া (Monthly Rent) ঐতিহাসিক বকেয়ার (Historical Due) সাথে যোগ করা হয় এবং শুধুমাত্র 'ভাড়া' বাবদ দেওয়া টাকাগুলো বিয়োগ করা হয়।</p>
+                <p><strong>Note:</strong> বকেয়া হিসেব করার সময় 'Billing Start Date' থেকে শুরু হওয়া প্রতিটি মাসের ভাড়া ঐতিহাসিক বকেয়ার (Historical Due) সাথে যোগ করা হয় এবং শুধুমাত্র 'ভাড়া' বাবদ দেওয়া টাকাগুলো বিয়োগ করা হয়।</p>
               </div>
             </CardContent>
           </Card>
@@ -709,7 +716,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Monthly Rent (৳)</Label><Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: e.target.value})}/></div>
-              <div className="space-y-2"><Label>Plan</Label><Select value={editForm.paymentSystem} onValueChange={val => setEditForm({...editForm, paymentSystem: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="package">Package</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>Billing Start Date</Label><Input type="date" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})}/></div>
             </div>
             <div className="space-y-2"><Label>Address</Label><Textarea value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})}/></div>
           </div>
