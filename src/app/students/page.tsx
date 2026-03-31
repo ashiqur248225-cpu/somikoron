@@ -54,6 +54,7 @@ export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Filters State
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [roomFilter, setRoomFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
@@ -98,7 +99,6 @@ export default function StudentsPage() {
       const monthlyRate = formData.monthlyRent || "0";
       
       setFormData(prev => {
-        // If rent paid > 0, set due to 0. Otherwise set to monthly rate.
         const calculatedDue = rentPaid > 0 ? "0" : monthlyRate;
         if (prev.dueAmount !== calculatedDue) {
           return { ...prev, dueAmount: calculatedDue };
@@ -120,6 +120,7 @@ export default function StudentsPage() {
   const selectedRoom = allRoomsInSelectedBuilding.find((r: any) => r.roomNo === formData.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
+  // Options for filter bar
   const roomOptions = useMemo(() => {
     if (buildingFilter === "all" || !buildings) return []
     const b = buildings.find(b => b.id === buildingFilter)
@@ -284,8 +285,16 @@ export default function StudentsPage() {
     })
   }, [students, searchTerm, buildingFilter, roomFilter, statusFilter, planFilter])
 
+  const handleResetFilters = () => {
+    setSearchTerm("")
+    setBuildingFilter("all")
+    setRoomFilter("all")
+    setStatusFilter("active")
+    setPlanFilter("all")
+  }
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="-ml-1" />
@@ -479,6 +488,65 @@ export default function StudentsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+            <Search size={10} /> Search Resident
+          </Label>
+          <Input placeholder="Name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+            <Building2 size={10} /> Building
+          </Label>
+          <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all") }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Buildings</SelectItem>
+              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+            <DoorOpen size={10} /> Room
+          </Label>
+          <Select value={roomFilter} onValueChange={setRoomFilter} disabled={buildingFilter === "all"}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Rooms</SelectItem>
+              {roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Status</Label>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="active">Active Only</SelectItem>
+              <SelectItem value="left">Ex-Residents</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Plan</Label>
+          <Select value={planFilter} onValueChange={setPlanFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Plans</SelectItem>
+              <SelectItem value="package">Package Only</SelectItem>
+              <SelectItem value="non-package">Non-Package</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="ghost" className="h-10" onClick={handleResetFilters}>
+          <XCircle size={14} className="mr-1" /> Reset
+        </Button>
       </div>
 
       {isLoading ? (
