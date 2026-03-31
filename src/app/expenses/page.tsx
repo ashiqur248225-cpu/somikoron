@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter } from "lucide-react"
+import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter, FileSpreadsheet, Printer } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -146,17 +147,59 @@ export default function ExpenseHistoryPage() {
     setEndDate("")
   }
 
+  const handleExportCSV = () => {
+    const headers = ["Type", "Date", "Expenser/Party", "Category", "Method", "Location", "Amount"]
+    const rows = filteredExpenses.map(e => [
+      "EXPENSE",
+      new Date(e.expenseDate).toLocaleDateString(),
+      e.expensePartyName,
+      e.category,
+      e.method,
+      `${e.buildingName}${e.apartmentName && e.apartmentName !== 'none' ? ' | ' + e.apartmentName : ''}`,
+      e.amount
+    ])
+
+    let csvContent = "data:text/csv;charset=utf-8,"
+    csvContent += "SOMIKORON EXPENSE HISTORY\n"
+    csvContent += `Generated on: ${new Date().toLocaleString()}\n\n`
+    csvContent += headers.join(",") + "\n"
+    rows.forEach(row => { csvContent += row.join(",") + "\n" })
+    csvContent += `\n,,,,,TOTAL EXPENSES,${totalFilteredExpense}`
+
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", `Expense_History_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handlePrint = () => {
+    if (typeof window !== "undefined") {
+      window.print()
+    }
+  }
+
   return (
-    <div className="space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-8 pb-20 print:p-0">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <h1 className="text-3xl font-headline font-bold text-primary">Expenses</h1>
         </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
+            <FileSpreadsheet size={16} /> Export CSV
+          </Button>
+          <Button className="gap-2" onClick={handlePrint}>
+            <Printer size={16} /> Print Report
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 print:hidden">
         <Card className="bg-destructive/5 border-none shadow-sm border-l-4 border-l-destructive">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-destructive flex items-center gap-2">
@@ -169,7 +212,7 @@ export default function ExpenseHistoryPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 bg-secondary/20 p-4 rounded-xl border items-end print:hidden">
          <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground uppercase font-bold">Category</Label>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -227,7 +270,7 @@ export default function ExpenseHistoryPage() {
          </Button>
       </div>
 
-      <Card className="border-none shadow-sm overflow-hidden">
+      <Card className="border-none shadow-sm overflow-hidden print:hidden">
         <CardContent className="p-0">
           <Table>
             <TableHeader className="bg-secondary/30">
@@ -269,7 +312,53 @@ export default function ExpenseHistoryPage() {
         </CardContent>
       </Card>
 
-      <div className="fixed bottom-8 right-8 z-50">
+      {/* Hidden print section */}
+      <div className="hidden print:block space-y-6">
+        <h2 className="text-2xl font-bold text-center">Somikoron Expense Report</h2>
+        <div className="flex justify-between text-sm border-b pb-2">
+          <div>
+            <p><strong>Period:</strong> {startDate || 'Beginning'} to {endDate || 'Today'}</p>
+            <p><strong>Category:</strong> {categoryFilter}</p>
+          </div>
+          <div className="text-right">
+            <p><strong>Report Date:</strong> {new Date().toLocaleString()}</p>
+          </div>
+        </div>
+        <table className="w-full border-collapse text-[10px]">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-2 text-left">Type</th>
+              <th className="border p-2 text-left">Date</th>
+              <th className="border p-2 text-left">Expenser/Party</th>
+              <th className="border p-2 text-left">Category</th>
+              <th className="border p-2 text-left">Method</th>
+              <th className="border p-2 text-left">Location</th>
+              <th className="border p-2 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredExpenses.map((e, i) => (
+              <tr key={i}>
+                <td className="border p-2">EXPENSE</td>
+                <td className="border p-2">{new Date(e.expenseDate).toLocaleDateString()}</td>
+                <td className="border p-2 font-medium">{e.expensePartyName}</td>
+                <td className="border p-2 capitalize">{e.category}</td>
+                <td className="border p-2 uppercase">{e.method}</td>
+                <td className="border p-2">{e.buildingName} {e.apartmentName !== 'none' ? '| ' + e.apartmentName : ''}</td>
+                <td className="border p-2 text-right">₹{e.amount?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="font-bold bg-gray-50">
+              <td colSpan={6} className="border p-2 text-right">TOTAL EXPENSES</td>
+              <td className="border p-2 text-right">₹{totalFilteredExpense.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div className="fixed bottom-8 right-8 z-50 print:hidden">
         <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:scale-105 transition-transform"><Plus className="h-8 w-8 text-white" /></Button>
       </div>
 
