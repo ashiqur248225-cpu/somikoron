@@ -17,7 +17,8 @@ import {
   Printer,
   XCircle,
   Building2,
-  Info
+  Info,
+  CircleAlert
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,6 +48,9 @@ export default function ReportsPage() {
   const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("expenseDate", "desc")), [db])
   const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
+  const studentsQuery = useMemoFirebase(() => collection(db, "students"), [db])
+  const { data: students } = useCollection(studentsQuery)
+
   // Filtered Data Logic
   const filteredData = useMemo(() => {
     if (!payments || !expenses) return { income: [], expense: [] }
@@ -71,12 +75,36 @@ export default function ReportsPage() {
   const stats = useMemo(() => {
     const totalIncome = filteredData.income.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     const totalExpense = filteredData.expense.reduce((acc, curr) => acc + (curr.amount || 0), 0)
+    
+    // Current Dues calculation for filtered building
+    const totalDues = (students || []).filter(s => s.isActive && (buildingFilter === 'all' || s.buildingId === buildingFilter)).reduce((acc, student) => {
+      const regDate = student.createdAt?.toDate?.() || new Date()
+      const now = new Date()
+      const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
+      
+      const historicalRentDue = Number(student.dueAmount) || 0
+      const generatedRent = monthsElapsed > 0 ? monthsElapsed * (student.monthlyRent || 0) : 0
+      const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+        return acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0)
+      }, 0) || 0
+      const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+
+      const historicalFoodDue = Number(student.foodDueAmount) || 0
+      const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+      const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+      const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
+      const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
+
+      return acc + rentDue + foodDue
+    }, 0)
+
     return {
       totalIncome,
       totalExpense,
+      totalDues,
       netProfit: totalIncome - totalExpense
     }
-  }, [filteredData])
+  }, [filteredData, students, buildingFilter])
 
   // Prepare Chart Data (Grouped by Date)
   const chartData = useMemo(() => {
@@ -144,12 +172,13 @@ export default function ReportsPage() {
     csvContent += "FINAL SUMMARY\n"
     csvContent += `Total Income,,,,,,${stats.totalIncome}\n`
     csvContent += `Total Expense,,,,,,${stats.totalExpense}\n`
+    csvContent += `Total Current Dues,,,,,,${stats.totalDues}\n`
     csvContent += `Net Profit/Loss,,,,,,${stats.netProfit}\n`
 
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
-    link.setAttribute("download", `Somikoron_Detailed_Report_${startDate}_to_${endDate}.csv`)
+    link.setAttribute("download", `Somikoron_Report_${startDate}_to_${endDate}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -183,7 +212,7 @@ export default function ReportsPage() {
             <FileSpreadsheet size={16} /> Export CSV
           </Button>
           <Button className="gap-2" onClick={handlePrint}>
-            <Printer size={16} /> Print/PDF
+            <Printer size={16} /> Print Report
           </Button>
         </div>
       </div>
@@ -218,27 +247,40 @@ export default function ReportsPage() {
       </Card>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
         <Card className="border-none shadow-sm bg-income/5 border-l-4 border-l-income">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-xs font-bold uppercase text-income">Total Income</CardTitle>
             <TrendingUp className="text-income h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black">₹{stats.totalIncome.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Based on {filteredData.income.length} collections</p>
+            <div className="text-2xl font-black">₹{stats.totalIncome.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">From {filteredData.income.length} records</p>
           </CardContent>
         </Card>
+        
         <Card className="border-none shadow-sm bg-expense/5 border-l-4 border-l-expense">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-xs font-bold uppercase text-expense">Total Expenses</CardTitle>
             <TrendingDown className="text-expense h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black">₹{stats.totalExpense.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Based on {filteredData.expense.length} payments</p>
+            <div className="text-2xl font-black">₹{stats.totalExpense.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">From {filteredData.expense.length} records</p>
           </CardContent>
         </Card>
+
+        <Card className="border-none shadow-sm bg-destructive/5 border-l-4 border-l-destructive">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-xs font-bold uppercase text-destructive">Total Dues</CardTitle>
+            <CircleAlert className="text-destructive h-4 w-4" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-black">₹{stats.totalDues.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Current outstanding</p>
+          </CardContent>
+        </Card>
+
         <Card className={cn(
           "border-none shadow-sm border-l-4",
           stats.netProfit >= 0 ? "bg-primary/5 border-l-primary" : "bg-destructive/5 border-l-destructive"
@@ -249,7 +291,7 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             <div className={cn(
-              "text-3xl font-black",
+              "text-2xl font-black",
               stats.netProfit >= 0 ? "text-primary" : "text-destructive"
             )}>
               {stats.netProfit < 0 ? '-' : ''}₹{Math.abs(stats.netProfit).toLocaleString()}
@@ -259,8 +301,8 @@ export default function ReportsPage() {
         </Card>
       </div>
 
-      {/* Main Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Main Charts - Hidden on Print */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
         <Card className="lg:col-span-2 border-none shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -290,15 +332,15 @@ export default function ReportsPage() {
             <CardHeader><CardTitle className="text-sm">Summary Details</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Transactions</span>
+                <span className="text-muted-foreground">Total Transactions</span>
                 <Badge variant="secondary">{filteredData.income.length + filteredData.expense.length}</Badge>
               </div>
               <div className="flex justify-between items-center text-sm border-t pt-4">
-                <span className="text-muted-foreground font-medium">Income Streams</span>
+                <span className="text-muted-foreground font-medium">Gross Collections</span>
                 <span className="font-bold text-income">₹{stats.totalIncome.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground font-medium">Expenses</span>
+                <span className="text-muted-foreground font-medium">Operational Costs</span>
                 <span className="font-bold text-expense">₹{stats.totalExpense.toLocaleString()}</span>
               </div>
               <Separator />
@@ -328,79 +370,95 @@ export default function ReportsPage() {
 
       {/* Hidden summary for Print */}
       <div className="hidden print:block space-y-8 mt-8 border-t pt-8">
-        <h2 className="text-2xl font-bold text-center">Financial Performance Report</h2>
+        <h2 className="text-2xl font-bold text-center">Somikoron Financial Performance Report</h2>
         <div className="grid grid-cols-2 gap-8 text-sm">
           <div>
-            <p><strong>Period:</strong> {startDate} to {endDate}</p>
-            <p><strong>Building:</strong> {buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+            <p><strong>Period:</strong> {new Date(startDate).toLocaleDateString()} to {new Date(endDate).toLocaleDateString()}</p>
+            <p><strong>Property:</strong> {buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
           </div>
           <div className="text-right">
-            <p><strong>Generated on:</strong> {new Date().toLocaleString()}</p>
+            <p><strong>Report Date:</strong> {new Date().toLocaleString()}</p>
           </div>
         </div>
         
         <div className="space-y-4">
-          <h3 className="font-bold border-b pb-1">Summary Aggregates</h3>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div className="border p-2">
-              <p className="text-xs uppercase">Total Income</p>
+          <h3 className="font-bold border-b pb-1">Performance Summary</h3>
+          <div className="grid grid-cols-4 gap-4 text-center">
+            <div className="border p-3 rounded">
+              <p className="text-[10px] uppercase text-muted-foreground">Income</p>
               <p className="text-lg font-bold">₹{stats.totalIncome.toLocaleString()}</p>
             </div>
-            <div className="border p-2">
-              <p className="text-xs uppercase">Total Expense</p>
-              <p className="text-lg font-bold text-destructive">₹{stats.totalExpense.toLocaleString()}</p>
+            <div className="border p-3 rounded">
+              <p className="text-[10px] uppercase text-muted-foreground">Expense</p>
+              <p className="text-lg font-bold">₹{stats.totalExpense.toLocaleString()}</p>
             </div>
-            <div className="border p-2">
-              <p className="text-xs uppercase">Net Balance</p>
-              <p className="text-lg font-bold text-primary">₹{stats.netProfit.toLocaleString()}</p>
+            <div className="border p-3 rounded">
+              <p className="text-[10px] uppercase text-muted-foreground">Current Dues</p>
+              <p className="text-lg font-bold">₹{stats.totalDues.toLocaleString()}</p>
+            </div>
+            <div className="border p-3 rounded">
+              <p className="text-[10px] uppercase text-muted-foreground">Net Balance</p>
+              <p className={cn("text-lg font-bold", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>
+                ₹{stats.netProfit.toLocaleString()}
+              </p>
             </div>
           </div>
         </div>
 
         <div className="space-y-4">
-          <h3 className="font-bold border-b pb-1">Income Details</h3>
-          <table className="w-full text-xs border">
+          <h3 className="font-bold border-b pb-1">Income Breakdown</h3>
+          <table className="w-full text-[10px] border-collapse">
             <thead>
-              <tr className="bg-secondary/20">
-                <th className="border p-1 text-left">Date</th>
-                <th className="border p-1 text-left">Receiver</th>
-                <th className="border p-1 text-left">Bldg</th>
-                <th className="border p-1 text-right">Amount</th>
+              <tr className="bg-secondary/30">
+                <th className="border p-2 text-left">Date</th>
+                <th className="border p-2 text-left">Entity</th>
+                <th className="border p-2 text-left">Receiver</th>
+                <th className="border p-2 text-left">Bldg</th>
+                <th className="border p-2 text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
               {filteredData.income.map((p, i) => (
                 <tr key={i}>
-                  <td className="border p-1">{p.date?.toDate ? p.date.toDate().toLocaleDateString() : new Date(p.date).toLocaleDateString()}</td>
-                  <td className="border p-1">{p.receiver}</td>
-                  <td className="border p-1">{p.buildingName}</td>
-                  <td className="border p-1 text-right">₹{p.amount?.toLocaleString()}</td>
+                  <td className="border p-2">{p.date?.toDate ? p.date.toDate().toLocaleDateString() : new Date(p.date).toLocaleDateString()}</td>
+                  <td className="border p-2">{p.studentName}</td>
+                  <td className="border p-2">{p.receiver}</td>
+                  <td className="border p-2">{p.buildingName}</td>
+                  <td className="border p-2 text-right font-medium">₹{p.amount?.toLocaleString()}</td>
                 </tr>
               ))}
+              {filteredData.income.length === 0 && (
+                <tr><td colSpan={5} className="border p-4 text-center text-muted-foreground">No records found.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
 
         <div className="space-y-4">
-          <h3 className="font-bold border-b pb-1">Expense Details</h3>
-          <table className="w-full text-xs border">
+          <h3 className="font-bold border-b pb-1">Expense Breakdown</h3>
+          <table className="w-full text-[10px] border-collapse">
             <thead>
-              <tr className="bg-secondary/20">
-                <th className="border p-1 text-left">Date</th>
-                <th className="border p-1 text-left">Expenser</th>
-                <th className="border p-1 text-left">Category</th>
-                <th className="border p-1 text-right">Amount</th>
+              <tr className="bg-secondary/30">
+                <th className="border p-2 text-left">Date</th>
+                <th className="border p-2 text-left">Category</th>
+                <th className="border p-2 text-left">Expenser</th>
+                <th className="border p-2 text-left">Location</th>
+                <th className="border p-2 text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
               {filteredData.expense.map((e, i) => (
                 <tr key={i}>
-                  <td className="border p-1">{new Date(e.expenseDate).toLocaleDateString()}</td>
-                  <td className="border p-1">{e.expensePartyName}</td>
-                  <td className="border p-1">{e.category}</td>
-                  <td className="border p-1 text-right text-destructive">₹{e.amount?.toLocaleString()}</td>
+                  <td className="border p-2">{new Date(e.expenseDate).toLocaleDateString()}</td>
+                  <td className="border p-2 capitalize">{e.category}</td>
+                  <td className="border p-2">{e.expensePartyName}</td>
+                  <td className="border p-2">{e.buildingName}</td>
+                  <td className="border p-2 text-right font-medium">₹{e.amount?.toLocaleString()}</td>
                 </tr>
               ))}
+              {filteredData.expense.length === 0 && (
+                <tr><td colSpan={5} className="border p-4 text-center text-muted-foreground">No records found.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
