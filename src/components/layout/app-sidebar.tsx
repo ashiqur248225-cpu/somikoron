@@ -9,7 +9,6 @@ import {
   Receipt, 
   History, 
   LayoutDashboard, 
-  Contact, 
   BarChart3,
   CircleDollarSign,
   Settings,
@@ -77,11 +76,6 @@ const items = [
     title: "Transfers",
     url: "/transfers",
     icon: ArrowLeftRight,
-  },
-  {
-    title: "Parties",
-    url: "/parties",
-    icon: Contact,
   },
   {
     title: "Reports",
