@@ -90,12 +90,22 @@ export default function StudentsPage() {
     method: "cash"
   })
 
-  // When monthly rent or type changes, update the default due amount
+  // Dynamic Due Logic for New Students
   useEffect(() => {
     if (formData.type === 'new') {
-      setFormData(prev => ({ ...prev, dueAmount: prev.monthlyRent || "0" }))
+      const rentPaid = Number(formData.initialRentPayment) || 0;
+      const monthlyRate = formData.monthlyRent || "0";
+      
+      setFormData(prev => {
+        // If rent paid > 0, set due to 0. Otherwise set to monthly rate.
+        const calculatedDue = rentPaid > 0 ? "0" : monthlyRate;
+        if (prev.dueAmount !== calculatedDue) {
+          return { ...prev, dueAmount: calculatedDue };
+        }
+        return prev;
+      });
     }
-  }, [formData.monthlyRent, formData.type])
+  }, [formData.monthlyRent, formData.type, formData.initialRentPayment])
 
   const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
   
@@ -161,7 +171,6 @@ export default function StudentsPage() {
       const monthlyRent = Number(formData.monthlyRent)
       const apartmentName = selectedRoom?.aptName || "General"
 
-      // Use what's in the box, converted to number
       const startingRentDue = Number(formData.dueAmount) || 0
       const startingFoodDue = Number(formData.foodDueAmount) || 0
 
@@ -333,7 +342,7 @@ export default function StudentsPage() {
                     <Label className="font-bold text-destructive">Initial/Previous RENT Due (৳)</Label>
                     <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
                     <p className="text-[10px] text-muted-foreground italic">
-                      * New student: Default is one month's rent. Old student: Total debt at entry.
+                      * New student: Auto-calculated based on Initial Payment. Old student: Total debt at entry.
                     </p>
                   </div>
                   {formData.paymentSystem === 'non-package' && (
@@ -445,52 +454,6 @@ export default function StudentsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Search</Label>
-          <Input placeholder="Name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Building</Label>
-          <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all") }}>
-            <SelectTrigger><SelectValue placeholder="Building" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Room</Label>
-          <Select disabled={buildingFilter === 'all'} value={roomFilter} onValueChange={setRoomFilter}>
-            <SelectTrigger><SelectValue placeholder="Room" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">All Rooms</SelectItem>{roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Status</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active Residents</SelectItem>
-              <SelectItem value="left">Ex-Residents</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Plan</Label>
-          <Select value={planFilter} onValueChange={setPlanFilter}>
-            <SelectTrigger><SelectValue placeholder="Plan" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Plans</SelectItem>
-              <SelectItem value="package">Package</SelectItem>
-              <SelectItem value="non-package">Non-Package</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button variant="ghost" className="h-10" onClick={() => { setBuildingFilter("all"); setRoomFilter("all"); setSearchTerm(""); setStatusFilter("active"); setPlanFilter("all"); }}>
-          <XCircle size={14} className="mr-1" /> Reset
-        </Button>
       </div>
 
       {isLoading ? (
