@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -52,7 +51,6 @@ export default function ExpenseHistoryPage() {
   const [isEntryOpen, setIsEntryOpen] = useState(false)
   
   // Filters State
-  const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [expenserFilter, setExpenserFilter] = useState("all")
@@ -89,10 +87,6 @@ export default function ExpenseHistoryPage() {
     if (!expenses) return []
     return expenses.filter(e => {
       const eDate = new Date(e.expenseDate)
-      const matchesSearch = 
-        (e.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (e.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (e.buildingName || "").toLowerCase().includes(searchTerm.toLowerCase())
       
       const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
       const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
@@ -101,9 +95,9 @@ export default function ExpenseHistoryPage() {
       const matchesStartDate = !startDate || eDate >= new Date(startDate)
       const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
 
-      return matchesSearch && matchesCategory && matchesBuilding && matchesExpenser && matchesMethod && matchesStartDate && matchesEndDate
+      return matchesCategory && matchesBuilding && matchesExpenser && matchesMethod && matchesStartDate && matchesEndDate
     })
-  }, [expenses, searchTerm, categoryFilter, buildingFilter, expenserFilter, methodFilter, startDate, endDate])
+  }, [expenses, categoryFilter, buildingFilter, expenserFilter, methodFilter, startDate, endDate])
 
   const totalFilteredExpense = useMemo(() => {
     return filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
@@ -144,7 +138,6 @@ export default function ExpenseHistoryPage() {
   }
 
   const handleResetFilters = () => {
-    setSearchTerm("")
     setCategoryFilter("all")
     setBuildingFilter("all")
     setExpenserFilter("all")
@@ -176,11 +169,7 @@ export default function ExpenseHistoryPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
-         <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase font-bold">Search</Label>
-            <Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-         </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
          <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground uppercase font-bold">Category</Label>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
