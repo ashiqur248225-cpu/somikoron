@@ -92,3 +92,30 @@
 .bg-expense {
   background-color: hsl(var(--destructive));
 }
+
+@media print {
+  [data-sidebar="sidebar"],
+  [data-sidebar="header"],
+  .sidebar-trigger,
+  button,
+  .print-hidden {
+    display: none !important;
+  }
+  
+  .sidebar-inset, 
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    width: 100% !important;
+  }
+
+  body {
+    background-color: white !important;
+  }
+
+  .card {
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+  }
+}

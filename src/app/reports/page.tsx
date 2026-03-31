@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -185,7 +184,9 @@ export default function ReportsPage() {
   }
 
   const handlePrint = () => {
-    window.print()
+    if (typeof window !== "undefined") {
+      window.print()
+    }
   }
 
   const handleReset = () => {
@@ -368,7 +369,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Hidden summary for Print */}
+      {/* Visible summary for Print only */}
       <div className="hidden print:block space-y-8 mt-8 border-t pt-8">
         <h2 className="text-2xl font-bold text-center">Somikoron Financial Performance Report</h2>
         <div className="grid grid-cols-2 gap-8 text-sm">
@@ -420,7 +421,7 @@ export default function ReportsPage() {
             <tbody>
               {filteredData.income.map((p, i) => (
                 <tr key={i}>
-                  <td className="border p-2">{p.date?.toDate ? p.date.toDate().toLocaleDateString() : new Date(p.date).toLocaleDateString()}</td>
+                  <td className="border p-2">{p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A')}</td>
                   <td className="border p-2">{p.studentName}</td>
                   <td className="border p-2">{p.receiver}</td>
                   <td className="border p-2">{p.buildingName}</td>
