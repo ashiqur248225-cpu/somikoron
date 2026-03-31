@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -47,7 +46,6 @@ export default function DuesPage() {
     if (!students) return []
     
     return students.map(student => {
-      // Logic alignment with Student Profile and Dashboard
       const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
       const now = new Date()
       const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
@@ -135,7 +133,8 @@ export default function DuesPage() {
 
   const handlePrint = () => {
     if (typeof window !== "undefined") {
-      window.print()
+      window.focus();
+      window.print();
     }
   }
 
@@ -154,7 +153,7 @@ export default function DuesPage() {
           <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
             <FileSpreadsheet size={16} /> Export CSV
           </Button>
-          <Button className="gap-2" onClick={handlePrint}>
+          <Button type="button" className="gap-2" onClick={handlePrint}>
             <Printer size={16} /> Print Report
           </Button>
         </div>
@@ -286,50 +285,52 @@ export default function DuesPage() {
         </CardContent>
       </Card>
 
-      {/* Hidden print section */}
+      {/* Optimized Print Section */}
       <div className="hidden print:block space-y-6">
-        <h2 className="text-2xl font-bold text-center">Somikoron Outstanding Dues Report</h2>
-        <div className="flex justify-between text-sm border-b pb-2">
-          <div>
-            <p><strong>Property:</strong> {buildingFilter === 'all' ? 'All' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
-            <p><strong>Room:</strong> {roomFilter}</p>
-          </div>
-          <div className="text-right">
-            <p><strong>Report Date:</strong> {new Date().toLocaleString()}</p>
+        <div className="text-center space-y-2 border-b pb-4">
+          <h1 className="text-2xl font-bold text-primary">Somikoron Hostel Ledger</h1>
+          <h2 className="text-xl font-semibold">Outstanding Dues Report</h2>
+          <div className="text-sm text-muted-foreground flex justify-center gap-4">
+            <span>Date: {new Date().toLocaleString()}</span>
+            <span>Building: {buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}</span>
           </div>
         </div>
-        <table className="w-full border-collapse text-[10px]">
+
+        <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-100">
-              <th className="border p-2 text-left">Resident</th>
-              <th className="border p-2 text-left">Phone</th>
-              <th className="border p-2 text-left">Building</th>
-              <th className="border p-2 text-left">Room</th>
-              <th className="border p-2 text-right">Rent Due</th>
-              <th className="border p-2 text-right">Food Due</th>
-              <th className="border p-2 text-right">Total Outstanding</th>
+            <tr>
+              <th>Resident</th>
+              <th>Building</th>
+              <th>Room</th>
+              <th className="text-right">Rent Due</th>
+              <th className="text-right">Food Due</th>
+              <th className="text-right">Total Outstanding</th>
             </tr>
           </thead>
           <tbody>
             {filteredDues.map((s, i) => (
               <tr key={i}>
-                <td className="border p-2 font-medium">{s.name}</td>
-                <td className="border p-2">{s.phone}</td>
-                <td className="border p-2">{s.buildingName}</td>
-                <td className="border p-2">{s.roomNumber}</td>
-                <td className="border p-2 text-right">৳{s.rentDue?.toLocaleString()}</td>
-                <td className="border p-2 text-right">৳{s.foodDue?.toLocaleString()}</td>
-                <td className="border p-2 text-right font-bold text-red-600">৳{s.totalDue?.toLocaleString()}</td>
+                <td className="font-medium">{s.name}</td>
+                <td>{s.buildingName}</td>
+                <td>{s.roomNumber}</td>
+                <td className="text-right">৳{s.rentDue?.toLocaleString()}</td>
+                <td className="text-right">৳{s.foodDue?.toLocaleString()}</td>
+                <td className="text-right font-bold text-destructive">৳{s.totalDue?.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="font-bold bg-gray-50">
-              <td colSpan={6} className="border p-2 text-right">GRAND TOTAL OUTSTANDING</td>
-              <td className="border p-2 text-right">৳{grandTotalDue.toLocaleString()}</td>
+            <tr className="bg-gray-50">
+              <td colSpan={5} className="text-right font-bold py-4">GRAND TOTAL OUTSTANDING:</td>
+              <td className="text-right font-bold text-lg text-destructive py-4">৳{grandTotalDue.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
+
+        <div className="pt-20 flex justify-between px-10">
+          <div className="border-t border-black px-8 pt-2 text-center text-sm">Auditor Signature</div>
+          <div className="border-t border-black px-8 pt-2 text-center text-sm">Manager Signature</div>
+        </div>
       </div>
     </div>
   )

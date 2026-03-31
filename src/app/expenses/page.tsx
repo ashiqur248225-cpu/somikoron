@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo } from "react"
@@ -194,7 +193,8 @@ export default function ExpenseHistoryPage() {
 
   const handlePrint = () => {
     if (typeof window !== "undefined") {
-      window.print()
+      window.focus();
+      window.print();
     }
   }
 
@@ -210,7 +210,7 @@ export default function ExpenseHistoryPage() {
           <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
             <FileSpreadsheet size={16} /> Export CSV
           </Button>
-          <Button className="gap-2" onClick={handlePrint}>
+          <Button type="button" className="gap-2" onClick={handlePrint}>
             <Printer size={16} /> Print Report
           </Button>
         </div>
@@ -330,48 +330,50 @@ export default function ExpenseHistoryPage() {
       </Card>
 
       <div className="hidden print:block space-y-6">
-        <h2 className="text-2xl font-bold text-center">Somikoron Expense Report</h2>
-        <div className="flex justify-between text-sm border-b pb-2">
-          <div>
-            <p><strong>Period:</strong> {startDate || 'Beginning'} to {endDate || 'Today'}</p>
-            <p><strong>Category:</strong> {categoryFilter}</p>
-          </div>
-          <div className="text-right">
-            <p><strong>Report Date:</strong> {new Date().toLocaleString()}</p>
+        <div className="text-center space-y-2 border-b pb-4">
+          <h1 className="text-2xl font-bold text-primary">Somikoron Hostel Ledger</h1>
+          <h2 className="text-xl font-semibold">Expense Report</h2>
+          <div className="text-sm text-muted-foreground flex justify-center gap-4">
+            <span>Period: {startDate || 'Beginning'} - {endDate || 'Today'}</span>
+            <span>Category: {categoryFilter}</span>
           </div>
         </div>
-        <table className="w-full border-collapse text-[10px]">
+
+        <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-100">
-              <th className="border p-2 text-left">Type</th>
-              <th className="border p-2 text-left">Date</th>
-              <th className="border p-2 text-left">Expenser/Party</th>
-              <th className="border p-2 text-left">Category</th>
-              <th className="border p-2 text-left">Method</th>
-              <th className="border p-2 text-left">Location</th>
-              <th className="border p-2 text-right">Amount</th>
+            <tr>
+              <th>Date</th>
+              <th>Expenser/Party</th>
+              <th>Category</th>
+              <th>Method</th>
+              <th>Location</th>
+              <th className="text-right">Amount</th>
             </tr>
           </thead>
           <tbody>
             {filteredExpenses.map((e, i) => (
               <tr key={i}>
-                <td className="border p-2">EXPENSE</td>
-                <td className="border p-2">{new Date(e.expenseDate).toLocaleDateString()}</td>
-                <td className="border p-2 font-medium">{e.expensePartyName}</td>
-                <td className="border p-2 capitalize">{e.category}</td>
-                <td className="border p-2 uppercase">{e.method}</td>
-                <td className="border p-2">{e.buildingName} {e.apartmentName !== 'none' ? '| ' + e.apartmentName : ''}</td>
-                <td className="border p-2 text-right">৳{e.amount?.toLocaleString()}</td>
+                <td>{new Date(e.expenseDate).toLocaleDateString()}</td>
+                <td className="font-medium">{e.expensePartyName}</td>
+                <td className="capitalize">{e.category}</td>
+                <td className="uppercase">{e.method}</td>
+                <td>{e.buildingName} {e.apartmentName !== 'none' ? '| ' + e.apartmentName : ''}</td>
+                <td className="text-right font-bold">৳{e.amount?.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="font-bold bg-gray-50">
-              <td colSpan={6} className="border p-2 text-right">TOTAL EXPENSES</td>
-              <td className="border p-2 text-right">৳{totalFilteredExpense.toLocaleString()}</td>
+            <tr className="bg-gray-50">
+              <td colSpan={5} className="text-right font-bold py-4">TOTAL EXPENSES:</td>
+              <td className="text-right font-bold text-lg text-destructive py-4">৳{totalFilteredExpense.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
+
+        <div className="pt-20 flex justify-between px-10">
+          <div className="border-t border-black px-8 pt-2 text-center text-sm">Accountant Signature</div>
+          <div className="border-t border-black px-8 pt-2 text-center text-sm">Manager Signature</div>
+        </div>
       </div>
 
       <div className="fixed bottom-8 right-8 z-50 print:hidden">
