@@ -159,7 +159,8 @@ export default function StudentsPage() {
     const svcPaid = Number(formData.serviceCharge) || 0
     const totalInitialReceived = rentPaid + foodPaid + advPaid + svcPaid
     
-    if (totalInitialReceived > 0 && !formData.receiver) {
+    // Receiver is only required if it's a NEW student paying money TODAY
+    if (formData.type === 'new' && totalInitialReceived > 0 && !formData.receiver) {
       toast({ variant: "destructive", title: "Missing Info", description: "Please select a receiver for the initial payment." })
       return
     }
@@ -179,7 +180,10 @@ export default function StudentsPage() {
       if (foodPaid > 0) detailsArr.push(`Food: ৳${foodPaid}`)
       if (advPaid > 0) detailsArr.push(`Advance: ৳${advPaid}`)
       if (svcPaid > 0) detailsArr.push(`Service: ৳${svcPaid}`)
-      const detailedDescription = `Initial payment: ${detailsArr.join(', ')}`
+      
+      const isOld = formData.type === 'old'
+      const prefix = isOld ? "[Historical Data] " : "Initial payment: "
+      const detailedDescription = `${prefix}${detailsArr.join(', ')}`
 
       const paymentRecord = totalInitialReceived > 0 ? {
         amount: totalInitialReceived,
@@ -194,13 +198,15 @@ export default function StudentsPage() {
         type: "income",
         month: new Date().toLocaleString('default', { month: 'long' }),
         year: new Date().getFullYear().toString(),
-        method: formData.method,
-        receiver: formData.receiver,
+        method: isOld ? "historical_import" : formData.method,
+        receiver: isOld ? "System (Data Import)" : formData.receiver,
         description: detailedDescription,
         date: new Date().toISOString()
       } : null
 
-      if (paymentRecord) {
+      // CRITICAL: Only add to global payments collection if it's a NEW student.
+      // For OLD students, we skip this setDoc so it doesn't affect Today's Income or Net Balance.
+      if (paymentRecord && formData.type === 'new') {
         await setDoc(doc(db, "payments", doc(collection(db, "payments")).id), {
           ...paymentRecord,
           date: serverTimestamp(),
@@ -218,6 +224,7 @@ export default function StudentsPage() {
         apartmentName: apartmentName,
         buildingName: selectedBuilding?.name || "Unknown",
         isActive: true,
+        // We still keep the record in the student's personal history for their own audit trail
         paymentsHistory: paymentRecord ? [paymentRecord] : [],
         mealsHistory: [],
         createdAt: serverTimestamp(),
@@ -253,7 +260,7 @@ export default function StudentsPage() {
         updatedAt: serverTimestamp()
       })
 
-      toast({ title: "Registered", description: "Resident registered successfully." })
+      toast({ title: "Registered", description: isOld ? "Historical resident data imported." : "New resident registered successfully." })
       setOpen(false)
       setFormData({
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
@@ -342,7 +349,9 @@ export default function StudentsPage() {
                     <Label className="font-bold text-destructive">Initial/Previous RENT Due (৳)</Label>
                     <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
                     <p className="text-[10px] text-muted-foreground italic">
-                      * New student: Auto-calculated based on Initial Payment. Old student: Total debt at entry.
+                      {formData.type === 'new' 
+                        ? "* Auto-calculated: 0 if initial rent paid, else 1 month rent."
+                        : "* Enter total previous debt at the time of app entry."}
                     </p>
                   </div>
                   {formData.paymentSystem === 'non-package' && (
@@ -401,15 +410,17 @@ export default function StudentsPage() {
               </div>
 
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
-                <Label className="font-bold text-success">Initial Payments & Fees</Label>
+                <Label className="font-bold text-success">
+                  {formData.type === 'old' ? 'Existing/Past Payments' : 'Initial Payments & Fees'}
+                </Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Initial Rent Payment (৳)</Label>
+                    <Label>Rent Payment (৳)</Label>
                     <Input type="number" value={formData.initialRentPayment} onChange={e => setFormData({...formData, initialRentPayment: e.target.value})} placeholder="0.00" />
                   </div>
                   {formData.paymentSystem === 'non-package' && (
                     <div className="space-y-2">
-                      <Label>Initial Food Payment (৳)</Label>
+                      <Label>Food Payment (৳)</Label>
                       <Input type="number" value={formData.initialFoodPayment} onChange={e => setFormData({...formData, initialFoodPayment: e.target.value})} placeholder="0.00" />
                     </div>
                   )}
@@ -424,33 +435,44 @@ export default function StudentsPage() {
                     <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} placeholder="0.00" />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-                  <div className="space-y-2">
-                    <Label>Payment Method</Label>
-                    <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="bkash">Bkash</SelectItem>
-                        <SelectItem value="nagad">Nagad</SelectItem>
-                        <SelectItem value="bank">Bank</SelectItem>
-                      </SelectContent>
-                    </Select>
+                
+                {formData.type === 'new' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                    <div className="space-y-2">
+                      <Label>Payment Method</Label>
+                      <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="bkash">Bkash</SelectItem>
+                          <SelectItem value="nagad">Nagad</SelectItem>
+                          <SelectItem value="bank">Bank</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Payment Receiver</Label>
+                      <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
+                        <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                        <SelectContent>
+                          {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Payment Receiver</Label>
-                    <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
-                      <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
-                      <SelectContent>
-                        {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                )}
+
+                {formData.type === 'old' && (
+                  <p className="text-[10px] text-muted-foreground p-2 bg-secondary/50 rounded italic">
+                    * Note: For Old Students, these values are stored for record-keeping only. They will NOT be added to Today's Global Income or Net Balance since the money was already received in the past.
+                  </p>
+                )}
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleRegister} className="w-full h-12 text-lg font-bold" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : "Register & Occupy Seat"}</Button>
+              <Button onClick={handleRegister} className="w-full h-12 text-lg font-bold" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="animate-spin"/> : formData.type === 'old' ? "Import Old Resident" : "Register & Occupy Seat"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
