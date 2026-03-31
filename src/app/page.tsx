@@ -126,8 +126,6 @@ export default function DashboardPage() {
 
   // Stats Calculations
   const stats = useMemo(() => {
-    if (!allPayments || !allExpenses || !students) return { income: 0, expense: 0, dues: 0, fund: { cash: 0, bkash: 0, nagad: 0, bank: 0 } }
-    
     const now = new Date()
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -147,22 +145,40 @@ export default function DashboardPage() {
       return d >= filterDate
     }
 
-    const income = allPayments.filter(p => isWithinRange(p.date)).reduce((acc, p) => acc + (p.amount || 0), 0)
-    const expense = allExpenses.filter(e => isWithinRange(e.expenseDate)).reduce((acc, e) => acc + (e.amount || 0), 0)
+    const income = (allPayments || [])
+      .filter(p => isWithinRange(p.date))
+      .reduce((acc, p) => acc + (p.amount || 0), 0)
 
-    const totalDues = students.filter(s => s.isActive).reduce((sAcc, student) => {
+    const expense = (allExpenses || [])
+      .filter(e => isWithinRange(e.expenseDate))
+      .reduce((acc, e) => acc + (e.amount || 0), 0)
+
+    const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, student) => {
       const regDate = student.createdAt?.toDate?.() || new Date()
-      const now = new Date()
       const monthsElapsed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth())
       
       const historicalRentDue = Number(student.dueAmount) || 0
-      const totalExpectedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
-      const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0) || 0), 0) || 0
-      const rentDue = Math.max(0, (historicalRentDue + totalExpectedRent) - totalRentPaid)
+      const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
+      
+      const totalRentPaid = student.paymentsHistory?.reduce((pAcc: number, curr: any) => {
+        const rentPortion = (curr.seatAmount !== undefined) 
+          ? Number(curr.seatAmount) 
+          : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
+        return pAcc + rentPortion
+      }, 0) || 0
+      
+      const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
       const historicalFoodDue = Number(student.foodDueAmount) || 0
-      const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-      const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+      const generatedFoodCost = student.mealsHistory?.reduce((fAcc: number, curr: any) => fAcc + (curr.totalCost || 0), 0) || 0
+      
+      const totalFoodPaid = student.paymentsHistory?.reduce((fAcc: number, curr: any) => {
+        const foodPortion = (curr.foodAmount !== undefined) 
+          ? Number(curr.foodAmount) 
+          : (student.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
+        return fAcc + foodPortion
+      }, 0) || 0
+      
       const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
       const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
 
@@ -176,11 +192,11 @@ export default function DashboardPage() {
       bank: Number(openingBalances?.bank || 0) 
     }
 
-    allPayments.forEach(p => {
+    (allPayments || []).forEach(p => {
       const m = p.method as keyof typeof fund
       if (fund[m] !== undefined) fund[m] += (p.amount || 0)
     })
-    allExpenses.forEach(e => {
+    (allExpenses || []).forEach(e => {
       const m = e.method as keyof typeof fund
       if (fund[m] !== undefined) fund[m] -= (e.amount || 0)
     })
@@ -230,7 +246,7 @@ export default function DashboardPage() {
     }
 
     try {
-      if (!useAdvanceBalance) {
+      if (!useAdvanceBalance && totalCashAmount > 0) {
         await setDoc(doc(db, "payments", paymentId), {
           ...paymentRecord,
           date: Timestamp.now(),
