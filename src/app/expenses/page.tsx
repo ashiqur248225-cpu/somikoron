@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { TrendingDown, Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle } from "lucide-react"
+import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -45,10 +46,17 @@ const EXPENSE_CATEGORIES = [
 
 export default function ExpenseHistoryPage() {
   const { toast } = useToast()
+  const router = useRouter()
   const db = useFirestore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isEntryOpen, setIsEntryOpen] = useState(false)
   
+  // Filters State
+  const [searchTerm, setSearchTerm] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+
   const [formData, setFormData] = useState({
     category: "market",
     buildingId: "",
@@ -56,8 +64,8 @@ export default function ExpenseHistoryPage() {
     roomNumber: "",
     amount: "",
     method: "cash",
-    expensePartyName: "", // Ke expense korece - Now from staff
-    receiver: "", // Staff who handled/received
+    expensePartyName: "",
+    receiver: "",
     description: "",
     expenseDate: new Date().toISOString().split('T')[0],
   })
@@ -68,34 +76,38 @@ export default function ExpenseHistoryPage() {
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
-  const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("expenseDate", "desc"), limit(200)), [db])
+  const expensesQuery = useMemoFirebase(() => query(collection(db, "expenses"), orderBy("expenseDate", "desc"), limit(500)), [db])
   const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
   const selectedBuildingForForm = useMemo(() => buildings?.find(b => b.id === formData.buildingId), [buildings, formData.buildingId])
   const apartmentsInBuilding = useMemo(() => selectedBuildingForForm?.apartmentsDetail || [], [selectedBuildingForForm])
 
+  const filteredExpenses = useMemo(() => {
+    if (!expenses) return []
+    return expenses.filter(e => {
+      const eDate = new Date(e.expenseDate)
+      const matchesSearch = 
+        (e.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (e.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (e.buildingName || "").toLowerCase().includes(searchTerm.toLowerCase())
+      
+      const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
+      const matchesStartDate = !startDate || eDate >= new Date(startDate)
+      const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
+
+      return matchesSearch && matchesCategory && matchesStartDate && matchesEndDate
+    })
+  }, [expenses, searchTerm, categoryFilter, startDate, endDate])
+
+  const totalFilteredExpense = useMemo(() => {
+    return filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
+  }, [filteredExpenses])
+
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!formData.amount || !formData.expensePartyName) {
-      toast({ variant: "destructive", title: "Error", description: "Amount and Expenser (Staff) are required." })
-      return
-    }
-
-    const needsBuilding = ["rent", "electricity", "water", "maintenance", "internet"].includes(formData.category)
-    if (needsBuilding && !formData.buildingId) {
-      toast({ variant: "destructive", title: "Error", description: "Please select a building." })
-      return
-    }
-
-    if (formData.category === "electricity" && !formData.apartmentName) {
-      toast({ variant: "destructive", title: "Error", description: "Please select an Apartment/Meter." })
-      return
-    }
-
-    const needsReceiver = ["market", "salary"].includes(formData.category)
-    if (needsReceiver && !formData.receiver) {
-      toast({ variant: "destructive", title: "Error", description: "Please select a Receiver (Staff)." })
+      toast({ variant: "destructive", title: "Error", description: "Amount and Expenser are required." })
       return
     }
 
@@ -106,6 +118,7 @@ export default function ExpenseHistoryPage() {
     try {
       await setDoc(doc(db, "expenses", expenseId), {
         ...formData,
+        id: expenseId,
         amount: Number(formData.amount),
         buildingName: building?.name || "General",
         createdAt: serverTimestamp(),
@@ -117,29 +130,19 @@ export default function ExpenseHistoryPage() {
         expensePartyName: "", receiver: "", description: "",
         expenseDate: new Date().toISOString().split('T')[0],
       })
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message })
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        e.preventDefault();
-        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
-        if (container) {
-          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
-          const index = focusables.indexOf(target);
-          if (index > -1 && index < focusables.length - 1) {
-            focusables[index + 1].focus();
-          }
-        }
-      }
-    }
-  };
+  const handleResetFilters = () => {
+    setSearchTerm("")
+    setCategoryFilter("all")
+    setStartDate("")
+    setEndDate("")
+  }
 
   return (
     <div className="space-y-8 pb-20">
@@ -149,6 +152,47 @@ export default function ExpenseHistoryPage() {
           <Separator orientation="vertical" className="mr-2 h-4" />
           <h1 className="text-3xl font-headline font-bold text-primary">Expenses</h1>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card className="bg-destructive/5 border-none shadow-sm border-l-4 border-l-destructive">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-destructive flex items-center gap-2">
+              <Receipt size={16} /> Total Expenses (Filtered)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-destructive">₹{totalFilteredExpense.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">Search</Label>
+            <Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+         </div>
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">Category</Label>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+         </div>
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">From Date</Label>
+            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+         </div>
+         <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase font-bold">To Date</Label>
+            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+         </div>
+         <Button variant="ghost" className="h-10" onClick={handleResetFilters}>
+           <XCircle size={14} className="mr-1" /> Reset
+         </Button>
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
@@ -166,8 +210,8 @@ export default function ExpenseHistoryPage() {
             <TableBody>
               {expensesLoading ? (
                 <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
-              ) : expenses?.map((e: any) => (
-                <TableRow key={e.id}>
+              ) : filteredExpenses?.map((e: any) => (
+                <TableRow key={e.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/expenses/${e.id}`)}>
                   <TableCell className="text-xs">{new Date(e.expenseDate).toLocaleDateString()}</TableCell>
                   <TableCell><Badge variant="secondary" className="capitalize text-[10px]">{e.category}</Badge></TableCell>
                   <TableCell className="font-medium text-sm">
@@ -179,14 +223,14 @@ export default function ExpenseHistoryPage() {
                   <TableCell className="text-xs">
                     <div className="flex flex-col">
                       <span>{e.buildingName}</span>
-                      {e.apartmentName && <span className="text-[10px] text-muted-foreground">{e.apartmentName} {e.roomNumber ? `| Room ${e.roomNumber}` : ''}</span>}
+                      {e.apartmentName && e.apartmentName !== 'none' && <span className="text-[10px] text-muted-foreground">{e.apartmentName} {e.roomNumber ? `| Room ${e.roomNumber}` : ''}</span>}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-bold text-expense">₹{e.amount?.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
-              {expenses?.length === 0 && !expensesLoading && (
-                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No expenses recorded yet.</TableCell></TableRow>
+              {filteredExpenses?.length === 0 && !expensesLoading && (
+                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No expenses found for these criteria.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -198,7 +242,7 @@ export default function ExpenseHistoryPage() {
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Log Expense Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
             
@@ -210,7 +254,6 @@ export default function ExpenseHistoryPage() {
               </Select>
             </div>
 
-            {/* Conditional Building Selection */}
             {["rent", "electricity", "water", "maintenance", "internet"].includes(formData.category) && (
               <div className="space-y-2 p-3 bg-secondary/10 rounded-lg border">
                 <Label className="flex items-center gap-1.5"><Building2 size={12}/> Target Building</Label>
@@ -221,7 +264,6 @@ export default function ExpenseHistoryPage() {
               </div>
             )}
 
-            {/* Conditional Unit/Room Selection */}
             {formData.buildingId && (
               <div className="space-y-3 p-3 bg-primary/5 border rounded-lg">
                 <div className="space-y-2">
@@ -247,7 +289,6 @@ export default function ExpenseHistoryPage() {
               </div>
             )}
 
-            {/* Expenser Name - Ke expense korece - FETCHED FROM STAFF */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5 font-bold"><UserCheck size={14} className="text-primary"/> Expenser (Staff Name)</Label>
               <Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}>
@@ -258,7 +299,6 @@ export default function ExpenseHistoryPage() {
               </Select>
             </div>
 
-            {/* Conditional Receiver (Staff) Selection */}
             {["market", "salary"].includes(formData.category) && (
               <div className="space-y-2 p-3 bg-success/5 border-success/20 border rounded-lg">
                 <Label className="flex items-center gap-1.5 text-success font-bold">Receiver (Staff member)</Label>
