@@ -152,7 +152,7 @@ export default function DuesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-destructive">tk{grandTotalDue.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-destructive">৳{grandTotalDue.toLocaleString()}</p>
           </CardContent>
         </Card>
       </div>
@@ -230,14 +230,14 @@ export default function DuesPage() {
                   </TableCell>
                   <TableCell className="text-xs">
                      <div className="flex items-center gap-1">
-                      tk{s.rentDue?.toLocaleString()}
+                      ৳{s.rentDue?.toLocaleString()}
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Info size={10} className="text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent className="text-[10px]">
-                            Historical: tk{s.dueAmount || 0} + Generated: tk{s.monthsElapsed * (s.monthlyRent || 0)}
+                            Historical: ৳{s.dueAmount || 0} + Generated: ৳{s.monthsElapsed * (s.monthlyRent || 0)}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -245,10 +245,10 @@ export default function DuesPage() {
                   </TableCell>
                   <TableCell className="text-xs">
                     <span className={cn(s.foodBalance >= 0 ? "text-success" : "text-destructive")}>
-                      tk{Math.abs(s.foodBalance || 0).toLocaleString()} {s.foodBalance < 0 ? '(Due)' : '(Credit)'}
+                      ৳{Math.abs(s.foodBalance || 0).toLocaleString()} {s.foodBalance < 0 ? '(Due)' : '(Credit)'}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-bold text-destructive">tk{s.totalDue?.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-bold text-destructive">৳{s.totalDue?.toLocaleString()}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>
                       <Eye size={14} className="mr-1" /> Profile
@@ -295,16 +295,16 @@ export default function DuesPage() {
                 <td className="border p-2">{s.phone}</td>
                 <td className="border p-2">{s.buildingName}</td>
                 <td className="border p-2">{s.roomNumber}</td>
-                <td className="border p-2 text-right">tk{s.rentDue?.toLocaleString()}</td>
-                <td className="border p-2 text-right">tk{s.foodDue?.toLocaleString()}</td>
-                <td className="border p-2 text-right font-bold text-red-600">tk{s.totalDue?.toLocaleString()}</td>
+                <td className="border p-2 text-right">৳{s.rentDue?.toLocaleString()}</td>
+                <td className="border p-2 text-right">৳{s.foodDue?.toLocaleString()}</td>
+                <td className="border p-2 text-right font-bold text-red-600">৳{s.totalDue?.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="font-bold bg-gray-50">
               <td colSpan={6} className="border p-2 text-right">GRAND TOTAL OUTSTANDING</td>
-              <td className="border p-2 text-right">tk{grandTotalDue.toLocaleString()}</td>
+              <td className="border p-2 text-right">৳{grandTotalDue.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>

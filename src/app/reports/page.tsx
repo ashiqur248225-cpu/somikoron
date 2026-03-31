@@ -256,7 +256,7 @@ export default function ReportsPage() {
             <TrendingUp className="text-income h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black">tk{stats.totalIncome.toLocaleString()}</div>
+            <div className="text-2xl font-black">৳{stats.totalIncome.toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1">From {filteredData.income.length} records</p>
           </CardContent>
         </Card>
@@ -267,7 +267,7 @@ export default function ReportsPage() {
             <TrendingDown className="text-expense h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black">tk{stats.totalExpense.toLocaleString()}</div>
+            <div className="text-2xl font-black">৳{stats.totalExpense.toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1">From {filteredData.expense.length} records</p>
           </CardContent>
         </Card>
@@ -278,7 +278,7 @@ export default function ReportsPage() {
             <CircleAlert className="text-destructive h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black">tk{stats.totalDues.toLocaleString()}</div>
+            <div className="text-2xl font-black">৳{stats.totalDues.toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1">Current outstanding</p>
           </CardContent>
         </Card>
@@ -296,7 +296,7 @@ export default function ReportsPage() {
               "text-2xl font-black",
               stats.netProfit >= 0 ? "text-primary" : "text-destructive"
             )}>
-              {stats.netProfit < 0 ? '-' : ''}tk{Math.abs(stats.netProfit).toLocaleString()}
+              {stats.netProfit < 0 ? '-' : ''}৳{Math.abs(stats.netProfit).toLocaleString()}
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">For selected period</p>
           </CardContent>
@@ -339,11 +339,11 @@ export default function ReportsPage() {
               </div>
               <div className="flex justify-between items-center text-sm border-t pt-4">
                 <span className="text-muted-foreground font-medium">Gross Collections</span>
-                <span className="font-bold text-income">tk{stats.totalIncome.toLocaleString()}</span>
+                <span className="font-bold text-income">৳{stats.totalIncome.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground font-medium">Operational Costs</span>
-                <span className="font-bold text-expense">tk{stats.totalExpense.toLocaleString()}</span>
+                <span className="font-bold text-expense">৳{stats.totalExpense.toLocaleString()}</span>
               </div>
               <Separator />
               <div className="bg-primary/5 p-4 rounded-xl space-y-2">
@@ -388,20 +388,20 @@ export default function ReportsPage() {
           <div className="grid grid-cols-4 gap-4 text-center">
             <div className="border p-3 rounded">
               <p className="text-[10px] uppercase text-muted-foreground">Income</p>
-              <p className="text-lg font-bold">tk{stats.totalIncome.toLocaleString()}</p>
+              <p className="text-lg font-bold">৳{stats.totalIncome.toLocaleString()}</p>
             </div>
             <div className="border p-3 rounded">
               <p className="text-[10px] uppercase text-muted-foreground">Expense</p>
-              <p className="text-lg font-bold">tk{stats.totalExpense.toLocaleString()}</p>
+              <p className="text-lg font-bold">৳{stats.totalExpense.toLocaleString()}</p>
             </div>
             <div className="border p-3 rounded">
               <p className="text-[10px] uppercase text-muted-foreground">Current Dues</p>
-              <p className="text-lg font-bold">tk{stats.totalDues.toLocaleString()}</p>
+              <p className="text-lg font-bold">৳{stats.totalDues.toLocaleString()}</p>
             </div>
             <div className="border p-3 rounded">
               <p className="text-[10px] uppercase text-muted-foreground">Net Balance</p>
               <p className={cn("text-lg font-bold", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>
-                tk{stats.netProfit.toLocaleString()}
+                ৳{stats.netProfit.toLocaleString()}
               </p>
             </div>
           </div>
@@ -426,7 +426,7 @@ export default function ReportsPage() {
                   <td className="border p-2">{p.studentName}</td>
                   <td className="border p-2">{p.receiver}</td>
                   <td className="border p-2">{p.buildingName}</td>
-                  <td className="border p-2 text-right font-medium">tk{p.amount?.toLocaleString()}</td>
+                  <td className="border p-2 text-right font-medium">৳{p.amount?.toLocaleString()}</td>
                 </tr>
               ))}
               {filteredData.income.length === 0 && (
@@ -455,7 +455,7 @@ export default function ReportsPage() {
                   <td className="border p-2 capitalize">{e.category}</td>
                   <td className="border p-2">{e.expensePartyName}</td>
                   <td className="border p-2">{e.buildingName}</td>
-                  <td className="border p-2 text-right font-medium">tk{e.amount?.toLocaleString()}</td>
+                  <td className="border p-2 text-right font-medium">৳{e.amount?.toLocaleString()}</td>
                 </tr>
               ))}
               {filteredData.expense.length === 0 && (

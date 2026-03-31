@@ -142,10 +142,10 @@ export default function StudentsPage() {
 
       // Detailed Description for Initial Payment
       let detailsArr = []
-      if (rentPaid > 0) detailsArr.push(`Rent: tk${rentPaid}`)
-      if (foodPaid > 0) detailsArr.push(`Food: tk${foodPaid}`)
-      if (advPaid > 0) detailsArr.push(`Advance: tk${advPaid}`)
-      if (svcPaid > 0) detailsArr.push(`Service: tk${svcPaid}`)
+      if (rentPaid > 0) detailsArr.push(`Rent: ৳${rentPaid}`)
+      if (foodPaid > 0) detailsArr.push(`Food: ৳${foodPaid}`)
+      if (advPaid > 0) detailsArr.push(`Advance: ৳${advPaid}`)
+      if (svcPaid > 0) detailsArr.push(`Service: ৳${svcPaid}`)
       const detailedDescription = `Initial payment: ${detailsArr.join(', ')}`
 
       const paymentRecord = totalInitialReceived > 0 ? {
@@ -277,7 +277,7 @@ export default function StudentsPage() {
                      </Select>
                    </div>
                    <div className="space-y-2">
-                     <Label>{formData.paymentSystem === 'package' ? 'Monthly Package Rate (tk)' : 'Monthly Seat Rent (tk)'}</Label>
+                     <Label>{formData.paymentSystem === 'package' ? 'Monthly Package Rate (৳)' : 'Monthly Seat Rent (৳)'}</Label>
                      <Input type="number" value={formData.monthlyRent} onChange={e => setFormData({...formData, monthlyRent: e.target.value})} placeholder="0.00" />
                    </div>
                 </div>
@@ -305,12 +305,12 @@ export default function StudentsPage() {
                 {formData.type === 'old' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
                     <div className="space-y-2">
-                      <Label className="font-bold text-destructive">Previous RENT Due (tk)</Label>
+                      <Label className="font-bold text-destructive">Previous RENT Due (৳)</Label>
                       <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
                     </div>
                     {formData.paymentSystem === 'non-package' && (
                       <div className="space-y-2">
-                        <Label className="font-bold text-destructive">Previous FOOD Due (tk)</Label>
+                        <Label className="font-bold text-destructive">Previous FOOD Due (৳)</Label>
                         <Input type="number" value={formData.foodDueAmount} onChange={e => setFormData({...formData, foodDueAmount: e.target.value})} placeholder="0.00" />
                       </div>
                     )}
@@ -368,23 +368,23 @@ export default function StudentsPage() {
                 <Label className="font-bold">Initial Payments & Fees</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Initial Rent Payment (tk)</Label>
+                    <Label>Initial Rent Payment (৳)</Label>
                     <Input type="number" value={formData.initialRentPayment} onChange={e => setFormData({...formData, initialRentPayment: e.target.value})} placeholder="0.00" />
                   </div>
                   {formData.paymentSystem === 'non-package' && (
                     <div className="space-y-2">
-                      <Label>Initial Food Payment (tk)</Label>
+                      <Label>Initial Food Payment (৳)</Label>
                       <Input type="number" value={formData.initialFoodPayment} onChange={e => setFormData({...formData, initialFoodPayment: e.target.value})} placeholder="0.00" />
                     </div>
                   )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Advance / Security (tk)</Label>
+                    <Label>Advance / Security (৳)</Label>
                     <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} placeholder="0.00" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Service Charge (tk)</Label>
+                    <Label>Service Charge (৳)</Label>
                     <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} placeholder="0.00" />
                   </div>
                 </div>

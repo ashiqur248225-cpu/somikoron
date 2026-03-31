@@ -237,7 +237,7 @@ export default function DashboardPage() {
         updatedAt: Timestamp.now()
       })
 
-      toast({ title: "Success", description: `Processed tk${totalAmount}.` })
+      toast({ title: "Success", description: `Processed ৳${totalAmount}.` })
       setIsPaymentOpen(false)
       setPaymentForm({ ...paymentForm, amount: "", seatAmount: "", foodAmount: "", description: "" })
       setSelectedBuildingId("")
@@ -323,7 +323,7 @@ export default function DashboardPage() {
             <ArrowUpCircle className="h-4 w-4 text-income" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">tk{stats.income.toLocaleString()}</div>
+            <div className="text-2xl font-bold">৳{stats.income.toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1 capitalize">Total for {timeFilter}</p>
           </CardContent>
         </Card>
@@ -333,7 +333,7 @@ export default function DashboardPage() {
             <ArrowDownCircle className="h-4 w-4 text-expense" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">tk{stats.expense.toLocaleString()}</div>
+            <div className="text-2xl font-bold">৳{stats.expense.toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1 capitalize">Total for {timeFilter}</p>
           </CardContent>
         </Card>
@@ -343,7 +343,7 @@ export default function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">tk{stats.dues.toLocaleString()}</div>
+            <div className="text-2xl font-bold">৳{stats.dues.toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1">Current outstanding</p>
           </CardContent>
         </Card>
@@ -377,34 +377,34 @@ export default function DashboardPage() {
                   <Banknote size={14} />
                   <span className="text-xs font-medium uppercase">Cash in Hand</span>
                 </div>
-                <p className="text-xl font-bold">tk{stats.fund.cash.toLocaleString()}</p>
+                <p className="text-xl font-bold">৳{stats.fund.cash.toLocaleString()}</p>
               </div>
               <div className="p-4 rounded-xl border bg-secondary/20 space-y-1">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Landmark size={14} />
                   <span className="text-xs font-medium uppercase">Bank Account</span>
                 </div>
-                <p className="text-xl font-bold">tk{stats.fund.bank.toLocaleString()}</p>
+                <p className="text-xl font-bold">৳{stats.fund.bank.toLocaleString()}</p>
               </div>
               <div className="p-4 rounded-xl border bg-secondary/20 space-y-1">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Smartphone size={14} className="text-primary" />
                   <span className="text-xs font-medium uppercase">Bkash Wallet</span>
                 </div>
-                <p className="text-xl font-bold text-primary">tk{stats.fund.bkash.toLocaleString()}</p>
+                <p className="text-xl font-bold text-primary">৳{stats.fund.bkash.toLocaleString()}</p>
               </div>
               <div className="p-4 rounded-xl border bg-secondary/20 space-y-1">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Smartphone size={14} className="text-orange-500" />
                   <span className="text-xs font-medium uppercase">Nagad Wallet</span>
                 </div>
-                <p className="text-xl font-bold text-orange-500">tk{stats.fund.nagad.toLocaleString()}</p>
+                <p className="text-xl font-bold text-orange-500">৳{stats.fund.nagad.toLocaleString()}</p>
               </div>
             </div>
             <div className="mt-6 pt-6 border-t flex justify-between items-center">
               <span className="text-sm font-medium text-muted-foreground">Combined Net Balance:</span>
               <span className="text-2xl font-black text-primary">
-                tk{(stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad).toLocaleString()}
+                ৳{(stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad).toLocaleString()}
               </span>
             </div>
           </CardContent>
@@ -487,12 +487,12 @@ export default function DashboardPage() {
                 <div className="bg-secondary/30 p-4 rounded-lg space-y-2 border">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Monthly Rent:</span>
-                    <span className="font-bold">tk{selectedStudent.monthlyRent}</span>
+                    <span className="font-bold">৳{selectedStudent.monthlyRent}</span>
                   </div>
                   <div className="flex flex-col gap-1 p-2 bg-primary/5 rounded border border-primary/10">
                     <div className="flex justify-between text-xs">
                       <span className="text-primary font-medium">Advance Pool:</span>
-                      <span className="font-bold text-primary">tk{selectedStudent.advanceAmount || 0}</span>
+                      <span className="font-bold text-primary">৳{selectedStudent.advanceAmount || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -539,17 +539,17 @@ export default function DashboardPage() {
 
               {selectedStudent?.paymentSystem === 'package' ? (
                 <div className="space-y-2">
-                  <Label>Amount (tk)</Label>
+                  <Label>Amount (৳)</Label>
                   <Input type="number" placeholder="0.00" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} />
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-bold text-muted-foreground">SEAT RENT (tk)</Label>
+                    <Label className="text-[10px] font-bold text-muted-foreground">SEAT RENT (৳)</Label>
                     <Input type="number" placeholder="Rent" value={paymentForm.seatAmount} onChange={e => setPaymentForm({...paymentForm, seatAmount: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-bold text-muted-foreground">FOOD CREDIT (tk)</Label>
+                    <Label className="text-[10px] font-bold text-muted-foreground">FOOD CREDIT (৳)</Label>
                     <Input type="number" placeholder="Food" value={paymentForm.foodAmount} onChange={e => setPaymentForm({...paymentForm, foodAmount: e.target.value})} />
                   </div>
                 </div>
