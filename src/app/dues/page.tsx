@@ -52,9 +52,6 @@ export default function DuesPage() {
   const processedStudents = useMemo(() => {
     if (!students) return []
     
-    const currentMonth = new Date().toLocaleString('default', { month: 'long' });
-    const currentYear = new Date().getFullYear().toString();
-
     return students.map(student => {
       const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
       const now = new Date()
@@ -84,12 +81,14 @@ export default function DuesPage() {
       
       const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
       const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
+      const totalDue = rentDue + foodDue
 
-      const paidThisMonth = student.paymentsHistory?.some((p: any) => p.month === currentMonth && p.year === currentYear && (Number(p.seatAmount) > 0 || Number(p.amount) > 0));
+      // Updated logic: Paid means Total Due is 0
+      const isPaid = totalDue <= 0
 
       return {
         ...student,
-        totalDue: rentDue + foodDue,
+        totalDue,
         rentDue,
         foodDue,
         foodBalance,
@@ -97,7 +96,7 @@ export default function DuesPage() {
         historicalRentDue,
         generatedRent,
         totalRentPaid,
-        paidThisMonth
+        isPaid
       }
     })
   }, [students])
@@ -111,7 +110,7 @@ export default function DuesPage() {
       
       const matchesPaymentStatus = paymentStatusFilter === "all" 
         ? true 
-        : (paymentStatusFilter === "paid" ? s.paidThisMonth : !s.paidThisMonth);
+        : (paymentStatusFilter === "paid" ? s.isPaid : !s.isPaid);
 
       // By default, if everything is 'all', show only those with totalDue > 0
       const hasDues = paymentStatusFilter === "all" && searchTerm === "" && buildingFilter === "all" && roomFilter === "all" 
@@ -126,14 +125,14 @@ export default function DuesPage() {
     const active = processedStudents.filter(s => s.isActive);
     return {
       totalDue: filteredDues.reduce((acc, curr) => acc + curr.totalDue, 0),
-      paidThisMonth: active.filter(s => s.paidThisMonth).length,
-      pendingThisMonth: active.filter(s => !s.paidThisMonth).length,
+      paidCount: active.filter(s => s.isPaid).length,
+      pendingCount: active.filter(s => !s.isPaid).length,
       totalActive: active.length
     }
   }, [filteredDues, processedStudents])
 
   const handleExportCSV = () => {
-    const headers = ["Student Name", "Phone", "Building", "Room No", "Rent Due", "Food Due", "Total Outstanding", "Paid This Month"]
+    const headers = ["Student Name", "Phone", "Building", "Room No", "Rent Due", "Food Due", "Total Outstanding", "Status"]
     const rows = filteredDues.map(s => [
       s.name,
       s.phone,
@@ -142,7 +141,7 @@ export default function DuesPage() {
       s.rentDue,
       s.foodDue,
       s.totalDue,
-      s.paidThisMonth ? "Yes" : "No"
+      s.isPaid ? "Paid" : "Pending"
     ])
 
     let csvContent = "data:text/csv;charset=utf-8,"
@@ -221,22 +220,22 @@ export default function DuesPage() {
         <Card className="bg-success/5 border-none shadow-sm border-l-4 border-l-success">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-bold uppercase text-success flex items-center gap-2">
-              <CheckCircle2 size={14} /> Paid This Month
+              <CheckCircle2 size={14} /> Fully Paid
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-success">{stats.paidThisMonth} / {stats.totalActive} <span className="text-xs font-normal text-muted-foreground">Residents</span></p>
+            <p className="text-2xl font-bold text-success">{stats.paidCount} / {stats.totalActive} <span className="text-xs font-normal text-muted-foreground">Residents</span></p>
           </CardContent>
         </Card>
         
         <Card className="bg-orange-500/5 border-none shadow-sm border-l-4 border-l-orange-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-bold uppercase text-orange-600 flex items-center gap-2">
-              <Clock size={14} /> Pending This Month
+              <Clock size={14} /> Pending Dues
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-orange-600">{stats.pendingThisMonth} <span className="text-xs font-normal text-muted-foreground">Waiting</span></p>
+            <p className="text-2xl font-bold text-orange-600">{stats.pendingCount} <span className="text-xs font-normal text-muted-foreground">Residents</span></p>
           </CardContent>
         </Card>
 
@@ -278,7 +277,7 @@ export default function DuesPage() {
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Payment (This Month)</Label>
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Status</Label>
           <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -310,7 +309,7 @@ export default function DuesPage() {
             <TableHeader className="bg-secondary/30">
               <TableRow>
                 <TableHead>Resident</TableHead>
-                <TableHead>Monthly Status</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Rent Due</TableHead>
                 <TableHead>Food Balance</TableHead>
                 <TableHead className="text-right">Total Due</TableHead>
@@ -329,7 +328,7 @@ export default function DuesPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {s.paidThisMonth ? (
+                    {s.isPaid ? (
                       <Badge variant="outline" className="bg-success/10 text-success border-success/20 gap-1">
                         <CheckCircle2 size={10} /> Paid
                       </Badge>
@@ -396,7 +395,7 @@ export default function DuesPage() {
             <tr>
               <th>Resident</th>
               <th>Room</th>
-              <th>Status (Month)</th>
+              <th>Status</th>
               <th className="text-right">Rent Due</th>
               <th className="text-right">Food Due</th>
               <th className="text-right">Total Outstanding</th>
@@ -407,7 +406,7 @@ export default function DuesPage() {
               <tr key={i}>
                 <td className="font-medium">{s.name}</td>
                 <td>{s.buildingName} - {s.roomNumber}</td>
-                <td>{s.paidThisMonth ? 'Paid' : 'Pending'}</td>
+                <td>{s.isPaid ? 'Paid' : 'Pending'}</td>
                 <td className="text-right">৳{s.rentDue?.toLocaleString()}</td>
                 <td className="text-right">৳{s.foodDue?.toLocaleString()}</td>
                 <td className="text-right font-bold text-destructive">৳{s.totalDue?.toLocaleString()}</td>
