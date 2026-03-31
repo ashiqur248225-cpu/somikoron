@@ -65,6 +65,9 @@ export default function StudentsPage() {
   const studentsQuery = useMemoFirebase(() => collection(db, "students"), [db])
   const { data: students, isLoading } = useCollection(studentsQuery)
 
+  const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
+  const { data: staffList } = useCollection(staffQuery)
+
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -82,7 +85,8 @@ export default function StudentsPage() {
     serviceCharge: "0",
     paymentSystem: "package",
     monthlyRent: "",
-    foodCost: "0" 
+    foodCost: "0",
+    receiver: ""
   })
 
   const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
@@ -114,6 +118,12 @@ export default function StudentsPage() {
       return
     }
 
+    const hasInitialPayment = Number(formData.initialRentPayment) > 0 || Number(formData.initialFoodPayment) > 0
+    if (hasInitialPayment && !formData.receiver) {
+      toast({ variant: "destructive", title: "Missing Info", description: "Please select a receiver for the initial payment." })
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const studentId = doc(collection(db, "students")).id
@@ -126,7 +136,6 @@ export default function StudentsPage() {
       const startingRentDue = formData.type === 'old' ? Number(formData.dueAmount) : monthlyRent
       const startingFoodDue = formData.type === 'old' ? Number(formData.foodDueAmount) : 0
 
-      const hasInitialPayment = initialRentPayment > 0 || initialFoodPayment > 0
       const paymentRecord = hasInitialPayment ? {
         amount: initialRentPayment + initialFoodPayment,
         seatAmount: initialRentPayment,
@@ -139,7 +148,7 @@ export default function StudentsPage() {
         month: new Date().toLocaleString('default', { month: 'long' }),
         year: new Date().getFullYear().toString(),
         method: "cash",
-        receiver: "Admin (Registration)",
+        receiver: formData.receiver,
         description: "Initial payment at registration",
         date: new Date().toISOString()
       } : null
@@ -201,7 +210,7 @@ export default function StudentsPage() {
       setFormData({
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
         type: "new", dueAmount: "0", foodDueAmount: "0", initialRentPayment: "0", initialFoodPayment: "0", advanceAmount: "0", serviceCharge: "0",
-        paymentSystem: "package", monthlyRent: "", foodCost: "0"
+        paymentSystem: "package", monthlyRent: "", foodCost: "0", receiver: ""
       })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -354,7 +363,7 @@ export default function StudentsPage() {
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Advance / Security (₹)</Label>
                     <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} placeholder="0.00" />
@@ -363,6 +372,15 @@ export default function StudentsPage() {
                     <Label>Service Charge (₹)</Label>
                     <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} placeholder="0.00" />
                   </div>
+                </div>
+                <div className="space-y-2 border-t pt-4">
+                  <Label>Payment Receiver</Label>
+                  <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
+                    <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
+                    <SelectContent>
+                      {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
