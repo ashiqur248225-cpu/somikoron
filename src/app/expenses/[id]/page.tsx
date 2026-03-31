@@ -1,10 +1,9 @@
-
 "use client"
 
 import React, { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore"
+import { doc, updateDoc, deleteDoc, serverTimestamp, collection } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -36,6 +35,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
 
 const EXPENSE_CATEGORIES = [
   { id: "rent", label: "Building Rent" },
