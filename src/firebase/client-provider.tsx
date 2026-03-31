@@ -1,10 +1,10 @@
+
 'use client';
 
 import React, { useMemo, useEffect, useState, type ReactNode } from 'react';
 import { FirebaseProvider } from '@/firebase/provider';
 import { initializeFirebase } from '@/firebase';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 
 interface FirebaseClientProviderProps {
@@ -17,7 +17,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     return initializeFirebase();
   }, []);
 
-  const { auth, firestore } = firebaseServices;
+  const { auth } = firebaseServices;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -29,27 +29,12 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
           setIsBootstrapping(false);
         }
       } else {
-        // Ensure user is in the managers collection for dev/prototype
-        const managerRef = doc(firestore, 'managers', user.uid);
-        try {
-          const snap = await getDoc(managerRef);
-          if (!snap.exists()) {
-            await setDoc(managerRef, { 
-              uid: user.uid,
-              role: 'admin',
-              createdAt: serverTimestamp() 
-            });
-          }
-        } catch (error) {
-          console.error("Manager setup failed", error);
-        } finally {
-          setIsBootstrapping(false);
-        }
+        setIsBootstrapping(false);
       }
     });
 
     return () => unsubscribe();
-  }, [auth, firestore]);
+  }, [auth]);
 
   if (isBootstrapping) {
     return (

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -190,7 +191,6 @@ export default function DashboardPage() {
     setIsSubmitting(true)
     const building = buildings?.find(b => b.id === selectedBuildingId)
     const paymentId = doc(collection(db, "payments")).id
-    const summaryId = `${paymentForm.year}-${paymentForm.month}`
 
     const paymentRecord = {
       amount: totalAmount,
@@ -216,12 +216,6 @@ export default function DashboardPage() {
           date: Timestamp.now(),
           createdAt: Timestamp.now(),
         })
-
-        await setDoc(doc(db, "summaries", summaryId), {
-          totalIncome: increment(totalAmount),
-          [`buildingIncome.${building?.name || 'Unknown'}`]: increment(totalAmount),
-          updatedAt: Timestamp.now()
-        }, { merge: true })
       }
 
       await updateDoc(doc(db, "students", paymentForm.studentId), {

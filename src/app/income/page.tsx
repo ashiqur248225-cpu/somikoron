@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -85,7 +86,6 @@ export default function IncomeHistoryPage() {
   const filteredPayments = useMemo(() => {
     if (!payments) return []
     return payments.filter(p => {
-      // Date Range Logic
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
       const matchesStartDate = !startDate || pDate >= new Date(startDate)
       const matchesEndDate = !endDate || pDate <= new Date(new Date(endDate).setHours(23, 59, 59))
@@ -116,7 +116,6 @@ export default function IncomeHistoryPage() {
 
     setIsSubmitting(true)
     const paymentId = doc(collection(db, "payments")).id
-    const summaryId = `${formData.year}-${formData.month}`
 
     const paymentRecord = {
       amount: totalAmount,
@@ -137,11 +136,6 @@ export default function IncomeHistoryPage() {
 
     try {
       await setDoc(doc(db, "payments", paymentId), { ...paymentRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
-      await setDoc(doc(db, "summaries", summaryId), {
-        totalIncome: increment(totalAmount),
-        [`buildingIncome.${selectedBuildingForForm?.name}`]: increment(totalAmount),
-        updatedAt: serverTimestamp()
-      }, { merge: true })
 
       await updateDoc(doc(db, "students", formData.studentId), {
         paymentsHistory: arrayUnion(paymentRecord),
