@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { Toaster } from "@/components/ui/toaster"
 import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { AuthGuard } from '@/components/auth-guard';
 
 export const metadata: Metadata = {
   title: 'Somikoron - Building & Student Management',
@@ -24,14 +25,16 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased bg-background">
         <FirebaseClientProvider>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-              <main className="flex-1 p-4 md:p-8">
-                {children}
-              </main>
-            </SidebarInset>
-          </SidebarProvider>
+          <AuthGuard>
+            <SidebarProvider>
+              <AppSidebar />
+              <SidebarInset>
+                <main className="flex-1 p-4 md:p-8">
+                  {children}
+                </main>
+              </SidebarInset>
+            </SidebarProvider>
+          </AuthGuard>
           <Toaster />
         </FirebaseClientProvider>
       </body>
