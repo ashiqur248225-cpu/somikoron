@@ -96,10 +96,12 @@ export default function StudentsPage() {
   useEffect(() => {
     if (formData.type === 'new') {
       const rentPaid = Number(formData.initialRentPayment) || 0;
-      const monthlyRate = formData.monthlyRent || "0";
+      const monthlyRate = Number(formData.monthlyRent) || 0;
       
       setFormData(prev => {
-        const calculatedDue = rentPaid > 0 ? "0" : monthlyRate;
+        // If rent paid is equal or more than monthly rate, no initial due.
+        // Otherwise, initial due is 1 full month rent.
+        const calculatedDue = (rentPaid >= monthlyRate && monthlyRate > 0) ? "0" : monthlyRate.toString();
         if (prev.dueAmount !== calculatedDue) {
           return { ...prev, dueAmount: calculatedDue };
         }
@@ -173,6 +175,7 @@ export default function StudentsPage() {
       const monthlyRent = Number(formData.monthlyRent)
       const apartmentName = selectedRoom?.aptName || "General"
 
+      // Use the auto-calculated or manually entered due amount
       const startingRentDue = Number(formData.dueAmount) || 0
       const startingFoodDue = Number(formData.foodDueAmount) || 0
 
@@ -356,23 +359,23 @@ export default function StudentsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-                  <div className="space-y-2">
-                    <Label className="font-bold text-destructive">Initial/Previous RENT Due (৳)</Label>
-                    <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
-                    <p className="text-[10px] text-muted-foreground italic">
-                      {formData.type === 'new' 
-                        ? "* Auto-calculated: 0 if initial rent paid, else 1 month rent."
-                        : "* অ্যাপ ব্যবহারের আগে থেকে থাকা মোট বকেয়া ভাড়া।"}
-                    </p>
-                  </div>
-                  {formData.paymentSystem === 'non-package' && (
+                {formData.type === 'old' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
                     <div className="space-y-2">
-                      <Label className="font-bold text-destructive">Previous FOOD Due (৳)</Label>
-                      <Input type="number" value={formData.foodDueAmount} onChange={e => setFormData({...formData, foodDueAmount: e.target.value})} placeholder="0.00" />
+                      <Label className="font-bold text-destructive">Initial/Previous RENT Due (৳)</Label>
+                      <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
+                      <p className="text-[10px] text-muted-foreground italic">
+                        * অ্যাপ ব্যবহারের আগে থেকে থাকা মোট বকেয়া ভাড়া।
+                      </p>
                     </div>
-                  )}
-                </div>
+                    {formData.paymentSystem === 'non-package' && (
+                      <div className="space-y-2">
+                        <Label className="font-bold text-destructive">Previous FOOD Due (৳)</Label>
+                        <Input type="number" value={formData.foodDueAmount} onChange={e => setFormData({...formData, foodDueAmount: e.target.value})} placeholder="0.00" />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -476,7 +479,7 @@ export default function StudentsPage() {
 
                 {formData.type === 'old' && (
                   <p className="text-[10px] text-muted-foreground p-2 bg-secondary/50 rounded italic">
-                    * Note: For Old Students, these values are stored for record-keeping only. They will NOT be added to Today's Global Income or Net Balance since the money was already received in the past.
+                    * দ্রষ্টব্য: পুরাতন শিক্ষার্থীদের জন্য, এই মানগুলি শুধুমাত্র রেকর্ড রাখার জন্য সংরক্ষণ করা হয়। এগুলি আজকের মোট আয় বা নিট ব্যালেন্সে যোগ করা হবে না, কারণ অর্থটি অতীতেই প্রাপ্ত হয়েছে।
                   </p>
                 )}
               </div>
