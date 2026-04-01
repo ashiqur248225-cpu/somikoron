@@ -131,8 +131,11 @@ export default function DashboardPage() {
     const now = new Date()
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    
+    // Correct Last Month Range: 1st of last month to last day of last month 23:59:59
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
+    
     const startOfYear = new Date(now.getFullYear(), 0, 1)
 
     let filterDate = startOfMonth
@@ -140,10 +143,26 @@ export default function DashboardPage() {
     if (timeFilter === "lastMonth") filterDate = startOfLastMonth
     if (timeFilter === "year") filterDate = startOfYear
 
+    // Robust Date Parser for timestamps and YYYY-MM-DD strings
+    const parseDate = (val: any) => {
+      if (!val) return null
+      if (val.toDate) return val.toDate()
+      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+        const [y, m, d] = val.split('-').map(Number)
+        return new Date(y, m - 1, d)
+      }
+      return new Date(val)
+    }
+
     const isWithinRange = (dateValue: any) => {
-      if (!dateValue) return false
-      const d = dateValue?.toDate ? dateValue.toDate() : new Date(dateValue)
-      if (timeFilter === "lastMonth") return d >= startOfLastMonth && d <= endOfLastMonth
+      const d = parseDate(dateValue)
+      if (!d) return false
+      
+      if (timeFilter === "lastMonth") {
+        return d >= startOfLastMonth && d <= endOfLastMonth
+      }
+      
+      // For other filters, we typically mean "from that point until now"
       return d >= filterDate
     }
 
@@ -158,7 +177,6 @@ export default function DashboardPage() {
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, student) => {
       const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
       const now = new Date()
-      // Stop months counting if student has exited
       const endDate = student.isActive ? now : (student.leftAt?.toDate?.() || now)
       
       const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
@@ -210,7 +228,6 @@ export default function DashboardPage() {
       if (fund[m] !== undefined) fund[m] -= (e.amount || 0)
     });
 
-    // Incorporate Internal Transfers into Balances
     (allTransfers || []).forEach(t => {
       const from = t.fromAccount as keyof typeof fund
       const to = t.toAccount as keyof typeof fund
