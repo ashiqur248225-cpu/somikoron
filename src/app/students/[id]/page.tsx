@@ -11,18 +11,13 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
-  UserCircle, Phone, MapPin, Building2, 
+  UserCircle, Phone, Building2, 
   BedDouble, CreditCard, Utensils,
   Loader2, Calculator,
-  Contact, Plus, UserMinus, Wallet,
-  UserPlus, AlertCircle, CheckCircle,
-  ArrowDownToLine, Lock,
+  Plus, UserMinus, Wallet,
+  AlertCircle, CheckCircle,
   History, MoreVertical, Edit, Trash2,
-  HelpCircle,
-  Info,
-  Zap,
   Calendar,
-  Banknote,
   Clock
 } from "lucide-react"
 import { 
@@ -34,10 +29,8 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog"
 import {
@@ -64,15 +57,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -85,25 +71,26 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const [isUpdating, setIsUpdating] = useState(false)
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isLogMealDialogOpen, setIsLogMealDialogOpen] = useState(false)
-  const [isAddStaffOpen, setIsAddStaffOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
   
-  const [logMonth, setLogMonth] = useState(MONTHS[new Date().getMonth()])
-  const [logCount, setLogCount] = useState("")
+  const [paymentData, setPaymentData] = useState({ 
+    month: MONTHS[new Date().getMonth()], 
+    year: new Date().getFullYear().toString(), 
+    amount: "", 
+    seatAmount: "", 
+    foodAmount: "", 
+    addAdvanceAmount: "0", 
+    method: "cash", 
+    receiver: "", 
+    description: "" 
+  })
 
   const [exitPayment, setExitPayment] = useState({ amount: "0", method: "cash", receiver: "", description: "" })
   const [editForm, setEditForm] = useState({ name: "", phone: "", parentPhone: "", address: "", monthlyRent: "", paymentSystem: "package", billingStartDate: "" })
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
-  const [newStaff, setNewStaff] = useState({ name: "", phone: "" })
-
-  const configRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
-  const { data: config } = useDoc(configRef)
-  const globalMealRate = config?.rate || 0
-
-  const [paymentData, setPaymentData] = useState({ month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: "", seatAmount: "", foodAmount: "", addAdvanceAmount: "0", method: "cash", receiver: "", description: "" })
 
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
@@ -111,7 +98,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   useEffect(() => {
     const action = searchParams.get('action')
     if (action === 'payment') setIsPaymentDialogOpen(true)
-    if (action === 'meals') setIsLogMealDialogOpen(true)
   }, [searchParams])
 
   useMemo(() => {
@@ -123,10 +109,27 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         address: student.address || "",
         monthlyRent: (student.monthlyRent || 0).toString(),
         paymentSystem: student.paymentSystem || "package",
-        billingStartDate: student.billingStartDate || student.createdAt?.toDate?.().toISOString().split('T')[0] || new Date().toISOString().split('T')[0]
+        billingStartDate: student.billingStartDate || ""
       })
     }
   }, [student])
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        e.preventDefault();
+        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
+        if (container) {
+          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
+          const index = focusables.indexOf(target);
+          if (index > -1 && index < focusables.length - 1) {
+            focusables[index + 1].focus();
+          }
+        }
+      }
+    }
+  };
 
   const financialStats = useMemo(() => {
     if (!student) return { rentDue: 0, foodBalance: 0, monthsElapsed: 0, monthsList: [] }
@@ -135,7 +138,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     const now = new Date()
     const endDate = student.isActive ? now : (student.leftAt?.toDate?.() || now)
     
-    // Waterfall Calculation for Dues Status
     const monthsList: any[] = []
     let tempDate = new Date(billingStart.getFullYear(), billingStart.getMonth(), 1)
     const endCompare = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
@@ -158,7 +160,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       return acc + (isRefund ? -rentPortion : rentPortion)
     }, 0) || 0
 
-    // Distribute total paid across the months list (Waterfall)
     let remainingPool = totalRentPaid - historicalRentDue
     monthsList.forEach(m => {
       if (remainingPool >= m.charge) {
@@ -191,8 +192,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     return { rentDue, foodBalance, monthsElapsed, monthsList: monthsList.reverse() }
   }, [student])
 
-  const foodDue = financialStats.foodBalance < 0 ? Math.abs(financialStats.foodBalance) : 0
-  
   const exitSettlement = useMemo(() => {
     if (!student) return { advance: 0, rentDue: 0, foodBalance: 0, finalBalance: 0, mode: 'none' }
     const advance = student.advanceAmount || 0
@@ -206,16 +205,8 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const remainingDueAtExit = Math.max(0, currentExitDeficit - Number(exitPayment.amount))
   const canConfirmExit = exitSettlement.mode === 'refund' || remainingDueAtExit <= 0;
 
-  const availableAdvanceForDeduction = useMemo(() => {
-    if (!student) return 0
-    const currentAdvance = student.advanceAmount || 0
-    const minRequired = student.monthlyRent || 0
-    return Math.max(0, currentAdvance - minRequired)
-  }, [student])
-
   const handleDeactivate = async () => {
     if (!student || !student.isActive || !studentRef || !canConfirmExit) return
-    if (exitSettlement.mode === 'deficit' && Number(exitPayment.amount) > 0 && !exitPayment.receiver) { toast({ variant: "destructive", title: "Error", description: "Please select a receiver." }); return }
     setIsUpdating(true)
     try {
       const settlementRecords = []
@@ -238,6 +229,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         }
       }
       await updateDoc(studentRef, { isActive: false, advanceAmount: 0, paymentsHistory: arrayUnion(...settlementRecords), updatedAt: serverTimestamp(), leftAt: serverTimestamp(), exitNote: exitPayment.description })
+      
       const bRef = doc(db, "buildings", student.buildingId)
       const bSnap = await getDoc(bRef)
       if (bSnap.exists()) {
@@ -251,7 +243,11 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         await updateDoc(bRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1) })
       }
       toast({ title: "Settled & Deactivated", description: "Resident vacated seat." })
-    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } finally { setIsUpdating(false) }
+      setIsUpdating(false)
+    } catch (e: any) { 
+      toast({ variant: "destructive", title: "Error", description: e.message })
+      setIsUpdating(false)
+    }
   }
 
   const handlePaymentSubmit = async () => {
@@ -260,20 +256,45 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     const foodPaid = student.paymentSystem === 'non-package' ? Number(paymentData.foodAmount) : 0
     const addAdvance = Number(paymentData.addAdvanceAmount)
     const totalCashAmount = seatPaid + foodPaid + addAdvance
-    if (totalCashAmount <= 0 && !useAdvanceBalance) return
+    
     setIsUpdating(true)
     try {
-      const pRecord = { amount: totalCashAmount, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: addAdvance, buildingId: student.buildingId, buildingName: student.buildingName, studentName: student.name, studentId: student.id, type: "income", month: paymentData.month, year: paymentData.year, method: useAdvanceBalance ? "advance_deduction" : paymentData.method, receiver: useAdvanceBalance ? "System (Advance Deduction)" : paymentData.receiver, description: paymentData.description, date: new Date().toISOString() }
-      if (!useAdvanceBalance && totalCashAmount > 0) { await setDoc(doc(db, "payments", doc(collection(db, "payments")).id), { ...pRecord, date: serverTimestamp() }) }
-      await updateDoc(studentRef, { paymentsHistory: arrayUnion(pRecord), advanceAmount: increment((useAdvanceBalance ? -(seatPaid + foodPaid) : addAdvance)), ...(student.paymentSystem === 'non-package' && foodPaid > 0 && { foodCost: increment(foodPaid) }), updatedAt: serverTimestamp() })
-      toast({ title: "Success", description: "Payment processed." }); setIsPaymentDialogOpen(false)
-    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } finally { setIsUpdating(false) }
-  }
-
-  const handleUpdateStudent = async () => {
-    if (!studentRef) return
-    setIsUpdating(true)
-    try { await updateDoc(studentRef, { ...editForm, monthlyRent: Number(editForm.monthlyRent), updatedAt: serverTimestamp() }); toast({ title: "Updated", description: "Student details saved." }); setIsEditDialogOpen(false) } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } finally { setIsUpdating(false) }
+      const pRecord = { 
+        amount: totalCashAmount, 
+        seatAmount: seatPaid, 
+        foodAmount: foodPaid, 
+        advanceAmount: addAdvance, 
+        buildingId: student.buildingId, 
+        buildingName: student.buildingName, 
+        studentName: student.name, 
+        studentId: student.id, 
+        type: "income", 
+        month: paymentData.month, 
+        year: paymentData.year, 
+        method: useAdvanceBalance ? "advance_deduction" : paymentData.method, 
+        receiver: useAdvanceBalance ? "System (Advance Deduction)" : paymentData.receiver, 
+        description: paymentData.description, 
+        date: new Date().toISOString() 
+      }
+      
+      if (!useAdvanceBalance && totalCashAmount > 0) { 
+        await setDoc(doc(db, "payments", doc(collection(db, "payments")).id), { ...pRecord, date: serverTimestamp() }) 
+      }
+      
+      await updateDoc(studentRef, { 
+        paymentsHistory: arrayUnion(pRecord), 
+        advanceAmount: increment((useAdvanceBalance ? -(seatPaid + foodPaid) : addAdvance)), 
+        ...(student.paymentSystem === 'non-package' && foodPaid > 0 && { foodCost: increment(foodPaid) }), 
+        updatedAt: serverTimestamp() 
+      })
+      
+      toast({ title: "Success", description: "Payment processed." })
+      setIsPaymentDialogOpen(false)
+      setIsUpdating(false)
+    } catch (e: any) { 
+      toast({ variant: "destructive", title: "Error", description: e.message })
+      setIsUpdating(false)
+    }
   }
 
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
@@ -310,22 +331,51 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                        <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> {exitSettlement.mode === 'refund' ? 'Refund Details' : 'Final Settlement Payment'}</Label>
                        <div className="space-y-2"><Label className="text-[10px] uppercase font-bold">{exitSettlement.mode === 'refund' ? 'Refunded to Student (৳)' : 'Payment Received Now (৳)'}</Label><Input type="number" value={exitPayment.amount} onChange={e => setExitPayment({...exitPayment, amount: e.target.value})}/></div>
                        {exitSettlement.mode === 'deficit' && remainingDueAtExit > 0 && (<div className="p-3 bg-white rounded border text-[9px] text-destructive flex items-center gap-1"><AlertCircle size={8}/> বকেয়া বাকি থাকলে এক্সিট করা যাবে না। (Remaining: ৳{remainingDueAtExit})</div>)}
-                       {Number(exitPayment.amount) > 0 && (<div className="grid grid-cols-2 gap-3"><div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Method</Label><Select value={exitPayment.method} onValueChange={val => setExitPayment({...exitPayment, method: val})}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div><div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Receiver</Label><Select value={exitPayment.receiver} onValueChange={val => setExitPayment({...exitPayment, receiver: val})}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div>)}
+                       {Number(exitPayment.amount) > 0 && (
+                         <div className="grid grid-cols-2 gap-3">
+                           <div className="space-y-1">
+                             <Label className="text-[10px] uppercase font-bold">Method</Label>
+                             <Select value={exitPayment.method} onValueChange={val => setExitPayment({...exitPayment, method: val})}>
+                               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                               <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
+                             </Select>
+                           </div>
+                           <div className="space-y-1">
+                             <Label className="text-[10px] uppercase font-bold">Receiver</Label>
+                             <Select value={exitPayment.receiver} onValueChange={val => setExitPayment({...exitPayment, receiver: val})}>
+                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Staff" /></SelectTrigger>
+                               <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                             </Select>
+                           </div>
+                         </div>
+                       )}
                        <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Exit Note</Label><Textarea className="text-xs min-h-[60px]" value={exitPayment.description} onChange={e => setExitPayment({...exitPayment, description: e.target.value})}/></div>
                     </div>
                   </div>
                 </AlertDialogHeader>
-                <AlertDialogFooter className="mt-4"><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeactivate} className={cn("bg-destructive", !canConfirmExit && "opacity-50 cursor-not-allowed")} disabled={!canConfirmExit || isUpdating}>{isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle size={16} className="mr-2" />}Confirm Settlement & Exit</AlertDialogAction></AlertDialogFooter>
+                <AlertDialogFooter className="mt-4">
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeactivate} className={cn("bg-destructive", !canConfirmExit && "opacity-50 cursor-not-allowed")} disabled={!canConfirmExit || isUpdating}>
+                    {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle size={16} className="mr-2" />}Confirm Settlement & Exit
+                  </AlertDialogAction>
+                </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           )}
-          <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="icon"><MoreVertical size={18}/></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => setIsEditDialogOpen(true)}><Edit size={14}/> Edit Profile</DropdownMenuItem><DropdownMenuItem className="gap-2 text-destructive cursor-pointer" onSelect={(e) => e.preventDefault()}><AlertDialog><AlertDialogTrigger asChild><div className="flex items-center gap-2 w-full"><Trash2 size={14}/> Delete Student</div></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Permanent Deletion</AlertDialogTitle><AlertDialogDescription>This will remove all history and vacate the seat.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => {}} className="bg-destructive">Delete Permanently</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></DropdownMenuItem></DropdownMenuContent></DropdownMenu>
           <Button variant="ghost" onClick={() => router.push("/students")}>Back</Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="border-none shadow-sm"><CardHeader><CardTitle className="text-lg">Contact & Location</CardTitle></CardHeader><CardContent className="space-y-4"><div className="flex items-center gap-3 text-sm"><Phone className="text-primary" size={16} /><span className="font-bold">{student.phone}</span></div><div className="flex items-center gap-3 text-sm"><Building2 className="text-primary" size={16} /><span className="font-semibold">{student.buildingName}</span></div><div className="flex items-center gap-3 text-sm"><BedDouble className="text-primary" size={16} /><span>Room {student.roomNumber} | Seat {student.seatNumber}</span></div><div className="flex items-center gap-3 text-sm"><Calendar className="text-primary" size={16} /><span>Billing Start: {student.billingStartDate || 'N/A'}</span></div></CardContent></Card>
+        <Card className="border-none shadow-sm">
+          <CardHeader><CardTitle className="text-lg">Contact & Location</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3 text-sm"><Phone className="text-primary" size={16} /><span className="font-bold">{student.phone}</span></div>
+            <div className="flex items-center gap-3 text-sm"><Building2 className="text-primary" size={16} /><span className="font-semibold">{student.buildingName}</span></div>
+            <div className="flex items-center gap-3 text-sm"><BedDouble className="text-primary" size={16} /><span>Room {student.roomNumber} | Seat {student.seatNumber}</span></div>
+            <div className="flex items-center gap-3 text-sm"><Calendar className="text-primary" size={16} /><span>Billing Start: {student.billingStartDate || 'N/A'}</span></div>
+          </CardContent>
+        </Card>
         <Card className="border-none shadow-sm md:col-span-2">
           <CardHeader><CardTitle className="text-lg">Financial Overview</CardTitle></CardHeader>
           <CardContent>
@@ -342,7 +392,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       <Tabs defaultValue="payments" className="w-full">
         <TabsList className="bg-secondary/50 p-1 mb-4">
           <TabsTrigger value="payments" className="flex gap-2"><CreditCard size={14} /> Payments</TabsTrigger>
-          <TabsTrigger value="dues" className="flex gap-2"><Clock size={14} /> Dues breakdown</TabsTrigger>
+          <TabsTrigger value="dues" className="flex gap-2"><Clock size={14} /> Dues Breakdown</TabsTrigger>
           {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meals</TabsTrigger>}
         </TabsList>
         
@@ -371,14 +421,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                       </TableCell>
                     </TableRow>
                   ))}
-                  {student.dueAmount > 0 && (
-                    <TableRow className="bg-muted/30">
-                      <TableCell className="font-bold">Historical/Old Dues</TableCell>
-                      <TableCell>৳{student.dueAmount}</TableCell>
-                      <TableCell>-</TableCell>
-                      <TableCell className="text-right"><Badge variant="destructive">Pending</Badge></TableCell>
-                    </TableRow>
-                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -386,31 +428,79 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         </TabsContent>
 
         {student.paymentSystem === 'non-package' && (
-          <TabsContent value="meals"><Card className="border-none shadow-sm"><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Period</TableHead><TableHead>Count</TableHead><TableHead className="text-right">Cost (৳)</TableHead></TableRow></TableHeader><TableBody>{student.mealsHistory?.map((m: any, idx: number) => (
-            <TableRow key={idx}><TableCell className="font-medium">{m.month}</TableCell><TableCell className="font-bold">{m.totalMeals}</TableCell><TableCell className="text-right font-bold">৳{m.totalCost?.toLocaleString()}</TableCell></TableRow>
-          ))}</TableBody></Table></CardContent></Card></TabsContent>
+          <TabsContent value="meals">
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Period</TableHead><TableHead>Count</TableHead><TableHead className="text-right">Cost (৳)</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {student.mealsHistory?.map((m: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{m.month}</TableCell>
+                        <TableCell className="font-bold">{m.totalMeals}</TableCell>
+                        <TableCell className="text-right font-bold">৳{m.totalCost?.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
         )}
       </Tabs>
 
       <div className="fixed bottom-8 right-8 z-50">
-        <DropdownMenu><DropdownMenuTrigger asChild><Button size="icon" className="h-14 w-14 rounded-full shadow-lg border-2 border-white bg-primary"><Plus className="h-8 w-8 text-white" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-56 p-2 space-y-1 mb-2"><DropdownMenuItem onClick={() => setIsPaymentDialogOpen(true)} className="cursor-pointer p-3"><Wallet className="mr-2" size={18} /> Process Payment</DropdownMenuItem>{student.paymentSystem === 'non-package' && <DropdownMenuItem onClick={() => setIsLogMealDialogOpen(true)} className="cursor-pointer p-3"><Utensils className="mr-2" size={18} /> Log Meals</DropdownMenuItem>}</DropdownMenuContent></DropdownMenu>
+        <Button onClick={() => setIsPaymentDialogOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg border-2 border-white bg-primary">
+          <Plus className="h-8 w-8 text-white" />
+        </Button>
       </div>
 
-      {/* Existing Dialogs (Payment, Edit, Meal) same logic as before, just updated initial values */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Record Transaction for {student.name}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Month</Label><Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Method</Label><Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2">
+                <Label>Month</Label>
+                <Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Method</Label>
+                <Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
+                </Select>
+              </div>
             </div>
-            {student.paymentSystem === 'package' ? (<div className="space-y-2"><Label>Amount (৳)</Label><Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" /></div>) : (<div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border"><div className="space-y-2"><Label className="text-xs">Seat Rent</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder="0.00" /></div><div className="space-y-2"><Label className="text-xs">Food Credit</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} placeholder="0.00" /></div></div>)}
-            <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-2"><Label className="text-xs font-bold text-primary flex items-center gap-1"><Plus size={12}/> Add to Advance Pool (৳)</Label><Input type="number" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} placeholder="0.00" /></div>
-            <div className="space-y-2"><Label>Receiver</Label><Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            {student.paymentSystem === 'package' ? (
+              <div className="space-y-2"><Label>Amount (৳)</Label><Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" /></div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border">
+                <div className="space-y-2"><Label className="text-xs">Seat Rent</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder="0.00" /></div>
+                <div className="space-y-2"><Label className="text-xs">Food Credit</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} placeholder="0.00" /></div>
+              </div>
+            )}
+            <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-2">
+              <Label className="text-xs font-bold text-primary flex items-center gap-1"><Plus size={12}/> Add to Advance Pool (৳)</Label>
+              <Input type="number" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} placeholder="0.00" />
+            </div>
+            <div className="space-y-2">
+              <Label>Receiver</Label>
+              <Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}>
+                <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
+                <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
             <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Notes..." />
           </div>
-          <DialogFooter><Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg" disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Transaction"}</Button></DialogFooter>
+          <DialogFooter>
+            <Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg" disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Transaction"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
