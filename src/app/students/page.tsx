@@ -18,7 +18,7 @@ import {
   Users, Search, Plus, Phone, UserCircle, Loader2, 
   BedDouble, MapPin, Eye, Contact, Filter, XCircle, 
   Building2, DoorOpen, LayoutGrid, MoreVertical,
-  Wallet, Utensils, Calendar
+  Wallet, Utensils, Calendar, Trash2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,6 +45,15 @@ import { collection, serverTimestamp, doc, setDoc, updateDoc, increment } from "
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const YEARS = ["2024", "2025", "2026", "2027"];
+
+interface MonthlyDue {
+  month: string;
+  year: string;
+  amount: string;
+}
 
 export default function StudentsPage() {
   const { toast } = useToast()
@@ -89,8 +98,25 @@ export default function StudentsPage() {
     foodCost: "0",
     receiver: "",
     method: "cash",
-    billingStartDate: new Date().toISOString().split('T')[0]
+    billingStartDate: new Date().toISOString().split('T')[0],
+    dueInputMethod: "total" as "total" | "breakdown"
   })
+
+  const [monthlyDues, setMonthlyDues] = useState<MonthlyDue[]>([])
+
+  const addMonthlyDueRow = () => {
+    setMonthlyDues([...monthlyDues, { month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: "" }])
+  }
+
+  const removeMonthlyDueRow = (idx: number) => {
+    setMonthlyDues(monthlyDues.filter((_, i) => i !== idx))
+  }
+
+  const updateMonthlyDueRow = (idx: number, field: keyof MonthlyDue, value: string) => {
+    const updated = [...monthlyDues]
+    updated[idx][field] = value
+    setMonthlyDues(updated)
+  }
 
   // Dynamic Due Logic for New Students
   useEffect(() => {
@@ -99,8 +125,6 @@ export default function StudentsPage() {
       const monthlyRate = Number(formData.monthlyRent) || 0;
       
       setFormData(prev => {
-        // If rent paid is equal or more than monthly rate, no initial due.
-        // Otherwise, initial due is 1 full month rent.
         const calculatedDue = (rentPaid >= monthlyRate && monthlyRate > 0) ? "0" : monthlyRate.toString();
         if (prev.dueAmount !== calculatedDue) {
           return { ...prev, dueAmount: calculatedDue };
@@ -122,7 +146,6 @@ export default function StudentsPage() {
   const selectedRoom = allRoomsInSelectedBuilding.find((r: any) => r.roomNo === formData.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
-  // Options for filter bar
   const roomOptions = useMemo(() => {
     if (buildingFilter === "all" || !buildings) return []
     const b = buildings.find(b => b.id === buildingFilter)
@@ -175,8 +198,18 @@ export default function StudentsPage() {
       const monthlyRent = Number(formData.monthlyRent)
       const apartmentName = selectedRoom?.aptName || "General"
 
-      // Use the auto-calculated or manually entered due amount
-      const startingRentDue = Number(formData.dueAmount) || 0
+      // Handle Dues Calculation based on method
+      let startingRentDue = 0
+      if (formData.type === 'old') {
+        if (formData.dueInputMethod === 'total') {
+          startingRentDue = Number(formData.dueAmount) || 0
+        } else {
+          startingRentDue = monthlyDues.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0)
+        }
+      } else {
+        startingRentDue = Number(formData.dueAmount) || 0
+      }
+
       const startingFoodDue = Number(formData.foodDueAmount) || 0
 
       let detailsArr = []
@@ -228,6 +261,7 @@ export default function StudentsPage() {
         isActive: true,
         paymentsHistory: paymentRecord ? [paymentRecord] : [],
         mealsHistory: [],
+        historicalDuesBreakdown: formData.dueInputMethod === 'breakdown' ? monthlyDues : [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -267,8 +301,10 @@ export default function StudentsPage() {
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
         type: "new", dueAmount: "0", foodDueAmount: "0", initialRentPayment: "0", initialFoodPayment: "0", advanceAmount: "0", serviceCharge: "0",
         paymentSystem: "package", monthlyRent: "", foodCost: "0", receiver: "", method: "cash",
-        billingStartDate: new Date().toISOString().split('T')[0]
+        billingStartDate: new Date().toISOString().split('T')[0],
+        dueInputMethod: "total"
       })
+      setMonthlyDues([])
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -287,14 +323,6 @@ export default function StudentsPage() {
       return matchesSearch && matchesBuilding && matchesRoom && matchesStatus && matchesPlan
     })
   }, [students, searchTerm, buildingFilter, roomFilter, statusFilter, planFilter])
-
-  const handleResetFilters = () => {
-    setSearchTerm("")
-    setBuildingFilter("all")
-    setRoomFilter("all")
-    setStatusFilter("active")
-    setPlanFilter("all")
-  }
 
   return (
     <div className="space-y-8 pb-20">
@@ -339,37 +367,80 @@ export default function StudentsPage() {
               </div>
 
               <div className="p-4 bg-secondary/20 rounded-lg border space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-2">
-                    <Label className="font-bold">Student Type</Label>
-                    <RadioGroup 
-                      value={formData.type} 
-                      onValueChange={val => setFormData({...formData, type: val})}
-                      className="flex gap-6 pt-2"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="new" id="new-std" />
-                        <Label htmlFor="new-std" className="cursor-pointer">New Student</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="old" id="old-std" />
-                        <Label htmlFor="old-std" className="cursor-pointer">Old Student (Existing Data)</Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
+                <div className="space-y-2">
+                  <Label className="font-bold">Student Type</Label>
+                  <RadioGroup 
+                    value={formData.type} 
+                    onValueChange={val => setFormData({...formData, type: val})}
+                    className="flex gap-6 pt-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="new" id="new-std" />
+                      <Label htmlFor="new-std" className="cursor-pointer">New Student</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="old" id="old-std" />
+                      <Label htmlFor="old-std" className="cursor-pointer">Old Student (Existing Data)</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
 
                 {formData.type === 'old' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-                    <div className="space-y-2">
-                      <Label className="font-bold text-destructive">Initial/Previous RENT Due (৳)</Label>
-                      <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
-                      <p className="text-[10px] text-muted-foreground italic">
-                        * অ্যাপ ব্যবহারের আগে থেকে থাকা মোট বকেয়া ভাড়া।
-                      </p>
+                  <div className="border-t pt-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="font-bold text-destructive">Initial RENT Due (৳)</Label>
+                      <RadioGroup 
+                        value={formData.dueInputMethod} 
+                        onValueChange={(val: any) => setFormData({...formData, dueInputMethod: val})}
+                        className="flex gap-4"
+                      >
+                        <div className="flex items-center space-x-1.5">
+                          <RadioGroupItem value="total" id="due-total" />
+                          <Label htmlFor="due-total" className="text-xs cursor-pointer">Total Amount</Label>
+                        </div>
+                        <div className="flex items-center space-x-1.5">
+                          <RadioGroupItem value="breakdown" id="due-breakdown" />
+                          <Label htmlFor="due-breakdown" className="text-xs cursor-pointer">Monthly Breakdown</Label>
+                        </div>
+                      </RadioGroup>
                     </div>
-                    {formData.paymentSystem === 'non-package' && (
+
+                    {formData.dueInputMethod === 'total' ? (
                       <div className="space-y-2">
+                        <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
+                        <p className="text-[10px] text-muted-foreground italic">* অ্যাপ ব্যবহারের আগে থেকে থাকা মোট বকেয়া ভাড়া।</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {monthlyDues.map((due, idx) => (
+                          <div key={idx} className="flex gap-2 items-end">
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-[10px]">Month</Label>
+                              <Select value={due.month} onValueChange={val => updateMonthlyDueRow(idx, 'month', val)}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
+                            <div className="w-20 space-y-1">
+                              <Label className="text-[10px]">Year</Label>
+                              <Select value={due.year} onValueChange={val => updateMonthlyDueRow(idx, 'year', val)}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-[10px]">Amount</Label>
+                              <Input type="number" className="h-8 text-xs" value={due.amount} onChange={e => updateMonthlyDueRow(idx, 'amount', e.target.value)} placeholder="0.00" />
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeMonthlyDueRow(idx)}><Trash2 size={14}/></Button>
+                          </div>
+                        ))}
+                        <Button variant="outline" size="sm" className="w-full text-[10px] h-7" onClick={addMonthlyDueRow}><Plus size={12}/> Add Month</Button>
+                      </div>
+                    )}
+
+                    {formData.paymentSystem === 'non-package' && (
+                      <div className="space-y-2 pt-2">
                         <Label className="font-bold text-destructive">Previous FOOD Due (৳)</Label>
                         <Input type="number" value={formData.foodDueAmount} onChange={e => setFormData({...formData, foodDueAmount: e.target.value})} placeholder="0.00" />
                       </div>
@@ -379,25 +450,13 @@ export default function StudentsPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Student Name</Label>
-                  <Input placeholder="Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Student Phone</Label>
-                  <Input placeholder="11 Digit Mobile Number" maxLength={11} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                </div>
+                <div className="space-y-2"><Label>Student Name</Label><Input placeholder="Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Student Phone</Label><Input placeholder="11 Digit Mobile Number" maxLength={11} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Parent's Phone</Label>
-                  <Input placeholder="11 Digit Contact" maxLength={11} value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Permanent Address</Label>
-                  <Textarea placeholder="Full Address Details" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
-                </div>
+                <div className="space-y-2"><Label>Parent's Phone</Label><Input placeholder="11 Digit Contact" maxLength={11} value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Permanent Address</Label><Textarea placeholder="Full Address Details" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
@@ -425,55 +484,22 @@ export default function StudentsPage() {
               </div>
 
               <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
-                <Label className="font-bold text-success">
-                  {formData.type === 'old' ? 'Existing/Past Payments' : 'Initial Payments & Fees'}
-                </Label>
+                <Label className="font-bold text-success">{formData.type === 'old' ? 'Existing/Past Payments' : 'Initial Payments & Fees'}</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Rent Payment (৳)</Label>
-                    <Input type="number" value={formData.initialRentPayment} onChange={e => setFormData({...formData, initialRentPayment: e.target.value})} placeholder="0.00" />
-                  </div>
+                  <div className="space-y-2"><Label>Rent Payment (৳)</Label><Input type="number" value={formData.initialRentPayment} onChange={e => setFormData({...formData, initialRentPayment: e.target.value})} placeholder="0.00" /></div>
                   {formData.paymentSystem === 'non-package' && (
-                    <div className="space-y-2">
-                      <Label>Food Payment (৳)</Label>
-                      <Input type="number" value={formData.initialFoodPayment} onChange={e => setFormData({...formData, initialFoodPayment: e.target.value})} placeholder="0.00" />
-                    </div>
+                    <div className="space-y-2"><Label>Food Payment (৳)</Label><Input type="number" value={formData.initialFoodPayment} onChange={e => setFormData({...formData, initialFoodPayment: e.target.value})} placeholder="0.00" /></div>
                   )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Advance / Security (৳)</Label>
-                    <Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} placeholder="0.00" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Service Charge (৳)</Label>
-                    <Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} placeholder="0.00" />
-                  </div>
+                  <div className="space-y-2"><Label>Advance / Security (৳)</Label><Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} placeholder="0.00" /></div>
+                  <div className="space-y-2"><Label>Service Charge (৳)</Label><Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} placeholder="0.00" /></div>
                 </div>
                 
                 {formData.type === 'new' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-                    <div className="space-y-2">
-                      <Label>Payment Method</Label>
-                      <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cash">Cash</SelectItem>
-                          <SelectItem value="bkash">Bkash</SelectItem>
-                          <SelectItem value="nagad">Nagad</SelectItem>
-                          <SelectItem value="bank">Bank</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Payment Receiver</Label>
-                      <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
-                        <SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger>
-                        <SelectContent>
-                          {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <div className="space-y-2"><Label>Payment Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-2"><Label>Payment Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                   </div>
                 )}
 
@@ -495,61 +521,12 @@ export default function StudentsPage() {
 
       {/* Filter Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-            <Search size={10} /> Search Resident
-          </Label>
-          <Input placeholder="Name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-            <Building2 size={10} /> Building
-          </Label>
-          <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all") }}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Buildings</SelectItem>
-              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-            <DoorOpen size={10} /> Room
-          </Label>
-          <Select value={roomFilter} onValueChange={setRoomFilter} disabled={buildingFilter === "all"}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Rooms</SelectItem>
-              {roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Status</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="active">Active Only</SelectItem>
-              <SelectItem value="left">Ex-Residents</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Plan</Label>
-          <Select value={planFilter} onValueChange={setPlanFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Plans</SelectItem>
-              <SelectItem value="package">Package Only</SelectItem>
-              <SelectItem value="non-package">Non-Package</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button variant="ghost" className="h-10" onClick={handleResetFilters}>
-          <XCircle size={14} className="mr-1" /> Reset
-        </Button>
+        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Search size={10} /> Search Resident</Label><Input placeholder="Name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Building2 size={10} /> Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all") }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><DoorOpen size={10} /> Room</Label><Select value={roomFilter} onValueChange={setRoomFilter} disabled={buildingFilter === "all"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Rooms</SelectItem>{roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="active">Active Only</SelectItem><SelectItem value="left">Ex-Residents</SelectItem></SelectContent></Select></div>
+        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Plan</Label><Select value={planFilter} onValueChange={setPlanFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Plans</SelectItem><SelectItem value="package">Package Only</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent></Select></div>
+        <Button variant="ghost" className="h-10" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setStatusFilter("active"); setPlanFilter("all") }}><XCircle size={14} className="mr-1" /> Reset</Button>
       </div>
 
       {isLoading ? (
@@ -569,61 +546,15 @@ export default function StudentsPage() {
               </TableHeader>
               <TableBody>
                 {filteredStudents.map((s: any) => (
-                  <TableRow 
-                    key={s.id} 
-                    className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => router.push(`/students/${s.id}`)}
-                  >
-                    <TableCell>
-                       <div className="flex items-center gap-3">
-                          <UserCircle size={32} className="text-primary/40" />
-                          <div className="flex flex-col">
-                            <span className="font-bold">{s.name}</span>
-                            <span className="text-[10px] text-muted-foreground">{s.phone}</span>
-                          </div>
-                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium">{s.buildingName}</span>
-                        <span className="text-[10px] text-muted-foreground">Room {s.roomNumber} | Seat {s.seatNumber}</span>
-                      </div>
-                    </TableCell>
+                  <TableRow key={s.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/students/${s.id}`)}>
+                    <TableCell><div className="flex items-center gap-3"><UserCircle size={32} className="text-primary/40" /><div className="flex flex-col"><span className="font-bold">{s.name}</span><span className="text-[10px] text-muted-foreground">{s.phone}</span></div></div></TableCell>
+                    <TableCell><div className="flex flex-col"><span className="text-sm font-medium">{s.buildingName}</span><span className="text-[10px] text-muted-foreground">Room {s.roomNumber} | Seat {s.seatNumber}</span></div></TableCell>
                     <TableCell><Badge variant="outline" className="capitalize">{s.paymentSystem}</Badge></TableCell>
-                    <TableCell>
-                      <Badge variant={s.isActive ? "default" : "secondary"} className={s.isActive ? "bg-success text-white" : ""}>
-                        {s.isActive ? "Active" : "Left"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical size={16} />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => router.push(`/students/${s.id}`)} className="cursor-pointer gap-2">
-                            <Eye size={14} /> View Profile
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=payment`)} className="cursor-pointer gap-2">
-                            <Wallet size={14} className="text-success" /> Process Payment
-                          </DropdownMenuItem>
-                          {s.paymentSystem === 'non-package' && (
-                            <DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=meals`)} className="cursor-pointer gap-2">
-                              <Utensils size={14} className="text-primary" /> Log Meals
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                    <TableCell><Badge variant={s.isActive ? "default" : "secondary"} className={s.isActive ? "bg-success text-white" : ""}>{s.isActive ? "Active" : "Left"}</Badge></TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem onClick={() => router.push(`/students/${s.id}`)} className="cursor-pointer gap-2"><Eye size={14} /> View Profile</DropdownMenuItem><DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=payment`)} className="cursor-pointer gap-2"><Wallet size={14} className="text-success" /> Process Payment</DropdownMenuItem>{s.paymentSystem === 'non-package' && (<DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=meals`)} className="cursor-pointer gap-2"><Utensils size={14} className="text-primary" /> Log Meals</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></TableCell>
                   </TableRow>
                 ))}
-                {filteredStudents.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found.</TableCell>
-                  </TableRow>
-                )}
+                {filteredStudents.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found.</TableCell></TableRow>}
               </TableBody>
             </Table>
           </CardContent>
