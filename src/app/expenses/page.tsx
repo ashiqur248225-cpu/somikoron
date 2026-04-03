@@ -136,6 +136,7 @@ export default function ExpenseHistoryPage() {
 
     setIsSubmitting(true)
     const building = buildings?.find(b => b.id === formData.buildingId)
+    const apartment = building?.apartmentsDetail?.find((a: any) => a.name === formData.apartmentName)
     const expenseId = doc(collection(db, "expenses")).id
 
     try {
@@ -144,6 +145,7 @@ export default function ExpenseHistoryPage() {
         id: expenseId,
         amount: Number(formData.amount),
         buildingName: building?.name || "General",
+        meterNo: apartment?.meterNo || "",
         createdAt: serverTimestamp(),
       })
       toast({ title: "Success", description: "Expense recorded." })
@@ -170,28 +172,29 @@ export default function ExpenseHistoryPage() {
   }
 
   const handleExportCSV = () => {
-    const headers = ["Type", "Date", "Expenser/Party", "Category", "Method", "Location", "Amount"]
+    const headers = ["Date", "Category", "Description", "Building", "Unit/Meter", "Room", "Amount", "Expenser (Handled By)"]
     const rows = filteredExpenses.map(e => [
-      "EXPENSE",
       new Date(e.expenseDate).toLocaleDateString(),
-      e.expensePartyName,
-      e.category,
-      e.method,
-      `${e.buildingName}${e.apartmentName && e.apartmentName !== 'none' ? ' | ' + e.apartmentName : ''}`,
-      e.amount
+      e.category.toUpperCase(),
+      e.description || "-",
+      e.buildingName || "General",
+      e.apartmentName && e.apartmentName !== 'none' ? `${e.apartmentName}${e.meterNo ? ' (Meter: ' + e.meterNo + ')' : ''}` : "-",
+      e.roomNumber || "-",
+      e.amount,
+      e.expensePartyName
     ])
 
     let csvContent = "data:text/csv;charset=utf-8,"
-    csvContent += "SOMIKORON EXPENSE HISTORY\n"
+    csvContent += "SOMIKORON DETAILED EXPENSE REPORT\n"
     csvContent += `Generated on: ${new Date().toLocaleString()}\n\n`
     csvContent += headers.join(",") + "\n"
     rows.forEach(row => { csvContent += row.join(",") + "\n" })
-    csvContent += `\n,,,,,TOTAL EXPENSES,${totalFilteredExpense}`
+    csvContent += `\n,,,,,,TOTAL EXPENSES,${totalFilteredExpense}`
 
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
-    link.setAttribute("download", `Expense_History_${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute("download", `Expense_Report_${new Date().toISOString().split('T')[0]}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

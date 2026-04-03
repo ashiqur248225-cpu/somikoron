@@ -158,6 +158,7 @@ export default function IncomeHistoryPage() {
       buildingName: selectedBuildingForForm?.name || "Unknown",
       studentName: selectedStudent?.name || "Unknown",
       studentId: formData.studentId,
+      roomNumber: selectedRoomNumber,
       type: "income",
       month: formData.month,
       year: formData.year,
@@ -198,29 +199,30 @@ export default function IncomeHistoryPage() {
   }
 
   const handleExportCSV = () => {
-    const headers = ["Type", "Date", "Student", "Details", "Method", "Receiver", "Building", "Amount"]
-    const rows = filteredPayments.map(p => [
-      "INCOME",
-      p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A'),
-      p.studentName,
-      p.description || "-",
-      p.method,
-      p.receiver,
-      p.buildingName,
-      p.amount
-    ])
+    const headers = ["Date", "Student Name", "Building", "Room No", "Amount", "Receiver (Received By)"]
+    const rows = filteredPayments.map(p => {
+      const student = students?.find(s => s.id === p.studentId);
+      return [
+        p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A'),
+        p.studentName,
+        p.buildingName,
+        p.roomNumber || student?.roomNumber || "-",
+        p.amount,
+        p.receiver
+      ]
+    })
 
     let csvContent = "data:text/csv;charset=utf-8,"
-    csvContent += "SOMIKORON INCOME HISTORY\n"
+    csvContent += "SOMIKORON INCOME REPORT\n"
     csvContent += `Generated on: ${new Date().toLocaleString()}\n\n`
     csvContent += headers.join(",") + "\n"
     rows.forEach(row => { csvContent += row.join(",") + "\n" })
-    csvContent += `\n,,,,,,,TOTAL COLLECTIONS,${totalFilteredIncome}`
+    csvContent += `\n,,,,TOTAL COLLECTIONS,${totalFilteredIncome}`
 
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
-    link.setAttribute("download", `Income_History_${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute("download", `Income_Report_${new Date().toISOString().split('T')[0]}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

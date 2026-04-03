@@ -136,12 +136,12 @@ export default function DuesPage() {
   }, [filteredDues, processedStudents])
 
   const handleExportCSV = () => {
-    const headers = ["Student Name", "Phone", "Building", "Room No", "Rent Due", "Food Due", "Total Outstanding", "Status"]
+    const headers = ["Student Name", "Building", "Room No", "Phone", "Rent Due", "Food Due", "Total Outstanding", "Status"]
     const rows = filteredDues.map(s => [
       s.name,
-      s.phone,
       s.buildingName,
       s.roomNumber,
+      s.phone || "N/A",
       s.rentDue,
       s.foodDue,
       s.totalDue,
@@ -149,11 +149,11 @@ export default function DuesPage() {
     ])
 
     let csvContent = "data:text/csv;charset=utf-8,"
-    csvContent += "SOMIKORON OUTSTANDING DUES & COLLECTION REPORT\n"
+    csvContent += "SOMIKORON OUTSTANDING DUES REPORT\n"
     csvContent += `Generated on: ${new Date().toLocaleString()}\n\n`
     csvContent += headers.join(",") + "\n"
     rows.forEach(row => { csvContent += row.join(",") + "\n" })
-    csvContent += `\n,,,,,GRAND TOTAL OUTSTANDING,${stats.totalDue}`
+    csvContent += `\n,,,GRAND TOTAL OUTSTANDING,,,${stats.totalDue}`
 
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
