@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
@@ -379,7 +378,11 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         <Card className="border-none shadow-sm md:col-span-2">
           <CardHeader><CardTitle className="text-lg">Financial Overview</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
+              <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                <p className="text-[10px] uppercase text-orange-600 font-bold">Monthly Rent</p>
+                <p className="text-lg font-bold text-orange-600">৳{student.monthlyRent}</p>
+              </div>
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/20"><p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p><p className="text-lg font-bold">৳{student.advanceAmount || 0}</p></div>
               <div className="p-3 rounded-lg bg-secondary/50 border border-secondary"><p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p><p className="text-lg font-bold">৳{student.serviceCharge || 0}</p></div>
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20"><p className="text-[10px] uppercase text-destructive font-bold">Total Rent Due</p><p className="text-lg font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p></div>

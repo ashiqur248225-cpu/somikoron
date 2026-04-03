@@ -284,12 +284,21 @@ export default function IncomeHistoryPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 print:hidden">
         <Card className="bg-income/5 border-none shadow-sm border-l-4 border-l-income">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-income flex items-center gap-2">
-              <HandCoins size={16} /> Total Collections (Filtered)
+            <CardTitle className="text-sm font-medium text-income flex items-center justify-between">
+              <span className="flex items-center gap-2"><HandCoins size={16} /> Total Collections (Filtered)</span>
+              {receiverFilter !== 'all' && <Badge variant="outline" className="text-[10px] bg-income/10 border-income/20">{receiverFilter}</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-income">৳{totalFilteredIncome.toLocaleString()}</p>
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="text-3xl font-bold text-income">৳{totalFilteredIncome.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Filtered result based on your criteria</p>
+              </div>
+              <Badge variant="outline" className="bg-income/10 text-income border-income/20 mb-1 px-3 py-1">
+                {filteredPayments.length} Receipts
+              </Badge>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -374,7 +383,7 @@ export default function IncomeHistoryPage() {
                     </div>
                   </TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
-                  <TableCell className="text-xs">{p.receiver}</TableCell>
+                  <TableCell className="text-xs font-medium text-primary">{p.receiver}</TableCell>
                   <TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
@@ -422,7 +431,7 @@ export default function IncomeHistoryPage() {
           </tbody>
           <tfoot>
             <tr className="bg-gray-50">
-              <td colSpan={5} className="text-right font-bold py-4">GRAND TOTAL COLLECTIONS:</td>
+              <td colSpan={5} className="text-right font-bold py-4">GRAND TOTAL COLLECTIONS ({filteredPayments.length} Receipts):</td>
               <td className="text-right font-bold text-lg text-primary py-4">৳{totalFilteredIncome.toLocaleString()}</td>
             </tr>
           </tfoot>

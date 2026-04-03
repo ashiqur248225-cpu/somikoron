@@ -256,12 +256,21 @@ export default function ExpenseHistoryPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 print:hidden">
         <Card className="bg-destructive/5 border-none shadow-sm border-l-4 border-l-destructive">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-destructive flex items-center gap-2">
-              <Receipt size={16} /> Total Expenses (Filtered)
+            <CardTitle className="text-sm font-medium text-destructive flex items-center justify-between">
+              <span className="flex items-center gap-2"><Receipt size={16} /> Total Expenses (Filtered)</span>
+              {expenserFilter !== 'all' && <Badge variant="outline" className="text-[10px] bg-destructive/10 border-destructive/20">{expenserFilter}</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-destructive">৳{totalFilteredExpense.toLocaleString()}</p>
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="text-3xl font-bold text-destructive">৳{totalFilteredExpense.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Filtered result based on your criteria</p>
+              </div>
+              <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 mb-1 px-3 py-1">
+                {filteredExpenses.length} Records
+              </Badge>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -345,7 +354,7 @@ export default function ExpenseHistoryPage() {
                   <TableCell><Badge variant="secondary" className="capitalize text-[10px]">{e.category}</Badge></TableCell>
                   <TableCell className="font-medium text-sm">
                     <div className="flex flex-col">
-                      <span>{e.expensePartyName}</span>
+                      <span className="text-primary font-semibold">{e.expensePartyName}</span>
                       {e.receiver && <span className="text-[10px] text-muted-foreground italic">via {e.receiver}</span>}
                     </div>
                   </TableCell>
@@ -401,7 +410,7 @@ export default function ExpenseHistoryPage() {
           </tbody>
           <tfoot>
             <tr className="bg-gray-50">
-              <td colSpan={5} className="text-right font-bold py-4">TOTAL EXPENSES:</td>
+              <td colSpan={5} className="text-right font-bold py-4">TOTAL EXPENSES ({filteredExpenses.length} Records):</td>
               <td className="text-right font-bold text-lg text-destructive py-4">৳{totalFilteredExpense.toLocaleString()}</td>
             </tr>
           </tfoot>
