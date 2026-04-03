@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo } from "react"
@@ -6,7 +7,25 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Building2, MapPin, Plus, DoorOpen, Loader2, Users, UserCheck, UserMinus, Trash2, CheckCircle2, XCircle, Zap, LayoutGrid } from "lucide-react"
+import { 
+  Building2, 
+  MapPin, 
+  Plus, 
+  DoorOpen, 
+  Loader2, 
+  Users, 
+  UserCheck, 
+  UserMinus, 
+  Trash2, 
+  CheckCircle2, 
+  XCircle, 
+  Zap, 
+  LayoutGrid, 
+  Search, 
+  Filter, 
+  Bed,
+  CircleDot
+} from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -16,6 +35,13 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
 import { collection, serverTimestamp } from "firebase/firestore"
@@ -23,6 +49,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
 
 interface SeatDetail {
   seatNo: string;
@@ -46,6 +73,13 @@ export default function BuildingsPage() {
   const router = useRouter()
   const db = useFirestore()
   const [open, setOpen] = useState(false)
+  
+  // Search & Filter State
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filterBuilding, setBuildingFilter] = useState("all")
+  const [filterRoomType, setRoomTypeFilter] = useState("all") // all, single, double, triple+
+  const [filterAvailability, setAvailabilityFilter] = useState("all") // all, empty_only
+
   const [newBuilding, setNewBuilding] = useState({ 
     name: "", 
     address: ""
@@ -58,6 +92,48 @@ export default function BuildingsPage() {
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings, isLoading } = useCollection(buildingsQuery)
 
+  // Derived state: Flattened Rooms for detailed search
+  const allFlattenedRooms = useMemo(() => {
+    if (!buildings) return []
+    const rooms: any[] = []
+    buildings.forEach(b => {
+      b.apartmentsDetail?.forEach((apt: any) => {
+        apt.rooms?.forEach((room: any) => {
+          rooms.push({
+            ...room,
+            buildingId: b.id,
+            buildingName: b.name,
+            aptName: apt.name,
+            emptyCount: room.seats.filter((s: any) => s.status === 'empty').length
+          })
+        })
+      })
+    })
+    return rooms
+  }, [buildings])
+
+  const filteredRooms = useMemo(() => {
+    return allFlattenedRooms.filter(room => {
+      const matchesSearch = 
+        room.roomNo.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        room.buildingName.toLowerCase().includes(searchTerm.toLowerCase())
+      
+      const matchesBuilding = filterBuilding === "all" || room.buildingId === filterBuilding
+      
+      let matchesRoomType = true
+      if (filterRoomType === "single") matchesRoomType = room.totalSeats === 1
+      if (filterRoomType === "double") matchesRoomType = room.totalSeats === 2
+      if (filterRoomType === "multiple") matchesRoomType = room.totalSeats >= 3
+
+      const matchesAvailability = filterAvailability === "all" || (filterAvailability === "empty_only" && room.emptyCount > 0)
+
+      return matchesSearch && matchesBuilding && matchesRoomType && matchesAvailability
+    })
+  }, [allFlattenedRooms, searchTerm, filterBuilding, filterRoomType, filterAvailability])
+
+  const isFiltering = searchTerm !== "" || filterBuilding !== "all" || filterRoomType !== "all" || filterAvailability !== "all"
+
+  // Create Building Logic
   const addApartment = () => {
     setApartments([...apartments, { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [] }] }])
   }
@@ -283,9 +359,139 @@ export default function BuildingsPage() {
         </Dialog>
       </div>
 
+      {/* Advanced Filter Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
+        <div className="space-y-1.5 lg:col-span-2">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+            <Search size={10} /> Search Building or Room
+          </Label>
+          <Input 
+            placeholder="Search room no..." 
+            value={searchTerm} 
+            onChange={e => setSearchTerm(e.target.value)} 
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+            <Building2 size={10} /> Building
+          </Label>
+          <Select value={filterBuilding} onValueChange={setBuildingFilter}>
+            <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Buildings</SelectItem>
+              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+            <Bed size={10} /> Room Type
+          </Label>
+          <Select value={filterRoomType} onValueChange={setRoomTypeFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any Bed</SelectItem>
+              <SelectItem value="single">Single Bed</SelectItem>
+              <SelectItem value="double">Double Bed</SelectItem>
+              <SelectItem value="multiple">Multiple (3+)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+            <UserCheck size={10} /> Availability
+          </Label>
+          <Select value={filterAvailability} onValueChange={setAvailabilityFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Rooms</SelectItem>
+              <SelectItem value="empty_only">Has Empty Seats</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {isFiltering && (
+          <Button 
+            variant="ghost" 
+            className="h-10 text-xs gap-1" 
+            onClick={() => {
+              setSearchTerm("")
+              setBuildingFilter("all")
+              setRoomTypeFilter("all")
+              setAvailabilityFilter("all")
+            }}
+          >
+            <XCircle size={14} /> Clear
+          </Button>
+        )}
+      </div>
+
       {isLoading ? (
         <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
+      ) : isFiltering ? (
+        // Detailed Search Result View
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-muted-foreground mb-2">
+            <Filter size={16} />
+            <p className="text-sm">Found {filteredRooms.length} rooms matching your criteria.</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredRooms.map((room, idx) => (
+              <Card key={idx} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all">
+                <div className={cn("h-1.5 w-full", room.emptyCount > 0 ? "bg-success" : "bg-destructive/20")} />
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-lg">Room {room.roomNo}</CardTitle>
+                      <p className="text-[10px] font-medium text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Building2 size={10} /> {room.buildingName} • {room.aptName}
+                      </p>
+                    </div>
+                    {room.emptyCount > 0 ? (
+                      <Badge variant="outline" className="bg-success/10 text-success border-success/20">
+                        {room.emptyCount} Empty
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
+                        Full
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {room.seats?.map((seat: any, sIdx: number) => (
+                      <div 
+                        key={sIdx}
+                        className={cn(
+                          "px-2 py-1 rounded text-[9px] font-bold border flex items-center gap-1",
+                          seat.status === 'occupied' 
+                            ? "bg-secondary text-muted-foreground border-secondary" 
+                            : "bg-success/5 text-success border-success/30"
+                        )}
+                      >
+                        <CircleDot size={8} />
+                        S-{seat.seatNo}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+                <CardFooter className="pt-0">
+                  <Button variant="ghost" size="sm" className="w-full h-8 text-[10px] uppercase font-bold" onClick={() => router.push(`/buildings/${room.buildingId}`)}>
+                    Go to Building
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+            {filteredRooms.length === 0 && (
+              <div className="col-span-full py-20 text-center bg-secondary/10 rounded-xl border border-dashed">
+                <Search size={48} className="mx-auto text-muted-foreground/30 mb-4" />
+                <p className="text-muted-foreground">No rooms found matching your specific filters.</p>
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
+        // Default Building Overview View
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {buildings?.map((building: any) => (
             <Card key={building.id} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all">
@@ -316,9 +522,22 @@ export default function BuildingsPage() {
                       </div>
                    </div>
                 </div>
+                
+                <div className="mt-4 space-y-1.5">
+                  <div className="flex justify-between text-[10px] uppercase font-bold">
+                    <span className="text-success">Empty: {building.emptySeats}</span>
+                    <span className="text-muted-foreground">Total: {building.totalSeats}</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-success transition-all duration-500" 
+                      style={{ width: `${(building.occupiedSeats / (building.totalSeats || 1)) * 100}%` }} 
+                    />
+                  </div>
+                </div>
               </CardContent>
               <CardFooter>
-                <Button variant="outline" className="w-full" onClick={() => router.push(`/buildings/${building.id}`)}>View Details</Button>
+                <Button variant="outline" className="w-full" onClick={() => router.push(`/buildings/${building.id}`)}>View Detailed View</Button>
               </CardFooter>
             </Card>
           ))}
