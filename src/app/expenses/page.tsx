@@ -74,6 +74,8 @@ export default function ExpenseHistoryPage() {
   // Filters State
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
+  const [methodFilter, setMethodFilter] = useState("all")
+  const [expenserFilter, setExpenserFilter] = useState("all")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
 
@@ -131,11 +133,13 @@ export default function ExpenseHistoryPage() {
       const eDate = new Date(e.expenseDate)
       const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
       const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
+      const matchesMethod = methodFilter === "all" || e.method === methodFilter
+      const matchesExpenser = expenserFilter === "all" || e.expensePartyName === expenserFilter
       const matchesStartDate = !startDate || eDate >= new Date(startDate)
       const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
-      return matchesCategory && matchesBuilding && matchesStartDate && matchesEndDate
+      return matchesCategory && matchesBuilding && matchesMethod && matchesExpenser && matchesStartDate && matchesEndDate
     })
-  }, [expenses, categoryFilter, buildingFilter, startDate, endDate])
+  }, [expenses, categoryFilter, buildingFilter, methodFilter, expenserFilter, startDate, endDate])
 
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -184,6 +188,8 @@ export default function ExpenseHistoryPage() {
     }
   }
 
+  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+
   return (
     <div className="space-y-8 pb-20 print:p-0">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
@@ -197,11 +203,24 @@ export default function ExpenseHistoryPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2"><FileSpreadsheet size={16} /> Export CSV</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="gap-2"><Download size={16} /> Export / Share</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer">
+                <FileText size={14} className="mr-2" /> Download PDF (Print)
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer">
+                <Share2 size={14} className="mr-2" /> Share Report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       {userRole !== 'Building Manager' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end print:hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4 bg-secondary/20 p-4 rounded-xl border items-end print:hidden">
            <div className="space-y-1">
               <Label className="text-[10px] text-muted-foreground uppercase font-bold">Category</Label>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -222,9 +241,34 @@ export default function ExpenseHistoryPage() {
                 </SelectContent>
               </Select>
            </div>
+           <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Method</Label>
+              <Select value={methodFilter} onValueChange={setMethodFilter}>
+                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Methods</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bkash">Bkash</SelectItem>
+                  <SelectItem value="nagad">Nagad</SelectItem>
+                  <SelectItem value="bank">Bank</SelectItem>
+                </SelectContent>
+              </Select>
+           </div>
+           <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Expenser</Label>
+              <Select value={expenserFilter} onValueChange={setExpenserFilter}>
+                <SelectTrigger><SelectValue placeholder="All Staff" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Staff</SelectItem>
+                  {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+           </div>
            <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">From</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
            <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">To</Label><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
-           <Button variant="ghost" className="h-10" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setStartDate(""); setEndDate("") }}><XCircle size={14} className="mr-1" /> Reset</Button>
+           <Button variant="ghost" className="h-10" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setMethodFilter("all"); setExpenserFilter("all"); setStartDate(""); setEndDate("") }}>
+             <XCircle size={14} className="mr-1" /> Reset
+           </Button>
         </div>
       )}
 
@@ -236,20 +280,25 @@ export default function ExpenseHistoryPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Building</TableHead>
+                <TableHead>Expenser</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {expensesLoading ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
               ) : filteredExpenses?.map((e: any) => (
                 <TableRow key={e.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/expenses/${e.id}`)}>
                   <TableCell className="text-xs">{new Date(e.expenseDate).toLocaleDateString()}</TableCell>
                   <TableCell><Badge variant="secondary" className="capitalize text-[10px]">{e.category}</Badge></TableCell>
                   <TableCell className="text-xs">{e.buildingName}</TableCell>
+                  <TableCell className="text-xs font-medium">{e.expensePartyName}</TableCell>
                   <TableCell className="text-right font-bold text-expense">৳{e.amount?.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
+              {filteredExpenses.length === 0 && !expensesLoading && (
+                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No expense records found matching these criteria.</TableCell></TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -290,6 +339,16 @@ export default function ExpenseHistoryPage() {
             <div className="space-y-2 p-3 bg-secondary/10 rounded-lg border">
               <Label>Target Building</Label>
               <div className="h-9 flex items-center px-3 bg-white rounded border text-sm font-bold">{buildings?.find(b => b.id === formData.buildingId)?.name || "Assigned Building"}</div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Expenser (Staff Name)</Label>
+              <Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}>
+                <SelectTrigger><SelectValue placeholder="Select Staff" /></SelectTrigger>
+                <SelectContent>
+                  {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
