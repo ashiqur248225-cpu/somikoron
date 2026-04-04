@@ -1,6 +1,8 @@
+
 "use client"
 
-import React, { useState, useMemo } from "react"
+import * as React from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase } from "@/firebase"
 import { doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore"
@@ -52,8 +54,15 @@ interface ApartmentDetail {
   rooms: RoomDetail[];
 }
 
-export default function BuildingDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+export default function BuildingDetailsPage({ 
+  params, 
+  searchParams 
+}: { 
+  params: Promise<{ id: string }>,
+  searchParams: Promise<any>
+}) {
   const { id } = React.use(params)
+  // React.use(searchParams) // Add if needed
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()

@@ -1,7 +1,8 @@
 
 "use client"
 
-import React, { useState, useMemo } from "react"
+import * as React from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, updateDoc, deleteDoc, serverTimestamp, collection, query, where } from "firebase/firestore"
@@ -76,12 +77,6 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
     return query(collection(db, "staff"), where("branch", "==", expense.branch))
   }, [db, expense?.branch])
   const { data: staffList } = useCollection(staffQuery)
-
-  const partiesQuery = useMemoFirebase(() => {
-    if (!expense?.branch) return collection(db, "expenseParties")
-    return query(collection(db, "expenseParties"), where("branch", "==", expense.branch))
-  }, [db, expense?.branch])
-  const { data: parties } = useCollection(partiesQuery)
 
   const [editForm, setEditForm] = useState<any>(null)
 

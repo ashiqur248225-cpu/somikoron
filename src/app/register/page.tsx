@@ -1,6 +1,7 @@
 
 "use client"
 
+import * as React from "react"
 import { useState, useMemo, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -21,16 +22,17 @@ const OCCUPATIONS = [
   { id: "job_holder", label: "Job Holder" }
 ]
 
-export default function PublicRegisterPage() {
+export default function PublicRegisterPage({ searchParams }: { searchParams: Promise<{ branch?: string, type?: string }> }) {
   const { toast } = useToast()
   const db = useFirestore()
-  const searchParams = useSearchParams()
+  const resolvedSearchParams = React.use(searchParams)
+  
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
 
   // Get Branch and Type from URL
-  const urlBranch = searchParams.get('branch') || ""
-  const urlType = searchParams.get('type') || "new"
+  const urlBranch = resolvedSearchParams.branch || ""
+  const urlType = resolvedSearchParams.type || "new"
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!urlBranch) return null
@@ -208,7 +210,7 @@ export default function PublicRegisterPage() {
                   <Input required maxLength={11} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="01XXXXXXXXX" className="border-2 border-slate-200 h-11" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Guardian's Phone (অভিভাবকের মোবাইল)</Label>
+                  <Label>Guardian's Phone (অভিভাগকের মোবাইল)</Label>
                   <Input required maxLength={11} value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} placeholder="জরুরী যোগাযোগের জন্য" className="border-2 border-slate-200 h-11" />
                 </div>
               </div>

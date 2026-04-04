@@ -1,7 +1,8 @@
 
 "use client"
 
-import React, { useState, useMemo } from "react"
+import * as React from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, updateDoc, serverTimestamp, arrayUnion, collection, setDoc } from "firebase/firestore"
@@ -24,8 +25,15 @@ import { Separator } from "@/components/ui/separator"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export default function StaffProfilePage({ params }: { params: Promise<{ id: string }> }) {
+export default function StaffProfilePage({ 
+  params, 
+  searchParams 
+}: { 
+  params: Promise<{ id: string }>,
+  searchParams: Promise<any>
+}) {
   const { id } = React.use(params)
+  // React.use(searchParams) // Add if needed
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()

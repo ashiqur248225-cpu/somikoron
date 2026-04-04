@@ -1,7 +1,9 @@
+
 "use client"
 
-import React, { useState, useMemo, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import * as React from "react"
+import { useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, setDoc, getDoc, arrayUnion, increment, collection, deleteDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -60,21 +62,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export default function StudentDetailsPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
-  const { id } = React.use(paramsPromise)
+export default function StudentDetailsPage({ 
+  params, 
+  searchParams 
+}: { 
+  params: Promise<{ id: string }>,
+  searchParams: Promise<{ action?: string }>
+}) {
+  const { id } = React.use(params)
+  const resolvedSearchParams = React.use(searchParams)
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { toast } = useToast()
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
@@ -119,10 +121,10 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const currentMealRate = mealRateConfig?.rate || 0
 
   useEffect(() => {
-    const action = searchParams.get('action')
+    const action = resolvedSearchParams.action
     if (action === 'payment') setIsPaymentDialogOpen(true)
     if (action === 'meals') setIsLogMealDialogOpen(true)
-  }, [searchParams])
+  }, [resolvedSearchParams])
 
   const financialStats = useMemo(() => {
     if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [], usableAdvance: 0, totalDue: 0 }
@@ -541,7 +543,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="p-4 md:p-6">
               <CardTitle className="text-sm">Monthly Rent Status</CardTitle>
-              <CardDescription className="text-xs">Real-time calculation based on payments.</CardDescription>
+              <CardDescription className="text-xs">Real-time calculation based on payments and dues map.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="hidden md:block">

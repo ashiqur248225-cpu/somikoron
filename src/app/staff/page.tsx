@@ -1,8 +1,9 @@
 
 "use client"
 
+import * as React from "react"
 import { useState, useMemo, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Table, 
@@ -37,11 +38,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
-export default function StaffPage() {
+export default function StaffPage({ searchParams }: { searchParams: Promise<{ type?: string }> }) {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const resolvedSearchParams = React.use(searchParams)
+  const currentTab = resolvedSearchParams.type || "management"
   
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddOpen, setIsAddOpen] = useState(false)
@@ -56,8 +58,6 @@ export default function StaffPage() {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
   }, [])
-
-  const currentTab = searchParams.get('type') || "management"
 
   const [formData, setFormData] = useState({
     name: "",
@@ -227,7 +227,48 @@ export default function StaffPage() {
         )}
       </Tabs>
 
-      {/* Enroll Dialog Omitted for brevity */}
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Enroll New Staff</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2"><Label>Full Name</Label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Phone</Label><Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
+              <div className="space-y-2"><Label>System Password</Label><Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} /></div>
+            </div>
+            <div className="space-y-2">
+              <Label>Staff Category</Label>
+              <Select value={formData.staffType} onValueChange={val => setFormData({...formData, staffType: val})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="management">Management (App Access)</SelectItem>
+                  <SelectItem value="working">Workers (Utility/Market)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Designation/Role</Label><Input value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Monthly Salary</Label><Input type="number" value={formData.monthlySalary} onChange={e => setFormData({...formData, monthlySalary: e.target.value})} /></div>
+            </div>
+            <div className="space-y-2">
+              <Label>Restricted to Building</Label>
+              <Select value={formData.assignedBuildingId} onValueChange={val => setFormData({...formData, assignedBuildingId: val})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None (Full Branch Access)</SelectItem>
+                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2"><Label>Address</Label><Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCreate} className="w-full h-12" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin" /> : "Save Employee"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
