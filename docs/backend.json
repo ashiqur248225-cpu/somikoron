@@ -83,13 +83,31 @@
     "Staff": {
       "title": "Staff",
       "type": "object",
+      "description": "Represents a staff member (Management or Working).",
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
         "phone": { "type": "string" },
-        "role": { "type": "string", "enum": ["Admin", "Branch Manager", "Building Manager"] },
+        "address": { "type": "string" },
+        "role": { "type": "string" },
+        "staffType": { "type": "string", "enum": ["management", "working"] },
+        "monthlySalary": { "type": "number" },
         "branch": { "type": "string" },
-        "assignedBuildingId": { "type": "string" }
+        "assignedBuildingId": { "type": "string" },
+        "password": { "type": "string" },
+        "salaryHistory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "amount": { "type": "number" },
+              "month": { "type": "string" },
+              "year": { "type": "string" },
+              "date": { "type": "string", "format": "date-time" },
+              "method": { "type": "string" }
+            }
+          }
+        }
       }
     },
     "ManagerRequest": {

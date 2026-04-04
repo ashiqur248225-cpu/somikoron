@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -16,7 +17,8 @@ import {
   UserPlus,
   LogOut,
   MapPin,
-  BellRing
+  BellRing,
+  ChevronRight
 } from "lucide-react"
 import {
   Sidebar,
@@ -27,6 +29,9 @@ import {
   SidebarMenuItem,
   SidebarGroup,
   SidebarFooter,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from "@/components/ui/sidebar"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -40,6 +45,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 
 export function AppSidebar() {
   const pathname = usePathname()
@@ -79,7 +89,16 @@ export function AppSidebar() {
     { title: "Expense History", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Dues Tracking", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },
-    { title: "Staff / Roles", url: "/staff", icon: UserCog, roles: ["Admin"] },
+    { 
+      title: "Staff & Roles", 
+      url: "/staff", 
+      icon: UserCog, 
+      roles: ["Admin"],
+      subItems: [
+        { title: "Management Staff", url: "/staff?type=management" },
+        { title: "Working Staff", url: "/staff?type=working" }
+      ]
+    },
     { title: "Branches", url: "/branches", icon: MapPin, roles: ["Admin"] },
     { title: "Transfers", url: "/transfers", icon: ArrowLeftRight, roles: ["Admin", "Branch Manager"] },
     { title: "Reports", url: "/reports", icon: BarChart3, roles: ["Admin", "Branch Manager"] },
@@ -110,18 +129,47 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarMenu>
             {filteredItems.map((item) => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton 
-                  asChild 
-                  isActive={pathname === item.url}
-                  tooltip={item.title}
-                >
-                  <Link href={item.url}>
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              <React.Fragment key={item.title}>
+                {item.subItems ? (
+                  <Collapsible asChild defaultOpen={pathname.startsWith(item.url)} className="group/collapsible">
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton tooltip={item.title}>
+                          <item.icon />
+                          <span>{item.title}</span>
+                          <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {item.subItems.map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.title}>
+                              <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
+                                <Link href={subItem.url}>
+                                  <span>{subItem.title}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
+                ) : (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton 
+                      asChild 
+                      isActive={pathname === item.url}
+                      tooltip={item.title}
+                    >
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+              </React.Fragment>
             ))}
           </SidebarMenu>
         </SidebarGroup>
