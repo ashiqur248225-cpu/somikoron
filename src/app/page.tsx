@@ -21,7 +21,8 @@ import {
   Users,
   BellRing,
   Calendar as CalendarIcon,
-  ChevronDown
+  ChevronDown,
+  Filter
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -219,35 +220,59 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 pb-24 relative">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-primary tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground font-medium text-sm">Real-time overview for <span className="text-foreground font-bold">{userBranch}</span>.</p>
+      {/* Header / App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex items-center gap-2">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
+          <div>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Dashboard</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Real-time overview for <span className="text-foreground font-bold">{userBranch}</span>.</p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-[160px] bg-white border-slate-200 font-bold text-slate-600 h-10 px-4 rounded-xl shadow-sm">
-              <div className="flex items-center gap-2">
-                <CalendarIcon size={14} className="text-primary" />
-                <SelectValue placeholder="Select period" />
-              </div>
-            </SelectTrigger>
-            <SelectContent className="rounded-xl border-slate-100">
-              <SelectItem value="today" className="font-medium">This Day</SelectItem>
-              <SelectItem value="this_week" className="font-medium">This Week</SelectItem>
-              <SelectItem value="this_month" className="font-medium">This Month</SelectItem>
-              <SelectItem value="this_year" className="font-medium">This Year</SelectItem>
-            </SelectContent>
-          </Select>
+        
+        <div className="ml-auto flex items-center gap-3">
+          {/* Desktop Filter */}
+          <div className="hidden md:block">
+            <Select value={timeRange} onValueChange={setTimeRange}>
+              <SelectTrigger className="w-[160px] bg-white border-slate-200 font-bold text-slate-600 h-10 px-4 rounded-xl shadow-sm">
+                <div className="flex items-center gap-2">
+                  <CalendarIcon size={14} className="text-primary" />
+                  <SelectValue placeholder="Select period" />
+                </div>
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-slate-100">
+                <SelectItem value="today" className="font-medium">This Day</SelectItem>
+                <SelectItem value="this_week" className="font-medium">This Week</SelectItem>
+                <SelectItem value="this_month" className="font-medium">This Month</SelectItem>
+                <SelectItem value="this_year" className="font-medium">This Year</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Mobile Filter Icon */}
+          <div className="md:hidden">
+            <Select value={timeRange} onValueChange={setTimeRange}>
+              <SelectTrigger className="h-10 w-10 p-0 border-none bg-secondary/50 rounded-full flex items-center justify-center shadow-none focus:ring-0">
+                <CalendarIcon size={20} className="text-primary" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="this_week">This Week</SelectItem>
+                <SelectItem value="this_month">This Month</SelectItem>
+                <SelectItem value="this_year">This Year</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           {userRole !== 'Building Manager' && pendingMgrRequests && pendingMgrRequests.length > 0 && (
-            <Link href="/manager-requests">
-              <Button variant="outline" className="bg-orange-50 border-orange-200 text-orange-600 animate-pulse gap-2 rounded-xl">
-                <BellRing size={16}/> {pendingMgrRequests.length} Manager Requests
+            <Link href="/manager-requests" className="hidden sm:block">
+              <Button variant="outline" className="bg-orange-50 border-orange-200 text-orange-600 animate-pulse gap-2 rounded-xl h-10 px-4">
+                <BellRing size={16}/> {pendingMgrRequests.length}
               </Button>
             </Link>
           )}
+
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
               <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
