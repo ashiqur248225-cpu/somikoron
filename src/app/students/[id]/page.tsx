@@ -19,7 +19,9 @@ import {
   History, MoreVertical, Edit, Trash2,
   Calendar,
   Clock,
-  UtensilsCrossed
+  UtensilsCrossed,
+  ChevronLeft,
+  ArrowDownRight
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -176,13 +178,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     return { rentDue, foodBalance, monthsList: sortedAlloc.reverse(), usableAdvance }
   }, [student])
 
-  const currentMonthDueInBreakdown = useMemo(() => {
-    if (!student) return 0
-    const key = `${paymentData.month} ${paymentData.year}`
-    const breakdown = financialStats.monthsList.find(m => m.key === key)
-    return breakdown ? (breakdown.charge - breakdown.paid) : 0
-  }, [student, paymentData.month, paymentData.year, financialStats])
-
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
     const seatPaid = student.paymentSystem === 'package' ? Number(paymentData.amount) : Number(paymentData.seatAmount)
@@ -204,7 +199,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         studentName: student.name, 
         studentId: student.id, 
         roomNumber: student.roomNumber,
-        branch: student.branch, // CRITICAL
+        branch: student.branch,
         type: "income", 
         month: paymentData.month, 
         year: paymentData.year, 
@@ -285,7 +280,39 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
 
   return (
     <div className="space-y-6 pb-20 relative">
-      <div className="flex flex-col md:flex-row justify-between gap-4">
+      {/* Mobile App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
+          <ChevronLeft size={24} />
+        </Button>
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-bold truncate">{student.name}</h1>
+        </div>
+        <div className="flex items-center gap-1">
+          {student.isActive && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="text-destructive">
+                  <UserMinus size={20} />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>This will deactivate the resident and vacate the seat.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeactivate} className="bg-destructive">Confirm Exit</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop Header */}
+      <div className="hidden md:flex justify-between items-start gap-4">
         <div className="flex gap-4 items-center">
           <div className="bg-primary/10 p-4 rounded-xl text-primary"><UserCircle size={48} /></div>
           <div>
@@ -324,13 +351,19 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             <div className="flex items-center gap-3 text-sm"><Building2 className="text-primary" size={16} /><span className="font-semibold">{student.buildingName}</span></div>
             <div className="flex items-center gap-3 text-sm"><BedDouble className="text-primary" size={16} /><span>Room {student.roomNumber} | Seat {student.seatNumber}</span></div>
             <div className="flex items-center gap-3 text-sm"><Calendar className="text-primary" size={16} /><span>Billing Start: {student.billingStartDate || 'N/A'}</span></div>
+            
+            {/* Mobile-only status badges */}
+            <div className="md:hidden flex flex-wrap gap-2 pt-2 border-t mt-2">
+              <Badge variant={student.isActive ? "default" : "destructive"} className={student.isActive ? "bg-success text-[10px]" : "text-[10px]"}>{student.isActive ? "Active Resident" : "Ex-Resident"}</Badge>
+              <Badge variant="outline" className="capitalize text-[10px]">{student.paymentSystem} Plan</Badge>
+            </div>
           </CardContent>
         </Card>
         
         <Card className="border-none shadow-sm">
           <CardHeader><CardTitle className="text-lg">Financial Overview</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid gap-4 grid-cols-2">
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
               <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
                 <p className="text-[10px] uppercase text-orange-600 font-bold">Monthly Rent</p>
                 <p className="text-lg font-bold text-orange-600">৳{student.monthlyRent}</p>
@@ -361,70 +394,177 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       </div>
 
       <Tabs defaultValue="payments" className="w-full">
-        <TabsList className="bg-secondary/50 p-1 mb-4">
-          <TabsTrigger value="payments" className="flex gap-2"><CreditCard size={14} /> Payments</TabsTrigger>
-          <TabsTrigger value="dues" className="flex gap-2"><Clock size={14} /> Dues Breakdown</TabsTrigger>
-          {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meals History</TabsTrigger>}
+        <TabsList className="bg-secondary/50 p-1 mb-4 flex w-full md:w-auto">
+          <TabsTrigger value="payments" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><CreditCard size={14} /> Payments</TabsTrigger>
+          <TabsTrigger value="dues" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><Clock size={14} /> Dues</TabsTrigger>
+          {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><Utensils size={14} /> Meals</TabsTrigger>}
         </TabsList>
         
         <TabsContent value="payments">
-          <Card className="border-none shadow-sm"><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Method</TableHead><TableHead>Purpose</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader><TableBody>{student.paymentsHistory?.map((p: any, idx: number) => (
-            <TableRow key={idx}><TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell><TableCell className="font-medium">{p.month} {p.year}</TableCell><TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell><TableCell><span className="text-[10px] text-muted-foreground truncate max-w-[200px] block">{p.description}</span></TableCell><TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell></TableRow>
-          ))}{(!student.paymentsHistory || student.paymentsHistory.length === 0) && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No records.</TableCell></TableRow>}</TableBody></Table></CardContent></Card>
+          <Card className="border-none shadow-sm overflow-hidden">
+            <CardContent className="p-0">
+              {/* Desktop Table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead>Purpose</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {student.paymentsHistory?.map((p: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell>
+                        <TableCell className="font-medium">{p.month} {p.year}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
+                        <TableCell><span className="text-[10px] text-muted-foreground truncate max-w-[200px] block">{p.description}</span></TableCell>
+                        <TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(!student.paymentsHistory || student.paymentsHistory.length === 0) && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No records.</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-3 p-4">
+                {student.paymentsHistory?.map((p: any, idx: number) => (
+                  <div key={idx} className="bg-secondary/20 p-3 rounded-xl border border-secondary flex justify-between items-center">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p>
+                      <p className="text-sm font-black text-slate-800">{p.month} {p.year}</p>
+                      <Badge variant="outline" className="text-[8px] h-4 uppercase">{p.method}</Badge>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-black text-income">৳{p.amount?.toLocaleString()}</p>
+                      <p className="text-[8px] text-muted-foreground italic truncate max-w-[100px]">{p.description}</p>
+                    </div>
+                  </div>
+                ))}
+                {(!student.paymentsHistory || student.paymentsHistory.length === 0) && <p className="text-center py-12 text-muted-foreground italic text-sm">No records found.</p>}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="dues">
-          <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle className="text-sm">Monthly Rent Payment Status</CardTitle><CardDescription>Real-time calculation based on payments and dues map.</CardDescription></CardHeader>
+          <Card className="border-none shadow-sm overflow-hidden">
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-sm">Monthly Rent Status</CardTitle>
+              <CardDescription className="text-xs">Real-time calculation based on payments.</CardDescription>
+            </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader><TableRow><TableHead>Month & Year</TableHead><TableHead>Rent Amount</TableHead><TableHead>Amount Covered</TableHead><TableHead className="text-right">Status</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {financialStats.monthsList.map((m: any, idx: number) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-medium">{m.month} {m.year} {m.isHistorical && <Badge variant="secondary" className="text-[8px] h-4">Historical</Badge>}</TableCell>
-                      <TableCell>৳{m.charge}</TableCell>
-                      <TableCell>৳{m.paid}</TableCell>
-                      <TableCell className="text-right">
-                        <Badge className={cn(
-                          m.status === 'Paid' ? "bg-success" : m.status === 'Partial' ? "bg-orange-500" : "bg-destructive"
-                        )}>{m.status}</Badge>
-                      </TableCell>
+              {/* Desktop Table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Month & Year</TableHead>
+                      <TableHead>Rent Amount</TableHead>
+                      <TableHead>Amount Covered</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {financialStats.monthsList.map((m: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{m.month} {m.year} {m.isHistorical && <Badge variant="secondary" className="text-[8px] h-4">Historical</Badge>}</TableCell>
+                        <TableCell>৳{m.charge}</TableCell>
+                        <TableCell>৳{m.paid}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge className={cn(
+                            m.status === 'Paid' ? "bg-success text-white" : m.status === 'Partial' ? "bg-orange-500 text-white" : "bg-destructive text-white"
+                          )}>{m.status}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-3 p-4">
+                {financialStats.monthsList.map((m: any, idx: number) => (
+                  <div key={idx} className="bg-white p-3 rounded-xl border flex justify-between items-center shadow-sm">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-slate-800">{m.month} {m.year}</p>
+                        {m.isHistorical && <Badge variant="secondary" className="text-[7px] h-3.5 px-1 uppercase">Hist</Badge>}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium">
+                        <span>Charge: ৳{m.charge}</span>
+                        <span>•</span>
+                        <span className="text-income">Paid: ৳{m.paid}</span>
+                      </div>
+                    </div>
+                    <Badge className={cn(
+                      "text-[8px] h-5 px-1.5 font-bold uppercase",
+                      m.status === 'Paid' ? "bg-success" : m.status === 'Partial' ? "bg-orange-500" : "bg-destructive"
+                    )}>{m.status}</Badge>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {student.paymentSystem === 'non-package' && (
           <TabsContent value="meals">
-            <Card className="border-none shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between">
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between p-4 md:p-6">
                 <div>
-                  <CardTitle className="text-sm">Logged Meals History</CardTitle>
-                  <CardDescription>Meal entries at ৳{currentMealRate}/meal.</CardDescription>
+                  <CardTitle className="text-sm">Meals History</CardTitle>
+                  <CardDescription className="text-[10px] md:text-xs">৳{currentMealRate}/meal</CardDescription>
                 </div>
-                <Button onClick={() => setIsLogMealDialogOpen(true)} variant="outline" size="sm" className="gap-2">
-                  <UtensilsCrossed size={14} /> Log Monthly Meals
+                <Button onClick={() => setIsLogMealDialogOpen(true)} variant="outline" size="sm" className="h-8 gap-1 text-[10px] md:text-sm">
+                  <UtensilsCrossed size={12} /> Log Meals
                 </Button>
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader><TableRow><TableHead>Month</TableHead><TableHead>Total Meals</TableHead><TableHead>Rate</TableHead><TableHead className="text-right">Total Cost</TableHead></TableRow></TableHeader>
-                  <TableBody>
-                    {student.mealsHistory?.map((m: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-medium">{m.month}</TableCell>
-                        <TableCell className="font-bold">{m.totalMeals}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">৳{m.perMealCost}</TableCell>
-                        <TableCell className="text-right font-bold text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell>
+                {/* Desktop Table */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Month</TableHead>
+                        <TableHead>Total Meals</TableHead>
+                        <TableHead>Rate</TableHead>
+                        <TableHead className="text-right">Total Cost</TableHead>
                       </TableRow>
-                    ))}
-                    {(!student.mealsHistory || student.mealsHistory.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No meal records found.</TableCell></TableRow>}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {student.mealsHistory?.map((m: any, idx: number) => (
+                        <TableRow key={idx}>
+                          <TableCell className="font-medium">{m.month}</TableCell>
+                          <TableCell className="font-bold">{m.totalMeals}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">৳{m.perMealCost}</TableCell>
+                          <TableCell className="text-right font-bold text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                      {(!student.mealsHistory || student.mealsHistory.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No meal records found.</TableCell></TableRow>}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="md:hidden space-y-3 p-4">
+                  {student.mealsHistory?.map((m: any, idx: number) => (
+                    <div key={idx} className="bg-orange-50/50 p-3 rounded-xl border border-orange-100 flex justify-between items-center shadow-sm">
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-slate-800">{m.month}</p>
+                        <p className="text-[10px] text-muted-foreground font-medium">{m.totalMeals} Meals × ৳{m.perMealCost}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-black text-destructive">৳{m.totalCost?.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {(!student.mealsHistory || student.mealsHistory.length === 0) && <p className="text-center py-12 text-muted-foreground italic text-sm">No meal entries found.</p>}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
