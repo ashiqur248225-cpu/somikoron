@@ -31,6 +31,7 @@ import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, deleteDoc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 
 export default function StaffPage() {
   const { toast } = useToast()
