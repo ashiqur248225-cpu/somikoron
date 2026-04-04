@@ -336,9 +336,14 @@ export default function ExpenseHistoryPage() {
               </Select>
             </div>
 
-            <div className="space-y-2 p-3 bg-secondary/10 rounded-lg border">
+            <div className="space-y-2">
               <Label>Target Building</Label>
-              <div className="h-9 flex items-center px-3 bg-white rounded border text-sm font-bold">{buildings?.find(b => b.id === formData.buildingId)?.name || "Assigned Building"}</div>
+              <Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val})}>
+                <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
+                <SelectContent>
+                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

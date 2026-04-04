@@ -116,14 +116,14 @@ export default function IncomeHistoryPage() {
     })
   }, [rawPayments])
 
-  // BM should only see their assigned building in the dropdown
+  // Initial assigned building for BM
   useEffect(() => {
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none' && !selectedBuildingId) {
       setSelectedBuildingId(assignedBuildingId)
     }
-  }, [userRole, assignedBuildingId])
+  }, [userRole, assignedBuildingId, selectedBuildingId])
 
-  const selectedBuildingForForm = buildings?.find(b => b.id === (selectedBuildingId || assignedBuildingId))
+  const selectedBuildingForForm = buildings?.find(b => b.id === selectedBuildingId)
   const roomsInBuildingForForm = useMemo(() => {
     if (!selectedBuildingForForm) return []
     return selectedBuildingForForm.apartmentsDetail?.flatMap((a: any) => 
@@ -133,11 +133,11 @@ export default function IncomeHistoryPage() {
   
   const filteredStudentsForForm = useMemo(() => {
     return students?.filter(s => 
-      s.buildingId === (selectedBuildingId || assignedBuildingId) && 
+      s.buildingId === selectedBuildingId && 
       s.roomNumber === selectedRoomNumber &&
       s.isActive
     ) || []
-  }, [students, selectedBuildingId, assignedBuildingId, selectedRoomNumber])
+  }, [students, selectedBuildingId, selectedRoomNumber])
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
@@ -386,19 +386,24 @@ export default function IncomeHistoryPage() {
              <div className="p-4 bg-secondary/10 rounded-xl border">
                 <div className="space-y-2">
                   <Label>Building</Label>
-                  <div className="h-9 flex items-center px-3 bg-white rounded border text-sm font-bold">{selectedBuildingForForm?.name || "Select Building"}</div>
+                  <Select value={selectedBuildingId} onValueChange={(val) => { setSelectedBuildingId(val); setSelectedRoomNumber(""); setFormData({...formData, studentId: ""}) }}>
+                    <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
+                    <SelectContent>
+                      {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2 mt-3">
                   <Label>Room No.</Label>
-                  <Select onValueChange={(val) => { setSelectedRoomNumber(val); setFormData({...formData, studentId: ""}) }}>
-                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <Select value={selectedRoomNumber} onValueChange={(val) => { setSelectedRoomNumber(val); setFormData({...formData, studentId: ""}) }}>
+                    <SelectTrigger><SelectValue placeholder="Select Room" /></SelectTrigger>
                     <SelectContent>{roomsInBuildingForForm.map((r: any, idx: number) => <SelectItem key={`${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2 mt-3">
                   <Label>Student</Label>
-                  <Select disabled={!selectedRoomNumber} onValueChange={val => setFormData({...formData, studentId: val})}>
-                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <Select disabled={!selectedRoomNumber} value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}>
+                    <SelectTrigger><SelectValue placeholder="Select Student" /></SelectTrigger>
                     <SelectContent>{filteredStudentsForForm.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
