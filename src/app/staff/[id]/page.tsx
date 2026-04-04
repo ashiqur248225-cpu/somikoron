@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, updateDoc, serverTimestamp, arrayUnion, collection, setDoc } from "firebase/firestore"
@@ -14,7 +14,8 @@ import {
   UserCircle, Phone, MapPin, 
   Wallet, History, Plus, Loader2, 
   ChevronLeft, Calendar, Shield, Briefcase,
-  Banknote, CreditCard, Smartphone, Receipt
+  Banknote, CreditCard, Smartphone, Receipt,
+  Lock
 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
@@ -39,6 +40,11 @@ export default function StaffProfilePage({
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isPayDialogOpen, setIsPayDialogOpen] = useState(false)
+  const [userRole, setUserRole] = useState("")
+
+  useEffect(() => {
+    setUserRole(localStorage.getItem("user_role") || "Staff")
+  }, [])
 
   const [paymentData, setPaymentData] = useState({
     amount: "",
@@ -160,6 +166,19 @@ export default function StaffProfilePage({
                 <Calendar size={16} className="text-slate-400" />
                 <span className="font-medium">Joined: {staff.createdAt?.toDate ? staff.createdAt.toDate().toLocaleDateString() : 'N/A'}</span>
               </div>
+
+              {/* Protected Password Section for Admins */}
+              {userRole === 'Admin' && staff.password && (
+                <div className="pt-4 border-t mt-2 space-y-1">
+                  <p className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1">
+                    <Lock size={10} /> Access Password
+                  </p>
+                  <div className="p-2 bg-slate-50 rounded border border-dashed border-primary/20 text-center">
+                    <span className="font-mono text-sm font-bold text-primary select-all">{staff.password}</span>
+                  </div>
+                  <p className="text-[8px] text-muted-foreground italic text-center">Visible only to Administrators.</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
