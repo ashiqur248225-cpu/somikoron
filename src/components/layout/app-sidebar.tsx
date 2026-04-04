@@ -110,7 +110,6 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Main Navigation</SidebarGroupLabel>
           <SidebarMenu>
             {filteredItems.map((item) => (
               <SidebarMenuItem key={item.title}>
