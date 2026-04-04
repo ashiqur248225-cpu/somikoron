@@ -238,14 +238,6 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                       <Badge className="text-[8px] font-bold uppercase bg-primary">{s.role || 'Worker'}</Badge>
                     </div>
                     
-                    <div className="bg-secondary/30 p-3 rounded-xl border border-secondary flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <Wallet size={14} className="text-muted-foreground" />
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase">Monthly Salary</span>
-                      </div>
-                      <span className="text-lg font-black text-slate-800">৳{s.monthlySalary?.toLocaleString()}</span>
-                    </div>
-
                     <div className="flex justify-between items-center pt-1">
                       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-bold uppercase">
                         <MapPin size={10} /> {s.branch}
