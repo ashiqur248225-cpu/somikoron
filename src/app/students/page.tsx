@@ -343,44 +343,6 @@ export default function StudentsPage() {
     })
   }, [students, searchTerm, buildingFilter, roomFilter, statusFilter, planFilter])
 
-  const handleExportCSV = () => {
-    const reportData = filteredStudents.map(s => {
-      const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
-      const now = new Date()
-      const endDate = s.isActive ? now : (s.leftAt?.toDate?.() || now)
-      const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
-      const historicalRentDue = Number(s.dueAmount) || 0
-      const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (s.monthlyRent || 0)
-      const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
-        const isRefund = curr.type === 'refund'
-        const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (s.paymentSystem === 'package' ? Number(curr.amount) : 0)
-        return acc + (isRefund ? -rentPortion : rentPortion)
-      }, 0) || 0
-      const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
-      const historicalFoodDue = Number(s.foodDueAmount) || 0
-      const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-      const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
-        const isRefund = curr.type === 'refund'
-        const foodPortion = (curr.foodAmount !== undefined) ? Number(curr.foodAmount) : (s.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
-        return acc + (isRefund ? -foodPortion : foodPortion)
-      }, 0) || 0
-      const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
-      const latestMeal = s.mealsHistory && s.mealsHistory.length > 0 ? s.mealsHistory[s.mealsHistory.length - 1] : {}
-
-      return { ...s, rentDue, foodBalance, totalMeals: latestMeal.totalMeals || 0, mealRate: latestMeal.perMealCost || 0, mealTotalCost: latestMeal.totalCost || 0 }
-    })
-
-    const headers = ["Resident Name", "Phone", "Parent Phone", "Building", "Room", "Seat", "Status", "Plan", "Monthly Rent", "Advance Balance", "Current Rent Due", "Food Balance (Credit/Due)", "Meals (Last Entry)", "Meal Rate", "Meal Cost", "Address"]
-    const rows = reportData.map(s => [s.name, s.phone || "N/A", s.parentPhone || "N/A", s.buildingName, s.roomNumber, s.seatNumber, s.isActive ? "Active" : "Left", s.paymentSystem.toUpperCase(), s.monthlyRent, s.advanceAmount || 0, s.rentDue, s.foodBalance >= 0 ? `Credit: ৳${s.foodBalance}` : `Due: ৳${Math.abs(s.foodBalance)}`, s.totalMeals, s.mealRate, s.mealTotalCost, `"${s.address?.replace(/"/g, '""') || ""}"`])
-
-    let csvContent = "data:text/csv;charset=utf-8,SOMIKORON DETAILED RESIDENT REPORT\n"
-    csvContent += `Generated on: ${new Date().toLocaleString()}\nFilters - Branch: ${userBranch}, Building: ${buildingFilter}\n\n` + headers.join(",") + "\n"
-    rows.forEach(row => { csvContent += row.join(",") + "\n" })
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement("a"); link.setAttribute("href", encodedUri); link.setAttribute("download", `Residents_${userBranch}_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link)
-  }
-
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
 
   return (
@@ -388,7 +350,7 @@ export default function StudentsPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Residents</h1>
             <p className="text-muted-foreground mt-1">Manage occupants for <span className="font-bold text-foreground">{userBranch}</span>.</p>
@@ -398,7 +360,6 @@ export default function StudentsPage() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2"><Download size={16} /> Export / Share</Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleExportCSV} className="cursor-pointer"><FileSpreadsheet size={14} className="mr-2" /> Export CSV (Full Detail)</DropdownMenuItem>
               <DropdownMenuItem onClick={handlePrint} className="cursor-pointer"><FileText size={14} className="mr-2" /> Download PDF (Print)</DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer"><Share2 size={14} className="mr-2" /> Share List</DropdownMenuItem>
             </DropdownMenuContent>

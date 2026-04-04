@@ -83,7 +83,7 @@ export default function BranchesPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Branches</h1>
             <p className="text-muted-foreground mt-1">Manage multiple hostel locations.</p>

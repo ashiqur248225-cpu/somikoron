@@ -110,7 +110,7 @@ export default function TransfersPage() {
     <div className="space-y-8">
       <div className="flex items-center gap-4">
         <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4" />
+        <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
         <div>
           <h1 className="text-3xl font-headline font-bold text-primary">Fund Transfers</h1>
           <p className="text-muted-foreground mt-1">Inter-account movement for <span className="font-bold text-foreground">{userBranch}</span>.</p>

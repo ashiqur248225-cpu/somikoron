@@ -166,12 +166,14 @@ export default function ExpenseHistoryPage() {
     setEndDate("")
   }
 
+  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+
   return (
     <div className="space-y-8 pb-20 print:p-0">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Expenses</h1>
             <p className="text-muted-foreground mt-1">Spending records for <span className="font-bold text-foreground">{userBranch}</span>.</p>
@@ -182,7 +184,7 @@ export default function ExpenseHistoryPage() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button className="gap-2"><Download size={16} /> Export / Share</Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem className="cursor-pointer"><FileText size={14} className="mr-2" /> Download PDF (Print)</DropdownMenuItem>
+              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer"><FileText size={14} className="mr-2" /> Download PDF (Print)</DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer"><Share2 size={14} className="mr-2" /> Share Report</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -307,6 +309,46 @@ export default function ExpenseHistoryPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Print View Table */}
+      <div className="hidden print:block">
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-primary">Expense History Report</h2>
+          <p className="text-sm text-muted-foreground">Branch: {userBranch} | Filter: {categoryFilter !== 'all' ? categoryFilter : 'All'}</p>
+        </div>
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-secondary/30 border">
+              <th className="border p-2 text-left">Date</th>
+              <th className="border p-2 text-left">Category</th>
+              <th className="border p-2 text-left">Details</th>
+              <th className="border p-2 text-left">Building/Room</th>
+              <th className="border p-2 text-left">Method</th>
+              <th className="border p-2 text-left">Expenser</th>
+              <th className="border p-2 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredExpenses.map((e: any) => (
+              <tr key={e.id} className="border">
+                <td className="border p-2">{new Date(e.expenseDate).toLocaleDateString()}</td>
+                <td className="border p-2 capitalize">{e.category}</td>
+                <td className="border p-2 text-[10px]">{e.description || 'N/A'}</td>
+                <td className="border p-2">{e.buildingName} {e.apartmentName !== 'none' ? `| ${e.apartmentName}` : ''}</td>
+                <td className="border p-2 uppercase">{e.method}</td>
+                <td className="border p-2">{e.expensePartyName}</td>
+                <td className="border p-2 text-right">৳{e.amount?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="font-bold bg-secondary/10">
+              <td colSpan={6} className="border p-2 text-right">Grand Total:</td>
+              <td className="border p-2 text-right">৳{totalFilteredExpense.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
 
       <div className="fixed bottom-8 right-8 z-50 print:hidden">
         <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:scale-105 transition-transform"><Plus className="h-8 w-8 text-white" /></Button>

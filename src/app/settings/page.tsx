@@ -111,7 +111,7 @@ export default function SettingsPage() {
     <div className="max-w-3xl mx-auto space-y-8 pb-20">
       <div className="flex items-center gap-4">
         <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4" />
+        <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
         <div>
           <h1 className="text-3xl font-headline font-bold text-primary">Global Settings</h1>
           <p className="text-muted-foreground mt-1">Configure parameters for <span className="font-bold text-foreground">{userBranch}</span>.</p>

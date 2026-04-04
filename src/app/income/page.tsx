@@ -199,12 +199,14 @@ export default function IncomeHistoryPage() {
     setReceiverFilter("all")
   }
 
+  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+
   return (
     <div className="space-y-8 pb-20 print:p-0">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Income History</h1>
             <p className="text-muted-foreground mt-1">Receipts for <span className="font-bold text-foreground">{userBranch}</span>.</p>
@@ -215,7 +217,7 @@ export default function IncomeHistoryPage() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button className="gap-2"><Download size={16} /> Export / Share</Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem className="cursor-pointer"><FileText size={14} className="mr-2" /> Download PDF (Print)</DropdownMenuItem>
+              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer"><FileText size={14} className="mr-2" /> Download PDF (Print)</DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer"><Share2 size={14} className="mr-2" /> Share Report</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -332,8 +334,46 @@ export default function IncomeHistoryPage() {
         </CardContent>
       </Card>
 
+      {/* Print View Table */}
+      <div className="hidden print:block">
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-primary">Income History Report</h2>
+          <p className="text-sm text-muted-foreground">Branch: {userBranch} | Period: {startDate || 'Start'} to {endDate || 'Now'}</p>
+        </div>
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-secondary/30 border">
+              <th className="border p-2 text-left">Date</th>
+              <th className="border p-2 text-left">Student</th>
+              <th className="border p-2 text-left">Building & Room</th>
+              <th className="border p-2 text-left">Method</th>
+              <th className="border p-2 text-left">Receiver</th>
+              <th className="border p-2 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredPayments.map((p: any) => (
+              <tr key={p.id} className="border">
+                <td className="border p-2">{p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A')}</td>
+                <td className="border p-2 font-bold">{p.studentName}</td>
+                <td className="border p-2">{p.buildingName} | R-{p.roomNumber}</td>
+                <td className="border p-2 uppercase">{p.method}</td>
+                <td className="border p-2">{p.receiver}</td>
+                <td className="border p-2 text-right">৳{p.amount?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="font-bold bg-secondary/10">
+              <td colSpan={5} className="border p-2 text-right">Grand Total:</td>
+              <td className="border p-2 text-right">৳{totalFilteredIncome.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
       <div className="fixed bottom-8 right-8 z-50 print:hidden">
-        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform"><Plus className="h-8 w-8 text-white" /></Button>
+        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform"><Plus h-8 w-8 text-white /></Button>
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
