@@ -91,8 +91,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     count: ""
   })
 
-  const [exitPayment, setExitPayment] = useState({ amount: "0", method: "cash", receiver: "", description: "" })
-  
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
@@ -110,7 +108,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   }, [searchParams])
 
   const financialStats = useMemo(() => {
-    if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [] }
+    if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [], usableAdvance: 0 }
     
     const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
     const now = new Date()
@@ -139,23 +137,17 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       return acc + (isRefund ? -rentPortion : rentPortion)
     }, 0) || 0
 
-    // Combine Historical Dues Map with generated months
     const histDuesMap = student.duesBreakdown || {}
     Object.entries(histDuesMap).forEach(([key, val]) => {
       if (!monthsList.find(m => m.key === key)) {
         monthsList.push({ key, month: key.split(' ')[0], year: key.split(' ')[1], charge: Number(val), paid: 0, status: 'Unpaid', isHistorical: true })
       } else {
-        // If it exists in both, we should combine the charges? 
-        // Actually generated months charge is monthlyRent. Historical might be different.
-        // If it's old student, we use historical value if provided.
         const idx = monthsList.findIndex(m => m.key === key)
         monthsList[idx].charge = Number(val)
       }
     })
 
-    // Allocate payment to months (Oldest first)
     let remainingPool = totalRentPaid
-    // Sort months list by date ASC for allocation
     const sortedAlloc = [...monthsList].sort((a, b) => {
       const d1 = new Date(`${a.month} 1, ${a.year}`)
       const d2 = new Date(`${b.month} 1, ${b.year}`)
@@ -163,22 +155,12 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     })
 
     sortedAlloc.forEach(m => {
-      if (remainingPool >= m.charge) {
-        m.paid = m.charge
-        m.status = 'Paid'
-        remainingPool -= m.charge
-      } else if (remainingPool > 0) {
-        m.paid = remainingPool
-        m.status = 'Partial'
-        remainingPool = 0
-      } else {
-        m.paid = 0
-        m.status = 'Unpaid'
-      }
+      if (remainingPool >= m.charge) { m.paid = m.charge; m.status = 'Paid'; remainingPool -= m.charge; }
+      else if (remainingPool > 0) { m.paid = remainingPool; m.status = 'Partial'; remainingPool = 0; }
+      else { m.paid = 0; m.status = 'Unpaid'; }
     })
 
     const rentDue = sortedAlloc.reduce((acc, m) => acc + (m.charge - m.paid), 0)
-
     const historicalFoodDue = Number(student.foodDueAmount) || 0
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
     const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
@@ -188,7 +170,10 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     }, 0) || 0
     const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
 
-    return { rentDue, foodBalance, monthsList: sortedAlloc.reverse() }
+    const lockedAdvance = student.monthlyRent || 0
+    const usableAdvance = Math.max(0, (student.advanceAmount || 0) - lockedAdvance)
+
+    return { rentDue, foodBalance, monthsList: sortedAlloc.reverse(), usableAdvance }
   }, [student])
 
   const currentMonthDueInBreakdown = useMemo(() => {
@@ -219,6 +204,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         studentName: student.name, 
         studentId: student.id, 
         roomNumber: student.roomNumber,
+        branch: student.branch, // CRITICAL
         type: "income", 
         month: paymentData.month, 
         year: paymentData.year, 
@@ -232,7 +218,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() }) 
       }
       
-      // Update Monthly Dues Breakdown Map if payment covers a specific month
       const mKey = `${paymentData.month} ${paymentData.year}`
       const currentMap = student.duesBreakdown || {}
       if (seatPaid > 0 && currentMap[mKey] !== undefined) {
@@ -461,20 +446,27 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Record Transaction for {student.name}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="bg-secondary/30 p-4 rounded-lg space-y-2 border">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Monthly Rent:</span>
-                <span className="font-bold">৳{student.monthlyRent}</span>
+            <div className="bg-secondary/30 p-4 rounded-xl space-y-3 border">
+              <h4 className="text-[10px] font-bold uppercase text-primary flex items-center gap-1.5"><Calculator size={12}/> Current Status</h4>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-white p-2 rounded border">
+                  <p className="text-[8px] uppercase font-bold text-muted-foreground">Monthly Rent</p>
+                  <p className="text-sm font-bold">৳{student.monthlyRent}</p>
+                </div>
+                <div className="bg-white p-2 rounded border">
+                  <p className="text-[8px] uppercase font-bold text-destructive">Overall Due</p>
+                  <p className="text-sm font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p>
+                </div>
+                <div className="bg-white p-2 rounded border">
+                  <p className="text-[8px] uppercase font-bold text-success">Total Advance</p>
+                  <p className="text-sm font-bold text-success">৳{student.advanceAmount.toLocaleString()}</p>
+                </div>
+                <div className="bg-white p-2 rounded border">
+                  <p className="text-[8px] uppercase font-bold text-primary">Usable Advance</p>
+                  <p className="text-sm font-bold text-primary">৳{financialStats.usableAdvance.toLocaleString()}</p>
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-primary font-medium">Selected Month Due:</span>
-                <span className="font-bold text-primary">৳{currentMonthDueInBreakdown.toLocaleString()}</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between text-sm">
-                <span className="text-destructive font-medium">Total Overall Due:</span>
-                <span className="font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</span>
-              </div>
+              <p className="text-[8px] text-muted-foreground italic flex items-center gap-1"><AlertCircle size={8}/> ১ মাসের ভাড়া অগ্রিম হিসেবে লক করা থাকে।</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -515,12 +507,12 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
               <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Payment Amounts</Label>
               {student.paymentSystem === 'package' ? (
                 <div className="space-y-2">
-                  <Label className="text-xs">Amount (৳)</Label>
-                  <Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder={currentMonthDueInBreakdown > 0 ? currentMonthDueInBreakdown.toString() : "0.00"} />
+                  <Label className="text-xs">Amount Received (৳)</Label>
+                  <Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" />
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder={currentMonthDueInBreakdown > 0 ? currentMonthDueInBreakdown.toString() : "0.00"} /></div>
+                  <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder="0.00" /></div>
                   <div className="space-y-2"><Label className="text-xs">Food Credit (৳)</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} placeholder="0.00" /></div>
                 </div>
               )}
@@ -533,7 +525,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Notes (Optional)..." />
           </div>
           <DialogFooter>
-            <Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg" disabled={isUpdating}>
+            <Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg font-bold" disabled={isUpdating}>
               {isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Transaction"}
             </Button>
           </DialogFooter>
@@ -576,7 +568,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             )}
           </div>
           <DialogFooter>
-            <Button onClick={handleLogMealSubmit} className="w-full bg-orange-500 hover:bg-orange-600" disabled={isUpdating || !mealLogData.count}>
+            <Button onClick={handleLogMealSubmit} className="w-full bg-orange-500 hover:bg-orange-600 font-bold" disabled={isUpdating || !mealLogData.count}>
               {isUpdating ? <Loader2 className="animate-spin" /> : "Save Meal Entry"}
             </Button>
           </DialogFooter>

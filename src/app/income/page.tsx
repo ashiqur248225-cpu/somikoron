@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert } from "lucide-react"
+import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert, Calculator, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, orderBy, limit, where } from "firebase/firestore"
@@ -30,6 +30,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function IncomeHistoryPage() {
   const { toast } = useToast()
@@ -64,7 +66,7 @@ export default function IncomeHistoryPage() {
 
   const [formData, setFormData] = useState({
     studentId: "",
-    month: new Date().toLocaleString('default', { month: 'long' }),
+    month: MONTHS[new Date().getMonth()],
     year: new Date().getFullYear().toString(),
     amount: "",
     seatAmount: "",
@@ -106,7 +108,7 @@ export default function IncomeHistoryPage() {
   }, [db, userBranch, userRole, assignedBuildingId])
   const { data: rawPayments, isLoading: paymentsLoading } = useCollection(incomeQuery)
 
-  // Sort in-memory to avoid index requirement
+  // Sort in-memory
   const payments = useMemo(() => {
     if (!rawPayments) return []
     return [...rawPayments].sort((a, b) => {
@@ -115,13 +117,6 @@ export default function IncomeHistoryPage() {
       return dateB.getTime() - dateA.getTime()
     })
   }, [rawPayments])
-
-  // Initial assigned building for BM
-  useEffect(() => {
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none' && !selectedBuildingId) {
-      setSelectedBuildingId(assignedBuildingId)
-    }
-  }, [userRole, assignedBuildingId, selectedBuildingId])
 
   const selectedBuildingForForm = buildings?.find(b => b.id === selectedBuildingId)
   const roomsInBuildingForForm = useMemo(() => {
@@ -140,6 +135,32 @@ export default function IncomeHistoryPage() {
   }, [students, selectedBuildingId, selectedRoomNumber])
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
+
+  // Real-time calculation for the selected student
+  const studentFinancials = useMemo(() => {
+    if (!selectedStudent) return null
+    
+    const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
+    const now = new Date()
+    
+    const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
+    const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (selectedStudent.monthlyRent || 0)
+    
+    const historicalRentDue = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
+    
+    const totalRentPaid = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const isRefund = curr.type === 'refund'
+      const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (selectedStudent.paymentSystem === 'package' ? Number(curr.amount) : 0)
+      return acc + (isRefund ? -rentPortion : rentPortion)
+    }, 0) || 0
+
+    const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+    
+    const lockedAdvance = selectedStudent.monthlyRent || 0
+    const usableAdvance = Math.max(0, (selectedStudent.advanceAmount || 0) - lockedAdvance)
+
+    return { rentDue, advanceAmount: selectedStudent.advanceAmount || 0, usableAdvance, monthlyRent: selectedStudent.monthlyRent }
+  }, [selectedStudent])
 
   const filteredPayments = useMemo(() => {
     if (!payments) return []
@@ -191,7 +212,7 @@ export default function IncomeHistoryPage() {
       studentName: selectedStudent?.name,
       studentId: formData.studentId,
       roomNumber: selectedRoomNumber,
-      branch: userBranch,
+      branch: userBranch, // CRITICAL
       month: formData.month,
       year: formData.year,
       method: formData.method,
@@ -210,7 +231,7 @@ export default function IncomeHistoryPage() {
           id: reqId,
           requestType: 'income'
         })
-        toast({ title: "Request Sent", description: "Payment request sent to Admin/Branch Manager for approval." })
+        toast({ title: "Request Sent", description: "Payment request sent for approval." })
       } else {
         const paymentId = doc(collection(db, "payments")).id
         await setDoc(doc(db, "payments", paymentId), { ...recordPayload, id: paymentId, type: "income", date: serverTimestamp() })
@@ -231,10 +252,6 @@ export default function IncomeHistoryPage() {
     } finally {
       setIsSubmitting(false)
     }
-  }
-
-  const handleResetFilters = () => {
-    setSearchTerm(""); setStartDate(""); setEndDate(""); setBuildingFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setCategoryFilter("all");
   }
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
@@ -320,7 +337,7 @@ export default function IncomeHistoryPage() {
               </Select>
            </div>
            <div className="xl:col-span-2">
-             <Button variant="ghost" type="button" className="h-10 w-full" onClick={handleResetFilters}><XCircle size={14} className="mr-1" /> Reset</Button>
+             <Button variant="ghost" type="button" className="h-10 w-full" onClick={() => { setSearchTerm(""); setStartDate(""); setEndDate(""); setBuildingFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setCategoryFilter("all"); }}><XCircle size={14} className="mr-1" /> Reset</Button>
            </div>
         </div>
       )}
@@ -409,6 +426,31 @@ export default function IncomeHistoryPage() {
                 </div>
              </div>
 
+             {studentFinancials && (
+               <div className="p-4 bg-primary/5 rounded-xl border border-primary/20 space-y-3 animate-in fade-in slide-in-from-top-2">
+                  <h4 className="text-[10px] font-bold uppercase text-primary flex items-center gap-1.5"><Calculator size={12}/> Current Status for {selectedStudent?.name}</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-white p-2 rounded border">
+                      <p className="text-[8px] uppercase font-bold text-muted-foreground">Monthly Rent</p>
+                      <p className="text-sm font-bold">৳{studentFinancials.monthlyRent}</p>
+                    </div>
+                    <div className="bg-white p-2 rounded border">
+                      <p className="text-[8px] uppercase font-bold text-destructive">Overall Due</p>
+                      <p className="text-sm font-bold text-destructive">৳{studentFinancials.rentDue.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-white p-2 rounded border">
+                      <p className="text-[8px] uppercase font-bold text-success">Total Advance</p>
+                      <p className="text-sm font-bold text-success">৳{studentFinancials.advanceAmount.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-white p-2 rounded border">
+                      <p className="text-[8px] uppercase font-bold text-primary">Usable Advance</p>
+                      <p className="text-sm font-bold text-primary">৳{studentFinancials.usableAdvance.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <p className="text-[8px] text-muted-foreground italic flex items-center gap-1"><AlertCircle size={8}/> ১ মাসের ভাড়া অগ্রিম হিসেবে লক করা আছে (নিরাপত্তার জন্য)।</p>
+               </div>
+             )}
+
              <div className="grid grid-cols-2 gap-4">
                <div className="space-y-2">
                  <Label>Method</Label>
@@ -434,11 +476,11 @@ export default function IncomeHistoryPage() {
              </div>
 
              <div className="space-y-2">
-               <Label>Amount (৳)</Label>
+               <Label>Amount Received (৳)</Label>
                <Input type="number" placeholder="0.00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
              </div>
 
-             <Button type="submit" className={cn("w-full h-12", userRole === 'Building Manager' ? "bg-orange-500" : "bg-income")} disabled={isSubmitting}>
+             <Button type="submit" className={cn("w-full h-12 font-bold", userRole === 'Building Manager' ? "bg-orange-500" : "bg-income")} disabled={isSubmitting}>
                {isSubmitting ? <Loader2 className="animate-spin"/> : (userRole === 'Building Manager' ? "Submit Approval Request" : "Confirm Payment")}
              </Button>
           </form>

@@ -96,7 +96,7 @@ export default function DashboardPage() {
   }, [db, userBranch, userRole])
   const { data: pendingMgrRequests } = useCollection(managerRequestsQuery)
 
-  // 6. Opening Balances Config
+  // 6. Opening Balances Config (Branch-specific config would be ideal, but for now global)
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances } = useDoc(balancesRef)
 
@@ -105,7 +105,7 @@ export default function DashboardPage() {
     const currentMonthName = MONTHS[now.getMonth()]
     const currentYearStr = now.getFullYear().toString()
 
-    // Monthly Totals
+    // Monthly Totals filtered by Branch (Already in Query)
     const monthlyIncome = (allPayments || [])
       .filter(p => p.month === currentMonthName && p.year === currentYearStr)
       .reduce((acc, p) => acc + (p.amount || 0), 0)
@@ -148,7 +148,7 @@ export default function DashboardPage() {
       return sAcc + rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
     }, 0)
 
-    // Fund status based on all transactions (Not just monthly)
+    // Fund status based on all transactions for THIS branch
     const fund = { 
       cash: Number(openingBalances?.cash || 0), 
       bank: Number(openingBalances?.bank || 0), 
@@ -266,7 +266,7 @@ export default function DashboardPage() {
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg font-bold text-slate-800">Branch Fund Status</CardTitle>
-              <p className="text-xs text-muted-foreground font-medium mt-1">Cumulative balances including all branch transfers.</p>
+              <p className="text-xs text-muted-foreground font-medium mt-1">Cumulative balances for {userBranch}.</p>
             </div>
             <div className="bg-primary/5 p-3 rounded-2xl text-primary border border-primary/10"><CircleDollarSign size={24} /></div>
           </CardHeader>

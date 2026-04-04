@@ -122,10 +122,10 @@ export default function ExpenseHistoryPage() {
   }, [rawExpenses])
 
   useEffect(() => {
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none' && !formData.buildingId) {
       setFormData(prev => ({ ...prev, buildingId: assignedBuildingId }))
     }
-  }, [userRole, assignedBuildingId])
+  }, [userRole, assignedBuildingId, formData.buildingId])
 
   const filteredExpenses = useMemo(() => {
     if (!expenses) return []
@@ -157,7 +157,7 @@ export default function ExpenseHistoryPage() {
       ...formData,
       amount: Number(formData.amount),
       buildingName: building?.name || "General",
-      branch: userBranch,
+      branch: userBranch, // CRITICAL
       createdAt: serverTimestamp(),
       requestedBy: localStorage.getItem("somikoron_auth_id") || "system",
       requestedByName: localStorage.getItem("user_name")
