@@ -25,7 +25,16 @@ import {
   Filter,
   Calculator,
   Search,
-  CheckCircle2
+  CheckCircle2,
+  MoreVertical,
+  Receipt,
+  Lightbulb,
+  Wrench,
+  Utensils,
+  Wifi,
+  UserCircle,
+  Zap,
+  LayoutGrid
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -40,7 +49,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -50,13 +61,31 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+const EXPENSE_CATEGORIES = [
+  { id: "rent", label: "Building Rent", icon: Building2 },
+  { id: "electricity", label: "Electricity Bill", icon: Lightbulb },
+  { id: "water", label: "Water & Gas Bill", icon: Receipt },
+  { id: "maintenance", label: "Maintenance/Repair", icon: Wrench },
+  { id: "market", label: "Market/Food", icon: Utensils },
+  { id: "internet", label: "Internet Bill", icon: Wifi },
+  { id: "salary", label: "Staff Salary", icon: UserCircle },
+  { id: "others", label: "Others", icon: Wallet },
+]
 
 export default function DashboardPage() {
   const db = useFirestore()
@@ -69,12 +98,18 @@ export default function DashboardPage() {
 
   // Permissions
   const [canRequestIncome, setCanRequestIncome] = useState(false)
+  const [canRequestExpense, setCanRequestExpense] = useState(false)
 
-  // Income Entry Dialog State
+  // Dialog States
   const [isIncomeDialogOpen, setIsIncomeDialogOpen] = useState(false)
+  const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Income Entry Filter State
   const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
   const [entryRoomFilter, setEntryRoomFilter] = useState("all")
+
+  // Form Datas
   const [formData, setFormData] = useState({
     studentId: "",
     month: MONTHS[new Date().getMonth()],
@@ -88,12 +123,29 @@ export default function DashboardPage() {
     description: ""
   })
 
+  const [expenseFormData, setExpenseFormData] = useState({
+    category: "others",
+    buildingId: "none",
+    apartmentName: "",
+    roomNumber: "",
+    meterNo: "",
+    amount: "",
+    method: "cash",
+    expensePartyName: "",
+    receiver: "",
+    month: MONTHS[new Date().getMonth()],
+    year: new Date().getFullYear().toString(),
+    description: "",
+    expenseDate: new Date().toISOString().split('T')[0]
+  })
+
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserName(localStorage.getItem("user_name") || "User")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
     setCanRequestIncome(localStorage.getItem("can_request_income") === "true")
+    setCanRequestExpense(localStorage.getItem("can_request_expense") === "true")
   }, [])
 
   // 1. Fetch Buildings - Role-based filtering
@@ -339,7 +391,6 @@ export default function DashboardPage() {
     setIsSubmitting(true)
     try {
       if (userRole === 'Building Manager') {
-        // Create Approval Request instead of direct entry
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), {
           id: reqId,
@@ -365,7 +416,6 @@ export default function DashboardPage() {
         })
         toast({ title: "Request Sent", description: "Your entry is waiting for admin approval." })
       } else {
-        // Direct Entry for Admin/Manager
         const pId = doc(collection(db, "payments")).id
         const pRecord = {
           id: pId,
@@ -429,6 +479,78 @@ export default function DashboardPage() {
     }
   }
 
+  // Expense Entry Handler
+  const handleCreateExpense = async () => {
+    if (!expenseFormData.amount || !expenseFormData.expensePartyName) {
+      toast({ variant: "destructive", title: "Error", description: "Amount and Spent By are required." })
+      return
+    }
+
+    if (expenseFormData.category === 'others' && !expenseFormData.description) {
+      toast({ variant: "destructive", title: "Error", description: "Description is mandatory for 'Others' category." })
+      return
+    }
+
+    if (['rent', 'electricity', 'water', 'maintenance', 'internet'].includes(expenseFormData.category) && expenseFormData.buildingId === 'none') {
+      toast({ variant: "destructive", title: "Error", description: "Building selection is required for this category." })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const selectedBuildingData = buildings?.find(b => b.id === expenseFormData.buildingId)
+      const expenseData = {
+        ...expenseFormData,
+        amount: Number(expenseFormData.amount),
+        branch: userBranch,
+        buildingName: selectedBuildingData?.name || "General",
+        updatedAt: serverTimestamp()
+      }
+
+      if (userRole === 'Building Manager') {
+        const reqId = doc(collection(db, "managerRequests")).id
+        await setDoc(doc(db, "managerRequests", reqId), {
+          ...expenseData,
+          id: reqId,
+          requestType: "expense",
+          requestedBy: localStorage.getItem("somikoron_auth_id"),
+          requestedByName: userName,
+          createdAt: serverTimestamp()
+        })
+        toast({ title: "Request Sent", description: "Expense is waiting for approval." })
+      } else {
+        const expenseId = doc(collection(db, "expenses")).id
+        await setDoc(doc(db, "expenses", expenseId), {
+          ...expenseData,
+          id: expenseId,
+          createdAt: serverTimestamp()
+        })
+        toast({ title: "Expense Recorded", description: `Amount ৳${expenseFormData.amount} saved.` })
+      }
+
+      setIsExpenseDialogOpen(false)
+      setExpenseFormData({
+        category: "others",
+        buildingId: "none",
+        apartmentName: "",
+        roomNumber: "",
+        meterNo: "",
+        amount: "",
+        method: "cash",
+        expensePartyName: "",
+        receiver: "",
+        month: MONTHS[new Date().getMonth()],
+        year: new Date().getFullYear().toString(),
+        description: "",
+        expenseDate: new Date().toISOString().split('T')[0]
+      })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
   const isLoading = buildingsLoading || studentsLoading || paymentsLoading || expensesLoading || transfersLoading
 
@@ -440,6 +562,20 @@ export default function DashboardPage() {
       </div>
     )
   }
+
+  // Expense Dialog Helpers
+  const selectedExpBuilding = buildings?.find(b => b.id === expenseFormData.buildingId)
+  const apartmentList = selectedExpBuilding?.apartmentsDetail || []
+  const roomList = (() => {
+    if (!selectedExpBuilding) return []
+    const rooms: string[] = []
+    selectedExpBuilding.apartmentsDetail?.forEach((apt: any) => {
+      apt.rooms?.forEach((room: any) => {
+        if (room.roomNo && !rooms.includes(room.roomNo)) rooms.push(room.roomNo)
+      })
+    })
+    return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  })()
 
   return (
     <div className="space-y-8 pb-24 relative">
@@ -611,17 +747,38 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Quick Action FAB */}
-      <div className="fixed bottom-8 right-8 flex flex-col gap-4 items-end">
-        {(userRole !== 'Building Manager' || canRequestIncome) && (
-          <Button 
-            size="icon" 
-            onClick={() => setIsIncomeDialogOpen(true)}
-            className="h-14 w-14 rounded-full shadow-2xl bg-primary hover:scale-110 transition-transform border-4 border-white"
-          >
-            <Plus size={32} />
-          </Button>
-        )}
+      {/* Quick Action FAB with Action Menu */}
+      <div className="fixed bottom-8 right-8 z-50">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              size="icon" 
+              className="h-14 w-14 rounded-full shadow-2xl bg-primary hover:scale-110 transition-transform border-4 border-white"
+            >
+              <MoreVertical size={32} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-slate-100">
+            {(userRole !== 'Building Manager' || canRequestIncome) && (
+              <DropdownMenuItem 
+                onClick={() => setIsIncomeDialogOpen(true)}
+                className="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-primary/5 text-primary font-bold"
+              >
+                <Wallet className="h-5 w-5" />
+                <span>New Income Entry</span>
+              </DropdownMenuItem>
+            )}
+            {(userRole !== 'Building Manager' || canRequestExpense) && (
+              <DropdownMenuItem 
+                onClick={() => setIsExpenseDialogOpen(true)}
+                className="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-destructive/5 text-destructive font-bold"
+              >
+                <Receipt className="h-5 w-5" />
+                <span>Record New Expense</span>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* NEW INCOME ENTRY DIALOG */}
@@ -767,6 +924,183 @@ export default function DashboardPage() {
           <DialogFooter>
             <Button onClick={handleCreatePayment} disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
               {isSubmitting ? <Loader2 className="animate-spin" /> : (userRole === 'Building Manager' ? "Send Approval Request" : "Confirm & Save Receipt")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* NEW EXPENSE ENTRY DIALOG (Dynamic) */}
+      <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{userRole === 'Building Manager' ? 'Send Expense Request' : 'Record New Expense'}</DialogTitle>
+            <DialogDescription>Setup expense details based on selected category.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            {/* Common Fields - Part 1 */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Expense Category</Label>
+                <Select value={expenseFormData.category} onValueChange={val => setExpenseFormData({...expenseFormData, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: '', month: MONTHS[new Date().getMonth()]})}>
+                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Spent By (Staff)</Label>
+                <Select value={expenseFormData.expensePartyName} onValueChange={val => setExpenseFormData({...expenseFormData, expensePartyName: val})}>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Who spent the money?" /></SelectTrigger>
+                  <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Dynamic Fields Section */}
+            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              {/* Category: Building Rent, Electricity, Water, Maintenance, Internet, Others */}
+              {['rent', 'electricity', 'water', 'maintenance', 'internet', 'others'].includes(expenseFormData.category) && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-muted-foreground">Target Building</Label>
+                    <Select value={expenseFormData.buildingId} onValueChange={val => setExpenseFormData({...expenseFormData, buildingId: val, apartmentName: "", roomNumber: ""})}>
+                      <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">General / No Building</SelectItem>
+                        {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {(expenseFormData.category === 'rent' || expenseFormData.category === 'electricity' || expenseFormData.category === 'internet' || expenseFormData.category === 'others') && expenseFormData.buildingId !== 'none' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">Apartment (Optional)</Label>
+                      <Select value={expenseFormData.apartmentName} onValueChange={val => {
+                        const apt = apartmentList.find((a: any) => a.name === val);
+                        setExpenseFormData({...expenseFormData, apartmentName: val, meterNo: apt?.meterNo || ""});
+                      }}>
+                        <SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger>
+                        <SelectContent>
+                          {apartmentList.map((apt: any) => <SelectItem key={apt.name} value={apt.name}>{apt.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {(expenseFormData.category === 'maintenance' || expenseFormData.category === 'internet' || expenseFormData.category === 'others') && expenseFormData.buildingId !== 'none' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">Room Number (Optional)</Label>
+                      <Select value={expenseFormData.roomNumber} onValueChange={val => setExpenseFormData({...expenseFormData, roomNumber: val})}>
+                        <SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger>
+                        <SelectContent>
+                          {roomList.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {expenseFormData.category === 'electricity' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-1"><Zap size={12}/> Meter Number</Label>
+                      <Input value={expenseFormData.meterNo} onChange={e => setExpenseFormData({...expenseFormData, meterNo: e.target.value})} placeholder="Enter Meter ID" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Category: Market / Food */}
+              {expenseFormData.category === 'market' && (
+                <div className="space-y-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-orange-700">Received By (Staff)</Label>
+                    <Select value={expenseFormData.receiver} onValueChange={val => setExpenseFormData({...expenseFormData, receiver: val})}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select receiver" /></SelectTrigger>
+                      <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-orange-700">Market Description / Items</Label>
+                    <Textarea value={expenseFormData.description} onChange={e => setExpenseFormData({...expenseFormData, description: e.target.value})} placeholder="e.g. Rice, Oil, Vegetables..." className="bg-white" />
+                  </div>
+                </div>
+              )}
+
+              {/* Category: Staff Salary */}
+              {expenseFormData.category === 'salary' && (
+                <div className="space-y-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-primary">Salary For (Staff Name)</Label>
+                    <Select value={expenseFormData.receiver} onValueChange={val => {
+                      const staff = staffList?.find(s => s.name === val);
+                      setExpenseFormData({...expenseFormData, receiver: val, amount: staff?.monthlySalary?.toString() || ""});
+                    }}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                      <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-primary">Salary Month</Label>
+                      <Select value={expenseFormData.month} onValueChange={val => setExpenseFormData({...expenseFormData, month: val})}>
+                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                        <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-primary">Year</Label>
+                      <Select value={expenseFormData.year} onValueChange={val => setExpenseFormData({...expenseFormData, year: val})}>
+                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                        <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Common Fields - Part 2 */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Amount (৳)</Label>
+                  <Input type="number" value={expenseFormData.amount} onChange={e => setExpenseFormData({...expenseFormData, amount: e.target.value})} placeholder="0.00" className="h-11 text-lg font-bold" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Method</Label>
+                  <Select value={expenseFormData.method} onValueChange={val => setExpenseFormData({...expenseFormData, method: val})}>
+                    <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bank">Bank</SelectItem>
+                      <SelectItem value="bkash">Bkash</SelectItem>
+                      <SelectItem value="nagad">Nagad</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Expense Date</Label>
+                <Input type="date" value={expenseFormData.expenseDate} onChange={e => setExpenseFormData({...expenseFormData, expenseDate: e.target.value})} className="h-11" />
+              </div>
+
+              {expenseFormData.category !== 'market' && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Note / Reference (Optional)</Label>
+                  <Textarea value={expenseFormData.description} onChange={e => setExpenseFormData({...expenseFormData, description: e.target.value})} placeholder="Add details..." />
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCreateExpense} disabled={isSubmitting} className="w-full h-12 text-lg font-bold bg-expense hover:bg-expense/90">
+              {isSubmitting ? <Loader2 className="animate-spin" /> : (userRole === 'Building Manager' ? "Send Approval Request" : "Save Expense Record")}
             </Button>
           </DialogFooter>
         </DialogContent>
