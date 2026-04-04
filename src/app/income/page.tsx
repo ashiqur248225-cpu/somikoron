@@ -268,9 +268,6 @@ export default function IncomeHistoryPage() {
             <CardTitle className="text-sm font-medium text-income flex items-center gap-2">
               <HandCoins size={16} /> Total Collections (Filtered)
             </CardTitle>
-            <Badge variant="outline" className="bg-income/10 text-income border-income/20 px-3 py-1">
-              {filteredPayments.length} Receipts
-            </Badge>
           </CardHeader>
           <CardContent>
             <div className="flex justify-between items-end">
