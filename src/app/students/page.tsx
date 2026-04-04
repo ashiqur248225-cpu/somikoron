@@ -18,7 +18,7 @@ import {
   Users, Search, Plus, Phone, UserCircle, Loader2, 
   BedDouble, MapPin, Eye, Contact, Filter, XCircle, 
   Building2, DoorOpen, LayoutGrid, MoreVertical,
-  Wallet, Utensils, Calendar, Trash2, FileSpreadsheet, Download, Share2, FileText
+  Wallet, Utensils, Calendar, Trash2, FileSpreadsheet, Download, Share2, FileText, Printer
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -39,6 +39,7 @@ import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export default function StudentsPage() {
+  const { toast } = useToast()
   const router = useRouter()
   const db = useFirestore()
   const [searchTerm, setSearchTerm] = useState("")
@@ -89,6 +90,41 @@ export default function StudentsPage() {
     })
   }, [students, searchTerm, buildingFilter, statusFilter, roomFilter, planFilter])
 
+  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+
+  const handleExportCSV = () => {
+    try {
+      const headers = ["Name", "Phone", "Building", "Room", "Seat", "Plan", "Status"];
+      const rows = filteredStudents.map(s => [
+        s.name,
+        s.phone,
+        s.buildingName,
+        s.roomNumber,
+        s.seatNumber,
+        s.paymentSystem,
+        s.isActive ? 'Active' : 'Left'
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.map(val => `"${val || ''}"`).join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `resident_list_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "Export Success", description: "CSV file downloaded." });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Export Failed", description: err.message });
+    }
+  }
+
   return (
     <div className="space-y-8 pb-20 print:p-0">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
@@ -101,7 +137,8 @@ export default function StudentsPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Button size="sm" variant="outline" className="gap-2"><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
               <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">{userName ? userName.substring(0, 2) : "U"}</AvatarFallback>

@@ -48,8 +48,6 @@ export default function IncomeHistoryPage() {
   const [methodFilter, setMethodFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
 
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>("")
-
   useEffect(() => {
     const role = localStorage.getItem("user_role") || "Manager"
     const branch = localStorage.getItem("user_branch") || "Main Branch"
@@ -62,7 +60,6 @@ export default function IncomeHistoryPage() {
     setAssignedBuildingId(assignedId)
 
     if (role === 'Building Manager' && assignedId !== 'none') {
-      setSelectedBuildingId(assignedId)
       setBuildingFilter(assignedId)
     }
   }, [])
@@ -83,20 +80,14 @@ export default function IncomeHistoryPage() {
   // Queries
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
-    }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
-    }
     return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userRole, userBranch, assignedBuildingId])
+  }, [db, userBranch])
   const { data: students } = useCollection(studentsQuery)
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
@@ -104,11 +95,8 @@ export default function IncomeHistoryPage() {
 
   const incomeQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "payments"), where("buildingId", "==", assignedBuildingId), limit(500))
-    }
     return query(collection(db, "payments"), where("branch", "==", userBranch), limit(500))
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userBranch])
   const { data: rawPayments, isLoading: paymentsLoading } = useCollection(incomeQuery)
 
   const payments = useMemo(() => {
@@ -220,6 +208,39 @@ export default function IncomeHistoryPage() {
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
 
+  const handleExportCSV = () => {
+    try {
+      const headers = ["Date", "Student", "Building", "Room", "Method", "Amount", "Description"];
+      const rows = filteredPayments.map(p => [
+        p.date?.toDate ? p.date.toDate().toLocaleDateString() : '',
+        p.studentName,
+        p.buildingName,
+        p.roomNumber,
+        p.method,
+        p.amount,
+        p.description
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.map(val => `"${val || ''}"`).join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `income_history_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "Export Success", description: "CSV file downloaded." });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Export Failed", description: err.message });
+    }
+  }
+
   const selectedStudentForEntry = students?.find(s => s.id === formData.studentId)
 
   return (
@@ -234,7 +255,8 @@ export default function IncomeHistoryPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
               <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">{userName ? userName.substring(0, 2) : "U"}</AvatarFallback>

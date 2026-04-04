@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Users, Search, Filter, Building2, DoorOpen, Loader2, Eye, 
   CircleAlert, XCircle, Info, FileSpreadsheet, Download, 
-  CheckCircle2, Clock, Wallet, LayoutGrid, RotateCcw, ArrowDownRight, AlertTriangle, Briefcase, GraduationCap
+  CheckCircle2, Clock, Wallet, LayoutGrid, RotateCcw, ArrowDownRight, AlertTriangle, Briefcase, GraduationCap, Printer
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -89,6 +89,40 @@ export default function DuesPage() {
     return filteredData.reduce((acc, curr) => acc + (curr.totalDue || 0), 0)
   }, [filteredData])
 
+  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+
+  const handleExportCSV = () => {
+    try {
+      const headers = ["Student Name", "Building", "Room", "Plan", "Due Amount", "Status"];
+      const rows = filteredData.map(s => [
+        s.name,
+        s.buildingName,
+        s.roomNumber,
+        s.paymentSystem,
+        s.totalDue,
+        s.isActive ? 'Active' : 'Left'
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.map(val => `"${val || ''}"`).join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `outstanding_dues_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "Export Success", description: "CSV file downloaded." });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Export Failed", description: err.message });
+    }
+  }
+
   return (
     <div className="space-y-8 pb-20 print:p-0">
       {/* Sticky App Bar */}
@@ -106,7 +140,8 @@ export default function DuesPage() {
             <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Filtered Dues</p>
             <p className="text-sm font-black text-destructive">৳{totalOutstanding.toLocaleString()}</p>
           </div>
-          <Button size="sm" variant="outline" className="gap-2"><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
               <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">{userName ? userName.substring(0, 2) : "U"}</AvatarFallback>

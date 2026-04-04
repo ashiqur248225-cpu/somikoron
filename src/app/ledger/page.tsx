@@ -27,10 +27,12 @@ import { collection, query, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export default function LedgerPage() {
+  const { toast } = useToast()
   const db = useFirestore()
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
@@ -86,6 +88,38 @@ export default function LedgerPage() {
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print() } }
 
+  const handleExportCSV = () => {
+    try {
+      const headers = ["Date", "Type", "Entity/Purpose", "Details", "Method", "Amount"];
+      const rows = filteredData.map(row => [
+        getTransactionDate(row).toLocaleDateString(),
+        row.txType.toUpperCase(),
+        row.studentName || row.expensePartyName || "N/A",
+        row.description || row.category || '',
+        row.method || 'N/A',
+        row.amount
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.map(val => `"${val || ''}"`).join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `ledger_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "Export Success", description: "CSV file downloaded." });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Export Failed", description: err.message });
+    }
+  }
+
   return (
     <div className="space-y-8 pb-20 print:p-0">
       {/* Sticky App Bar */}
@@ -100,9 +134,7 @@ export default function LedgerPage() {
         </div>
         
         <div className="ml-auto flex items-center gap-3">
-          <div className="hidden sm:flex gap-2">
-            <Button variant="outline" size="sm" className="gap-2"><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export</span></Button>
-          </div>
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
           <Button size="sm" onClick={handlePrint} className="gap-2 shadow-lg">
             <Printer size={16} /> <span className="hidden sm:inline">Print</span>
           </Button>
@@ -149,7 +181,7 @@ export default function LedgerPage() {
         </Card>
       </div>
 
-      <div className="bg-secondary/20 p-4 rounded-xl border flex flex-col md:flex-row gap-4 items-center">
+      <div className="bg-secondary/20 p-4 rounded-xl border flex flex-col md:flex-row gap-4 items-center print:hidden">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search records..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
