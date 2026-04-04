@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, Link as LinkIcon, Copy, CheckCircle2 } from "lucide-react"
+import { Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, Link as LinkIcon, Copy, CheckCircle2, ExternalLink } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc, setDoc, serverTimestamp } from "firebase/firestore"
@@ -133,9 +133,14 @@ export default function SettingsPage() {
                 <p className="text-sm font-bold">{link.label}</p>
                 <p className="text-[10px] text-muted-foreground truncate">/register?branch={encodeURIComponent(userBranch)}&type={link.type}</p>
               </div>
-              <Button size="sm" variant="secondary" className="gap-2" onClick={() => copyToClipboard(`/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`)}>
-                <Copy size={14} /> Copy Link
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="gap-2" onClick={() => window.open(`/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`, '_blank')}>
+                  <ExternalLink size={14} /> Open Form
+                </Button>
+                <Button size="sm" variant="secondary" className="gap-2" onClick={() => copyToClipboard(`/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`)}>
+                  <Copy size={14} /> Copy Link
+                </Button>
+              </div>
             </div>
           ))}
           <p className="text-[10px] text-muted-foreground italic mt-2">* এই লিঙ্কগুলো ব্যবহার করে স্টুডেন্টরা আবেদন করলে সেগুলো সরাসরি আপনার "Pending Requests" সেকশনে জমা হবে।</p>
