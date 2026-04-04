@@ -5,7 +5,7 @@ import * as React from "react"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc } from "firebase/firestore"
+import { doc, collection } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -38,8 +38,7 @@ export default function StaffProfilePage({
   const { data: staff, isLoading } = useDoc(staffRef)
 
   const buildingsQuery = useMemoFirebase(() => {
-    const coll = require("firebase/firestore").collection
-    return coll(db, "buildings")
+    return collection(db, "buildings")
   }, [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
