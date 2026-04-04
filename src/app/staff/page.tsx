@@ -87,6 +87,9 @@ export default function StaffPage() {
   }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
+  const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
+  const { data: branches } = useCollection(branchesQuery)
+
   const filteredStaff = useMemo(() => {
     if (!staff) return []
     return staff.filter(s => {
@@ -97,7 +100,7 @@ export default function StaffPage() {
   }, [staff, searchTerm, currentTab])
 
   const handleCreate = async () => {
-    if (!formData.name || !formData.phone || (formData.staffType === 'management' && !formData.password)) {
+    if (!formData.name || !formData.phone || !formData.branch || (formData.staffType === 'management' && !formData.password)) {
       toast({ variant: "destructive", title: "Error", description: "Required fields are missing." })
       return
     }
@@ -155,6 +158,18 @@ export default function StaffPage() {
           <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>New Staff Enrollment</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Assign to Branch</Label>
+                <Select value={formData.branch} onValueChange={val => setFormData({...formData, branch: val})}>
+                  <SelectTrigger><SelectValue placeholder="Select Branch" /></SelectTrigger>
+                  <SelectContent>
+                    {branches?.map(b => (
+                      <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <Label>Staff Category</Label>
                 <Select value={formData.staffType} onValueChange={val => setFormData({...formData, staffType: val, role: val === 'management' ? 'Branch Manager' : 'Cook'})}>
@@ -242,6 +257,7 @@ export default function StaffPage() {
         <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl">
           <CardHeader className="pb-4 border-b">
             <div className="relative w-full md:max-w-md">
+              Search Staff
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Search name or phone..." className="pl-10 bg-slate-50 border-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
