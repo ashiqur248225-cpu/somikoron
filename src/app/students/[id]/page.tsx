@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
@@ -66,7 +65,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
@@ -195,7 +194,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     return { rentDue, foodBalance, monthsList: sortedAlloc.reverse(), usableAdvance, totalDue }
   }, [student])
 
-  // Effect to initialize exit settlement data
   useEffect(() => {
     if (student && isExitDialogOpen) {
       const net = (student.advanceAmount || 0) - financialStats.totalDue
@@ -265,6 +263,32 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     }
   }
 
+  const handleLogMealSubmit = async () => {
+    if (!student || !studentRef || !mealLogData.count) return
+    setIsUpdating(true)
+    try {
+      const count = Number(mealLogData.count)
+      const cost = count * currentMealRate
+      const mealRecord = {
+        month: `${mealLogData.month} ${mealLogData.year}`,
+        totalMeals: count,
+        perMealCost: currentMealRate,
+        totalCost: cost,
+        date: new Date().toISOString()
+      }
+      await updateDoc(studentRef, {
+        mealsHistory: arrayUnion(mealRecord),
+        updatedAt: serverTimestamp()
+      })
+      toast({ title: "Success", description: "Meals logged." })
+      setIsLogMealDialogOpen(false)
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleConfirmExit = async () => {
     if (!student || !studentRef) return
     if (!exitSettlement.staffName) {
@@ -277,7 +301,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       const refund = Number(exitSettlement.refundAmount) || 0
       const collect = Number(exitSettlement.collectAmount) || 0
 
-      // 1. Create Transaction if needed
       if (refund > 0) {
         const expId = doc(collection(db, "expenses")).id
         await setDoc(doc(db, "expenses", expId), {
@@ -316,7 +339,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         })
       }
 
-      // 2. Update Building Seat Status
       const bRef = doc(db, "buildings", student.buildingId)
       const bSnap = await getDoc(bRef)
       if (bSnap.exists()) {
@@ -348,12 +370,11 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         })
       }
 
-      // 3. Deactivate Student
       await updateDoc(studentRef, { 
         isActive: false, 
         leftAt: serverTimestamp(), 
-        advanceAmount: 0, // Advance is consumed/refunded
-        duesBreakdown: {}, // Dues are cleared/collected
+        advanceAmount: 0, 
+        duesBreakdown: {}, 
         updatedAt: serverTimestamp() 
       })
 
@@ -420,7 +441,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             <div className="flex items-center gap-3 text-sm"><BedDouble className="text-primary" size={16} /><span>Room {student.roomNumber} | Seat {student.seatNumber}</span></div>
             <div className="flex items-center gap-3 text-sm"><Calendar className="text-primary" size={16} /><span>Billing Start: {student.billingStartDate || 'N/A'}</span></div>
             
-            {/* Mobile-only status badges */}
             <div className="md:hidden flex flex-wrap gap-2 pt-2 border-t mt-2">
               <Badge variant={student.isActive ? "default" : "destructive"} className={student.isActive ? "bg-success text-[10px]" : "text-[10px]"}>{student.isActive ? "Active Resident" : "Ex-Resident"}</Badge>
               <Badge variant="outline" className="capitalize text-[10px]">{student.paymentSystem} Plan</Badge>
@@ -471,7 +491,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         <TabsContent value="payments">
           <Card className="border-none shadow-sm overflow-hidden">
             <CardContent className="p-0">
-              {/* Desktop Table */}
               <div className="hidden md:block">
                 <Table>
                   <TableHeader>
@@ -498,7 +517,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                 </Table>
               </div>
 
-              {/* Mobile Cards */}
               <div className="md:hidden space-y-3 p-4">
                 {student.paymentsHistory?.map((p: any, idx: number) => (
                   <div key={idx} className="bg-secondary/20 p-3 rounded-xl border border-secondary flex justify-between items-center">
@@ -526,7 +544,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
               <CardDescription className="text-xs">Real-time calculation based on payments.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {/* Desktop Table */}
               <div className="hidden md:block">
                 <Table>
                   <TableHeader>
@@ -554,7 +571,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                 </Table>
               </div>
 
-              {/* Mobile Cards */}
               <div className="md:hidden space-y-3 p-4">
                 {financialStats.monthsList.map((m: any, idx: number) => (
                   <div key={idx} className="bg-white p-3 rounded-xl border flex justify-between items-center shadow-sm">
@@ -593,7 +609,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                 </Button>
               </CardHeader>
               <CardContent className="p-0">
-                {/* Desktop Table */}
                 <div className="hidden md:block">
                   <Table>
                     <TableHeader>
@@ -618,7 +633,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                   </Table>
                 </div>
 
-                {/* Mobile Cards */}
                 <div className="md:hidden space-y-3 p-4">
                   {student.mealsHistory?.map((m: any, idx: number) => (
                     <div key={idx} className="bg-orange-50/50 p-3 rounded-xl border border-orange-100 flex justify-between items-center shadow-sm">
@@ -783,7 +797,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         </DialogContent>
       </Dialog>
 
-      {/* Exit & Settlement Dialog */}
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -798,7 +811,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                 <p className="text-xl font-black text-destructive">৳{financialStats.totalDue.toLocaleString()}</p>
               </Card>
               <Card className="bg-primary/5 border-primary/10 p-3">
-                <Label className="text-[10px] uppercase font-bold text-primary">Advance Pool</p>
+                <Label className="text-[10px] uppercase font-bold text-primary">Advance Pool</Label>
                 <p className="text-xl font-black text-primary">৳{(student.advanceAmount || 0).toLocaleString()}</p>
               </Card>
             </div>
