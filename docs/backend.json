@@ -1,6 +1,18 @@
 
 {
   "entities": {
+    "Branch": {
+      "title": "Branch",
+      "type": "object",
+      "description": "Represents a hostel branch/location.",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name"]
+    },
     "Building": {
       "title": "Building",
       "type": "object",
@@ -9,6 +21,7 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "address": { "type": "string" },
+        "branch": { "type": "string" },
         "apartmentsCount": { "type": "number" },
         "apartmentsDetail": { 
           "type": "array", 
@@ -60,6 +73,7 @@
         "address": { "type": "string" },
         "buildingId": { "type": "string" },
         "buildingName": { "type": "string" },
+        "branch": { "type": "string" },
         "apartmentName": { "type": "string" },
         "roomNumber": { "type": "string" },
         "seatNumber": { "type": "string" },
@@ -104,53 +118,6 @@
       },
       "required": ["id", "name", "buildingId", "roomNumber"]
     },
-    "Payment": {
-      "title": "Payment",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "amount": { "type": "number" },
-        "month": { "type": "string" },
-        "year": { "type": "string" },
-        "studentName": { "type": "string" },
-        "studentId": { "type": "string" },
-        "buildingId": { "type": "string" },
-        "buildingName": { "type": "string" },
-        "type": { "type": "string" },
-        "date": { "type": "string", "format": "date-time" }
-      }
-    },
-    "Expense": {
-      "title": "Expense",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "category": { "type": "string" },
-        "amount": { "type": "number" },
-        "buildingId": { "type": "string" },
-        "buildingName": { "type": "string" },
-        "apartmentName": { "type": "string" },
-        "roomNumber": { "type": "string" },
-        "expensePartyName": { "type": "string" },
-        "receiver": { "type": "string" },
-        "method": { "type": "string" },
-        "expenseDate": { "type": "string" },
-        "description": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "MealRecord": {
-      "title": "Meal Record",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "studentId": { "type": "string" },
-        "date": { "type": "string", "format": "date" },
-        "count": { "type": "number" },
-        "month": { "type": "string" },
-        "year": { "type": "string" }
-      }
-    },
     "Staff": {
       "title": "Staff",
       "type": "object",
@@ -158,25 +125,10 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "phone": { "type": "string" },
-        "role": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin", "Branch Manager", "Building Manager"] },
+        "branch": { "type": "string" },
+        "assignedBuildingId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "Transfer": {
-      "title": "Fund Transfer",
-      "type": "object",
-      "description": "Internal money transfers between accounts.",
-      "properties": {
-        "id": { "type": "string" },
-        "amount": { "type": "number" },
-        "fromAccount": { "type": "string" },
-        "toAccount": { "type": "string" },
-        "senderId": { "type": "string" },
-        "senderName": { "type": "string" },
-        "receiverId": { "type": "string" },
-        "receiverName": { "type": "string" },
-        "date": { "type": "string", "format": "date-time" },
-        "description": { "type": "string" }
       }
     }
   },
@@ -184,13 +136,12 @@
     "providers": ["password", "anonymous"]
   },
   "firestore": {
+    "/branches/{branchId}": { "schema": "Branch", "description": "Hostel Branches" },
     "/buildings/{buildingId}": { "schema": "Building", "description": "Buildings list" },
-    "/students/{studentId}": { "schema": "Student", "description": "Students list with embedded histories" },
-    "/payments/{paymentId}": { "schema": "Payment", "description": "Global Income records" },
-    "/expenses/{expenseId}": { "schema": "Expense", "description": "Global Expense records" },
-    "/meals/{mealId}": { "schema": "MealRecord", "description": "Global Meal counts" },
-    "/staff/{staffId}": { "schema": "Staff", "description": "List of staff/receivers" },
-    "/transfers/{transferId}": { "schema": "Transfer", "description": "Internal fund transfers" },
-    "/configs/{configId}": { "schema": "object", "description": "Global settings like mealRate" }
+    "/students/{studentId}": { "schema": "Student", "description": "Students list" },
+    "/staff/{staffId}": { "schema": "Staff", "description": "Staff and roles" },
+    "/payments/{paymentId}": { "schema": "object", "description": "Global Income" },
+    "/expenses/{expenseId}": { "schema": "object", "description": "Global Expenses" },
+    "/transfers/{transferId}": { "schema": "object", "description": "Fund transfers" }
   }
 }

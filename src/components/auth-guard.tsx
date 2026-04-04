@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore } from "@/firebase"
 import { collection, query, where, getDocs, limit } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -36,7 +36,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true)
     try {
-      // Query staff collection for the user with matching phone and password
       const staffRef = collection(db, "staff")
       const q = query(staffRef, 
         where("phone", "==", formData.number), 
@@ -49,11 +48,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       if (!querySnapshot.empty) {
         const userData = querySnapshot.docs[0].data()
         
-        // Save session info
         localStorage.setItem("somikoron_auth", "true")
         localStorage.setItem("user_role", userData.role || "Manager")
         localStorage.setItem("user_branch", userData.branch || "Main Branch")
         localStorage.setItem("user_name", userData.name)
+        localStorage.setItem("assigned_building_id", userData.assignedBuildingId || "none")
         
         setIsAuthenticated(true)
         toast({ title: "Welcome to Somikoron", description: `Logged in as ${userData.role}` })
@@ -79,7 +78,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    // Check if we are on the public registration page
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/register')) {
       return <>{children}</>
     }
@@ -107,45 +105,20 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
                   <Label htmlFor="number" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Mobile No.</Label>
                   <div className="relative">
                     <Smartphone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="number" 
-                      type="text" 
-                      placeholder="01XXXXXXXXX" 
-                      className="pl-10 h-11 bg-secondary/20 border-none focus-visible:ring-2 focus-visible:ring-primary"
-                      value={formData.number}
-                      onChange={e => setFormData({ ...formData, number: e.target.value })}
-                      required
-                    />
+                    <Input id="number" type="text" placeholder="01XXXXXXXXX" className="pl-10 h-11 bg-secondary/20 border-none" value={formData.number} onChange={e => setFormData({ ...formData, number: e.target.value })} required />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="password" 
-                      type="password" 
-                      placeholder="••••••••" 
-                      className="pl-10 h-11 bg-secondary/20 border-none focus-visible:ring-2 focus-visible:ring-primary"
-                      value={formData.password}
-                      onChange={e => setFormData({ ...formData, password: e.target.value })}
-                      required
-                    />
+                    <Input id="password" type="password" placeholder="••••••••" className="pl-10 h-11 bg-secondary/20 border-none" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
                   </div>
                 </div>
-                <Button type="submit" className="w-full h-12 text-lg font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="animate-spin mr-2" /> : "Verify & Access"}
-                </Button>
+                <Button type="submit" className="w-full h-12 text-lg font-bold shadow-lg" disabled={isLoading}>{isLoading ? <Loader2 className="animate-spin mr-2" /> : "Verify & Access"}</Button>
               </form>
             </CardContent>
           </Card>
-          
-          <div className="flex flex-col items-center gap-1 opacity-50">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
-              Secure Cloud Processing Active
-            </p>
-            <p className="text-[8px] text-muted-foreground">© 2024 Somikoron ERP v1.1.0</p>
-          </div>
         </div>
       </div>
     )

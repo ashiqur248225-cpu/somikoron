@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   ArrowUpCircle, 
@@ -52,39 +52,60 @@ export default function DashboardPage() {
   const { toast } = useToast()
   const [isPaymentOpen, setIsPaymentOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
   const [timeFilter, setTimeFilter] = useState("month")
 
-  const userRole = typeof window !== 'undefined' ? localStorage.getItem("user_role") : "Manager"
-  const userBranch = typeof window !== 'undefined' ? localStorage.getItem("user_branch") : ""
+  const [userRole, setUserRole] = useState("")
+  const [userBranch, setUserBranch] = useState("")
+  const [assignedBuildingId, setAssignedBuildingId] = useState("")
+
+  useEffect(() => {
+    setUserRole(localStorage.getItem("user_role") || "Manager")
+    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
+  }, [])
 
   const [selectedBuildingId, setSelectedBuildingId] = useState("")
   const [selectedRoomNumber, setSelectedRoomNumber] = useState("")
 
-  // Data Fetching with Branch Filtering
+  // Data Fetching with Branch & Role Filtering
   const buildingsQuery = useMemoFirebase(() => {
-    if (userRole === 'Admin') return collection(db, "buildings")
+    if (userRole === 'Admin') {
+      if (userBranch === 'All Branches') return collection(db, "buildings")
+      return query(collection(db, "buildings"), where("branch", "==", userBranch))
+    }
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
+    }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userRole, userBranch])
+  }, [db, userRole, userBranch, assignedBuildingId])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const studentsQuery = useMemoFirebase(() => {
-    if (userRole === 'Admin') return collection(db, "students")
+    if (userRole === 'Admin') {
+      if (userBranch === 'All Branches') return collection(db, "students")
+      return query(collection(db, "students"), where("branch", "==", userBranch))
+    }
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
+    }
     return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userRole, userBranch])
+  }, [db, userRole, userBranch, assignedBuildingId])
   const { data: students } = useCollection(studentsQuery)
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
-  const allPaymentsQuery = useMemoFirebase(() => collection(db, "payments"), [db])
+  const allPaymentsQuery = useMemoFirebase(() => {
+    if (userRole === 'Admin' && userBranch === 'All Branches') return collection(db, "payments")
+    return query(collection(db, "payments"), where("branch", "==", userBranch))
+  }, [db, userRole, userBranch])
   const { data: allPayments } = useCollection(allPaymentsQuery)
 
-  const allExpensesQuery = useMemoFirebase(() => collection(db, "expenses"), [db])
+  const allExpensesQuery = useMemoFirebase(() => {
+    if (userRole === 'Admin' && userBranch === 'All Branches') return collection(db, "expenses")
+    return query(collection(db, "expenses"), where("branch", "==", userBranch))
+  }, [db, userRole, userBranch])
   const { data: allExpenses } = useCollection(allExpensesQuery)
-
-  const allTransfersQuery = useMemoFirebase(() => collection(db, "transfers"), [db])
-  const { data: allTransfers } = useCollection(allTransfersQuery)
 
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances } = useDoc(balancesRef)
@@ -102,15 +123,15 @@ export default function DashboardPage() {
     description: ""
   })
 
-  const selectedBuilding = buildings?.find(b => b.id === selectedBuildingId)
+  const selectedBuilding = buildings?.find(b => b.id === (selectedBuildingId || assignedBuildingId))
   const roomsInBuilding = useMemo(() => {
     if (!selectedBuilding) return []
     return selectedBuilding.apartmentsDetail?.flatMap((a: any) => a.rooms || []) || []
   }, [selectedBuilding])
 
-  const filteredStudents = useMemo(() => {
+  const filteredStudentsForQuickPay = useMemo(() => {
     return students?.filter(s => 
-      s.buildingId === selectedBuildingId && 
+      (selectedBuildingId ? s.buildingId === selectedBuildingId : true) && 
       (selectedRoomNumber ? s.roomNumber === selectedRoomNumber : true) &&
       s.isActive
     ) || []
@@ -161,14 +182,12 @@ export default function DashboardPage() {
       return d >= filterDate
     }
 
-    const branchFilter = (item: any) => userRole === 'Admin' || item.branch === userBranch || item.buildingName?.includes(userBranch)
-
     const income = (allPayments || [])
-      .filter(p => isWithinRange(p.date) && branchFilter(p))
+      .filter(p => isWithinRange(p.date))
       .reduce((acc, p) => acc + (p.amount || 0), 0)
 
     const expense = (allExpenses || [])
-      .filter(e => isWithinRange(e.expenseDate) && branchFilter(e))
+      .filter(e => isWithinRange(e.expenseDate))
       .reduce((acc, e) => acc + (e.amount || 0), 0)
 
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, student) => {
@@ -206,23 +225,19 @@ export default function DashboardPage() {
     if (userRole === 'Admin') {
       (allPayments || []).forEach(p => { if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) });
       (allExpenses || []).forEach(e => { if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) });
-      (allTransfers || []).forEach(t => { 
-        if (fund[t.fromAccount as keyof typeof fund] !== undefined) fund[t.fromAccount as keyof typeof fund] -= (t.amount || 0)
-        if (fund[t.toAccount as keyof typeof fund] !== undefined) fund[t.toAccount as keyof typeof fund] += (t.amount || 0)
-      });
     }
 
     return { income, expense, dues: totalDues, fund }
-  }, [allPayments, allExpenses, allTransfers, students, timeFilter, openingBalances, userRole, userBranch])
+  }, [allPayments, allExpenses, students, timeFilter, openingBalances, userRole])
 
   const handleQuickPayment = async () => {
-    if (!paymentForm.studentId || (!useAdvanceBalance && !paymentForm.receiver)) {
+    if (!paymentForm.studentId || !paymentForm.receiver) {
       toast({ variant: "destructive", title: "Error", description: "Fill required fields." })
       return
     }
 
     setIsSubmitting(true)
-    const building = buildings?.find(b => b.id === selectedBuildingId)
+    const building = buildings?.find(b => b.id === (selectedBuildingId || selectedStudent?.buildingId))
     const paymentId = doc(collection(db, "payments")).id
     const seatPaid = selectedStudent?.paymentSystem === 'package' ? Number(paymentForm.amount) : Number(paymentForm.seatAmount)
     const foodPaid = selectedStudent?.paymentSystem === 'non-package' ? Number(paymentForm.foodAmount) : 0
@@ -235,7 +250,7 @@ export default function DashboardPage() {
       seatAmount: seatPaid,
       foodAmount: foodPaid,
       advanceAmount: addAdvance,
-      buildingId: selectedBuildingId,
+      buildingId: selectedBuildingId || selectedStudent?.buildingId,
       buildingName: building?.name || "Unknown",
       studentName: selectedStudent?.name || "Unknown",
       studentId: paymentForm.studentId,
@@ -244,25 +259,25 @@ export default function DashboardPage() {
       type: "income",
       month: paymentForm.month,
       year: paymentForm.year,
-      method: useAdvanceBalance ? "advance_deduction" : paymentForm.method,
-      receiver: useAdvanceBalance ? "System (Advance Deduction)" : paymentForm.receiver,
+      method: paymentForm.method,
+      receiver: paymentForm.receiver,
       description: paymentForm.description,
       date: new Date().toISOString()
     }
 
     try {
-      if (!useAdvanceBalance && totalCashAmount > 0) {
+      if (totalCashAmount > 0) {
         await setDoc(doc(db, "payments", paymentId), { ...paymentRecord, date: Timestamp.now(), createdAt: Timestamp.now() })
       }
       await updateDoc(doc(db, "students", paymentForm.studentId), {
         paymentsHistory: arrayUnion(paymentRecord),
-        advanceAmount: increment((useAdvanceBalance ? -(seatPaid + foodPaid) : addAdvance)),
+        advanceAmount: increment(addAdvance),
         updatedAt: Timestamp.now()
       })
       toast({ title: "Success", description: `Processed ৳${totalCashAmount}.` })
       setIsPaymentOpen(false)
       setPaymentForm({ ...paymentForm, amount: "", seatAmount: "", foodAmount: "", addAdvanceAmount: "0", description: "" })
-      setSelectedBuildingId(""); setSelectedRoomNumber(""); setUseAdvanceBalance(false)
+      setSelectedBuildingId(""); setSelectedRoomNumber("")
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -312,7 +327,7 @@ export default function DashboardPage() {
         </Card>
         <Card className="shadow-sm border-none bg-destructive/5 border-l-4 border-l-destructive">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-destructive">Branch Dues</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-destructive">Current Dues</CardTitle>
             <TrendingUp className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent><div className="text-2xl font-bold">৳{stats.dues.toLocaleString()}</div></CardContent>
@@ -351,14 +366,14 @@ export default function DashboardPage() {
               <div className="p-4 bg-secondary/10 rounded-xl border space-y-4">
                 <div className="space-y-2">
                   <Label>Building</Label>
-                  <Select onValueChange={(val) => { setSelectedBuildingId(val); setSelectedRoomNumber(""); setPaymentForm({...paymentForm, studentId: ""}) }}>
+                  <Select value={selectedBuildingId || assignedBuildingId} onValueChange={(val) => { setSelectedBuildingId(val); setSelectedRoomNumber(""); setPaymentForm({...paymentForm, studentId: ""}) }}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Room No.</Label>
-                  <Select disabled={!selectedBuildingId} value={selectedRoomNumber} onValueChange={(val) => { setSelectedRoomNumber(val); setPaymentForm({...paymentForm, studentId: ""}) }}>
+                  <Select disabled={!selectedBuildingId && assignedBuildingId === 'none'} value={selectedRoomNumber} onValueChange={(val) => { setSelectedRoomNumber(val); setPaymentForm({...paymentForm, studentId: ""}) }}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>{roomsInBuilding.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
                   </Select>
@@ -367,7 +382,7 @@ export default function DashboardPage() {
                   <Label>Student</Label>
                   <Select disabled={!selectedRoomNumber} onValueChange={val => setPaymentForm({...paymentForm, studentId: val})}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>{filteredStudents.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{filteredStudentsForQuickPay.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>
