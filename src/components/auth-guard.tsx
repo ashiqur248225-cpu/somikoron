@@ -1,8 +1,9 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
-import { useFirestore } from "@/firebase"
-import { doc, getDoc } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection, query, where, getDocs, limit } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,7 +18,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const db = useFirestore()
   const { toast } = useToast()
 
-  // Check if session exists on load
   useEffect(() => {
     const auth = localStorage.getItem("somikoron_auth")
     if (auth === "true") {
@@ -36,23 +36,29 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true)
     try {
-      // Direct verification against the user's specified document
-      const docRef = doc(db, "opening", "Lc197oTWpOUXNv7NCwaj")
-      const docSnap = await getDoc(docRef)
+      // Query staff collection for the user with matching phone and password
+      const staffRef = collection(db, "staff")
+      const q = query(staffRef, 
+        where("phone", "==", formData.number), 
+        where("password", "==", formData.password),
+        limit(1)
+      )
+      
+      const querySnapshot = await getDocs(q)
 
-      if (docSnap.exists()) {
-        const data = docSnap.data()
+      if (!querySnapshot.empty) {
+        const userData = querySnapshot.docs[0].data()
         
-        // Match the number and password fields exactly as requested
-        if (data.number?.toString() === formData.number && data.password?.toString() === formData.password) {
-          localStorage.setItem("somikoron_auth", "true")
-          setIsAuthenticated(true)
-          toast({ title: "Welcome to Somikoron", description: "Login successful." })
-        } else {
-          toast({ variant: "destructive", title: "Unauthorized", description: "Incorrect number or password." })
-        }
+        // Save session info
+        localStorage.setItem("somikoron_auth", "true")
+        localStorage.setItem("user_role", userData.role || "Manager")
+        localStorage.setItem("user_branch", userData.branch || "Main Branch")
+        localStorage.setItem("user_name", userData.name)
+        
+        setIsAuthenticated(true)
+        toast({ title: "Welcome to Somikoron", description: `Logged in as ${userData.role}` })
       } else {
-        toast({ variant: "destructive", title: "System Error", description: "Security configurations missing in database." })
+        toast({ variant: "destructive", title: "Unauthorized", description: "Incorrect number or password." })
       }
     } catch (error: any) {
       toast({ variant: "destructive", title: "Connection Error", description: "Failed to connect to security server." })
@@ -61,7 +67,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Handle Loading state
   if (isAuthenticated === null) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-background">
@@ -73,8 +78,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Render Login UI if not authenticated
   if (!isAuthenticated) {
+    // Check if we are on the public registration page
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/register')) {
+      return <>{children}</>
+    }
+
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 z-[9999]">
         <div className="w-full max-w-[400px] space-y-8 animate-in fade-in zoom-in duration-300">
@@ -89,19 +98,19 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           <Card className="border-none shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden rounded-2xl">
             <div className="h-2 bg-gradient-to-r from-primary/50 via-primary to-primary/50 w-full" />
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl">Admin Login</CardTitle>
-              <CardDescription>Verify your credentials to manage properties.</CardDescription>
+              <CardTitle className="text-xl">User Login</CardTitle>
+              <CardDescription>Verify your credentials to access your branch.</CardDescription>
             </CardHeader>
             <CardContent className="pt-4">
               <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="number" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Manager Mobile No.</Label>
+                  <Label htmlFor="number" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Mobile No.</Label>
                   <div className="relative">
                     <Smartphone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input 
                       id="number" 
                       type="text" 
-                      placeholder="Enter mobile number" 
+                      placeholder="01XXXXXXXXX" 
                       className="pl-10 h-11 bg-secondary/20 border-none focus-visible:ring-2 focus-visible:ring-primary"
                       value={formData.number}
                       onChange={e => setFormData({ ...formData, number: e.target.value })}
@@ -110,7 +119,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Access Password</Label>
+                  <Label htmlFor="password" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input 
@@ -135,13 +144,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
             <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
               Secure Cloud Processing Active
             </p>
-            <p className="text-[8px] text-muted-foreground">© 2024 Somikoron ERP v1.0.2</p>
+            <p className="text-[8px] text-muted-foreground">© 2024 Somikoron ERP v1.1.0</p>
           </div>
         </div>
       </div>
     )
   }
 
-  // Render children (App content) if authenticated
   return <>{children}</>
 }

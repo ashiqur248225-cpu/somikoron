@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -9,11 +10,12 @@ import {
   History, 
   LayoutDashboard, 
   BarChart3,
-  CircleDollarSign,
   Settings,
   CircleAlert,
   UserCog,
-  ArrowLeftRight
+  ArrowLeftRight,
+  UserPlus,
+  LogOut
 } from "lucide-react"
 import {
   Sidebar,
@@ -25,84 +27,56 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarFooter,
-  useSidebar
 } from "@/components/ui/sidebar"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-
-const items = [
-  {
-    title: "Dashboard",
-    url: "/",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Buildings",
-    url: "/buildings",
-    icon: Building2,
-  },
-  {
-    title: "Students",
-    url: "/students",
-    icon: Users,
-  },
-  {
-    title: "Income History",
-    url: "/income",
-    icon: Wallet,
-  },
-  {
-    title: "Expense History",
-    url: "/expenses",
-    icon: Receipt,
-  },
-  {
-    title: "Dues Tracking",
-    url: "/dues",
-    icon: CircleAlert,
-  },
-  {
-    title: "Ledgers",
-    url: "/ledger",
-    icon: History,
-  },
-  {
-    title: "Staff",
-    url: "/staff",
-    icon: UserCog,
-  },
-  {
-    title: "Transfers",
-    url: "/transfers",
-    icon: ArrowLeftRight,
-  },
-  {
-    title: "Reports",
-    url: "/reports",
-    icon: BarChart3,
-  },
-  {
-    title: "Settings",
-    url: "/settings",
-    icon: Settings,
-  },
-]
+import { usePathname, useRouter } from "next/navigation"
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  
+  const userRole = typeof window !== 'undefined' ? localStorage.getItem("user_role") : "Manager"
+  const userName = typeof window !== 'undefined' ? localStorage.getItem("user_name") : "User"
+  const userBranch = typeof window !== 'undefined' ? localStorage.getItem("user_branch") : "Main"
+
+  const items = [
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Buildings", url: "/buildings", icon: Building2 },
+    { title: "Students", url: "/students", icon: Users },
+    { title: "Pending Requests", url: "/registrations", icon: UserPlus },
+    { title: "Income History", url: "/income", icon: Wallet },
+    { title: "Expense History", url: "/expenses", icon: Receipt },
+    { title: "Dues Tracking", url: "/dues", icon: CircleAlert },
+    { title: "Ledgers", url: "/ledger", icon: History },
+    { title: "Staff / Roles", url: "/staff", icon: UserCog, adminOnly: true },
+    { title: "Transfers", url: "/transfers", icon: ArrowLeftRight },
+    { title: "Reports", url: "/reports", icon: BarChart3 },
+    { title: "Settings", url: "/settings", icon: Settings },
+  ]
+
+  const filteredItems = items.filter(item => !item.adminOnly || userRole === 'Admin')
+
+  const handleLogout = () => {
+    localStorage.clear()
+    window.location.href = "/"
+  }
 
   return (
     <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader className="border-b px-4 py-4">
-        <div className="flex items-center gap-2 font-headline font-bold text-primary">
-          <span className="text-xl tracking-tight group-data-[collapsible=icon]:hidden">Somikoron</span>
+        <div className="flex flex-col gap-1">
+          <span className="text-xl font-black text-primary tracking-tight group-data-[collapsible=icon]:hidden">Somikoron</span>
+          <div className="flex flex-col group-data-[collapsible=icon]:hidden">
+            <span className="text-[10px] font-bold uppercase text-muted-foreground">{userBranch}</span>
+            <span className="text-[9px] text-primary font-medium">{userName} ({userRole})</span>
+          </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Main Navigation</SidebarGroupLabel>
           <SidebarMenu>
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton 
                   asChild 
@@ -119,8 +93,12 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t p-4 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-        © 2024 Somikoron v1.0
+      <SidebarFooter className="border-t p-4 group-data-[collapsible=icon]:hidden space-y-4">
+        <Button variant="ghost" className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleLogout}>
+          <LogOut size={16} />
+          <span>Logout Session</span>
+        </Button>
+        <div className="text-[10px] text-muted-foreground">© 2024 Somikoron v1.1.0</div>
       </SidebarFooter>
     </Sidebar>
   )

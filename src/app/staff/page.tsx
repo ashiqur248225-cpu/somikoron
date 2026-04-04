@@ -1,6 +1,7 @@
+
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Table, 
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { UserCog, Search, Plus, Phone, Loader2, Trash2 } from "lucide-react"
+import { UserCog, Search, Plus, Phone, Loader2, Trash2, Shield, Building2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { 
   Dialog, 
@@ -23,6 +24,7 @@ import {
   DialogFooter 
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, deleteDoc } from "firebase/firestore"
@@ -36,10 +38,14 @@ export default function StaffPage() {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
+  const userRole = typeof window !== 'undefined' ? localStorage.getItem("user_role") : "Manager"
+
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
-    role: "Admin"
+    password: "",
+    role: "Manager",
+    branch: "Main Branch"
   })
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
@@ -51,7 +57,10 @@ export default function StaffPage() {
   )
 
   const handleCreate = async () => {
-    if (!formData.name || !formData.phone) return
+    if (!formData.name || !formData.phone || !formData.password) {
+      toast({ variant: "destructive", title: "Error", description: "Name, Phone and Password are required." })
+      return
+    }
     if (formData.phone.length !== 11) {
       toast({ variant: "destructive", title: "Error", description: "Phone must be exactly 11 digits." })
       return
@@ -63,8 +72,8 @@ export default function StaffPage() {
         ...formData,
         createdAt: serverTimestamp()
       })
-      toast({ title: "Success", description: "Staff added." })
-      setFormData({ name: "", phone: "", role: "Admin" })
+      toast({ title: "Success", description: "Staff added successfully." })
+      setFormData({ name: "", phone: "", password: "", role: "Manager", branch: "Main Branch" })
       setIsAddOpen(false)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -74,6 +83,10 @@ export default function StaffPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if (userRole !== 'Admin') {
+      toast({ variant: "destructive", title: "Denied", description: "Only Admins can delete staff members." })
+      return
+    }
     try {
       await deleteDoc(doc(db, "staff", id))
       toast({ title: "Deleted", description: "Staff member removed." })
@@ -90,7 +103,7 @@ export default function StaffPage() {
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Staff Management</h1>
-            <p className="text-muted-foreground mt-1">Manage employees and administrative receivers.</p>
+            <p className="text-muted-foreground mt-1">Manage branches, roles, and login credentials.</p>
           </div>
         </div>
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -99,7 +112,7 @@ export default function StaffPage() {
               <Plus size={18} /> Add New Staff
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Add Staff Member</DialogTitle>
             </DialogHeader>
@@ -108,13 +121,38 @@ export default function StaffPage() {
                 <Label>Full Name</Label>
                 <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Rahul Hossain" />
               </div>
-              <div className="space-y-2">
-                <Label>Phone Number</Label>
-                <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="11 Digit Mobile" maxLength={11} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Phone Number</Label>
+                  <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="11 Digit Mobile" maxLength={11} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Login Password</Label>
+                  <Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Create Password" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Role / Position</Label>
-                <Input value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} placeholder="e.g. Manager, Cook, Guard" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select value={formData.role} onValueChange={val => setFormData({...formData, role: val})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Admin">Admin (All Access)</SelectItem>
+                      <SelectItem value="Manager">Manager (Branch Only)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Branch</Label>
+                  <Select value={formData.branch} onValueChange={val => setFormData({...formData, branch: val})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Main Branch">Main Branch</SelectItem>
+                      <SelectItem value="Arambagh Branch">Arambagh Branch</SelectItem>
+                      <SelectItem value="Uttara Branch">Uttara Branch</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -146,7 +184,7 @@ export default function StaffPage() {
               <TableHeader className="bg-secondary/30">
                 <TableRow>
                   <TableHead>Staff Name</TableHead>
-                  <TableHead>Role</TableHead>
+                  <TableHead>Role & Branch</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -157,15 +195,20 @@ export default function StaffPage() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="bg-primary/10 p-2 rounded-full text-primary">
-                          <UserCog size={20} />
+                          <Shield size={20} />
                         </div>
                         <span className="font-semibold">{s.name}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="font-normal capitalize">
-                        {s.role}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant={s.role === 'Admin' ? 'default' : 'secondary'} className="w-fit">
+                          {s.role}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <Building2 size={10} /> {s.branch}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5 text-sm">
@@ -174,9 +217,11 @@ export default function StaffPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(s.id)}>
-                        <Trash2 size={16} />
-                      </Button>
+                      {userRole === 'Admin' && (
+                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(s.id)}>
+                          <Trash2 size={16} />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
