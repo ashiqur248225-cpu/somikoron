@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -27,7 +26,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarFooter,
 } from "@/components/ui/sidebar"
 import Link from "next/link"
@@ -158,7 +156,6 @@ export function AppSidebar() {
             <span className="text-xs">Logout Session</span>
           </Button>
         )}
-        <div className="text-[10px] text-muted-foreground">© 2024 Somikoron ERP</div>
       </SidebarFooter>
     </Sidebar>
   )
