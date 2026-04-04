@@ -31,17 +31,20 @@ import { Separator } from "@/components/ui/separator"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function DashboardPage() {
   const db = useFirestore()
   const [userRole, setUserRole] = useState("")
+  const [userName, setUserName] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
+    setUserName(localStorage.getItem("user_name") || "User")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
@@ -159,6 +162,13 @@ export default function DashboardPage() {
               </Button>
             </Link>
           )}
+          <Link href="/profile">
+            <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold">
+                {userName ? userName.substring(0, 2).toUpperCase() : "U"}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
         </div>
       </div>
 
