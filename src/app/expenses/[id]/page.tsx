@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { 
   Receipt, Calendar, UserCheck, Building2, 
   MapPin, Wallet, Trash2, Edit, Loader2, 
-  ArrowLeft, LayoutGrid, Info, Zap, UserCircle
+  ArrowLeft, LayoutGrid, Info, Zap, UserCircle, DoorOpen, Utensils
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -58,6 +58,8 @@ const EXPENSE_CATEGORIES = [
   { id: "others", label: "Others" },
 ]
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params)
   const router = useRouter()
@@ -69,11 +71,14 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
   const expenseRef = useMemoFirebase(() => id ? doc(db, "expenses", id) : null, [db, id])
   const { data: expense, isLoading } = useDoc(expenseRef)
 
-  const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!expense?.branch) return null
+    return query(collection(db, "buildings"), where("branch", "==", expense.branch))
+  }, [db, expense?.branch])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const staffQuery = useMemoFirebase(() => {
-    if (!expense?.branch) return collection(db, "staff")
+    if (!expense?.branch) return null
     return query(collection(db, "staff"), where("branch", "==", expense.branch))
   }, [db, expense?.branch])
   const { data: staffList } = useCollection(staffQuery)
@@ -84,13 +89,16 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
     if (expense) {
       setEditForm({
         category: expense.category,
-        buildingId: expense.buildingId || "",
+        buildingId: expense.buildingId || "none",
         apartmentName: expense.apartmentName || "",
+        roomNumber: expense.roomNumber || "",
         meterNo: expense.meterNo || "",
         amount: expense.amount.toString(),
         method: expense.method,
         expensePartyName: expense.expensePartyName,
         receiver: expense.receiver || "",
+        month: expense.month || MONTHS[new Date().getMonth()],
+        year: expense.year || new Date().getFullYear().toString(),
         description: expense.description || "",
         expenseDate: expense.expenseDate,
       })
@@ -100,8 +108,8 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
   const handleUpdate = async () => {
     if (!expenseRef || !editForm) return
     
-    if (editForm.category === 'salary' && !editForm.receiver) {
-      toast({ variant: "destructive", title: "Error", description: "Staff selection is required for salary." })
+    if (editForm.category === 'others' && !editForm.description) {
+      toast({ variant: "destructive", title: "Error", description: "Description is mandatory for 'Others' category." })
       return
     }
 
@@ -112,8 +120,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
         ...editForm,
         amount: Number(editForm.amount),
         buildingName: building?.name || "General",
-        updatedAt: serverTimestamp(),
-        receiver: editForm.category === 'salary' ? editForm.receiver : (editForm.receiver || "N/A")
+        updatedAt: serverTimestamp()
       })
       toast({ title: "Updated", description: "Expense record saved." })
       setIsEditDialogOpen(false)
@@ -142,7 +149,17 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
   if (!expense) return <div className="text-center p-20">Expense not found.</div>
 
   const selectedBuildingForEdit = buildings?.find(b => b.id === editForm?.buildingId)
-  const apartmentsInBuilding = selectedBuildingForEdit?.apartmentsDetail || []
+  const apartmentList = selectedBuildingForEdit?.apartmentsDetail || []
+  const roomList = (() => {
+    if (!selectedBuildingForEdit) return []
+    const rooms: string[] = []
+    selectedBuildingForEdit.apartmentsDetail?.forEach((apt: any) => {
+      apt.rooms?.forEach((room: any) => {
+        if (room.roomNo && !rooms.includes(room.roomNo)) rooms.push(room.roomNo)
+      })
+    })
+    return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  })()
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -190,12 +207,12 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               <p className="font-semibold">{new Date(expense.expenseDate).toLocaleDateString('en-IN', { dateStyle: 'full' })}</p>
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCheck size={10}/> Paid By (Expenser)</Label>
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCheck size={10}/> Spent By (Staff)</Label>
               <p className="font-semibold">{expense.expensePartyName}</p>
             </div>
-            {expense.category === 'salary' && (
+            {(expense.category === 'salary' || expense.category === 'market') && (
               <div className="space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCircle size={10}/> Paid To (Staff Name)</Label>
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCircle size={10}/> {expense.category === 'salary' ? 'Paid To' : 'Received By'}</Label>
                 <p className="font-semibold text-primary">{expense.receiver || "N/A"}</p>
               </div>
             )}
@@ -213,18 +230,17 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               <div>
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground">Allocation</Label>
                 <h3 className="font-bold">{expense.buildingName}</h3>
-                {expense.apartmentName && expense.apartmentName !== 'none' && (
-                  <div className="flex gap-4 mt-1">
-                    <p className="text-xs text-muted-foreground flex items-center gap-1"><LayoutGrid size={12}/> Unit: {expense.apartmentName}</p>
-                    {expense.meterNo && <p className="text-xs text-primary font-bold flex items-center gap-1"><Zap size={12}/> Meter: {expense.meterNo}</p>}
-                  </div>
-                )}
+                <div className="flex flex-wrap gap-4 mt-1">
+                  {expense.apartmentName && <p className="text-xs text-muted-foreground flex items-center gap-1"><LayoutGrid size={12}/> Unit: {expense.apartmentName}</p>}
+                  {expense.roomNumber && <p className="text-xs text-muted-foreground flex items-center gap-1"><DoorOpen size={12}/> Room: {expense.roomNumber}</p>}
+                  {expense.meterNo && <p className="text-xs text-primary font-bold flex items-center gap-1"><Zap size={12}/> Meter: {expense.meterNo}</p>}
+                </div>
               </div>
             </div>
 
             <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 space-y-2">
-              <Label className="text-[10px] uppercase font-bold text-primary flex items-center gap-1.5"><Info size={10}/> Description / Notes</Label>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{expense.description || "No additional details provided for this expense."}</p>
+              <Label className="text-[10px] uppercase font-bold text-primary flex items-center gap-1.5"><Info size={10}/> Note / Description</Label>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{expense.description || "No additional details provided."}</p>
             </div>
           </div>
         </CardContent>
@@ -234,93 +250,134 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Expense Record</DialogTitle></DialogHeader>
           {editForm && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Expense Category</Label>
-                <Select value={editForm.category} onValueChange={val => setEditForm({...editForm, category: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Target Building</Label>
-                <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, apartmentName: "", meterNo: ""})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">General / No Building</SelectItem>
-                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {editForm.category === 'electricity' && editForm.buildingId && (
-                <div className="p-3 bg-secondary/20 rounded-lg space-y-3 border">
-                  <Label className="text-xs font-bold uppercase">Unit Selection</Label>
-                  <Select 
-                    value={editForm.apartmentName} 
-                    onValueChange={(val) => {
-                      const apt = apartmentsInBuilding.find((a: any) => a.name === val);
-                      setEditForm({ ...editForm, apartmentName: val, meterNo: apt?.meterNo || "" });
-                    }}
-                  >
-                    <SelectTrigger className="bg-white"><SelectValue placeholder="Select Unit" /></SelectTrigger>
-                    <SelectContent>
-                      {apartmentsInBuilding.map((apt: any) => (
-                        <SelectItem key={apt.id || apt.name} value={apt.name}>{apt.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {editForm.meterNo && <p className="text-[10px] font-bold text-primary">Linked Meter: {editForm.meterNo}</p>}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label>Paid By (Expenser Name)</Label>
-                <Select value={editForm.expensePartyName} onValueChange={val => setEditForm({...editForm, expensePartyName: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-
-              {editForm.category === 'salary' && (
-                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                  <Label>Paid To (Staff Name)</Label>
-                  <Select value={editForm.receiver} onValueChange={val => setEditForm({...editForm, receiver: val})}>
-                    <SelectTrigger><SelectValue placeholder="Select Staff" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectLabel>Staff Members</SelectLabel>
-                        {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                      </SelectGroup>
-                    </SelectContent>
+            <div className="space-y-6 py-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase">Expense Category</Label>
+                  <Select value={editForm.category} onValueChange={val => setEditForm({...editForm, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: ''})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-              )}
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase">Spent By (Staff)</Label>
+                  <Select value={editForm.expensePartyName} onValueChange={val => setEditForm({...editForm, expensePartyName: val})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Dynamic Fields Section */}
+              <div className="space-y-4">
+                {['rent', 'electricity', 'water', 'maintenance', 'internet', 'others'].includes(editForm.category) && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase">Target Building</Label>
+                      <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, apartmentName: "", roomNumber: ""})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">General / No Building</SelectItem>
+                          {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {(editForm.category === 'rent' || editForm.category === 'electricity' || editForm.category === 'internet' || editForm.category === 'others') && editForm.buildingId !== 'none' && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase">Apartment (Optional)</Label>
+                        <Select value={editForm.apartmentName} onValueChange={val => {
+                          const apt = apartmentList.find((a: any) => a.name === val);
+                          setEditForm({...editForm, apartmentName: val, meterNo: apt?.meterNo || ""});
+                        }}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {apartmentList.map((apt: any) => <SelectItem key={apt.name} value={apt.name}>{apt.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {(editForm.category === 'maintenance' || editForm.category === 'internet' || editForm.category === 'others') && editForm.buildingId !== 'none' && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase">Room Number (Optional)</Label>
+                        <Select value={editForm.roomNumber} onValueChange={val => setEditForm({...editForm, roomNumber: val})}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {roomList.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {editForm.category === 'electricity' && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase flex items-center gap-1"><Zap size={12}/> Meter Number</Label>
+                        <Input value={editForm.meterNo} onChange={e => setEditForm({...editForm, meterNo: e.target.value})} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {editForm.category === 'market' && (
+                  <div className="space-y-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
+                    <Label className="text-xs font-bold uppercase text-orange-700">Market Info</Label>
+                    <Select value={editForm.receiver} onValueChange={val => setEditForm({...editForm, receiver: val})}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Receiver Staff" /></SelectTrigger>
+                      <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {editForm.category === 'salary' && (
+                  <div className="space-y-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
+                    <Label className="text-xs font-bold uppercase text-primary">Salary Info</Label>
+                    <Select value={editForm.receiver} onValueChange={val => setEditForm({...editForm, receiver: val})}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Employee" /></SelectTrigger>
+                      <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select value={editForm.month} onValueChange={val => setEditForm({...editForm, month: val})}>
+                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                        <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Select value={editForm.year} onValueChange={val => setEditForm({...editForm, year: val})}>
+                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                        <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Amount (৳)</Label><Input type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: e.target.value})} /></div>
+                <div className="space-y-2"><Label className="text-xs font-bold uppercase">Amount (৳)</Label><Input type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: e.target.value})} /></div>
                 <div className="space-y-2">
-                  <Label>Method</Label>
+                  <Label className="text-xs font-bold uppercase">Method</Label>
                   <Select value={editForm.method} onValueChange={val => setEditForm({...editForm, method: val})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bank">Bank</SelectItem>
                       <SelectItem value="bkash">Bkash</SelectItem>
                       <SelectItem value="nagad">Nagad</SelectItem>
-                      <SelectItem value="bank">Bank</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Expense Date</Label>
+                <Label className="text-xs font-bold uppercase">Expense Date</Label>
                 <Input type="date" value={editForm.expenseDate} onChange={e => setEditForm({...editForm, expenseDate: e.target.value})} />
               </div>
 
               <div className="space-y-2">
-                <Label>Description</Label>
+                <Label className="text-xs font-bold uppercase">Note / Description</Label>
                 <Textarea value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} />
               </div>
 

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert, ArrowDownRight, ArrowDownCircle } from "lucide-react"
+import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert, ArrowDownRight, ArrowDownCircle, DoorOpen, User } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -48,6 +48,8 @@ const EXPENSE_CATEGORIES = [
   { id: "others", label: "Others", icon: Wallet },
 ]
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 export default function ExpenseHistoryPage() {
   const { toast } = useToast()
   const router = useRouter()
@@ -71,10 +73,14 @@ export default function ExpenseHistoryPage() {
     category: "others",
     buildingId: "none",
     apartmentName: "",
+    roomNumber: "",
+    meterNo: "",
     amount: "",
     method: "cash",
     expensePartyName: "",
     receiver: "",
+    month: MONTHS[new Date().getMonth()],
+    year: new Date().getFullYear().toString(),
     description: "",
     expenseDate: new Date().toISOString().split('T')[0]
   })
@@ -143,40 +149,63 @@ export default function ExpenseHistoryPage() {
     return filteredExpenses.reduce((acc, curr) => acc + (curr.amount || 0), 0)
   }, [filteredExpenses])
 
+  const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
+  const apartmentList = selectedBuilding?.apartmentsDetail || []
+  const roomList = useMemo(() => {
+    if (!selectedBuilding) return []
+    const rooms: string[] = []
+    selectedBuilding.apartmentsDetail?.forEach((apt: any) => {
+      apt.rooms?.forEach((room: any) => {
+        if (room.roomNo && !rooms.includes(room.roomNo)) rooms.push(room.roomNo)
+      })
+    })
+    return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }, [selectedBuilding])
+
   const handleCreateExpense = async () => {
     if (!formData.amount || !formData.expensePartyName) {
-      toast({ variant: "destructive", title: "Error", description: "Amount and Expenser Name are required." })
+      toast({ variant: "destructive", title: "Error", description: "Amount and Spent By are required." })
+      return
+    }
+
+    if (formData.category === 'others' && !formData.description) {
+      toast({ variant: "destructive", title: "Error", description: "Description is mandatory for 'Others' category." })
+      return
+    }
+
+    if (['rent', 'electricity', 'water', 'maintenance', 'internet'].includes(formData.category) && formData.buildingId === 'none') {
+      toast({ variant: "destructive", title: "Error", description: "Building selection is required for this category." })
       return
     }
 
     setIsSubmitting(true)
     try {
-      const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
+      const selectedBuildingData = buildings?.find(b => b.id === formData.buildingId)
       
+      const expenseData = {
+        ...formData,
+        amount: Number(formData.amount),
+        branch: userBranch,
+        buildingName: selectedBuildingData?.name || "General",
+        updatedAt: serverTimestamp()
+      }
+
       if (userRole === 'Building Manager') {
-        // Send Approval Request
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), {
-          ...formData,
+          ...expenseData,
           id: reqId,
           requestType: "expense",
-          amount: Number(formData.amount),
-          branch: userBranch,
-          buildingName: selectedBuilding?.name || "General",
           requestedBy: localStorage.getItem("somikoron_auth_id"),
           requestedByName: userName,
           createdAt: serverTimestamp()
         })
         toast({ title: "Request Sent", description: "Expense is waiting for approval." })
       } else {
-        // Direct Entry
         const expenseId = doc(collection(db, "expenses")).id
         await setDoc(doc(db, "expenses", expenseId), {
-          ...formData,
+          ...expenseData,
           id: expenseId,
-          amount: Number(formData.amount),
-          branch: userBranch,
-          buildingName: selectedBuilding?.name || "General",
           createdAt: serverTimestamp()
         })
         toast({ title: "Expense Recorded", description: `Amount ৳${formData.amount} saved.` })
@@ -187,10 +216,14 @@ export default function ExpenseHistoryPage() {
         category: "others",
         buildingId: "none",
         apartmentName: "",
+        roomNumber: "",
+        meterNo: "",
         amount: "",
         method: "cash",
         expensePartyName: "",
         receiver: "",
+        month: MONTHS[new Date().getMonth()],
+        year: new Date().getFullYear().toString(),
         description: "",
         expenseDate: new Date().toISOString().split('T')[0]
       })
@@ -205,7 +238,7 @@ export default function ExpenseHistoryPage() {
 
   const handleExportCSV = () => {
     try {
-      const headers = ["Date", "Category", "Building", "Paid By", "Method", "Amount", "Description"];
+      const headers = ["Date", "Category", "Building", "Spent By", "Method", "Amount", "Description"];
       const rows = filteredExpenses.map(e => [
         e.expenseDate,
         e.category,
@@ -294,7 +327,7 @@ export default function ExpenseHistoryPage() {
           </div>
           <div className="space-y-1 md:col-span-2">
             <Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label>
-            <Input placeholder="Description or party..." className="bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <Input placeholder="Spent by or description..." className="bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
         </div>
 
@@ -325,7 +358,7 @@ export default function ExpenseHistoryPage() {
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Category</TableHead>
-                    <TableHead>Expenser</TableHead>
+                    <TableHead>Spent By</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -362,7 +395,7 @@ export default function ExpenseHistoryPage() {
                   </div>
                   <Separator className="opacity-50" />
                   <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest truncate">
-                    <UserCircle size={10} /> Paid By: {e.expensePartyName}
+                    <UserCircle size={10} /> Spent By: {e.expensePartyName}
                   </div>
                 </CardContent>
               </Card>
@@ -381,69 +414,173 @@ export default function ExpenseHistoryPage() {
         </div>
       )}
 
-      {/* NEW EXPENSE DIALOG */}
+      {/* NEW EXPENSE DIALOG (Dynamic) */}
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{userRole === 'Building Manager' ? 'Send Expense Request' : 'Record New Expense'}</DialogTitle>
+            <DialogDescription>Setup expense details based on selected category.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={formData.category} onValueChange={val => setFormData({...formData, category: val})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Building / Property</Label>
-              <Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val})}>
-                <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">General (No Building)</SelectItem>
-                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-6 py-4">
+            {/* Common Fields - Part 1 */}
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Amount (৳)</Label>
-                <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
-              </div>
-              <div className="space-y-2">
-                <Label>Method</Label>
-                <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Expense Category</Label>
+                <Select value={formData.category} onValueChange={val => setFormData({...formData, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: '', month: MONTHS[new Date().getMonth()]})}>
+                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bkash">Bkash</SelectItem>
-                    <SelectItem value="nagad">Nagad</SelectItem>
-                    <SelectItem value="bank">Bank</SelectItem>
+                    {EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
                   </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Spent By (Staff)</Label>
+                <Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Who spent the money?" /></SelectTrigger>
+                  <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Expenser (Who Paid?)</Label>
-              <Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}>
-                <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
-                <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-              </Select>
+            <Separator />
+
+            {/* Dynamic Fields Section */}
+            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              {/* Category: Building Rent, Electricity, Water, Maintenance, Internet, Others */}
+              {['rent', 'electricity', 'water', 'maintenance', 'internet', 'others'].includes(formData.category) && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-muted-foreground">Target Building</Label>
+                    <Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val, apartmentName: "", roomNumber: ""})}>
+                      <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">General / No Building</SelectItem>
+                        {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {(formData.category === 'rent' || formData.category === 'electricity' || formData.category === 'internet' || formData.category === 'others') && formData.buildingId !== 'none' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">Apartment (Optional)</Label>
+                      <Select value={formData.apartmentName} onValueChange={val => {
+                        const apt = apartmentList.find((a: any) => a.name === val);
+                        setFormData({...formData, apartmentName: val, meterNo: apt?.meterNo || ""});
+                      }}>
+                        <SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger>
+                        <SelectContent>
+                          {apartmentList.map((apt: any) => <SelectItem key={apt.name} value={apt.name}>{apt.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {(formData.category === 'maintenance' || formData.category === 'internet' || formData.category === 'others') && formData.buildingId !== 'none' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">Room Number (Optional)</Label>
+                      <Select value={formData.roomNumber} onValueChange={val => setFormData({...formData, roomNumber: val})}>
+                        <SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger>
+                        <SelectContent>
+                          {roomList.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {formData.category === 'electricity' && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-1"><Zap size={12}/> Meter Number</Label>
+                      <Input value={formData.meterNo} onChange={e => setFormData({...formData, meterNo: e.target.value})} placeholder="Enter Meter ID" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Category: Market / Food */}
+              {formData.category === 'market' && (
+                <div className="space-y-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-orange-700">Received By (Staff)</Label>
+                    <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select receiver" /></SelectTrigger>
+                      <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-orange-700">Market Description / Items</Label>
+                    <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="e.g. Rice, Oil, Vegetables..." className="bg-white" />
+                  </div>
+                </div>
+              )}
+
+              {/* Category: Staff Salary */}
+              {formData.category === 'salary' && (
+                <div className="space-y-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-primary">Salary For (Staff Name)</Label>
+                    <Select value={formData.receiver} onValueChange={val => {
+                      const staff = staffList?.find(s => s.name === val);
+                      setFormData({...formData, receiver: val, amount: staff?.monthlySalary?.toString() || ""});
+                    }}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                      <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-primary">Salary Month</Label>
+                      <Select value={formData.month} onValueChange={val => setFormData({...formData, month: val})}>
+                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                        <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase text-primary">Year</Label>
+                      <Select value={formData.year} onValueChange={val => setFormData({...formData, year: val})}>
+                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                        <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <Label>Expense Date</Label>
-              <Input type="date" value={formData.expenseDate} onChange={e => setFormData({...formData, expenseDate: e.target.value})} />
-            </div>
+            <Separator />
 
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="What was this for?" />
+            {/* Common Fields - Part 2 */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Amount (৳)</Label>
+                  <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" className="h-11 text-lg font-bold" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Method</Label>
+                  <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
+                    <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bank">Bank</SelectItem>
+                      <SelectItem value="bkash">Bkash</SelectItem>
+                      <SelectItem value="nagad">Nagad</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Expense Date</Label>
+                <Input type="date" value={formData.expenseDate} onChange={e => setFormData({...formData, expenseDate: e.target.value})} className="h-11" />
+              </div>
+
+              {formData.category !== 'market' && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Note / Reference (Optional)</Label>
+                  <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Add details..." />
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
