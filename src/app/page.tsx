@@ -18,7 +18,8 @@ import {
   Banknote,
   Landmark,
   AlertCircle,
-  Users
+  Users,
+  BellRing
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -47,16 +48,15 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
+import Link from "next/link"
 
 export default function DashboardPage() {
   const db = useFirestore()
   const { toast } = useToast()
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [timeFilter, setTimeFilter] = useState("month")
 
   const [userRole, setUserRole] = useState("")
-  const [userBranch, setUserBranch] = useState("Main Branch")
+  const [userBranch, setUserBranch] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
   useEffect(() => {
@@ -64,9 +64,6 @@ export default function DashboardPage() {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
-
-  const [selectedBuildingId, setSelectedBuildingId] = useState("")
-  const [selectedRoomNumber, setSelectedRoomNumber] = useState("")
 
   // Queries
   const buildingsQuery = useMemoFirebase(() => {
@@ -87,124 +84,52 @@ export default function DashboardPage() {
   }, [db, userRole, userBranch, assignedBuildingId])
   const { data: students } = useCollection(studentsQuery)
 
-  const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
-  const { data: staffList } = useCollection(staffQuery)
-
   const allPaymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "payments"), where("buildingId", "==", assignedBuildingId))
+    }
     return query(collection(db, "payments"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: allPayments } = useCollection(allPaymentsQuery)
 
   const allExpensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "expenses"), where("buildingId", "==", assignedBuildingId))
+    }
     return query(collection(db, "expenses"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: allExpenses } = useCollection(allExpensesQuery)
 
-  const allTransfersQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "transfers"), where("branch", "==", userBranch))
-  }, [db, userBranch])
-  const { data: allTransfers } = useCollection(allTransfersQuery)
+  const managerRequestsQuery = useMemoFirebase(() => {
+    if (!userBranch || userRole === 'Building Manager') return null
+    return query(collection(db, "managerRequests"), where("branch", "==", userBranch))
+  }, [db, userBranch, userRole])
+  const { data: pendingMgrRequests } = useCollection(managerRequestsQuery)
 
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances } = useDoc(balancesRef)
 
-  const [paymentForm, setPaymentForm] = useState({
-    studentId: "",
-    month: new Date().toLocaleString('default', { month: 'long' }),
-    year: new Date().getFullYear().toString(),
-    amount: "",
-    seatAmount: "",
-    foodAmount: "",
-    addAdvanceAmount: "0",
-    method: "cash",
-    receiver: "",
-    description: ""
-  })
-
-  const selectedBuilding = buildings?.find(b => b.id === (selectedBuildingId || assignedBuildingId))
-  const roomsInBuilding = useMemo(() => {
-    if (!selectedBuilding) return []
-    return selectedBuilding.apartmentsDetail?.flatMap((a: any) => a.rooms || []) || []
-  }, [selectedBuilding])
-
-  const filteredStudentsForQuickPay = useMemo(() => {
-    return students?.filter(s => 
-      (selectedBuildingId ? s.buildingId === selectedBuildingId : true) && 
-      (selectedRoomNumber ? s.roomNumber === selectedRoomNumber : true) &&
-      s.isActive
-    ) || []
-  }, [students, selectedBuildingId, selectedRoomNumber])
-
-  const selectedStudent = useMemo(() => students?.find(s => s.id === paymentForm.studentId), [students, paymentForm.studentId])
-
-  const selectedStudentRentDue = useMemo(() => {
-    if (!selectedStudent) return 0
-    const s = selectedStudent
-    const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
-    const now = new Date()
-    const endDate = s.isActive ? now : (s.leftAt?.toDate?.() || now)
-    const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth()) + 1
-    const historicalRentDue = Number(s.dueAmount) || 0
-    const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (s.monthlyRent || 0)
-    const totalRentPaid = s.paymentsHistory?.reduce((pAcc: number, curr: any) => {
-      const isRefund = curr.type === 'refund'
-      const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (s.paymentSystem === 'package' ? Number(curr.amount) : 0)
-      return pAcc + (isRefund ? -rentPortion : rentPortion)
-    }, 0) || 0
-    return Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
-  }, [selectedStudent])
-
   const stats = useMemo(() => {
     const now = new Date()
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
-    const startOfYear = new Date(now.getFullYear(), 0, 1)
-
-    let filterDate = startOfMonth
-    if (timeFilter === "today") filterDate = startOfToday
-    if (timeFilter === "lastMonth") filterDate = startOfLastMonth
-    if (timeFilter === "year") filterDate = startOfYear
-
+    
     const parseDate = (val: any) => {
       if (!val) return null
       if (val.toDate) return val.toDate()
       return new Date(val)
     }
 
-    const isWithinRange = (dateValue: any) => {
-      const d = parseDate(dateValue)
-      if (!d) return false
-      if (timeFilter === "lastMonth") return d >= startOfLastMonth && d <= endOfLastMonth
-      return d >= filterDate
-    }
-
     const income = (allPayments || [])
-      .filter(p => isWithinRange(p.date))
       .reduce((acc, p) => acc + (p.amount || 0), 0)
 
     const expense = (allExpenses || [])
-      .filter(e => isWithinRange(e.expenseDate))
       .reduce((acc, e) => acc + (e.amount || 0), 0)
 
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, student) => {
-      const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
-      const now = new Date()
-      const endDate = student.isActive ? now : (student.leftAt?.toDate?.() || now)
-      const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth()) + 1
       const historicalRentDue = Number(student.dueAmount) || 0
-      const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
-      const totalRentPaid = student.paymentsHistory?.reduce((pAcc: number, curr: any) => {
-        const isRefund = curr.type === 'refund'
-        const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
-        return pAcc + (isRefund ? -rentPortion : rentPortion)
-      }, 0) || 0
-      const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
-      return sAcc + rentDue
+      return sAcc + historicalRentDue
     }, 0)
 
     const fund = { 
@@ -214,70 +139,13 @@ export default function DashboardPage() {
       bank: Number(openingBalances?.bank || 0) 
     };
 
-    (allPayments || []).forEach(p => { if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) });
-    (allExpenses || []).forEach(e => { if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) });
-    (allTransfers || []).forEach(t => {
-      if (fund[t.fromAccount as keyof typeof fund] !== undefined) fund[t.fromAccount as keyof typeof fund] -= (t.amount || 0);
-      if (fund[t.toAccount as keyof typeof fund] !== undefined) fund[t.toAccount as keyof typeof fund] += (t.amount || 0);
-    });
+    if (userRole !== 'Building Manager') {
+      (allPayments || []).forEach(p => { if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) });
+      (allExpenses || []).forEach(e => { if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) });
+    }
 
     return { income, expense, dues: totalDues, fund }
-  }, [allPayments, allExpenses, allTransfers, students, timeFilter, openingBalances])
-
-  const handleQuickPayment = async () => {
-    if (!paymentForm.studentId || !paymentForm.receiver) {
-      toast({ variant: "destructive", title: "Error", description: "Fill required fields." })
-      return
-    }
-
-    setIsSubmitting(true)
-    const building = buildings?.find(b => b.id === (selectedBuildingId || selectedStudent?.buildingId))
-    const paymentId = doc(collection(db, "payments")).id
-    const seatPaid = selectedStudent?.paymentSystem === 'package' ? Number(paymentForm.amount) : Number(paymentForm.seatAmount)
-    const foodPaid = selectedStudent?.paymentSystem === 'non-package' ? Number(paymentForm.foodAmount) : 0
-    const addAdvance = Number(paymentForm.addAdvanceAmount)
-    const totalCashAmount = seatPaid + foodPaid + addAdvance
-
-    const paymentRecord = {
-      id: paymentId,
-      amount: totalCashAmount,
-      seatAmount: seatPaid,
-      foodAmount: foodPaid,
-      advanceAmount: addAdvance,
-      buildingId: selectedBuildingId || selectedStudent?.buildingId,
-      buildingName: building?.name || "Unknown",
-      studentName: selectedStudent?.name || "Unknown",
-      studentId: paymentForm.studentId,
-      roomNumber: selectedRoomNumber || selectedStudent?.roomNumber || "N/A",
-      branch: userBranch,
-      type: "income",
-      month: paymentForm.month,
-      year: paymentForm.year,
-      method: paymentForm.method,
-      receiver: paymentForm.receiver,
-      description: paymentForm.description,
-      date: new Date().toISOString()
-    }
-
-    try {
-      if (totalCashAmount > 0) {
-        await setDoc(doc(db, "payments", paymentId), { ...paymentRecord, date: Timestamp.now(), createdAt: Timestamp.now() })
-      }
-      await updateDoc(doc(db, "students", paymentForm.studentId), {
-        paymentsHistory: arrayUnion(paymentRecord),
-        advanceAmount: increment(addAdvance),
-        updatedAt: Timestamp.now()
-      })
-      toast({ title: "Success", description: `Processed ৳${totalCashAmount}.` })
-      setIsPaymentOpen(false)
-      setPaymentForm({ ...paymentForm, amount: "", seatAmount: "", foodAmount: "", addAdvanceAmount: "0", description: "" })
-      setSelectedBuildingId(""); setSelectedRoomNumber("")
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  }, [allPayments, allExpenses, students, openingBalances, userRole])
 
   const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
 
@@ -289,217 +157,134 @@ export default function DashboardPage() {
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Dashboard</h1>
-            <p className="text-muted-foreground mt-1">Real-time overview of your hostel network.</p>
+            <p className="text-muted-foreground mt-1">
+              {userRole === 'Building Manager' ? `Overview for Assigned Building` : `Real-time overview of ${userBranch}`}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 bg-white border p-1.5 rounded-xl shadow-sm">
-          <CalendarDays size={16} className="ml-2 text-muted-foreground" />
-          <Select value={timeFilter} onValueChange={setTimeFilter}>
-            <SelectTrigger className="w-[140px] border-none bg-transparent shadow-none focus:ring-0 font-medium"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="month">This Month</SelectItem>
-              <SelectItem value="lastMonth">Last Month</SelectItem>
-              <SelectItem value="year">This Year</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        
+        {userRole !== 'Building Manager' && pendingMgrRequests && pendingMgrRequests.length > 0 && (
+          <Link href="/manager-requests">
+            <Button variant="outline" className="bg-orange-50 border-orange-200 text-orange-600 animate-pulse gap-2">
+              <BellRing size={16}/> {pendingMgrRequests.length} Manager Requests
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-sm border-none bg-white border-l-4 border-l-success">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-success">Income</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-success">Approved Income</CardTitle>
             <ArrowUpCircle className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-black">৳{stats.income.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold">Total For {timeFilter.replace('Month', ' Month')}</p>
           </CardContent>
         </Card>
         <Card className="shadow-sm border-none bg-white border-l-4 border-l-destructive">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-destructive">Expenses</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-destructive">Approved Expenses</CardTitle>
             <ArrowDownCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-black">৳{stats.expense.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold">Total For {timeFilter.replace('Month', ' Month')}</p>
           </CardContent>
         </Card>
         <Card className="shadow-sm border-none bg-white border-l-4 border-l-orange-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-orange-500">Total Dues</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-orange-500">Building Dues</CardTitle>
             <TrendingUp className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-black">৳{stats.dues.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold">Current Outstanding</p>
           </CardContent>
         </Card>
         <Card className="shadow-sm border-none bg-white border-l-4 border-l-primary">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">Residents</CardTitle>
-            <Building2 className="h-4 w-4 text-primary" />
+            <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-black">{students?.filter(s => s.isActive).length || 0}</div>
-            <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold">Active in {buildings?.length || 0} Properties</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* Total Fund Status Column */}
-        <Card className="lg:col-span-2 shadow-sm border-none bg-white rounded-2xl overflow-hidden">
-          <CardHeader className="pb-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle className="text-xl font-bold">Total Fund Status</CardTitle>
-                <p className="text-xs text-muted-foreground mt-1">Opening + Transactions (including transfers).</p>
-              </div>
-              <div className="bg-primary/10 p-2 rounded-lg text-primary"><CircleDollarSign size={20} /></div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                  <Banknote size={14} /> Cash in Hand
+      {userRole !== 'Building Manager' && (
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+          <Card className="lg:col-span-2 shadow-sm border-none bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="pb-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle className="text-xl font-bold">Branch Fund Status</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Real-time balances for {userBranch}.</p>
                 </div>
-                <div className="text-2xl font-black text-primary">৳{stats.fund.cash.toLocaleString()}</div>
+                <div className="bg-primary/10 p-2 rounded-lg text-primary"><CircleDollarSign size={20} /></div>
               </div>
-              <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                  <Landmark size={14} /> Bank Account
+            </CardHeader>
+            <CardContent className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest"><Banknote size={14} /> Cash in Hand</div>
+                  <div className="text-2xl font-black text-primary">৳{stats.fund.cash.toLocaleString()}</div>
                 </div>
-                <div className="text-2xl font-black text-primary">৳{stats.fund.bank.toLocaleString()}</div>
-              </div>
-              <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-blue-600">
-                  <Smartphone size={14} /> Bkash Wallet
+                <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest"><Landmark size={14} /> Bank Account</div>
+                  <div className="text-2xl font-black text-primary">৳{stats.fund.bank.toLocaleString()}</div>
                 </div>
-                <div className="text-2xl font-black text-blue-600">৳{stats.fund.bkash.toLocaleString()}</div>
               </div>
-              <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-orange-500">
-                  <Smartphone size={14} /> Nagad Wallet
-                </div>
-                <div className="text-2xl font-black text-orange-500">৳{stats.fund.nagad.toLocaleString()}</div>
+              <div className="pt-6 border-t flex flex-col md:flex-row justify-between items-center gap-4">
+                <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Branch Net Balance:</p>
+                <div className="text-4xl font-black text-primary tracking-tighter">৳{combinedBalance.toLocaleString()}</div>
               </div>
-            </div>
-            
-            <div className="pt-6 border-t flex flex-col md:flex-row justify-between items-center gap-4">
-              <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Combined Net Balance:</p>
-              <div className="text-4xl font-black text-primary tracking-tighter">৳{combinedBalance.toLocaleString()}</div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* Property Occupancy Column */}
-        <Card className="shadow-sm border-none bg-white rounded-2xl overflow-hidden">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl font-bold bg-primary/10 w-fit px-3 py-1 rounded text-primary">Property Occupancy</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {buildings?.map((b: any) => {
-                const occupancy = Math.round((b.occupiedSeats / (b.totalSeats || 1)) * 100)
-                return (
-                  <div key={b.id} className="space-y-2">
-                    <div className="flex justify-between items-end">
-                      <div className="space-y-0.5">
+          <Card className="shadow-sm border-none bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl font-bold bg-primary/10 w-fit px-3 py-1 rounded text-primary">Occupancy</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {buildings?.map((b: any) => {
+                  const occupancy = Math.round((b.occupiedSeats / (b.totalSeats || 1)) * 100)
+                  return (
+                    <div key={b.id} className="space-y-2">
+                      <div className="flex justify-between items-end">
                         <p className="text-sm font-bold">{b.name}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold">{b.occupiedSeats} / {b.totalSeats} Seats</p>
+                        <span className="text-xs font-black text-primary">{occupancy}%</span>
                       </div>
-                      <span className="text-xs font-black text-primary">{occupancy}%</span>
+                      <Progress value={occupancy} className="h-2" />
                     </div>
-                    <Progress value={occupancy} className="h-2" />
-                  </div>
-                )
-              })}
-              {(!buildings || buildings.length === 0) && (
-                <div className="text-center py-10 space-y-2">
-                  <Building2 className="mx-auto text-muted-foreground/20" size={48} />
-                  <p className="text-xs text-muted-foreground font-medium">No properties registered.</p>
-                </div>
-              )}
-            </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {userRole === 'Building Manager' && (
+        <Card className="shadow-sm border-none bg-white rounded-2xl">
+          <CardHeader>
+            <CardTitle>Quick Access</CardTitle>
+            <CardDescription>Submit requests for the Admin to approve.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-4">
+            <Link href="/income" className="flex-1">
+              <Button className="w-full h-20 text-lg bg-success hover:bg-success/90 flex-col gap-1">
+                <Wallet size={24}/> Request Income Entry
+              </Button>
+            </Link>
+            <Link href="/expenses" className="flex-1">
+              <Button className="w-full h-20 text-lg bg-destructive hover:bg-destructive/90 flex-col gap-1">
+                <Receipt size={24}/> Request Expense Entry
+              </Button>
+            </Link>
           </CardContent>
         </Card>
-      </div>
-
-      <div className="fixed bottom-8 right-8 z-50">
-        <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
-          <DialogTrigger asChild>
-            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform"><Plus className="h-8 w-8 text-white" /></Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Quick Payment Record</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="p-4 bg-secondary/10 rounded-xl border space-y-4">
-                <div className="space-y-2">
-                  <Label>Building</Label>
-                  <Select value={selectedBuildingId || assignedBuildingId} onValueChange={(val) => { setSelectedBuildingId(val); setSelectedRoomNumber(""); setPaymentForm({...paymentForm, studentId: ""}) }}>
-                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Room No.</Label>
-                  <Select disabled={!selectedBuildingId && assignedBuildingId === 'none'} value={selectedRoomNumber} onValueChange={(val) => { setSelectedRoomNumber(val); setPaymentForm({...paymentForm, studentId: ""}) }}>
-                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>{roomsInBuilding.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Student</Label>
-                  <Select disabled={!selectedRoomNumber} onValueChange={val => setPaymentForm({...paymentForm, studentId: val})}>
-                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>{filteredStudentsForQuickPay.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {selectedStudent && (
-                <div className="bg-secondary/30 p-4 rounded-lg space-y-2 border text-sm">
-                  <div className="flex justify-between"><span>Rent:</span><span className="font-bold">৳{selectedStudent.monthlyRent}</span></div>
-                  {selectedStudentRentDue > 0 && <div className="flex justify-between text-destructive"><span>Due:</span><span className="font-bold">৳{selectedStudentRentDue.toLocaleString()}</span></div>}
-                  <div className="flex justify-between text-primary"><span>Advance:</span><span className="font-bold">৳{selectedStudent.advanceAmount || 0}</span></div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Method</Label>
-                  <Select value={paymentForm.method} onValueChange={val => setPaymentForm({...paymentForm, method: val})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Receiver</Label>
-                  <Select value={paymentForm.receiver} onValueChange={val => setPaymentForm({...paymentForm, receiver: val})}>
-                    <SelectTrigger><SelectValue placeholder="Staff" /></SelectTrigger>
-                    <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {selectedStudent?.paymentSystem === 'package' ? (
-                <div className="space-y-2"><Label>Package Amount (৳)</Label><Input type="number" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} /></div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Seat Rent (৳)</Label><Input type="number" value={paymentForm.seatAmount} onChange={e => setPaymentForm({...paymentForm, seatAmount: e.target.value})} /></div>
-                  <div className="space-y-2"><Label>Food (৳)</Label><Input type="number" value={paymentForm.foodAmount} onChange={e => setPaymentForm({...paymentForm, foodAmount: e.target.value})} /></div>
-                </div>
-              )}
-              <div className="space-y-2"><Label>Description</Label><Textarea value={paymentForm.description} onChange={e => setPaymentForm({...paymentForm, description: e.target.value})} /></div>
-            </div>
-            <DialogFooter><Button onClick={handleQuickPayment} className="w-full" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin" /> : "Record Payment"}</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+      )}
     </div>
   )
 }

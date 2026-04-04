@@ -17,7 +17,8 @@ import {
   UserPlus,
   LogOut,
   MapPin,
-  RefreshCw
+  RefreshCw,
+  BellRing
 } from "lucide-react"
 import {
   Sidebar,
@@ -57,7 +58,6 @@ export function AppSidebar() {
     const name = localStorage.getItem("user_name") || "User"
     let branch = localStorage.getItem("user_branch")
     
-    // Default to 'Main Branch' if no branch is set
     if (!branch) {
       branch = "Main Branch"
       localStorage.setItem("user_branch", branch)
@@ -71,23 +71,25 @@ export function AppSidebar() {
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
   const { data: branches } = useCollection(branchesQuery)
 
+  // Strict Menu Access Definition
   const items = [
-    { title: "Dashboard", url: "/", icon: LayoutDashboard },
-    { title: "Buildings", url: "/buildings", icon: Building2 },
-    { title: "Students", url: "/students", icon: Users },
-    { title: "Pending Requests", url: "/registrations", icon: UserPlus },
-    { title: "Income History", url: "/income", icon: Wallet },
-    { title: "Expense History", url: "/expenses", icon: Receipt },
-    { title: "Dues Tracking", url: "/dues", icon: CircleAlert },
-    { title: "Ledgers", url: "/ledger", icon: History },
-    { title: "Staff / Roles", url: "/staff", icon: UserCog, adminOnly: true },
-    { title: "Branches", url: "/branches", icon: MapPin, adminOnly: true },
-    { title: "Transfers", url: "/transfers", icon: ArrowLeftRight },
-    { title: "Reports", url: "/reports", icon: BarChart3 },
-    { title: "Settings", url: "/settings", icon: Settings },
+    { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Buildings", url: "/buildings", icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Pending Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
+    { title: "Manager Requests", url: "/manager-requests", icon: BellRing, roles: ["Admin", "Branch Manager"] },
+    { title: "Income History", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Expense History", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Dues Tracking", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },
+    { title: "Staff / Roles", url: "/staff", icon: UserCog, roles: ["Admin"] },
+    { title: "Branches", url: "/branches", icon: MapPin, roles: ["Admin"] },
+    { title: "Transfers", url: "/transfers", icon: ArrowLeftRight, roles: ["Admin", "Branch Manager"] },
+    { title: "Reports", url: "/reports", icon: BarChart3, roles: ["Admin", "Branch Manager"] },
+    { title: "Settings", url: "/settings", icon: Settings, roles: ["Admin", "Branch Manager"] },
   ]
 
-  const filteredItems = items.filter(item => !item.adminOnly || userRole === 'Admin')
+  const filteredItems = items.filter(item => item.roles.includes(userRole))
 
   const handleLogout = () => {
     localStorage.clear()
@@ -97,7 +99,7 @@ export function AppSidebar() {
   const handleBranchSwitch = (newBranch: string) => {
     localStorage.setItem("user_branch", newBranch)
     setUserBranch(newBranch)
-    window.location.reload() // Force reload to refresh all branch-filtered queries
+    window.location.reload()
   }
 
   return (
@@ -119,7 +121,6 @@ export function AppSidebar() {
                   <SelectValue placeholder="Switch Branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  {/* Removed "All Branches" as per user request */}
                   {branches?.map(b => (
                     <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
                   ))}
