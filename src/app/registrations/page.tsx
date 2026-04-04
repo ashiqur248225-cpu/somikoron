@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
-  AlertCircle, Calculator, Info
+  AlertCircle, Calculator, Info, Utensils
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -75,7 +75,8 @@ export default function RegistrationsPage() {
     monthlyRent: "",
     serviceCharge: "0",
     advanceAmount: "0",
-    dueAmount: "0", // Historical Due for Old students
+    dueAmount: "0", // Historical Rent Due for Old students
+    foodDueAmount: "0", // Historical Food Balance for Old students (Positive = Credit, Negative = Owed)
     initialRentPayment: "0", // For New students
     initialFoodPayment: "0", // For New students
     paymentSystem: "package",
@@ -95,7 +96,7 @@ export default function RegistrationsPage() {
         buildingId: selectedReg.buildingId || "",
         roomNumber: selectedReg.roomNumber || "",
         seatNumber: selectedReg.seatNumber || "",
-        paymentSystem: selectedReg.group === 'Other' ? 'non-package' : 'package',
+        paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
       }))
     }
   }, [selectedReg])
@@ -136,7 +137,12 @@ export default function RegistrationsPage() {
       const monthlyRent = Number(approvalForm.monthlyRent)
       const svcCharge = Number(approvalForm.serviceCharge)
       const advAmount = Number(approvalForm.advanceAmount)
-      const histDue = Number(approvalForm.dueAmount)
+      const histRentDue = Number(approvalForm.dueAmount)
+      
+      // For foodDueAmount: Logic uses foodDueAmount as "debt".
+      // User enters "Balance": 3450 (Credit) means foodDueAmount should be -3450.
+      // User enters "Balance": -2450 (Debt) means foodDueAmount should be 2450.
+      const histFoodDue = -Number(approvalForm.foodDueAmount || 0)
       
       const rentPaid = Number(approvalForm.initialRentPayment)
       const foodPaid = Number(approvalForm.initialFoodPayment)
@@ -191,7 +197,8 @@ export default function RegistrationsPage() {
         monthlyRent: monthlyRent,
         serviceCharge: svcCharge,
         advanceAmount: advAmount,
-        dueAmount: isOld ? histDue : (rentPaid >= monthlyRent ? 0 : monthlyRent),
+        dueAmount: isOld ? histRentDue : (rentPaid >= monthlyRent ? 0 : monthlyRent),
+        foodDueAmount: isOld ? histFoodDue : 0,
         billingStartDate: approvalForm.billingStartDate,
         paymentSystem: approvalForm.paymentSystem,
         isActive: true,
@@ -425,10 +432,21 @@ export default function RegistrationsPage() {
                     </div>
 
                     {selectedReg.type === 'old' ? (
-                      <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20">
-                        <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Rent Due (৳)</Label>
-                        <Input type="number" className="h-9 mt-1 border-destructive/30" value={approvalForm.dueAmount} onChange={e => setApprovalForm({...approvalForm, dueAmount: e.target.value})} placeholder="Outstanding balance" />
-                        <p className="text-[9px] text-muted-foreground mt-1.5 italic">* পুরাতন স্টুডেন্টের এডভান্স এবং সার্ভিস চার্জ শুধু ডাটা হিসেবে থাকবে, ক্যাশ ব্যালেন্সে যোগ হবে না।</p>
+                      <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20 space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Rent Due (৳)</Label>
+                          <Input type="number" className="h-9 border-destructive/30" value={approvalForm.dueAmount} onChange={e => setApprovalForm({...approvalForm, dueAmount: e.target.value})} placeholder="Outstanding balance" />
+                        </div>
+                        
+                        {approvalForm.paymentSystem === 'non-package' && (
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase font-bold text-orange-600 flex items-center gap-1"><Utensils size={10}/> Historical Food Balance (৳)</Label>
+                            <Input type="number" className="h-9 border-orange-200" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="e.g. 3450 or -2450" />
+                            <p className="text-[8px] text-muted-foreground italic">Positive = Credit, Negative = Owed</p>
+                          </div>
+                        )}
+                        
+                        <p className="text-[9px] text-muted-foreground mt-1.5 italic">* পুরাতন স্টুডেন্টের এডভান্স, সার্ভিস চার্জ এবং ফুড ব্যালেন্স শুধু ডাটা হিসেবে থাকবে, ক্যাশ ব্যালেন্সে যোগ হবে না।</p>
                       </div>
                     ) : (
                       <div className="space-y-4 p-3 bg-success/5 rounded-lg border border-success/20">
