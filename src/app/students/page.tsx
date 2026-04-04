@@ -22,15 +22,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter
-} from "@/components/ui/dialog"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -40,7 +31,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, updateDoc, increment, query, where, limit } from "firebase/firestore"
+import { collection, query, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 
@@ -48,9 +39,7 @@ export default function StudentsPage() {
   const { toast } = useToast()
   const router = useRouter()
   const db = useFirestore()
-  const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Filters State
   const [buildingFilter, setBuildingFilter] = useState("all")
@@ -87,189 +76,11 @@ export default function StudentsPage() {
     })
   }, [rawStudents])
 
-  const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
-  const { data: staffList } = useCollection(staffQuery)
-
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    parentPhone: "",
-    address: "",
-    buildingId: "",
-    roomNumber: "",
-    seatNumber: "",
-    type: "new", 
-    dueAmount: "0", 
-    initialRentPayment: "0",
-    advanceAmount: "0",
-    serviceCharge: "0",
-    paymentSystem: "package",
-    monthlyRent: "",
-    receiver: "",
-    method: "cash",
-    billingStartDate: new Date().toISOString().split('T')[0]
-  })
-
-  const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
-  
-  const allRoomsInSelectedBuilding = useMemo(() => {
-    if (!selectedBuilding) return []
-    return selectedBuilding.apartmentsDetail?.flatMap((apt: any) => 
-      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
-    ) || []
-  }, [selectedBuilding])
-
-  const selectedRoom = allRoomsInSelectedBuilding.find((r: any) => r.roomNo === formData.roomNumber)
-  const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
-
   const roomOptions = useMemo(() => {
     if (buildingFilter === "all" || !buildings) return []
     const b = buildings.find(b => b.id === buildingFilter)
     return b?.apartmentsDetail?.flatMap((a: any) => a.rooms?.map((r: any) => r.roomNo)) || []
   }, [buildingFilter, buildings])
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        e.preventDefault();
-        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
-        if (container) {
-          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
-          const index = focusables.indexOf(target);
-          if (index > -1 && index < focusables.length - 1) {
-            focusables[index + 1].focus();
-          }
-        }
-      }
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!formData.name || !formData.buildingId || !formData.roomNumber || !formData.seatNumber || !formData.monthlyRent || !formData.billingStartDate) {
-      toast({ variant: "destructive", title: "Missing Info", description: "Name, Building, Room, Seat, Rent and Billing Start Date are required." })
-      return
-    }
-
-    if (formData.phone.length !== 11) {
-      toast({ variant: "destructive", title: "Invalid Phone", description: "Phone number must be exactly 11 digits." })
-      return
-    }
-
-    const rentPaid = Number(formData.initialRentPayment) || 0
-    const advPaid = Number(formData.advanceAmount) || 0
-    const svcPaid = Number(formData.serviceCharge) || 0
-    const totalInitialReceived = rentPaid + advPaid + svcPaid
-    
-    if (totalInitialReceived > 0 && !formData.receiver) {
-      toast({ variant: "destructive", title: "Missing Info", description: "Please select a receiver for the initial payment." })
-      return
-    }
-
-    setIsSubmitting(true)
-    try {
-      const studentId = doc(collection(db, "students")).id
-      const studentRef = doc(db, "students", studentId)
-      const monthlyRent = Number(formData.monthlyRent)
-      const apartmentName = selectedRoom?.aptName || "General"
-
-      let detailsArr = []
-      if (rentPaid > 0) detailsArr.push(`Rent: ৳${rentPaid}`)
-      if (advPaid > 0) detailsArr.push(`Advance: ৳${advPaid}`)
-      if (svcPaid > 0) detailsArr.push(`Service: ৳${svcPaid}`)
-      
-      const detailedDescription = `Initial payment: ${detailsArr.join(', ')}`
-
-      const paymentRecord = totalInitialReceived > 0 ? {
-        amount: totalInitialReceived,
-        seatAmount: rentPaid,
-        advanceAmount: advPaid,
-        serviceCharge: svcPaid,
-        buildingId: formData.buildingId,
-        buildingName: selectedBuilding?.name || "Unknown",
-        studentName: formData.name,
-        studentId: studentId,
-        roomNumber: formData.roomNumber,
-        branch: userBranch,
-        type: "income",
-        month: new Date().toLocaleString('default', { month: 'long' }),
-        year: new Date().getFullYear().toString(),
-        method: formData.method,
-        receiver: formData.receiver,
-        description: detailedDescription,
-        date: new Date().toISOString()
-      } : null
-
-      if (paymentRecord) {
-        const pId = doc(collection(db, "payments")).id
-        await setDoc(doc(db, "payments", pId), {
-          ...paymentRecord,
-          id: pId,
-          date: serverTimestamp(),
-          createdAt: serverTimestamp(),
-        })
-      }
-
-      await setDoc(studentRef, {
-        ...formData,
-        id: studentId,
-        branch: userBranch,
-        dueAmount: Number(formData.dueAmount) || 0,
-        advanceAmount: advPaid,
-        serviceCharge: svcPaid,
-        monthlyRent: monthlyRent,
-        apartmentName: apartmentName,
-        buildingName: selectedBuilding?.name || "Unknown",
-        isActive: true,
-        paymentsHistory: paymentRecord ? [paymentRecord] : [],
-        mealsHistory: [],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      })
-
-      const buildingRef = doc(db, "buildings", formData.buildingId)
-      const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
-        if (apt.name === apartmentName) {
-          return {
-            ...apt,
-            rooms: apt.rooms.map((room: any) => {
-              if (room.roomNo === formData.roomNumber) {
-                return {
-                  ...room,
-                  seats: room.seats.map((seat: any) => {
-                    if (seat.seatNo === formData.seatNumber) return { ...seat, status: 'occupied' }
-                    return seat
-                  })
-                }
-              }
-              return room
-            })
-          }
-        }
-        return apt
-      })
-
-      await updateDoc(buildingRef, {
-        apartmentsDetail: updatedApts,
-        occupiedSeats: increment(1),
-        emptySeats: increment(-1),
-        updatedAt: serverTimestamp()
-      })
-
-      toast({ title: "Registered", description: "New resident registered successfully." })
-      setOpen(false)
-      setFormData({
-        name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
-        type: "new", dueAmount: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
-        paymentSystem: "package", monthlyRent: "", receiver: "", method: "cash",
-        billingStartDate: new Date().toISOString().split('T')[0]
-      })
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   const filteredStudents = useMemo(() => {
     if (!students) return []
@@ -304,80 +115,6 @@ export default function StudentsPage() {
               <DropdownMenuItem className="cursor-pointer"><Share2 size={14} className="mr-2" /> Share List</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button className="gap-2"><Plus size={18} /> Register Student</Button></DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
-              <DialogHeader><DialogTitle>Register Resident</DialogTitle></DialogHeader>
-              <div className="space-y-6 py-4">
-                
-                <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
-                  <Label className="font-bold text-primary">Billing & Food Plan</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div className="space-y-2">
-                       <Label>Payment System</Label>
-                       <Select value={formData.paymentSystem} onValueChange={val => setFormData({...formData, paymentSystem: val})}>
-                         <SelectTrigger><SelectValue /></SelectTrigger>
-                         <SelectContent>
-                           <SelectItem value="package">Package Plan (Fixed All-in)</SelectItem>
-                           <SelectItem value="non-package">Non-Package (Separate Rent & Food)</SelectItem>
-                         </SelectContent>
-                       </Select>
-                     </div>
-                     <div className="space-y-2">
-                       <Label>{formData.paymentSystem === 'package' ? 'Monthly Package Rate (৳)' : 'Monthly Seat Rent (৳)'}</Label>
-                       <Input type="number" value={formData.monthlyRent} onChange={e => setFormData({...formData, monthlyRent: e.target.value})} placeholder="0.00" />
-                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2"><Calendar size={14} className="text-primary"/> Billing Start Date (Hostel Entry Date)</Label>
-                    <Input type="date" value={formData.billingStartDate} onChange={e => setFormData({...formData, billingStartDate: e.target.value})} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Student Name</Label><Input placeholder="Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
-                  <div className="space-y-2"><Label>Student Phone</Label><Input placeholder="11 Digit Mobile Number" maxLength={11} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
-                   <div className="space-y-1">
-                      <Label className="text-[10px] font-bold">Building</Label>
-                      <Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val, roomNumber: "", seatNumber: ""})}>
-                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                   </div>
-                   <div className="space-y-1">
-                      <Label className="text-[10px] font-bold flex items-center gap-1"><DoorOpen size={10}/> Room No.</Label>
-                      <Select disabled={!formData.buildingId} value={formData.roomNumber} onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}>
-                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>{allRoomsInSelectedBuilding.map((r: any, idx: number) => <SelectItem key={`${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
-                      </Select>
-                   </div>
-                   <div className="space-y-1">
-                      <Label className="text-[10px] font-bold">Seat</Label>
-                      <Select disabled={!formData.roomNumber} value={formData.seatNumber} onValueChange={val => setFormData({...formData, seatNumber: val})}>
-                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>{emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
-                      </Select>
-                   </div>
-                </div>
-
-                <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
-                  <Label className="font-bold text-success">Initial Payments & Fees</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Rent Payment (৳)</Label><Input type="number" value={formData.initialRentPayment} onChange={e => setFormData({...formData, initialRentPayment: e.target.value})} placeholder="0.00" /></div>
-                    <div className="space-y-2"><Label>Payment Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={handleRegister} className="w-full h-12 text-lg font-bold" disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="animate-spin"/> : "Register Resident"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
