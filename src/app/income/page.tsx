@@ -259,12 +259,14 @@ export default function IncomeHistoryPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-income flex items-center justify-between">
               <span className="flex items-center gap-2"><HandCoins size={16} /> Total Collections (Filtered)</span>
+              <Badge variant="outline" className="bg-income/10 text-income border-income/20 px-3 py-1">
+                {filteredPayments.length} Receipts
+              </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex justify-between items-end">
               <div><p className="text-3xl font-bold text-income">৳{totalFilteredIncome.toLocaleString()}</p></div>
-              <Badge variant="outline" className="bg-income/10 text-income border-income/20 mb-1 px-3 py-1">{filteredPayments.length} Receipts</Badge>
             </div>
           </CardContent>
         </Card>
