@@ -20,7 +20,8 @@ import {
   CircleDollarSign,
   Smartphone,
   Banknote,
-  Landmark
+  Landmark,
+  AlertCircle
 } from "lucide-react"
 import { 
   Table, 
@@ -126,13 +127,37 @@ export default function DashboardPage() {
     return students?.find(s => s.id === paymentForm.studentId)
   }, [students, paymentForm.studentId])
 
+  // Individual Student Due Calculation for UI display
+  const selectedStudentRentDue = useMemo(() => {
+    if (!selectedStudent) return 0
+    const s = selectedStudent
+    const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
+    const now = new Date()
+    const endDate = s.isActive ? now : (s.leftAt?.toDate?.() || now)
+    
+    // Total months calculation
+    const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth()) + 1
+    
+    const historicalRentDue = Number(s.dueAmount) || 0
+    const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (s.monthlyRent || 0)
+    
+    const totalRentPaid = s.paymentsHistory?.reduce((pAcc: number, curr: any) => {
+      const isRefund = curr.type === 'refund'
+      const rentPortion = (curr.seatAmount !== undefined) 
+        ? Number(curr.seatAmount) 
+        : (s.paymentSystem === 'package' ? Number(curr.amount) : 0)
+      return pAcc + (isRefund ? -rentPortion : rentPortion)
+    }, 0) || 0
+    
+    return Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+  }, [selectedStudent])
+
   // Stats Calculations
   const stats = useMemo(() => {
     const now = new Date()
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     
-    // Correct Last Month Range: 1st of last month to last day of last month 23:59:59
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
     
@@ -143,7 +168,6 @@ export default function DashboardPage() {
     if (timeFilter === "lastMonth") filterDate = startOfLastMonth
     if (timeFilter === "year") filterDate = startOfYear
 
-    // Robust Date Parser for timestamps and YYYY-MM-DD strings
     const parseDate = (val: any) => {
       if (!val) return null
       if (val.toDate) return val.toDate()
@@ -157,12 +181,7 @@ export default function DashboardPage() {
     const isWithinRange = (dateValue: any) => {
       const d = parseDate(dateValue)
       if (!d) return false
-      
-      if (timeFilter === "lastMonth") {
-        return d >= startOfLastMonth && d <= endOfLastMonth
-      }
-      
-      // For other filters, we typically mean "from that point until now"
+      if (timeFilter === "lastMonth") return d >= startOfLastMonth && d <= endOfLastMonth
       return d >= filterDate
     }
 
@@ -179,7 +198,7 @@ export default function DashboardPage() {
       const now = new Date()
       const endDate = student.isActive ? now : (student.leftAt?.toDate?.() || now)
       
-      const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
+      const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth()) + 1
       
       const historicalRentDue = Number(student.dueAmount) || 0
       const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (student.monthlyRent || 0)
@@ -262,6 +281,7 @@ export default function DashboardPage() {
     const breakdown = detailsArr.join(', ')
 
     const paymentRecord = {
+      id: paymentId,
       amount: totalCashAmount,
       seatAmount: seatPaid,
       foodAmount: foodPaid,
@@ -270,7 +290,7 @@ export default function DashboardPage() {
       buildingName: building?.name || "Unknown",
       studentName: selectedStudent?.name || "Unknown",
       studentId: paymentForm.studentId,
-      roomNumber: selectedRoomNumber,
+      roomNumber: selectedRoomNumber || selectedStudent?.roomNumber || "N/A",
       type: "income",
       month: paymentForm.month,
       year: paymentForm.year,
@@ -547,6 +567,12 @@ export default function DashboardPage() {
                     <span className="text-muted-foreground">Monthly Rent:</span>
                     <span className="font-bold">৳{selectedStudent.monthlyRent}</span>
                   </div>
+                  {selectedStudentRentDue > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-destructive font-medium flex items-center gap-1"><AlertCircle size={12}/> Current Due:</span>
+                      <span className="font-bold text-destructive">৳{selectedStudentRentDue.toLocaleString()}</span>
+                    </div>
+                  )}
                   <div className="flex flex-col gap-1 p-2 bg-primary/5 rounded border border-primary/10">
                     <div className="flex justify-between text-xs">
                       <span className="text-primary font-medium">Advance Pool:</span>
@@ -625,7 +651,7 @@ export default function DashboardPage() {
                   <Label>Receiver</Label>
                   <Select value={paymentForm.receiver} onValueChange={val => setPaymentForm({...paymentForm, receiver: val})}>
                     <SelectTrigger><SelectValue placeholder="Select receiver" /></SelectTrigger>
-                    <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               )}

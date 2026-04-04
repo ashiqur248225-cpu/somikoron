@@ -259,6 +259,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     setIsUpdating(true)
     try {
       const pRecord = { 
+        id: doc(collection(db, "payments")).id,
         amount: totalCashAmount, 
         seatAmount: seatPaid, 
         foodAmount: foodPaid, 
@@ -278,7 +279,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       }
       
       if (!useAdvanceBalance && totalCashAmount > 0) { 
-        await setDoc(doc(db, "payments", doc(collection(db, "payments")).id), { ...pRecord, date: serverTimestamp() }) 
+        await setDoc(doc(db, "payments", pRecord.id), { ...pRecord, date: serverTimestamp() }) 
       }
       
       await updateDoc(studentRef, { 
@@ -344,7 +345,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                              <Label className="text-[10px] uppercase font-bold">Receiver</Label>
                              <Select value={exitPayment.receiver} onValueChange={val => setExitPayment({...exitPayment, receiver: val})}>
                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Staff" /></SelectTrigger>
-                               <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                               <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                              </Select>
                            </div>
                          </div>
@@ -463,6 +464,27 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
           <DialogHeader><DialogTitle>Record Transaction for {student.name}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
+            {student && (
+              <div className="bg-secondary/30 p-4 rounded-lg space-y-2 border">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Monthly Rent:</span>
+                  <span className="font-bold">৳{student.monthlyRent}</span>
+                </div>
+                {financialStats.rentDue > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-destructive font-medium flex items-center gap-1"><AlertCircle size={12}/> Current Due:</span>
+                    <span className="font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex flex-col gap-1 p-2 bg-primary/5 rounded border border-primary/10">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-primary font-medium">Advance Pool:</span>
+                    <span className="font-bold text-primary">৳{student.advanceAmount || 0}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Month</Label>
@@ -495,7 +517,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
               <Label>Receiver</Label>
               <Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}>
                 <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
-                <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Notes..." />
