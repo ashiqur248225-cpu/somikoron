@@ -71,7 +71,7 @@ export default function DashboardPage() {
   const [isIncomeDialogOpen, setIsIncomeDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
-  const [entryRoomFilter, setEntryRoomFilter] = useState("")
+  const [entryRoomFilter, setEntryRoomFilter] = useState("all")
   const [formData, setFormData] = useState({
     studentId: "",
     month: MONTHS[new Date().getMonth()],
@@ -241,12 +241,29 @@ export default function DashboardPage() {
   }, [allPayments, allExpenses, allTransfers, students, openingBalances, timeRange])
 
   // Dialog Student Filtering
+  const availableRooms = useMemo(() => {
+    if (!buildings) return []
+    let rooms: string[] = []
+    buildings.forEach(b => {
+      if (entryBuildingFilter === "all" || b.id === entryBuildingFilter) {
+        b.apartmentsDetail?.forEach((apt: any) => {
+          apt.rooms?.forEach((room: any) => {
+            if (room.roomNo && !rooms.includes(room.roomNo)) {
+              rooms.push(room.roomNo)
+            }
+          })
+        })
+      }
+    })
+    return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }, [buildings, entryBuildingFilter])
+
   const filteredStudentsForEntry = useMemo(() => {
     if (!students) return []
     return students.filter(s => {
       if (!s.isActive) return false
       const matchesBuilding = entryBuildingFilter === "all" || s.buildingId === entryBuildingFilter
-      const matchesRoom = !entryRoomFilter || s.roomNumber?.toLowerCase().includes(entryRoomFilter.toLowerCase())
+      const matchesRoom = entryRoomFilter === "all" || s.roomNumber === entryRoomFilter
       return matchesBuilding && matchesRoom
     })
   }, [students, entryBuildingFilter, entryRoomFilter])
@@ -348,6 +365,8 @@ export default function DashboardPage() {
 
       toast({ title: "Payment Recorded", description: `Amount ৳${totalCashAmount} collected from ${selectedStudent.name}.` })
       setIsIncomeDialogOpen(false)
+      setEntryBuildingFilter("all")
+      setEntryRoomFilter("all")
       setFormData({
         studentId: "",
         month: MONTHS[new Date().getMonth()],
@@ -569,7 +588,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-2 p-3 bg-secondary/30 rounded-xl border">
               <div className="space-y-1">
                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">Building</Label>
-                <Select value={entryBuildingFilter} onValueChange={setEntryBuildingFilter}>
+                <Select value={entryBuildingFilter} onValueChange={val => { setEntryBuildingFilter(val); setEntryRoomFilter("all"); }}>
                   <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Buildings</SelectItem>
@@ -579,12 +598,15 @@ export default function DashboardPage() {
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] font-bold uppercase text-muted-foreground">Room No.</Label>
-                <Input 
-                  placeholder="301" 
-                  value={entryRoomFilter} 
-                  onChange={e => setEntryRoomFilter(e.target.value)} 
-                  className="h-8 text-xs bg-white"
-                />
+                <Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}>
+                  <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Rooms</SelectItem>
+                    {availableRooms.map(r => (
+                      <SelectItem key={r} value={r}>Room {r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
