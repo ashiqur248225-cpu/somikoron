@@ -32,6 +32,8 @@ import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 export default function DashboardPage() {
   const db = useFirestore()
   const [userRole, setUserRole] = useState("")
@@ -95,19 +97,32 @@ export default function DashboardPage() {
     const expense = (allExpenses || []).reduce((acc, e) => acc + (e.amount || 0), 0)
 
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, s) => {
-      // Logic from profile breakdown
       const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
       const now = new Date()
-      const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth()) + 1
-      const historicalRentDue = Number(s.dueAmount) || 0
+      
+      const monthsList: any[] = []
+      let tempDate = new Date(billingStart.getFullYear(), billingStart.getMonth(), 1)
+      const endCompare = new Date(now.getFullYear(), now.getMonth(), 1)
+
+      while (tempDate <= endCompare) {
+        monthsList.push({ key: `${MONTHS[tempDate.getMonth()]} ${tempDate.getFullYear()}`, charge: s.monthlyRent || 0 })
+        tempDate.setMonth(tempDate.getMonth() + 1)
+      }
+
+      const histDuesMap = s.duesBreakdown || {}
+      Object.entries(histDuesMap).forEach(([key, val]) => {
+        const existing = monthsList.find(m => m.key === key)
+        if (existing) existing.charge = Number(val)
+        else monthsList.push({ key, charge: Number(val) })
+      })
+
       const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
-        const isRefund = curr.type === 'refund'
         const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (s.paymentSystem === 'package' ? Number(curr.amount) : 0)
-        return acc + (isRefund ? -rentPortion : rentPortion)
+        return acc + rentPortion
       }, 0) || 0
-      const generatedRent = monthsElapsed * (s.monthlyRent || 0)
-      const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
-      return sAcc + rentDue
+
+      const totalPayable = monthsList.reduce((acc, m) => acc + m.charge, 0)
+      return sAcc + Math.max(0, totalPayable - totalRentPaid)
     }, 0)
 
     const fund = { 
@@ -195,7 +210,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-5">
-        {/* Total Fund Status */}
         <Card className="lg:col-span-3 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
@@ -231,7 +245,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Property Occupancy */}
         <Card className="lg:col-span-2 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>

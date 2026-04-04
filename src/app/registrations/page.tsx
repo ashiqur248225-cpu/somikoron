@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
-  AlertCircle, Calculator, Info, Utensils
+  AlertCircle, Calculator, Info, Utensils, Plus, Minus
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -29,6 +29,9 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const YEARS = ["2023", "2024", "2025", "2026"];
 
 export default function RegistrationsPage() {
   const { toast } = useToast()
@@ -75,10 +78,9 @@ export default function RegistrationsPage() {
     monthlyRent: "",
     serviceCharge: "0",
     advanceAmount: "0",
-    dueAmount: "0", // Historical Rent Due for Old students
-    foodDueAmount: "0", // Historical Food Balance for Old students (Positive = Credit, Negative = Owed)
-    initialRentPayment: "0", // For New students
-    initialFoodPayment: "0", // For New students
+    foodDueAmount: "0", 
+    initialRentPayment: "0", 
+    initialFoodPayment: "0", 
     paymentSystem: "package",
     receiver: "",
     method: "cash",
@@ -87,6 +89,23 @@ export default function RegistrationsPage() {
     roomNumber: "",
     seatNumber: ""
   })
+
+  // Monthly Dues State for Old Students
+  const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
+
+  const addDueRow = () => {
+    setHistoricalDues([...historicalDues, { month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: "" }])
+  }
+
+  const removeDueRow = (idx: number) => {
+    setHistoricalDues(historicalDues.filter((_, i) => i !== idx))
+  }
+
+  const updateDueRow = (idx: number, field: string, value: string) => {
+    const updated = [...historicalDues]
+    ;(updated[idx] as any)[field] = value
+    setHistoricalDues(updated)
+  }
 
   // Sync initial state when a registration is selected
   useEffect(() => {
@@ -98,6 +117,7 @@ export default function RegistrationsPage() {
         seatNumber: selectedReg.seatNumber || "",
         paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
       }))
+      setHistoricalDues([])
     }
   }, [selectedReg])
 
@@ -118,11 +138,6 @@ export default function RegistrationsPage() {
       return
     }
 
-    if (selectedReg.type === 'new' && (Number(approvalForm.initialRentPayment) + Number(approvalForm.advanceAmount) + Number(approvalForm.serviceCharge) > 0) && !approvalForm.receiver) {
-      toast({ variant: "destructive", title: "Error", description: "Receiver is required for new student payment." })
-      return
-    }
-
     setIsProcessing(true)
     try {
       const studentId = doc(collection(db, "students")).id
@@ -137,11 +152,18 @@ export default function RegistrationsPage() {
       const monthlyRent = Number(approvalForm.monthlyRent)
       const svcCharge = Number(approvalForm.serviceCharge)
       const advAmount = Number(approvalForm.advanceAmount)
-      const histRentDue = Number(approvalForm.dueAmount)
       
-      // For foodDueAmount: Logic uses foodDueAmount as "debt".
-      // User enters "Balance": 3450 (Credit) means foodDueAmount should be -3450.
-      // User enters "Balance": -2450 (Debt) means foodDueAmount should be 2450.
+      // Historical Dues Map
+      const duesBreakdown: Record<string, number> = {}
+      let totalHistDue = 0
+      historicalDues.forEach(d => {
+        if (d.amount && Number(d.amount) > 0) {
+          const key = `${d.month} ${d.year}`
+          duesBreakdown[key] = (duesBreakdown[key] || 0) + Number(d.amount)
+          totalHistDue += Number(d.amount)
+        }
+      })
+
       const histFoodDue = -Number(approvalForm.foodDueAmount || 0)
       
       const rentPaid = Number(approvalForm.initialRentPayment)
@@ -197,7 +219,8 @@ export default function RegistrationsPage() {
         monthlyRent: monthlyRent,
         serviceCharge: svcCharge,
         advanceAmount: advAmount,
-        dueAmount: isOld ? histRentDue : (rentPaid >= monthlyRent ? 0 : monthlyRent),
+        dueAmount: isOld ? totalHistDue : (rentPaid >= monthlyRent ? 0 : monthlyRent),
+        duesBreakdown: isOld ? duesBreakdown : {},
         foodDueAmount: isOld ? histFoodDue : 0,
         billingStartDate: approvalForm.billingStartDate,
         paymentSystem: approvalForm.paymentSystem,
@@ -384,14 +407,14 @@ export default function RegistrationsPage() {
                           <Label className="text-[10px] uppercase font-bold">Room</Label>
                           <Select disabled={!approvalForm.buildingId} value={approvalForm.roomNumber} onValueChange={val => setApprovalForm({...approvalForm, roomNumber: val, seatNumber: ""})}>
                             <SelectTrigger><SelectValue placeholder="Room" /></SelectTrigger>
-                            <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
+                            <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`${selectedReg.id}-${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-1">
                           <Label className="text-[10px] uppercase font-bold">Seat</Label>
                           <Select disabled={!approvalForm.roomNumber} value={approvalForm.seatNumber} onValueChange={val => setApprovalForm({...approvalForm, seatNumber: val})}>
                             <SelectTrigger><SelectValue placeholder="Seat" /></SelectTrigger>
-                            <SelectContent>{emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
+                            <SelectContent>{emptySeats.map((s: any) => <SelectItem key={`${selectedReg.id}-${s.seatNo}`} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                       </div>
@@ -433,20 +456,39 @@ export default function RegistrationsPage() {
 
                     {selectedReg.type === 'old' ? (
                       <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20 space-y-3">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Rent Due (৳)</Label>
-                          <Input type="number" className="h-9 border-destructive/30" value={approvalForm.dueAmount} onChange={e => setApprovalForm({...approvalForm, dueAmount: e.target.value})} placeholder="Outstanding balance" />
+                        <div className="flex justify-between items-center">
+                          <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Monthly Dues Breakdown (৳)</Label>
+                          <Button variant="outline" size="sm" className="h-6 text-[9px] gap-1" onClick={addDueRow}><Plus size={10}/> Add Month</Button>
+                        </div>
+                        
+                        <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                          {historicalDues.map((due, idx) => (
+                            <div key={idx} className="flex gap-2 items-center">
+                              <Select value={due.month} onValueChange={val => updateDueRow(idx, "month", val)}>
+                                <SelectTrigger className="h-8 text-[10px] flex-1"><SelectValue/></SelectTrigger>
+                                <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                              </Select>
+                              <Select value={due.year} onValueChange={val => updateDueRow(idx, "year", val)}>
+                                <SelectTrigger className="h-8 text-[10px] w-[70px]"><SelectValue/></SelectTrigger>
+                                <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                              </Select>
+                              <Input type="number" className="h-8 text-[10px] w-[80px]" value={due.amount} onChange={e => updateDueRow(idx, "amount", e.target.value)} placeholder="Amount"/>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeDueRow(idx)}><Minus size={12}/></Button>
+                            </div>
+                          ))}
+                          {historicalDues.length === 0 && <p className="text-[9px] text-muted-foreground text-center py-2">No dues added yet.</p>}
                         </div>
                         
                         {approvalForm.paymentSystem === 'non-package' && (
-                          <div className="space-y-1">
+                          <div className="space-y-1 pt-2">
                             <Label className="text-[10px] uppercase font-bold text-orange-600 flex items-center gap-1"><Utensils size={10}/> Historical Food Balance (৳)</Label>
                             <Input type="number" className="h-9 border-orange-200" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="e.g. 3450 or -2450" />
-                            <p className="text-[8px] text-muted-foreground italic">Positive = Credit, Negative = Owed</p>
+                            <p className="text-[8px] text-muted-foreground italic">Positive = Credit (জমা), Negative = Owed (পাবে)</p>
                           </div>
                         )}
                         
-                        <p className="text-[9px] text-muted-foreground mt-1.5 italic">* পুরাতন স্টুডেন্টের এডভান্স, সার্ভিস চার্জ এবং ফুড ব্যালেন্স শুধু ডাটা হিসেবে থাকবে, ক্যাশ ব্যালেন্সে যোগ হবে না।</p>
+                        <Separator className="my-2" />
+                        <p className="text-[9px] text-muted-foreground mt-1.5 italic">* পুরাতন স্টুডেন্টের বকেয়া, এডভান্স এবং সার্ভিস চার্জ শুধু ডাটা হিসেবে থাকবে, ক্যাশ ব্যালেন্সে যোগ হবে না।</p>
                       </div>
                     ) : (
                       <div className="space-y-4 p-3 bg-success/5 rounded-lg border border-success/20">
@@ -475,7 +517,7 @@ export default function RegistrationsPage() {
                             <Label className="text-[9px] font-bold">Receiver</Label>
                             <Select value={approvalForm.receiver} onValueChange={val => setApprovalForm({...approvalForm, receiver: val})}>
                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Staff" /></SelectTrigger>
-                              <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                              <SelectContent>{staffList?.map(s => <SelectItem key={`${selectedReg.id}-${s.name}`} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
                         </div>

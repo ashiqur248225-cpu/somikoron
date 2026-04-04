@@ -72,8 +72,6 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const [isUpdating, setIsUpdating] = useState(false)
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isLogMealDialogOpen, setIsLogMealDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [useAdvanceBalance, setUseAdvanceBalance] = useState(false)
   
   const [paymentData, setPaymentData] = useState({ 
     month: MONTHS[new Date().getMonth()], 
@@ -111,25 +109,8 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     if (action === 'meals') setIsLogMealDialogOpen(true)
   }, [searchParams])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        e.preventDefault();
-        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
-        if (container) {
-          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
-          const index = focusables.indexOf(target);
-          if (index > -1 && index < focusables.length - 1) {
-            focusables[index + 1].focus();
-          }
-        }
-      }
-    }
-  };
-
   const financialStats = useMemo(() => {
-    if (!student) return { rentDue: 0, foodBalance: 0, monthsElapsed: 0, monthsList: [] }
+    if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [] }
     
     const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
     const now = new Date()
@@ -140,7 +121,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     const endCompare = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
 
     while (tempDate <= endCompare) {
+      const mKey = `${MONTHS[tempDate.getMonth()]} ${tempDate.getFullYear()}`
       monthsList.push({
+        key: mKey,
         month: MONTHS[tempDate.getMonth()],
         year: tempDate.getFullYear().toString(),
         charge: student.monthlyRent || 0,
@@ -150,15 +133,36 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       tempDate.setMonth(tempDate.getMonth() + 1)
     }
 
-    const historicalRentDue = Number(student.dueAmount) || 0
     const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => {
       const isRefund = curr.type === 'refund'
       const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
       return acc + (isRefund ? -rentPortion : rentPortion)
     }, 0) || 0
 
-    let remainingPool = totalRentPaid - historicalRentDue
-    monthsList.forEach(m => {
+    // Combine Historical Dues Map with generated months
+    const histDuesMap = student.duesBreakdown || {}
+    Object.entries(histDuesMap).forEach(([key, val]) => {
+      if (!monthsList.find(m => m.key === key)) {
+        monthsList.push({ key, month: key.split(' ')[0], year: key.split(' ')[1], charge: Number(val), paid: 0, status: 'Unpaid', isHistorical: true })
+      } else {
+        // If it exists in both, we should combine the charges? 
+        // Actually generated months charge is monthlyRent. Historical might be different.
+        // If it's old student, we use historical value if provided.
+        const idx = monthsList.findIndex(m => m.key === key)
+        monthsList[idx].charge = Number(val)
+      }
+    })
+
+    // Allocate payment to months (Oldest first)
+    let remainingPool = totalRentPaid
+    // Sort months list by date ASC for allocation
+    const sortedAlloc = [...monthsList].sort((a, b) => {
+      const d1 = new Date(`${a.month} 1, ${a.year}`)
+      const d2 = new Date(`${b.month} 1, ${b.year}`)
+      return d1.getTime() - d2.getTime()
+    })
+
+    sortedAlloc.forEach(m => {
       if (remainingPool >= m.charge) {
         m.paid = m.charge
         m.status = 'Paid'
@@ -173,9 +177,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       }
     })
 
-    const monthsElapsed = monthsList.length
-    const generatedRent = monthsElapsed * (student.monthlyRent || 0)
-    const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+    const rentDue = sortedAlloc.reduce((acc, m) => acc + (m.charge - m.paid), 0)
 
     const historicalFoodDue = Number(student.foodDueAmount) || 0
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
@@ -186,66 +188,15 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     }, 0) || 0
     const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
 
-    return { rentDue, foodBalance, monthsElapsed, monthsList: monthsList.reverse() }
+    return { rentDue, foodBalance, monthsList: sortedAlloc.reverse() }
   }, [student])
 
-  const exitSettlement = useMemo(() => {
-    if (!student) return { advance: 0, rentDue: 0, foodBalance: 0, finalBalance: 0, mode: 'none' }
-    const advance = student.advanceAmount || 0
-    const rentDue = financialStats.rentDue || 0
-    const foodBalance = student.paymentSystem === 'non-package' ? financialStats.foodBalance : 0
-    const balance = (advance + foodBalance) - rentDue
-    return { advance, rentDue, foodBalance, finalBalance: balance, mode: balance >= 0 ? 'refund' : 'deficit' }
-  }, [student, financialStats])
-
-  const currentExitDeficit = Math.max(0, -exitSettlement.finalBalance)
-  const remainingDueAtExit = Math.max(0, currentExitDeficit - Number(exitPayment.amount))
-  const canConfirmExit = exitSettlement.mode === 'refund' || remainingDueAtExit <= 0;
-
-  const handleDeactivate = async () => {
-    if (!student || !student.isActive || !studentRef || !canConfirmExit) return
-    setIsUpdating(true)
-    try {
-      const settlementRecords = []
-      const manualAmt = Number(exitPayment.amount)
-      if (manualAmt > 0) {
-        const isRefund = exitSettlement.mode === 'refund'
-        const manualRecord = {
-          amount: manualAmt, buildingId: student.buildingId, buildingName: student.buildingName, studentName: student.name, studentId: student.id, roomNumber: student.roomNumber,
-          type: isRefund ? "refund" : "income", month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(),
-          method: exitPayment.method, receiver: exitPayment.receiver, description: isRefund ? `Refund at Exit: ${exitPayment.description}` : `Exit Payment: ${exitPayment.description}`,
-          date: new Date().toISOString()
-        }
-        settlementRecords.push(manualRecord)
-        if (isRefund) {
-          const expId = doc(collection(db, "expenses")).id
-          await setDoc(doc(db, "expenses", expId), { ...manualRecord, id: expId, category: "others", expenseDate: new Date().toISOString().split('T')[0], expensePartyName: student.name, createdAt: serverTimestamp() })
-        } else {
-          const pId = doc(collection(db, "payments")).id
-          await setDoc(doc(db, "payments", pId), { ...manualRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
-        }
-      }
-      await updateDoc(studentRef, { isActive: false, advanceAmount: 0, paymentsHistory: arrayUnion(...settlementRecords), updatedAt: serverTimestamp(), leftAt: serverTimestamp(), exitNote: exitPayment.description })
-      
-      const bRef = doc(db, "buildings", student.buildingId)
-      const bSnap = await getDoc(bRef)
-      if (bSnap.exists()) {
-        const bData = bSnap.data()
-        const updatedApts = bData.apartmentsDetail.map((apt: any) => {
-          if (apt.name === student.apartmentName) {
-            return { ...apt, rooms: apt.rooms.map((room: any) => { if (room.roomNo === student.roomNumber) { return { ...room, seats: room.seats.map((seat: any) => seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat) } } return room }) }
-          }
-          return apt
-        })
-        await updateDoc(bRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1) })
-      }
-      toast({ title: "Settled & Deactivated", description: "Resident vacated seat." })
-      setIsUpdating(false)
-    } catch (e: any) { 
-      toast({ variant: "destructive", title: "Error", description: e.message })
-      setIsUpdating(false)
-    }
-  }
+  const currentMonthDueInBreakdown = useMemo(() => {
+    if (!student) return 0
+    const key = `${paymentData.month} ${paymentData.year}`
+    const breakdown = financialStats.monthsList.find(m => m.key === key)
+    return breakdown ? (breakdown.charge - breakdown.paid) : 0
+  }, [student, paymentData.month, paymentData.year, financialStats])
 
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
@@ -256,8 +207,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     
     setIsUpdating(true)
     try {
+      const pId = doc(collection(db, "payments")).id
       const pRecord = { 
-        id: doc(collection(db, "payments")).id,
+        id: pId,
         amount: totalCashAmount, 
         seatAmount: seatPaid, 
         foodAmount: foodPaid, 
@@ -270,20 +222,28 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         type: "income", 
         month: paymentData.month, 
         year: paymentData.year, 
-        method: useAdvanceBalance ? "advance_deduction" : paymentData.method, 
-        receiver: useAdvanceBalance ? "System (Advance Deduction)" : paymentData.receiver, 
-        description: paymentData.description, 
+        method: paymentData.method, 
+        receiver: paymentData.receiver, 
+        description: paymentData.description || `Payment for ${paymentData.month} ${paymentData.year}`, 
         date: new Date().toISOString() 
       }
       
-      if (!useAdvanceBalance && totalCashAmount > 0) { 
-        await setDoc(doc(db, "payments", pRecord.id), { ...pRecord, date: serverTimestamp() }) 
+      if (totalCashAmount > 0) { 
+        await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() }) 
       }
       
+      // Update Monthly Dues Breakdown Map if payment covers a specific month
+      const mKey = `${paymentData.month} ${paymentData.year}`
+      const currentMap = student.duesBreakdown || {}
+      if (seatPaid > 0 && currentMap[mKey] !== undefined) {
+        currentMap[mKey] = Math.max(0, currentMap[mKey] - seatPaid)
+        if (currentMap[mKey] === 0) delete currentMap[mKey]
+      }
+
       await updateDoc(studentRef, { 
         paymentsHistory: arrayUnion(pRecord), 
-        advanceAmount: increment((useAdvanceBalance ? -(seatPaid + foodPaid) : addAdvance)), 
-        ...(student.paymentSystem === 'non-package' && foodPaid > 0 && { foodCost: increment(foodPaid) }), 
+        advanceAmount: increment(addAdvance),
+        duesBreakdown: currentMap,
         updatedAt: serverTimestamp() 
       })
       
@@ -291,6 +251,19 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       setIsPaymentDialogOpen(false)
       setIsUpdating(false)
     } catch (e: any) { 
+      toast({ variant: "destructive", title: "Error", description: e.message })
+      setIsUpdating(false)
+    }
+  }
+
+  const handleDeactivate = async () => {
+    if (!student || !studentRef) return
+    setIsUpdating(true)
+    try {
+      await updateDoc(studentRef, { isActive: false, leftAt: serverTimestamp(), updatedAt: serverTimestamp() })
+      toast({ title: "Resident Deactivated", description: "Marked as left." })
+      setIsUpdating(false)
+    } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
       setIsUpdating(false)
     }
@@ -342,47 +315,14 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           {student.isActive && (
             <AlertDialog>
               <AlertDialogTrigger asChild><Button variant="destructive" className="flex gap-2" disabled={isUpdating}><UserMinus size={18} /> Mark as Left</Button></AlertDialogTrigger>
-              <AlertDialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+              <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Resident Exit Settlement</AlertDialogTitle>
-                  <div className="mt-4 space-y-4">
-                    <div className="bg-secondary/50 p-4 rounded-lg space-y-2 border text-xs">
-                      <div className="flex justify-between"><span>Available Advance:</span><span className="font-bold text-primary">৳{exitSettlement.advance.toLocaleString()}</span></div>
-                      <div className="flex justify-between"><span>Rent Due:</span><span className="font-bold text-destructive">৳{exitSettlement.rentDue.toLocaleString()}</span></div>
-                      {student.paymentSystem === 'non-package' && (<div className="flex justify-between"><span>Food Balance:</span><span className={cn("font-bold", exitSettlement.foodBalance >= 0 ? "text-success" : "text-destructive")}>৳{Math.abs(exitSettlement.foodBalance).toLocaleString()}</span></div>)}
-                      <Separator /><div className="flex justify-between font-bold text-sm pt-1"><span>{exitSettlement.mode === 'refund' ? 'Net Refundable:' : 'Net Deficit (Owed):'}</span><span className={exitSettlement.mode === 'refund' ? 'text-success' : 'text-destructive'}>৳{Math.abs(exitSettlement.finalBalance).toLocaleString()}</span></div>
-                    </div>
-                    <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
-                       <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> {exitSettlement.mode === 'refund' ? 'Refund Details' : 'Final Settlement Payment'}</Label>
-                       <div className="space-y-2"><Label className="text-[10px] uppercase font-bold">{exitSettlement.mode === 'refund' ? 'Refunded to Student (৳)' : 'Payment Received Now (৳)'}</Label><Input type="number" value={exitPayment.amount} onChange={e => setExitPayment({...exitPayment, amount: e.target.value})}/></div>
-                       {exitSettlement.mode === 'deficit' && remainingDueAtExit > 0 && (<div className="p-3 bg-white rounded border text-[9px] text-destructive flex items-center gap-1"><AlertCircle size={8}/> বকেয়া বাকি থাকলে এক্সিট করা যাবে না। (Remaining: ৳{remainingDueAtExit})</div>)}
-                       {Number(exitPayment.amount) > 0 && (
-                         <div className="grid grid-cols-2 gap-3">
-                           <div className="space-y-1">
-                             <Label className="text-[10px] uppercase font-bold">Method</Label>
-                             <Select value={exitPayment.method} onValueChange={val => setExitPayment({...exitPayment, method: val})}>
-                               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                               <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
-                             </Select>
-                           </div>
-                           <div className="space-y-1">
-                             <Label className="text-[10px] uppercase font-bold">Receiver</Label>
-                             <Select value={exitPayment.receiver} onValueChange={val => setExitPayment({...exitPayment, receiver: val})}>
-                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Staff" /></SelectTrigger>
-                               <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                             </Select>
-                           </div>
-                         </div>
-                       )}
-                       <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Exit Note</Label><Textarea className="text-xs min-h-[60px]" value={exitPayment.description} onChange={e => setExitPayment({...exitPayment, description: e.target.value})}/></div>
-                    </div>
-                  </div>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>This will deactivate the resident and vacate the seat.</AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter className="mt-4">
+                <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeactivate} className={cn("bg-destructive", !canConfirmExit && "opacity-50 cursor-not-allowed")} disabled={!canConfirmExit || isUpdating}>
-                    {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle size={16} className="mr-2" />}Confirm Settlement & Exit
-                  </AlertDialogAction>
+                  <AlertDialogAction onClick={handleDeactivate} className="bg-destructive">Confirm Exit</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -391,7 +331,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="border-none shadow-sm h-fit">
           <CardHeader><CardTitle className="text-lg">Contact & Location</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -401,7 +341,8 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
             <div className="flex items-center gap-3 text-sm"><Calendar className="text-primary" size={16} /><span>Billing Start: {student.billingStartDate || 'N/A'}</span></div>
           </CardContent>
         </Card>
-        <Card className="border-none shadow-sm md:col-span-2">
+        
+        <Card className="border-none shadow-sm">
           <CardHeader><CardTitle className="text-lg">Financial Overview</CardTitle></CardHeader>
           <CardContent>
             <div className="grid gap-4 grid-cols-2">
@@ -418,20 +359,13 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                 <p className="text-lg font-bold">৳{student.serviceCharge || 0}</p>
               </div>
               
-              {financialStats.rentDue > 0 ? (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                  <p className="text-[10px] uppercase text-destructive font-bold">Total Rent Due</p>
-                  <p className="text-lg font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p>
-                </div>
-              ) : (
-                <div className="p-3 rounded-lg bg-success/10 border border-success/20">
-                  <p className="text-[10px] uppercase text-success font-bold">Rent Status</p>
-                  <p className="text-lg font-bold text-success">No Dues</p>
-                </div>
-              )}
+              <div className={cn("p-3 rounded-lg border", financialStats.rentDue > 0 ? "bg-destructive/10 border-destructive/20" : "bg-success/10 border-success/20")}>
+                <p className={cn("text-[10px] uppercase font-bold", financialStats.rentDue > 0 ? "text-destructive" : "text-success")}>Total Rent Due</p>
+                <p className="text-lg font-bold">৳{financialStats.rentDue.toLocaleString()}</p>
+              </div>
               
               {student.paymentSystem === 'non-package' && (
-                <div className={cn("p-3 rounded-lg border", financialStats.foodBalance >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20")}>
+                <div className={cn("p-3 rounded-lg border md:col-span-2", financialStats.foodBalance >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20")}>
                   <p className={cn("text-[10px] uppercase font-bold", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")}>Food Balance</p>
                   <p className="text-lg font-bold">৳{financialStats.foodBalance.toLocaleString()}</p>
                 </div>
@@ -450,20 +384,20 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         
         <TabsContent value="payments">
           <Card className="border-none shadow-sm"><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Method</TableHead><TableHead>Purpose</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader><TableBody>{student.paymentsHistory?.map((p: any, idx: number) => (
-            <TableRow key={idx}><TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell><TableCell className="font-medium">{p.month} {p.year}</TableCell><TableCell><Badge variant="outline" className={cn("text-[10px] uppercase", p.type === 'refund' ? "border-destructive text-destructive" : "")}>{p.type === 'refund' ? 'REFUND' : p.method}</Badge></TableCell><TableCell><span className="text-[10px] text-muted-foreground truncate max-w-[200px] block">{p.description}</span></TableCell><TableCell className={cn("text-right font-bold", p.type === 'refund' ? "text-destructive" : "text-income")}>{p.type === 'refund' ? '-' : ''}৳{p.amount?.toLocaleString()}</TableCell></TableRow>
+            <TableRow key={idx}><TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell><TableCell className="font-medium">{p.month} {p.year}</TableCell><TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell><TableCell><span className="text-[10px] text-muted-foreground truncate max-w-[200px] block">{p.description}</span></TableCell><TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell></TableRow>
           ))}{(!student.paymentsHistory || student.paymentsHistory.length === 0) && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No records.</TableCell></TableRow>}</TableBody></Table></CardContent></Card>
         </TabsContent>
 
         <TabsContent value="dues">
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle className="text-sm">Monthly Rent Payment Status</CardTitle><CardDescription>System calculates payment coverage from joining date.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="text-sm">Monthly Rent Payment Status</CardTitle><CardDescription>Real-time calculation based on payments and dues map.</CardDescription></CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader><TableRow><TableHead>Month & Year</TableHead><TableHead>Rent Amount</TableHead><TableHead>Amount Covered</TableHead><TableHead className="text-right">Status</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {financialStats.monthsList.map((m: any, idx: number) => (
                     <TableRow key={idx}>
-                      <TableCell className="font-medium">{m.month} {m.year}</TableCell>
+                      <TableCell className="font-medium">{m.month} {m.year} {m.isHistorical && <Badge variant="secondary" className="text-[8px] h-4">Historical</Badge>}</TableCell>
                       <TableCell>৳{m.charge}</TableCell>
                       <TableCell>৳{m.paid}</TableCell>
                       <TableCell className="text-right">
@@ -524,29 +458,24 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       </div>
 
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Record Transaction for {student.name}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
-            {student && (
-              <div className="bg-secondary/30 p-4 rounded-lg space-y-2 border">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Monthly Rent:</span>
-                  <span className="font-bold">৳{student.monthlyRent}</span>
-                </div>
-                {financialStats.rentDue > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-destructive font-medium flex items-center gap-1"><AlertCircle size={12}/> Current Due:</span>
-                    <span className="font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</span>
-                  </div>
-                )}
-                <div className="flex flex-col gap-1 p-2 bg-primary/5 rounded border border-primary/10">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-primary font-medium">Advance Pool:</span>
-                    <span className="font-bold text-primary">৳{student.advanceAmount || 0}</span>
-                  </div>
-                </div>
+            <div className="bg-secondary/30 p-4 rounded-lg space-y-2 border">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Monthly Rent:</span>
+                <span className="font-bold">৳{student.monthlyRent}</span>
               </div>
-            )}
+              <div className="flex justify-between text-sm">
+                <span className="text-primary font-medium">Selected Month Due:</span>
+                <span className="font-bold text-primary">৳{currentMonthDueInBreakdown.toLocaleString()}</span>
+              </div>
+              <Separator />
+              <div className="flex justify-between text-sm">
+                <span className="text-destructive font-medium">Total Overall Due:</span>
+                <span className="font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</span>
+              </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -557,33 +486,51 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label>Year</Label>
+                <Select value={paymentData.year} onValueChange={val => setPaymentData({...paymentData, year: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <Label>Method</Label>
                 <Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
                 </Select>
               </div>
-            </div>
-            {student.paymentSystem === 'package' ? (
-              <div className="space-y-2"><Label>Amount (৳)</Label><Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" /></div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 p-3 bg-secondary/10 rounded-lg border">
-                <div className="space-y-2"><Label className="text-xs">Seat Rent</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder="0.00" /></div>
-                <div className="space-y-2"><Label className="text-xs">Food Credit</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} placeholder="0.00" /></div>
+              <div className="space-y-2">
+                <Label>Receiver</Label>
+                <Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}>
+                  <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
+                  <SelectContent>{staffList?.map(s => <SelectItem key={`${student.id}-${s.name}`} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
-            )}
-            <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-2">
-              <Label className="text-xs font-bold text-primary flex items-center gap-1"><Plus size={12}/> Add to Advance Pool (৳)</Label>
-              <Input type="number" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} placeholder="0.00" />
             </div>
-            <div className="space-y-2">
-              <Label>Receiver</Label>
-              <Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}>
-                <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
-                <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-              </Select>
+
+            <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
+              <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Payment Amounts</Label>
+              {student.paymentSystem === 'package' ? (
+                <div className="space-y-2">
+                  <Label className="text-xs">Amount (৳)</Label>
+                  <Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder={currentMonthDueInBreakdown > 0 ? currentMonthDueInBreakdown.toString() : "0.00"} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder={currentMonthDueInBreakdown > 0 ? currentMonthDueInBreakdown.toString() : "0.00"} /></div>
+                  <div className="space-y-2"><Label className="text-xs">Food Credit (৳)</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} placeholder="0.00" /></div>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label>
+                <Input type="number" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} placeholder="0.00" />
+              </div>
             </div>
-            <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Notes..." />
+
+            <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Notes (Optional)..." />
           </div>
           <DialogFooter>
             <Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg" disabled={isUpdating}>
@@ -594,7 +541,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       </Dialog>
 
       <Dialog open={isLogMealDialogOpen} onOpenChange={setIsLogMealDialogOpen}>
-        <DialogContent className="max-w-sm" onKeyDown={handleKeyDown}>
+        <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Log Monthly Meals</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="bg-orange-500/5 p-3 rounded-lg border border-orange-500/20 text-xs flex justify-between">
