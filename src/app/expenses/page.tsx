@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert } from "lucide-react"
+import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert, ArrowDownRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -34,13 +34,6 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
@@ -62,85 +55,27 @@ export default function ExpenseHistoryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isEntryOpen, setIsEntryOpen] = useState(false)
   
-  // User Context
   const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
-  const [canRequest, setCanRequest] = useState(true)
 
-  // Filters State
   const [categoryFilter, setCategoryFilter] = useState("all")
-  const [buildingFilter, setBuildingFilter] = useState("all")
-  const [methodFilter, setMethodFilter] = useState("all")
-  const [expenserFilter, setExpenserFilter] = useState("all")
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
-
-  const [formData, setFormData] = useState({
-    category: "others",
-    buildingId: "",
-    apartmentName: "",
-    meterNo: "",
-    amount: "",
-    method: "cash",
-    expensePartyName: "",
-    receiver: "",
-    description: "",
-    expenseDate: new Date().toISOString().split('T')[0],
-  })
+  const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
-    const role = localStorage.getItem("user_role") || "Manager"
-    const branch = localStorage.getItem("user_branch") || "Main Branch"
-    const name = localStorage.getItem("user_name") || "User"
-    const assignedId = localStorage.getItem("assigned_building_id") || "none"
-    const reqStatus = localStorage.getItem("can_request_expense") !== "false"
-
-    setUserRole(role)
-    setUserBranch(branch)
-    setUserName(name)
-    setAssignedBuildingId(assignedId)
-    setCanRequest(reqStatus)
-
-    if (role === 'Building Manager' && assignedId !== 'none') {
-      setBuildingFilter(assignedId)
-      setFormData(prev => ({ ...prev, buildingId: assignedId }))
-    }
+    setUserRole(localStorage.getItem("user_role") || "Manager")
+    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setUserName(localStorage.getItem("user_name") || "User")
+    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
-
-  // Branch-Filtered Queries
-  const buildingsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
-    }
-    return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, assignedBuildingId])
-  const { data: buildings } = useCollection(buildingsQuery)
-
-  const staffQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "staff"), where("branch", "==", userBranch))
-  }, [db, userBranch])
-  const { data: staffList } = useCollection(staffQuery)
-
-  const partiesQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "expenseParties"), where("branch", "==", userBranch))
-  }, [db, userBranch])
-  const { data: parties } = useCollection(partiesQuery)
 
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "expenses"), where("buildingId", "==", assignedBuildingId), limit(500))
-    }
     return query(collection(db, "expenses"), where("branch", "==", userBranch), limit(500))
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userBranch])
   const { data: rawExpenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
-  // Sort in memory
   const expenses = useMemo(() => {
     if (!rawExpenses) return []
     return [...rawExpenses].sort((a, b) => {
@@ -151,345 +86,105 @@ export default function ExpenseHistoryPage() {
   }, [rawExpenses])
 
   const filteredExpenses = useMemo(() => {
-    if (!expenses) return []
     return expenses.filter(e => {
-      const eDate = new Date(e.expenseDate)
       const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
-      const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
-      const matchesMethod = methodFilter === "all" || e.method === methodFilter
-      const matchesExpenser = expenserFilter === "all" || e.expensePartyName === expenserFilter
-      const matchesStartDate = !startDate || eDate >= new Date(startDate)
-      const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
-      return matchesCategory && matchesBuilding && matchesMethod && matchesExpenser && matchesStartDate && matchesEndDate
+      const matchesSearch = (e.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) || (e.description || "").toLowerCase().includes(searchTerm.toLowerCase())
+      return matchesCategory && matchesSearch
     })
-  }, [expenses, categoryFilter, buildingFilter, methodFilter, expenserFilter, startDate, endDate])
-
-  const totalFilteredExpense = useMemo(() => filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0), [filteredExpenses])
-
-  const selectedBuildingForForm = buildings?.find(b => b.id === formData.buildingId)
-  const apartmentsInBuilding = selectedBuildingForForm?.apartmentsDetail || []
-
-  const handleEntrySubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    // Validation: Receiver is only required for 'salary' category
-    if (!formData.amount || !formData.buildingId || !formData.expensePartyName || (formData.category === 'salary' && !formData.receiver)) {
-      toast({ variant: "destructive", title: "Error", description: "Required fields are missing." })
-      return
-    }
-
-    setIsSubmitting(true)
-    const building = selectedBuildingForForm
-    
-    const recordPayload = {
-      ...formData,
-      amount: Number(formData.amount),
-      buildingName: building?.name || "General",
-      branch: userBranch,
-      createdAt: serverTimestamp(),
-      requestedBy: localStorage.getItem("somikoron_auth_id") || "system",
-      requestedByName: localStorage.getItem("user_name"),
-      receiver: formData.category === 'salary' ? formData.receiver : (formData.receiver || "N/A")
-    }
-
-    try {
-      if (userRole === 'Building Manager') {
-        const reqId = doc(collection(db, "managerRequests")).id
-        await setDoc(doc(db, "managerRequests", reqId), {
-          ...recordPayload,
-          id: reqId,
-          requestType: 'expense'
-        })
-        toast({ title: "Request Sent", description: "Expense request sent for approval." })
-      } else {
-        const expenseId = doc(collection(db, "expenses")).id
-        await setDoc(doc(db, "expenses", expenseId), { ...recordPayload, id: expenseId })
-        toast({ title: "Success", description: "Expense recorded." })
-      }
-      setIsEntryOpen(false)
-      setFormData({
-        category: "others", buildingId: assignedBuildingId !== 'none' ? assignedBuildingId : "", apartmentName: "", meterNo: "", amount: "", method: "cash", 
-        expensePartyName: "", receiver: "", description: "",
-        expenseDate: new Date().toISOString().split('T')[0],
-      })
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err.message })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+  }, [expenses, categoryFilter, searchTerm])
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Expenses</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
-              Spending records for <span className="font-bold text-foreground">{userBranch}</span>.
-            </p>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Expense Records</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Spending for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
-        
         <div className="ml-auto flex items-center gap-3">
-          <div className="hidden sm:flex gap-2">
-            <Button variant="outline" size="sm" className="gap-2"><FileSpreadsheet size={16} /> Export</Button>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="gap-2">
-                <Download size={16} /> <span className="hidden sm:inline">Export</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer">
-                <FileText size={14} className="mr-2" /> Download PDF (Print)
-              </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer">
-                <Share2 size={14} className="mr-2" /> Share Report
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
+          <Button size="sm" variant="outline" className="gap-2"><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
-              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
-                {userName ? userName.substring(0, 2) : "U"}
-              </AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">{userName ? userName.substring(0, 2) : "U"}</AvatarFallback>
             </Avatar>
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 print:hidden">
-        <Card className="bg-destructive/5 border-none shadow-sm border-l-4 border-l-destructive">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-sm font-medium text-destructive flex items-center gap-2">
-              Total Expenses (Filtered)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex justify-between items-end">
-              <div><p className="text-3xl font-bold text-destructive">৳{totalFilteredExpense.toLocaleString()}</p></div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="bg-secondary/20 p-4 rounded-xl border grid grid-cols-1 md:grid-cols-4 gap-4 items-end print:hidden">
+        <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Categories</SelectItem>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1 md:col-span-2"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label><Input placeholder="Description or party..." className="bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+        <Button variant="ghost" className="h-10 font-bold uppercase text-xs" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); }}><XCircle size={14} className="mr-1" /> Reset</Button>
       </div>
 
-      {userRole !== 'Building Manager' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4 bg-secondary/20 p-4 rounded-xl border items-end print:hidden">
-           <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Category</Label>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-           </div>
-           <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Building</Label>
-              <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Buildings</SelectItem>
-                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-           </div>
-           <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Method</Label>
-              <Select value={methodFilter} onValueChange={setMethodFilter}>
-                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Methods</SelectItem>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bkash">Bkash</SelectItem>
-                  <SelectItem value="nagad">Nagad</SelectItem>
-                  <SelectItem value="bank">Bank</SelectItem>
-                </SelectContent>
-              </Select>
-           </div>
-           <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Expenser</Label>
-              <Select value={expenserFilter} onValueChange={setExpenserFilter}>
-                <SelectTrigger><SelectValue placeholder="All Staff" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Staff</SelectItem>
-                  {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-           </div>
-           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">From</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
-           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">To</Label><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
-           <Button variant="ghost" className="h-10" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setMethodFilter("all"); setExpenserFilter("all"); setStartDate(""); setEndDate("") }}>
-             <XCircle size={14} className="mr-1" /> Reset
-           </Button>
-        </div>
+      {expensesLoading ? (
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+      ) : (
+        <>
+          {/* Table for Desktop */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-secondary/30">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Expenser</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredExpenses.map((e: any) => (
+                    <TableRow key={e.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/expenses/${e.id}`)}>
+                      <TableCell className="text-xs font-bold text-slate-500">{new Date(e.expenseDate).toLocaleDateString()}</TableCell>
+                      <TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell>
+                      <TableCell className="font-bold text-slate-700">{e.expensePartyName}</TableCell>
+                      <TableCell className="text-right font-black text-expense">৳{e.amount?.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Cards for Mobile */}
+          <div className="md:hidden space-y-4">
+            {filteredExpenses.map((e: any) => (
+              <Card key={e.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/expenses/${e.id}`)}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <h3 className="font-black text-slate-800 text-lg leading-tight capitalize">{e.category}</h3>
+                      <p className="text-xs font-bold text-slate-400">{new Date(e.expenseDate).toLocaleDateString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-black text-expense flex items-center gap-1 justify-end">
+                        <ArrowDownRight size={14} /> ৳{e.amount?.toLocaleString()}
+                      </p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">{e.method}</p>
+                    </div>
+                  </div>
+                  <Separator className="opacity-50" />
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest truncate">
+                    <UserCircle size={10} /> Paid By: {e.expensePartyName}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {filteredExpenses.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No expense records found.</div>}
+          </div>
+        </>
       )}
 
-      <Card className="border-none shadow-sm overflow-hidden print:hidden">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-secondary/30">
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Building</TableHead>
-                <TableHead>Expenser</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {expensesLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
-              ) : filteredExpenses?.map((e: any) => (
-                <TableRow key={e.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/expenses/${e.id}`)}>
-                  <TableCell className="text-xs">{new Date(e.expenseDate).toLocaleDateString()}</TableCell>
-                  <TableCell><Badge variant="secondary" className="capitalize text-[10px]">{e.category}</Badge></TableCell>
-                  <TableCell className="text-xs">
-                    <div className="flex flex-col">
-                      <span>{e.buildingName}</span>
-                      {e.apartmentName && <span className="text-[9px] text-muted-foreground">Unit: {e.apartmentName}</span>}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs font-medium">{e.expensePartyName}</TableCell>
-                  <TableCell className="text-right font-bold text-expense">৳{e.amount?.toLocaleString()}</TableCell>
-                </TableRow>
-              ))}
-              {filteredExpenses.length === 0 && !expensesLoading && (
-                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No expense records found matching these criteria.</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
+      {/* FAB */}
       <div className="fixed bottom-8 right-8 z-50 print:hidden">
-        {userRole === 'Building Manager' ? (
-          canRequest ? (
-            <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:scale-105 transition-transform">
-              <BellRing size={24} className="text-white" />
-            </Button>
-          ) : (
-            <div className="bg-white/80 backdrop-blur-sm p-3 rounded-xl border border-destructive/20 text-destructive text-[10px] font-bold flex items-center gap-2 shadow-sm animate-in fade-in slide-in-from-right-4">
-              <ShieldAlert size={14} /> Request Disabled
-            </div>
-          )
-        ) : (
-          <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:scale-105 transition-transform">
-            <Plus size={32} className="text-white" />
-          </Button>
-        )}
+        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-expense hover:scale-105 transition-transform">
+          <Plus size={32} className="text-white" />
+        </Button>
       </div>
-
-      <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{userRole === 'Building Manager' ? "Submit Expense Request" : "Log Expense Entry"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={formData.category} onValueChange={val => setFormData({...formData, category: val, apartmentName: "", meterNo: ""})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Target Building</Label>
-              <Select value={formData.buildingId} onValueChange={(val) => setFormData({...formData, buildingId: val, apartmentName: "", meterNo: ""})}>
-                <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
-                <SelectContent>
-                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {formData.category === 'electricity' && formData.buildingId && (
-              <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 space-y-4 animate-in fade-in slide-in-from-top-2">
-                <div className="space-y-2">
-                  <Label className="text-primary font-bold flex items-center gap-1.5"><LayoutGrid size={14}/> Select Apartment / Unit</Label>
-                  <Select 
-                    value={formData.apartmentName} 
-                    onValueChange={(val) => {
-                      const apt = apartmentsInBuilding.find((a: any) => a.name === val);
-                      setFormData({ ...formData, apartmentName: val, meterNo: apt?.meterNo || "" });
-                    }}
-                  >
-                    <SelectTrigger className="bg-white"><SelectValue placeholder="Select Apt" /></SelectTrigger>
-                    <SelectContent>
-                      {apartmentsInBuilding.map((apt: any) => (
-                        <SelectItem key={apt.id || apt.name} value={apt.name}>{apt.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {formData.meterNo && (
-                  <div className="space-y-1 bg-white p-2 rounded border">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Zap size={10} className="text-primary"/> Linked Meter Number</Label>
-                    <p className="text-sm font-bold text-primary">{formData.meterNo}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Paid By (Expenser/Manager)</Label>
-              <Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}>
-                <SelectTrigger><SelectValue placeholder="Who is paying?" /></SelectTrigger>
-                <SelectContent>
-                  {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Paid To: Shown only for Salary category */}
-            {formData.category === 'salary' && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                <Label>Paid To (Staff Name)</Label>
-                <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Who is receiving?" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Staff Members</SelectLabel>
-                      {staffList?.map(s => (
-                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Amount (৳)</Label><Input type="number" placeholder="0.00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} /></div>
-              <div className="space-y-2">
-                <Label>Method</Label>
-                <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2"><Label>Expense Date</Label><Input type="date" value={formData.expenseDate} onChange={e => setFormData({...formData, expenseDate: e.target.value})} /></div>
-            <div className="space-y-2"><Label>Notes</Label><Textarea placeholder="Details..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
-
-            <Button type="submit" className="w-full bg-destructive h-12 text-lg font-bold" disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="animate-spin" /> : (userRole === 'Building Manager' ? "Send Approval Request" : "Confirm Expense Record")}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

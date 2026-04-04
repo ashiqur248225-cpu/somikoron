@@ -20,7 +20,7 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { History, Search, Filter, Download, Loader2, FileSpreadsheet, Printer, ArrowUpCircle, ArrowDownCircle, Wallet, XCircle } from "lucide-react"
+import { History, Search, Filter, Download, Loader2, FileSpreadsheet, Printer, ArrowUpCircle, ArrowDownCircle, Wallet, XCircle, ArrowUpRight, ArrowDownRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, where } from "firebase/firestore"
@@ -35,7 +35,6 @@ export default function LedgerPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   
-  // User Context
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
 
@@ -44,7 +43,6 @@ export default function LedgerPage() {
     setUserName(localStorage.getItem("user_name") || "User")
   }, [])
 
-  // CRITICAL: Filter ledger by branch. Removed orderBy to avoid index requirements.
   const paymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "payments"), where("branch", "==", userBranch))
@@ -70,7 +68,6 @@ export default function LedgerPage() {
       ...(payments || []).map(p => ({ ...p, txType: 'income' })),
       ...(expenses || []).map(e => ({ ...e, txType: 'expense' }))
     ]
-    // Sort in memory DESC by date
     return combined.sort((a, b) => getTransactionDate(b).getTime() - getTransactionDate(a).getTime())
   }, [payments, expenses])
 
@@ -87,11 +84,7 @@ export default function LedgerPage() {
   const totalIncome = useMemo(() => (payments || []).reduce((acc, curr) => acc + (curr.amount || 0), 0), [payments])
   const totalExpense = useMemo(() => (expenses || []).reduce((acc, curr) => acc + (curr.amount || 0), 0), [expenses])
 
-  const handlePrint = () => {
-    if (typeof window !== "undefined") {
-      window.print()
-    }
-  }
+  const handlePrint = () => { if (typeof window !== "undefined") { window.print() } }
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
@@ -102,9 +95,7 @@ export default function LedgerPage() {
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Accounting Ledger</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
-              Unified financial records for <span className="font-bold text-foreground">{userBranch}</span>.
-            </p>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">unified financial records for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
         
@@ -134,7 +125,6 @@ export default function LedgerPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">৳{totalIncome.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Total collections</p>
           </CardContent>
         </Card>
 
@@ -145,7 +135,6 @@ export default function LedgerPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">৳{totalExpense.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Total spending</p>
           </CardContent>
         </Card>
 
@@ -156,109 +145,98 @@ export default function LedgerPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">৳{(totalIncome - totalExpense).toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Current operating surplus</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl">
-        <CardHeader className="pb-4 border-b print:hidden">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Search by student, staff or category..." 
-                className="pl-10 h-10 bg-slate-50 border-none" 
-                value={searchTerm} 
-                onChange={e => setSearchTerm(e.target.value)} 
-              />
-            </div>
-            <div className="flex gap-2">
-              <Select defaultValue="all" onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[140px] h-10 bg-slate-50 border-none font-bold text-xs uppercase">
-                  <SelectValue placeholder="All Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="income">Income Only</SelectItem>
-                  <SelectItem value="expense">Expenses Only</SelectItem>
-                </SelectContent>
-              </Select>
-              { (searchTerm || typeFilter !== 'all') && (
-                <Button variant="ghost" size="icon" onClick={() => { setSearchTerm(""); setTypeFilter("all") }} className="h-10 w-10 text-muted-foreground">
-                  <XCircle size={18} />
-                </Button>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {(paymentsLoading || expensesLoading) ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Loading database records...</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader className="bg-slate-50/50">
-                <TableRow className="hover:bg-transparent border-b">
-                  <TableHead className="py-4 font-bold text-slate-600">Date</TableHead>
-                  <TableHead className="py-4 font-bold text-slate-600">Entity / Purpose</TableHead>
-                  <TableHead className="py-4 font-bold text-slate-600">Details</TableHead>
-                  <TableHead className="py-4 font-bold text-slate-600 text-right pr-8">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredData.map((row) => (
-                  <TableRow key={row.id} className="group border-b last:border-0">
-                    <TableCell className="py-4">
-                      <span className="text-xs font-bold text-slate-500">
-                        {getTransactionDate(row).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-800">{row.studentName || row.expensePartyName || "N/A"}</span>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <Badge variant="outline" className={cn(
-                            "text-[9px] h-4 font-bold uppercase px-1.5",
-                            row.txType === 'income' ? "bg-success/5 text-success border-success/20" : "bg-destructive/5 text-destructive border-destructive/20"
-                          )}>
-                            {row.txType === 'income' ? 'Income' : 'Expense'}
-                          </Badge>
-                          <span className="text-[10px] text-muted-foreground font-medium">{row.buildingName}</span>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{row.category || 'Seat Rent/Food'}</span>
-                        <span className="text-[10px] text-slate-500 italic line-clamp-1 max-w-[200px]">{row.description}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className={cn(
-                      "text-right pr-8 font-black text-base",
-                      row.txType === 'income' ? 'text-success' : 'text-destructive'
-                    )}>
-                      {row.txType === 'income' ? '+' : '-'}৳{row.amount?.toLocaleString()}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filteredData.length === 0 && (
+      <div className="bg-secondary/20 p-4 rounded-xl border flex flex-col md:flex-row gap-4 items-center">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search records..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        </div>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-full md:w-[160px] h-10 bg-white font-bold text-xs uppercase"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="income">Income</SelectItem>
+            <SelectItem value="expense">Expense</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {(paymentsLoading || expensesLoading) ? (
+        <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+      ) : (
+        <>
+          {/* Table for Desktop */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50/50">
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-24 bg-slate-50/20">
-                      <div className="flex flex-col items-center justify-center opacity-30">
-                        <History size={48} strokeWidth={1} />
-                        <p className="mt-4 font-bold text-sm">No Financial Records Found</p>
-                      </div>
-                    </TableCell>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Entity / Purpose</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {filteredData.map((row) => (
+                    <TableRow key={row.id} className="group border-b last:border-0">
+                      <TableCell className="py-4 text-xs font-bold text-slate-500">
+                        {getTransactionDate(row).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-800">{row.studentName || row.expensePartyName || "N/A"}</span>
+                          <Badge variant="outline" className={cn("text-[9px] h-4 font-bold uppercase w-fit px-1.5 mt-1", row.txType === 'income' ? "bg-success/5 text-success border-success/20" : "bg-destructive/5 text-destructive border-destructive/20")}>
+                            {row.txType}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-[10px] text-slate-500 italic max-w-[200px] truncate">{row.description || row.category}</TableCell>
+                      <TableCell className={cn("text-right font-black text-base", row.txType === 'income' ? 'text-success' : 'text-destructive')}>
+                        {row.txType === 'income' ? '+' : '-'}৳{row.amount?.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Cards for Mobile */}
+          <div className="md:hidden space-y-4">
+            {filteredData.map((row) => (
+              <Card key={row.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <h3 className="font-black text-slate-800 text-lg leading-tight">{row.studentName || row.expensePartyName || "Miscellaneous"}</h3>
+                      <p className="text-xs font-bold text-slate-400">{getTransactionDate(row).toLocaleDateString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={cn("text-xl font-black", row.txType === 'income' ? 'text-success' : 'text-destructive')}>
+                        {row.txType === 'income' ? <ArrowUpRight size={14} className="inline mr-1" /> : <ArrowDownRight size={14} className="inline mr-1" />}
+                        ৳{row.amount?.toLocaleString()}
+                      </p>
+                      <Badge variant="secondary" className="text-[8px] uppercase mt-1 px-1">{row.txType}</Badge>
+                    </div>
+                  </div>
+                  <Separator className="opacity-50" />
+                  <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    <span>Purpose: {row.category || 'General'}</span>
+                    <span>Method: {row.method || 'N/A'}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {filteredData.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground italic">No financial records found.</div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }

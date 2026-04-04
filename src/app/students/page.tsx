@@ -38,37 +38,25 @@ import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export default function StudentsPage() {
-  const { toast } = useToast()
   const router = useRouter()
   const db = useFirestore()
   const [searchTerm, setSearchTerm] = useState("")
-
-  // Filters State
   const [buildingFilter, setBuildingFilter] = useState("all")
-  const [roomFilter, setRoomFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
-  const [planFilter, setPlanFilter] = useState("all")
   
-  // User Context
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
 
   useEffect(() => {
-    const branch = localStorage.getItem("user_branch") || "Main Branch"
-    const role = localStorage.getItem("user_role") || "Manager"
-    const name = localStorage.getItem("user_name") || "User"
-    const assignedId = localStorage.getItem("assigned_building_id") || "none"
-    
-    setUserBranch(branch)
-    setUserName(name)
-
-    // Auto-filter for Building Manager
+    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setUserName(localStorage.getItem("user_name") || "User")
+    const role = localStorage.getItem("user_role")
+    const assignedId = localStorage.getItem("assigned_building_id")
     if (role === 'Building Manager' && assignedId !== 'none') {
       setBuildingFilter(assignedId)
     }
   }, [])
 
-  // CRITICAL: Filter data by branch
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
@@ -81,114 +69,118 @@ export default function StudentsPage() {
   }, [db, userBranch])
   const { data: rawStudents, isLoading } = useCollection(studentsQuery)
 
-  // Sort in-memory
   const students = useMemo(() => {
     if (!rawStudents) return []
-    return [...rawStudents].sort((a, b) => {
-      const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt)
-      const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt)
-      return dateB.getTime() - dateA.getTime()
-    })
+    return [...rawStudents].sort((a, b) => (b.createdAt?.toDate?.().getTime() || 0) - (a.createdAt?.toDate?.().getTime() || 0))
   }, [rawStudents])
 
-  const roomOptions = useMemo(() => {
-    if (buildingFilter === "all" || !buildings) return []
-    const b = buildings.find(b => b.id === buildingFilter)
-    return b?.apartmentsDetail?.flatMap((a: any) => a.rooms?.map((r: any) => r.roomNo)) || []
-  }, [buildingFilter, buildings])
-
   const filteredStudents = useMemo(() => {
-    if (!students) return []
     return students.filter(s => {
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
-      const matchesRoom = roomFilter === "all" || s.roomNumber === roomFilter
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
-      const matchesPlan = planFilter === "all" || s.paymentSystem === planFilter
-      return matchesSearch && matchesBuilding && matchesRoom && matchesStatus && matchesPlan
+      return matchesSearch && matchesBuilding && matchesStatus
     })
-  }, [students, searchTerm, buildingFilter, roomFilter, statusFilter, planFilter])
-
-  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+  }, [students, searchTerm, buildingFilter, statusFilter])
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Residents</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
-              Manage occupants for <span className="font-bold text-foreground">{userBranch}</span>.
-            </p>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Resident List</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Manage occupants for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
-        
         <div className="ml-auto flex items-center gap-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="gap-2">
-                <Download size={16} /> <span className="hidden sm:inline">Export</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer"><FileText size={14} className="mr-2" /> Download PDF (Print)</DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer"><Share2 size={14} className="mr-2" /> Share List</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
+          <Button size="sm" variant="outline" className="gap-2"><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
-              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
-                {userName ? userName.substring(0, 2) : "U"}
-              </AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">{userName ? userName.substring(0, 2) : "U"}</AvatarFallback>
             </Avatar>
           </Link>
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end print:hidden">
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Search size={10} /> Search Resident</Label><Input placeholder="Name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Building2 size={10} /> Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all") }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><DoorOpen size={10} /> Room</Label><Select value={roomFilter} onValueChange={setRoomFilter} disabled={buildingFilter === "all"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Rooms</SelectItem>{roomOptions.map((r, idx) => <SelectItem key={`${r}-${idx}`} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="active">Active Only</SelectItem><SelectItem value="left">Ex-Residents</SelectItem></SelectContent></Select></div>
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Plan</Label><Select value={planFilter} onValueChange={setPlanFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Plans</SelectItem><SelectItem value="package">Package Only</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent></Select></div>
-        <Button variant="ghost" className="h-10" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setStatusFilter("active"); setPlanFilter("all") }}><XCircle size={14} className="mr-1" /> Reset</Button>
+      <div className="bg-secondary/20 p-4 rounded-xl border grid grid-cols-1 md:grid-cols-4 gap-4 items-end print:hidden">
+        <div className="flex-1 space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label><Input placeholder="Name or phone..." className="bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+        <div className="w-full md:w-48 space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+        <Button variant="ghost" className="h-10 font-bold uppercase text-xs" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); }}><XCircle size={14} className="mr-1" /> Reset</Button>
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center p-12"><Loader2 className="animate-spin" /></div>
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
-        <Card className="border-none shadow-sm overflow-hidden print:shadow-none print:border">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-secondary/30">
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right print:hidden">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredStudents.map((s: any) => (
-                  <TableRow key={s.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/students/${s.id}`)}>
-                    <TableCell><div className="flex items-center gap-3"><UserCircle size={32} className="text-primary/40 print:hidden" /><div className="flex flex-col"><span className="font-bold">{s.name}</span><span className="text-[10px] text-muted-foreground">{s.phone}</span></div></div></TableCell>
-                    <TableCell><div className="flex flex-col"><span className="text-sm font-medium">{s.buildingName}</span><span className="text-[10px] text-muted-foreground">Room {s.roomNumber} | Seat {s.seatNumber}</span></div></TableCell>
-                    <TableCell><Badge variant="outline" className="capitalize">{s.paymentSystem}</Badge></TableCell>
-                    <TableCell><Badge variant={s.isActive ? "default" : "secondary"} className={s.isActive ? "bg-success text-white" : ""}>{s.isActive ? "Active" : "Left"}</Badge></TableCell>
-                    <TableCell className="text-right print:hidden" onClick={(e) => e.stopPropagation()}><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem onClick={() => router.push(`/students/${s.id}`)} className="cursor-pointer gap-2"><Eye size={14} /> View Profile</DropdownMenuItem><DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=payment`)} className="cursor-pointer gap-2"><Wallet size={14} className="text-success" /> Process Payment</DropdownMenuItem>{s.paymentSystem === 'non-package' && (<DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=meals`)} className="cursor-pointer gap-2"><Utensils size={14} className="text-primary" /> Log Meals</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></TableCell>
+        <>
+          {/* Table for Desktop */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-secondary/30">
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-                {filteredStudents.length === 0 && !isLoading && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found.</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {filteredStudents.map((s: any) => (
+                    <TableRow key={s.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/students/${s.id}`)}>
+                      <TableCell><div className="flex items-center gap-3"><div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold">{s.name.substring(0, 2)}</div><div className="flex flex-col"><span className="font-bold">{s.name}</span><span className="text-[10px] text-muted-foreground">{s.phone}</span></div></div></TableCell>
+                      <TableCell><div className="flex flex-col"><span className="text-sm font-medium">{s.buildingName}</span><span className="text-[10px] text-muted-foreground">Room {s.roomNumber}</span></div></TableCell>
+                      <TableCell><Badge variant={s.isActive ? "default" : "secondary"} className={cn("text-[9px] uppercase", s.isActive && "bg-success")}>{s.isActive ? "Active" : "Left"}</Badge></TableCell>
+                      <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); router.push(`/students/${s.id}`); }}><Eye size={16} /></Button></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Cards for Mobile */}
+          <div className="md:hidden space-y-4">
+            {filteredStudents.map((s: any) => (
+              <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/students/${s.id}`)}>
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black">{s.name.substring(0, 2).toUpperCase()}</div>
+                      <div>
+                        <h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3>
+                        <p className="text-xs font-bold text-slate-400 mt-0.5">{s.phone}</p>
+                      </div>
+                    </div>
+                    <Badge variant={s.isActive ? "default" : "secondary"} className={cn("text-[8px] px-1 font-bold", s.isActive && "bg-success")}>
+                      {s.isActive ? "ACTIVE" : "LEFT"}
+                    </Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-secondary/30 p-2 rounded-xl border border-secondary text-center">
+                      <p className="text-[8px] font-bold text-muted-foreground uppercase mb-0.5">Building</p>
+                      <p className="text-xs font-black text-slate-700">{s.buildingName}</p>
+                    </div>
+                    <div className="bg-secondary/30 p-2 rounded-xl border border-secondary text-center">
+                      <p className="text-[8px] font-bold text-muted-foreground uppercase mb-0.5">Room/Seat</p>
+                      <p className="text-xs font-black text-slate-700">{s.roomNumber}/{s.seatNumber}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-1">
+                    <Badge variant="outline" className="capitalize text-[10px] h-5">{s.paymentSystem} Plan</Badge>
+                    <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold uppercase gap-1">
+                      View Profile <Eye size={12} />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {filteredStudents.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No residents found.</div>}
+          </div>
+        </>
       )}
     </div>
   )

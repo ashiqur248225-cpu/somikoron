@@ -24,6 +24,8 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog"
+import Link from "next/link"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export default function ManagerRequestsPage() {
   const { toast } = useToast()
@@ -34,20 +36,20 @@ export default function ManagerRequestsPage() {
   
   const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
+  const [userName, setUserName] = useState("")
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setUserName(localStorage.getItem("user_name") || "User")
   }, [])
 
-  // CRITICAL: Load manager requests for this branch. Removed orderBy to avoid index issues.
   const requestsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "managerRequests"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: rawRequests, isLoading } = useCollection(requestsQuery)
 
-  // Sort requests in memory to avoid composite index requirement
   const requests = useMemo(() => {
     if (!rawRequests) return []
     return [...rawRequests].sort((a, b) => {
@@ -71,10 +73,9 @@ export default function ManagerRequestsPage() {
           approvedAt: serverTimestamp(),
           approvedBy: localStorage.getItem("user_name"),
           createdAt: serverTimestamp(),
-          date: serverTimestamp() // Ensure actual date is set
+          date: serverTimestamp()
         })
 
-        // Update Student Advance if applicable
         if (selectedReq.advanceAmount > 0) {
           await updateDoc(doc(db, "students", selectedReq.studentId), {
             advanceAmount: increment(selectedReq.advanceAmount),
@@ -92,9 +93,7 @@ export default function ManagerRequestsPage() {
         })
       }
 
-      // Remove from requests
       await deleteDoc(doc(db, "managerRequests", selectedReq.id))
-
       toast({ title: "Approved!", description: "Transaction added to permanent records." })
       setIsDetailOpen(false)
       setSelectedReq(null)
@@ -121,70 +120,129 @@ export default function ManagerRequestsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
-        <div>
-          <h1 className="text-3xl font-headline font-bold text-primary">Manager Requests</h1>
-          <p className="text-muted-foreground mt-1">Pending income/expense approvals for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+    <div className="space-y-8 pb-20">
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex items-center gap-2">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
+          <div>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Manager Requests</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Pending income/expense approvals for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+          </div>
+        </div>
+        
+        <div className="ml-auto flex items-center gap-3">
+          <Link href="/profile">
+            <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
+                {userName ? userName.substring(0, 2) : "U"}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
         </div>
       </div>
 
-      <Card className="border-none shadow-sm overflow-hidden">
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
-          ) : (
-            <Table>
-              <TableHeader className="bg-secondary/30">
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Details</TableHead>
-                  <TableHead>Building</TableHead>
-                  <TableHead>Requested By</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests?.map((req) => (
-                  <TableRow key={req.id}>
-                    <TableCell>
-                      <Badge variant="outline" className={req.requestType === 'income' ? 'border-success text-success' : 'border-destructive text-destructive'}>
-                        {req.requestType === 'income' ? <ArrowUpRight size={12} className="mr-1"/> : <ArrowDownRight size={12} className="mr-1"/>}
-                        {req.requestType?.toUpperCase()}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-bold text-sm">{req.studentName || req.category}</span>
-                        <span className="text-[10px] text-muted-foreground italic">{req.description}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell><div className="flex items-center gap-1.5 text-xs font-medium"><Building2 size={12}/> {req.buildingName}</div></TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold text-primary">{req.requestedByName}</span>
-                        <span className="text-[10px] text-muted-foreground">{new Date(req.createdAt?.toDate?.() || req.createdAt).toLocaleDateString()}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-black">৳{req.amount?.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => { setSelectedReq(req); setIsDetailOpen(true); }}>
-                        <Eye size={14} className="mr-1" /> View
-                      </Button>
-                    </TableCell>
+      {isLoading ? (
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+      ) : (
+        <>
+          {/* Table for Desktop */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-secondary/30">
+                  <TableRow>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead>Building</TableHead>
+                    <TableHead>Requested By</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ))}
-                {requests?.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No pending requests from Building Managers.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {requests?.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell>
+                        <Badge variant="outline" className={req.requestType === 'income' ? 'border-success text-success' : 'border-destructive text-destructive'}>
+                          {req.requestType === 'income' ? <ArrowUpRight size={12} className="mr-1"/> : <ArrowDownRight size={12} className="mr-1"/>}
+                          {req.requestType?.toUpperCase()}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-sm">{req.studentName || req.category}</span>
+                          <span className="text-[10px] text-muted-foreground italic">{req.description}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell><div className="flex items-center gap-1.5 text-xs font-medium"><Building2 size={12}/> {req.buildingName}</div></TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-primary">{req.requestedByName}</span>
+                          <span className="text-[10px] text-muted-foreground">{new Date(req.createdAt?.toDate?.() || req.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-black">৳{req.amount?.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="outline" size="sm" onClick={() => { setSelectedReq(req); setIsDetailOpen(true); }}>
+                          <Eye size={14} className="mr-1" /> View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Cards for Mobile */}
+          <div className="md:hidden space-y-4">
+            {requests?.map((req) => (
+              <Card key={req.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <Badge variant="outline" className={req.requestType === 'income' ? 'bg-success/5 border-success/20 text-success' : 'bg-destructive/5 border-destructive/20 text-destructive'}>
+                      {req.requestType?.toUpperCase()} REQUEST
+                    </Badge>
+                    <p className="text-xs font-bold text-slate-400">{new Date(req.createdAt?.toDate?.() || req.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  
+                  <div className="flex justify-between items-end">
+                    <div className="space-y-1">
+                      <h3 className="font-black text-slate-800 text-lg leading-tight">{req.studentName || req.category}</h3>
+                      <p className="text-[10px] text-muted-foreground font-bold flex items-center gap-1">
+                        <Building2 size={10} /> {req.buildingName} {req.roomNumber ? `• Room ${req.roomNumber}` : ''}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Amount</p>
+                      <p className="text-xl font-black text-slate-900">৳{req.amount?.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <Separator className="opacity-50" />
+
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[8px] font-bold uppercase">
+                        {req.requestedByName?.substring(0, 2)}
+                      </div>
+                      <span className="text-xs font-medium text-slate-600">By {req.requestedByName}</span>
+                    </div>
+                    <Button variant="outline" size="sm" className="h-8 rounded-lg font-bold text-xs" onClick={() => { setSelectedReq(req); setIsDetailOpen(true); }}>
+                      Review Entry
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {requests?.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground italic">No pending requests found.</div>
+            )}
+          </div>
+        </>
+      )}
 
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-md">
@@ -230,10 +288,10 @@ export default function ManagerRequestsPage() {
 
           <DialogFooter className="grid grid-cols-2 gap-4">
             <Button variant="outline" onClick={handleReject} disabled={isProcessing} className="border-destructive text-destructive hover:bg-destructive/5">
-              Reject Request
+              Reject
             </Button>
             <Button onClick={handleApprove} disabled={isProcessing} className="bg-success hover:bg-success/90">
-              {isProcessing ? <Loader2 className="animate-spin" /> : "Approve Entry"}
+              {isProcessing ? <Loader2 className="animate-spin" /> : "Approve"}
             </Button>
           </DialogFooter>
         </DialogContent>
