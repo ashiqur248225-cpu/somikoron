@@ -41,7 +41,11 @@ export default function IncomeHistoryPage() {
   const [userName, setUserName] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
-  // Filter State
+  // Entry Filtering State (New)
+  const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
+  const [entryRoomFilter, setEntryRoomFilter] = useState("all")
+
+  // Filter State for List
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
@@ -126,17 +130,78 @@ export default function IncomeHistoryPage() {
     return filteredPayments.reduce((acc, curr) => acc + (curr.amount || 0), 0)
   }, [filteredPayments])
 
+  // Entry Filtering Logic
+  const availableRooms = useMemo(() => {
+    if (!buildings) return []
+    let rooms: string[] = []
+    buildings.forEach(b => {
+      if (entryBuildingFilter === "all" || b.id === entryBuildingFilter) {
+        b.apartmentsDetail?.forEach((apt: any) => {
+          apt.rooms?.forEach((room: any) => {
+            if (room.roomNo && !rooms.includes(room.roomNo)) {
+              rooms.push(room.roomNo)
+            }
+          })
+        })
+      }
+    })
+    return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }, [buildings, entryBuildingFilter])
+
+  const filteredStudentsForEntry = useMemo(() => {
+    if (!students) return []
+    return students.filter(s => {
+      if (!s.isActive) return false
+      const matchesBuilding = entryBuildingFilter === "all" || s.buildingId === entryBuildingFilter
+      const matchesRoom = entryRoomFilter === "all" || s.roomNumber === entryRoomFilter
+      return matchesBuilding && matchesRoom
+    })
+  }, [students, entryBuildingFilter, entryRoomFilter])
+
+  const selectedStudent = useMemo(() => 
+    students?.find(s => s.id === formData.studentId), 
+    [students, formData.studentId]
+  )
+
+  const financialStats = useMemo(() => {
+    if (!selectedStudent) return { rentDue: 0, foodBalance: 0, totalDue: 0 }
+    
+    const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
+    const endDate = new Date()
+    const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
+    const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (selectedStudent.monthlyRent || 0)
+    
+    const totalRentPaid = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const isRefund = curr.type === 'refund'
+      const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (selectedStudent.paymentSystem === 'package' ? Number(curr.amount) : 0)
+      return acc + (isRefund ? -rentPortion : rentPortion)
+    }, 0) || 0
+
+    const historicalRentDue = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
+    const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+
+    const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0
+    const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+    const totalFoodPaid = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const isRefund = curr.type === 'refund'
+      const foodPortion = (curr.foodAmount !== undefined) ? Number(curr.foodAmount) : (selectedStudent.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
+      return acc + (isRefund ? -foodPortion : foodPortion)
+    }, 0) || 0
+    const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
+
+    return { rentDue, foodBalance, totalDue: rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0) }
+  }, [selectedStudent])
+
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver) {
       toast({ variant: "destructive", title: "Error", description: "Select student and receiver." })
       return
     }
 
-    const student = students?.find(s => s.id === formData.studentId)
-    if (!student) return
+    if (!selectedStudent) return
 
-    const seatPaid = student.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
-    const foodPaid = student.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
+    const seatPaid = selectedStudent.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
+    const foodPaid = selectedStudent.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
     const addAdvance = Number(formData.addAdvanceAmount)
     const totalCashAmount = seatPaid + foodPaid + addAdvance
 
@@ -154,11 +219,11 @@ export default function IncomeHistoryPage() {
         seatAmount: seatPaid,
         foodAmount: foodPaid,
         advanceAmount: addAdvance,
-        buildingId: student.buildingId,
-        buildingName: student.buildingName,
-        studentName: student.name,
-        studentId: student.id,
-        roomNumber: student.roomNumber,
+        buildingId: selectedStudent.buildingId,
+        buildingName: selectedStudent.buildingName,
+        studentName: selectedStudent.name,
+        studentId: selectedStudent.id,
+        roomNumber: selectedStudent.roomNumber,
         branch: userBranch,
         type: "income",
         month: formData.month,
@@ -173,9 +238,9 @@ export default function IncomeHistoryPage() {
       await setDoc(doc(db, "payments", pId), pRecord)
 
       // Update student document
-      const studentRef = doc(db, "students", student.id)
+      const studentRef = doc(db, "students", selectedStudent.id)
       const mKey = `${formData.month} ${formData.year}`
-      const currentMap = student.duesBreakdown || {}
+      const currentMap = selectedStudent.duesBreakdown || {}
       
       if (seatPaid > 0 && currentMap[mKey] !== undefined) {
         currentMap[mKey] = Math.max(0, currentMap[mKey] - seatPaid)
@@ -189,8 +254,10 @@ export default function IncomeHistoryPage() {
         updatedAt: serverTimestamp()
       })
 
-      toast({ title: "Payment Recorded", description: `Amount ৳${totalCashAmount} collected from ${student.name}.` })
+      toast({ title: "Payment Recorded", description: `Amount ৳${totalCashAmount} collected from ${selectedStudent.name}.` })
       setIsEntryOpen(false)
+      setEntryBuildingFilter("all")
+      setEntryRoomFilter("all")
       setFormData({
         studentId: "",
         month: MONTHS[new Date().getMonth()],
@@ -244,8 +311,6 @@ export default function IncomeHistoryPage() {
       toast({ variant: "destructive", title: "Export Failed", description: err.message });
     }
   }
-
-  const selectedStudentForEntry = students?.find(s => s.id === formData.studentId)
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
@@ -402,32 +467,76 @@ export default function IncomeHistoryPage() {
         </Button>
       </div>
 
-      {/* Entry Dialog */}
+      {/* Entry Dialog (Synchronized with Dashboard) */}
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>New Income Entry</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-2">
+            {/* Filtering Controls */}
+            <div className="grid grid-cols-2 gap-2 p-3 bg-secondary/30 rounded-xl border">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Building</Label>
+                <Select value={entryBuildingFilter} onValueChange={val => { setEntryBuildingFilter(val); setEntryRoomFilter("all"); }}>
+                  <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Buildings</SelectItem>
+                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Room No.</Label>
+                <Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}>
+                  <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Rooms</SelectItem>
+                    {availableRooms.map(r => (
+                      <SelectItem key={r} value={r}>Room {r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Select Resident</Label>
               <Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}>
-                <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger>
                 <SelectContent>
-                  {students?.filter(s => s.isActive).map(s => (
+                  {filteredStudentsForEntry.map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>
                   ))}
+                  {filteredStudentsForEntry.length === 0 && <SelectItem disabled value="none">No matching residents</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
 
-            {selectedStudentForEntry && (
-              <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-2 animate-in fade-in zoom-in-95 duration-200">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted-foreground">Monthly Rent:</span>
-                  <span className="font-bold">৳{selectedStudentForEntry.monthlyRent}</span>
+            {selectedStudent && (
+              <div className="bg-primary/5 p-4 rounded-xl space-y-3 border border-primary/10 animate-in fade-in zoom-in-95 duration-200">
+                <h4 className="text-[10px] font-bold uppercase text-primary flex items-center gap-1.5"><Calculator size={12}/> Resident Ledger Stats</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white p-2 rounded border shadow-sm">
+                    <p className="text-[8px] uppercase font-bold text-muted-foreground">Monthly Rent</p>
+                    <p className="text-sm font-bold text-slate-800">৳{selectedStudent.monthlyRent}</p>
+                  </div>
+                  <div className={cn("bg-white p-2 rounded border shadow-sm", financialStats.rentDue > 0 ? "border-destructive/30" : "")}>
+                    <p className="text-[8px] uppercase font-bold text-destructive">Overall Rent Due</p>
+                    <p className="text-sm font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-white p-2 rounded border shadow-sm">
+                    <p className="text-[8px] uppercase font-bold text-success">Advance Pool</p>
+                    <p className="text-sm font-bold text-success">৳{(selectedStudent.advanceAmount || 0).toLocaleString()}</p>
+                  </div>
+                  {selectedStudent.paymentSystem === 'non-package' && (
+                    <div className={cn("bg-white p-2 rounded border shadow-sm", financialStats.foodBalance < 0 ? "border-destructive/30" : "border-success/30")}>
+                      <p className={cn("text-[8px] uppercase font-bold", financialStats.foodBalance < 0 ? "text-destructive" : "text-success")}>Food Balance</p>
+                      <p className={cn("text-sm font-bold", financialStats.foodBalance < 0 ? "text-destructive" : "text-success")}>৳{financialStats.foodBalance.toLocaleString()}</p>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted-foreground">Payment Plan:</span>
-                  <Badge variant="outline" className="text-[8px] h-4 uppercase">{selectedStudentForEntry.paymentSystem}</Badge>
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="text-[8px] h-4 uppercase bg-white">Plan: {selectedStudent.paymentSystem}</Badge>
+                  <Badge variant="outline" className="text-[8px] h-4 uppercase bg-white">Building: {selectedStudent.buildingName}</Badge>
                 </div>
               </div>
             )}
@@ -450,16 +559,16 @@ export default function IncomeHistoryPage() {
             </div>
 
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
-              <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Payment Amounts</Label>
-              {selectedStudentForEntry?.paymentSystem === 'package' ? (
+              <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Collection Amounts</Label>
+              {selectedStudent?.paymentSystem === 'package' ? (
                 <div className="space-y-2">
-                  <Label className="text-xs">Amount Received (৳)</Label>
+                  <Label className="text-xs">Flat Amount Received (৳)</Label>
                   <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} placeholder="0.00" /></div>
-                  <div className="space-y-2"><Label className="text-xs">Food Credit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} placeholder="0.00" /></div>
+                  <div className="space-y-2"><Label className="text-xs">Food Deposit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} placeholder="0.00" /></div>
                 </div>
               )}
               <div className="space-y-2">
@@ -492,7 +601,7 @@ export default function IncomeHistoryPage() {
 
             <div className="space-y-2">
               <Label>Description</Label>
-              <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Optional notes..." />
+              <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Optional notes or receipt no..." />
             </div>
           </div>
           <DialogFooter>
