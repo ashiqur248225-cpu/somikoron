@@ -248,11 +248,9 @@ export default function DashboardPage() {
         
         <div className="ml-auto flex items-center gap-3">
           <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-[140px] md:w-[160px] bg-white border-slate-200 font-bold text-slate-600 h-10 px-4 rounded-xl shadow-sm">
-              <div className="flex items-center gap-2">
-                <CalendarIcon size={14} className="text-primary" />
-                <SelectValue placeholder="Period" />
-              </div>
+            <SelectTrigger className="w-10 h-10 p-0 flex items-center justify-center bg-white border-slate-200 text-slate-600 rounded-xl shadow-sm [&>svg:last-child]:hidden">
+              <CalendarIcon size={18} className="text-primary" />
+              <span className="sr-only">Period Selector</span>
             </SelectTrigger>
             <SelectContent className="rounded-xl border-slate-100">
               <SelectItem value="today" className="font-medium">Today</SelectItem>
