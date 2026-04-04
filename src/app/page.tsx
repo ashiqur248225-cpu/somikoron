@@ -20,7 +20,7 @@ import {
   AlertCircle,
   Users,
   BellRing,
-  Calendar
+  Calendar as CalendarIcon
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -49,7 +49,7 @@ export default function DashboardPage() {
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
 
-  // Queries
+  // 1. Fetch Buildings for this branch
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -57,8 +57,9 @@ export default function DashboardPage() {
     }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
   }, [db, userRole, userBranch, assignedBuildingId])
-  const { data: buildings } = useCollection(buildingsQuery)
+  const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
 
+  // 2. Fetch Students for this branch
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -66,8 +67,9 @@ export default function DashboardPage() {
     }
     return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userRole, userBranch, assignedBuildingId])
-  const { data: students } = useCollection(studentsQuery)
+  const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
+  // 3. Fetch All Payments for this branch
   const allPaymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -75,8 +77,9 @@ export default function DashboardPage() {
     }
     return query(collection(db, "payments"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole, assignedBuildingId])
-  const { data: allPayments } = useCollection(allPaymentsQuery)
+  const { data: allPayments, isLoading: paymentsLoading } = useCollection(allPaymentsQuery)
 
+  // 4. Fetch All Expenses for this branch
   const allExpensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -84,50 +87,68 @@ export default function DashboardPage() {
     }
     return query(collection(db, "expenses"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole, assignedBuildingId])
-  const { data: allExpenses } = useCollection(allExpensesQuery)
+  const { data: allExpenses, isLoading: expensesLoading } = useCollection(allExpensesQuery)
 
+  // 5. Pending Manager Requests
   const managerRequestsQuery = useMemoFirebase(() => {
     if (!userBranch || userRole === 'Building Manager') return null
     return query(collection(db, "managerRequests"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole])
   const { data: pendingMgrRequests } = useCollection(managerRequestsQuery)
 
+  // 6. Opening Balances Config
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances } = useDoc(balancesRef)
 
   const stats = useMemo(() => {
-    const income = (allPayments || []).reduce((acc, p) => acc + (p.amount || 0), 0)
-    const expense = (allExpenses || []).reduce((acc, e) => acc + (e.amount || 0), 0)
+    const now = new Date()
+    const currentMonthName = MONTHS[now.getMonth()]
+    const currentYearStr = now.getFullYear().toString()
 
+    // Monthly Totals
+    const monthlyIncome = (allPayments || [])
+      .filter(p => p.month === currentMonthName && p.year === currentYearStr)
+      .reduce((acc, p) => acc + (p.amount || 0), 0)
+
+    const monthlyExpense = (allExpenses || [])
+      .filter(e => {
+        const eDate = e.expenseDate ? new Date(e.expenseDate) : null
+        return eDate && eDate.getMonth() === now.getMonth() && eDate.getFullYear() === now.getFullYear()
+      })
+      .reduce((acc, e) => acc + (e.amount || 0), 0)
+
+    // Dues Calculation Logic (Mirroring Dues Page)
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, s) => {
       const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
-      const now = new Date()
+      const endDate = now
       
-      const monthsList: any[] = []
-      let tempDate = new Date(billingStart.getFullYear(), billingStart.getMonth(), 1)
-      const endCompare = new Date(now.getFullYear(), now.getMonth(), 1)
-
-      while (tempDate <= endCompare) {
-        monthsList.push({ key: `${MONTHS[tempDate.getMonth()]} ${tempDate.getFullYear()}`, charge: s.monthlyRent || 0 })
-        tempDate.setMonth(tempDate.getMonth() + 1)
-      }
-
-      const histDuesMap = s.duesBreakdown || {}
-      Object.entries(histDuesMap).forEach(([key, val]) => {
-        const existing = monthsList.find(m => m.key === key)
-        if (existing) existing.charge = Number(val)
-        else monthsList.push({ key, charge: Number(val) })
-      })
-
+      const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
+      const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (s.monthlyRent || 0)
+      
+      const historicalRentDue = s.duesBreakdown ? Object.values(s.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
+      
       const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
+        const isRefund = curr.type === 'refund'
         const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (s.paymentSystem === 'package' ? Number(curr.amount) : 0)
-        return acc + rentPortion
+        return acc + (isRefund ? -rentPortion : rentPortion)
       }, 0) || 0
 
-      const totalPayable = monthsList.reduce((acc, m) => acc + m.charge, 0)
-      return sAcc + Math.max(0, totalPayable - totalRentPaid)
+      const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+
+      // Food Balance
+      const historicalFoodDue = Number(s.foodDueAmount) || 0
+      const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+      const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
+        const isRefund = curr.type === 'refund'
+        const foodPortion = (curr.foodAmount !== undefined) ? Number(curr.foodAmount) : (s.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
+        return acc + (isRefund ? -foodPortion : foodPortion)
+      }, 0) || 0
+      const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
+
+      return sAcc + rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
     }, 0)
 
+    // Fund status based on all transactions (Not just monthly)
     const fund = { 
       cash: Number(openingBalances?.cash || 0), 
       bank: Number(openingBalances?.bank || 0), 
@@ -135,13 +156,34 @@ export default function DashboardPage() {
       nagad: Number(openingBalances?.nagad || 0) 
     };
 
-    (allPayments || []).forEach(p => { if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) });
-    (allExpenses || []).forEach(e => { if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) });
+    (allPayments || []).forEach(p => { 
+      if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) 
+    });
+    (allExpenses || []).forEach(e => { 
+      if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) 
+    });
 
-    return { income, expense, dues: totalDues, fund }
+    return { 
+      income: monthlyIncome, 
+      expense: monthlyExpense, 
+      dues: totalDues, 
+      fund,
+      activeResidents: (students || []).filter(s => s.isActive).length
+    }
   }, [allPayments, allExpenses, students, openingBalances])
 
   const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
+
+  const isLoading = buildingsLoading || studentsLoading || paymentsLoading || expensesLoading
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-muted-foreground font-medium animate-pulse">Syncing Branch Data...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8 pb-24 relative">
@@ -149,11 +191,11 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-primary tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground font-medium text-sm">Real-time overview of your hostel network.</p>
+          <p className="text-muted-foreground font-medium text-sm">Real-time overview for <span className="text-foreground font-bold">{userBranch}</span>.</p>
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="bg-white border-slate-200 px-4 py-2 text-slate-600 font-bold flex gap-2">
-            <Calendar size={14} /> This Month
+            <CalendarIcon size={14} /> {MONTHS[new Date().getMonth()]} {new Date().getFullYear()}
           </Badge>
           {userRole !== 'Building Manager' && pendingMgrRequests && pendingMgrRequests.length > 0 && (
             <Link href="/manager-requests">
@@ -164,7 +206,7 @@ export default function DashboardPage() {
           )}
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer">
-              <AvatarFallback className="bg-primary text-primary-foreground font-bold">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs">
                 {userName ? userName.substring(0, 2).toUpperCase() : "U"}
               </AvatarFallback>
             </Avatar>
@@ -176,7 +218,7 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-widest text-success">Income</CardTitle>
+            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-success">Income</CardTitle>
             <div className="bg-success/10 p-1.5 rounded-full"><ArrowUpCircle className="h-4 w-4 text-success" /></div>
           </CardHeader>
           <CardContent>
@@ -187,7 +229,7 @@ export default function DashboardPage() {
 
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-widest text-destructive">Expenses</CardTitle>
+            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-destructive">Expenses</CardTitle>
             <div className="bg-destructive/10 p-1.5 rounded-full"><ArrowDownCircle className="h-4 w-4 text-destructive" /></div>
           </CardHeader>
           <CardContent>
@@ -196,25 +238,25 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-rose-400 rounded-2xl overflow-hidden group hover:shadow-md transition-all">
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-orange-400 rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-widest text-rose-500">Total Dues</CardTitle>
-            <div className="bg-rose-100 p-1.5 rounded-full"><TrendingUp className="h-4 w-4 text-rose-500" /></div>
+            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-orange-500">Total Dues</CardTitle>
+            <div className="bg-orange-50 p-1.5 rounded-full"><TrendingUp className="h-4 w-4 text-orange-500" /></div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">৳{stats.dues.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Current outstanding</p>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">Branch Receivables</p>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-primary rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-widest text-primary">Residents</CardTitle>
+            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-primary">Residents</CardTitle>
             <div className="bg-primary/10 p-1.5 rounded-full"><Building2 className="h-4 w-4 text-primary" /></div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-900">{students?.filter(s => s.isActive).length || 0}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Active in {buildings?.length || 0} properties</p>
+            <div className="text-2xl font-bold text-slate-900">{stats.activeResidents}</div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">Active in {buildings?.length || 0} buildings</p>
           </CardContent>
         </Card>
       </div>
@@ -223,8 +265,8 @@ export default function DashboardPage() {
         <Card className="lg:col-span-3 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-bold text-slate-800">Total Fund Status</CardTitle>
-              <p className="text-xs text-muted-foreground font-medium mt-1">Opening + Transactions (including transfers).</p>
+              <CardTitle className="text-lg font-bold text-slate-800">Branch Fund Status</CardTitle>
+              <p className="text-xs text-muted-foreground font-medium mt-1">Cumulative balances including all branch transfers.</p>
             </div>
             <div className="bg-primary/5 p-3 rounded-2xl text-primary border border-primary/10"><CircleDollarSign size={24} /></div>
           </CardHeader>
