@@ -22,12 +22,15 @@ import {
   BellRing,
   Calendar as CalendarIcon,
   ChevronDown,
-  Filter
+  Filter,
+  Calculator,
+  Search,
+  CheckCircle2
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useFirestore, useCollection, useDoc, useMemoFirebase } from "@/firebase"
-import { collection, query, where, doc } from "firebase/firestore"
+import { collection, query, where, doc, serverTimestamp, setDoc, updateDoc, arrayUnion, increment } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Progress } from "@/components/ui/progress"
@@ -41,16 +44,46 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/hooks/use-toast"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function DashboardPage() {
   const db = useFirestore()
+  const { toast } = useToast()
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [timeRange, setTimeRange] = useState("this_month")
+
+  // Income Entry Dialog State
+  const [isIncomeDialogOpen, setIsIncomeDialogOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
+  const [entryRoomFilter, setEntryRoomFilter] = useState("")
+  const [formData, setFormData] = useState({
+    studentId: "",
+    month: MONTHS[new Date().getMonth()],
+    year: new Date().getFullYear().toString(),
+    amount: "",
+    seatAmount: "",
+    foodAmount: "",
+    addAdvanceAmount: "0",
+    method: "cash",
+    receiver: "",
+    description: ""
+  })
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
@@ -72,12 +105,19 @@ export default function DashboardPage() {
   // 2. Fetch Students
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
-    }
     return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userRole, userBranch, assignedBuildingId])
+  }, [db, userBranch])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
+
+  const staffQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "staff"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: staffList } = useCollection(staffQuery)
+
+  const mealRateRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
+  const { data: mealRateConfig } = useDoc(mealRateRef)
+  const currentMealRate = mealRateConfig?.rate || 0
 
   // 3. Fetch All Payments
   const allPaymentsQuery = useMemoFirebase(() => {
@@ -93,7 +133,7 @@ export default function DashboardPage() {
   }, [db, userBranch])
   const { data: allExpenses, isLoading: expensesLoading } = useCollection(allExpensesQuery)
 
-  // 5. Fetch All Transfers (Critical for Fund status)
+  // 5. Fetch All Transfers
   const allTransfersQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "transfers"), where("branch", "==", userBranch))
@@ -120,7 +160,7 @@ export default function DashboardPage() {
     }
     if (range === 'this_week') {
       const day = now.getDay()
-      const diff = now.getDate() - day + (day === 0 ? -6 : 1) // Monday
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1)
       const startOfWeek = new Date(new Date(now).setDate(diff))
       startOfWeek.setHours(0, 0, 0, 0)
       return date >= startOfWeek
@@ -136,13 +176,10 @@ export default function DashboardPage() {
 
   const stats = useMemo(() => {
     const now = new Date()
-
-    // Filter payments and expenses based on selected timeRange
     const filteredPayments = (allPayments || []).filter(p => {
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
       return isWithinRange(pDate, timeRange)
     })
-
     const filteredExpenses = (allExpenses || []).filter(e => {
       const eDate = e.expenseDate ? new Date(e.expenseDate) : null
       return eDate && isWithinRange(eDate, timeRange)
@@ -151,24 +188,19 @@ export default function DashboardPage() {
     const totalIncome = filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
     const totalExpense = filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
 
-    // Dues Calculation
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, s) => {
       const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
       const endDate = now
-      
       const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
       const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (s.monthlyRent || 0)
       const historicalRentDue = s.duesBreakdown ? Object.values(s.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
-      
       const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
         const isRefund = curr.type === 'refund'
         const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (s.paymentSystem === 'package' ? Number(curr.amount) : 0)
         return acc + (isRefund ? -rentPortion : rentPortion)
       }, 0) || 0
-
       const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
-      // Food Balance
       const historicalFoodDue = Number(s.foodDueAmount) || 0
       const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
       const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
@@ -181,7 +213,6 @@ export default function DashboardPage() {
       return sAcc + rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
     }, 0)
 
-    // Fund status (Opening Balances + Income - Expenses + Transfers In - Transfers Out)
     const fund = { 
       cash: Number(openingBalances?.cash || 0), 
       bank: Number(openingBalances?.bank || 0), 
@@ -189,26 +220,15 @@ export default function DashboardPage() {
       nagad: Number(openingBalances?.nagad || 0) 
     };
 
-    // Add Income
     (allPayments || []).forEach(p => { 
       if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) 
     });
-    
-    // Subtract Expenses
     (allExpenses || []).forEach(e => { 
       if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) 
     });
-
-    // Apply Inter-Account Transfers
     (allTransfers || []).forEach(t => {
-      // Subtract from source
-      if (fund[t.fromAccount as keyof typeof fund] !== undefined) {
-        fund[t.fromAccount as keyof typeof fund] -= (t.amount || 0)
-      }
-      // Add to destination
-      if (fund[t.toAccount as keyof typeof fund] !== undefined) {
-        fund[t.toAccount as keyof typeof fund] += (t.amount || 0)
-      }
+      if (fund[t.fromAccount as keyof typeof fund] !== undefined) fund[t.fromAccount as keyof typeof fund] -= (t.amount || 0)
+      if (fund[t.toAccount as keyof typeof fund] !== undefined) fund[t.toAccount as keyof typeof fund] += (t.amount || 0)
     });
 
     return { 
@@ -220,8 +240,134 @@ export default function DashboardPage() {
     }
   }, [allPayments, allExpenses, allTransfers, students, openingBalances, timeRange])
 
-  const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
+  // Dialog Student Filtering
+  const filteredStudentsForEntry = useMemo(() => {
+    if (!students) return []
+    return students.filter(s => {
+      if (!s.isActive) return false
+      const matchesBuilding = entryBuildingFilter === "all" || s.buildingId === entryBuildingFilter
+      const matchesRoom = !entryRoomFilter || s.roomNumber?.toLowerCase().includes(entryRoomFilter.toLowerCase())
+      return matchesBuilding && matchesRoom
+    })
+  }, [students, entryBuildingFilter, entryRoomFilter])
 
+  const selectedStudent = useMemo(() => 
+    students?.find(s => s.id === formData.studentId), 
+    [students, formData.studentId]
+  )
+
+  const financialStats = useMemo(() => {
+    if (!selectedStudent) return { rentDue: 0, foodBalance: 0, totalDue: 0 }
+    
+    const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
+    const endDate = new Date()
+    const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
+    const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (selectedStudent.monthlyRent || 0)
+    
+    const totalRentPaid = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const isRefund = curr.type === 'refund'
+      const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (selectedStudent.paymentSystem === 'package' ? Number(curr.amount) : 0)
+      return acc + (isRefund ? -rentPortion : rentPortion)
+    }, 0) || 0
+
+    const historicalRentDue = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
+    const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+
+    const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0
+    const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+    const totalFoodPaid = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => {
+      const isRefund = curr.type === 'refund'
+      const foodPortion = (curr.foodAmount !== undefined) ? Number(curr.foodAmount) : (selectedStudent.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
+      return acc + (isRefund ? -foodPortion : foodPortion)
+    }, 0) || 0
+    const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
+
+    return { rentDue, foodBalance, totalDue: rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0) }
+  }, [selectedStudent])
+
+  const handleCreatePayment = async () => {
+    if (!formData.studentId || !formData.receiver) {
+      toast({ variant: "destructive", title: "Error", description: "Please select student and receiver staff." })
+      return
+    }
+
+    if (!selectedStudent) return
+
+    const seatPaid = selectedStudent.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
+    const foodPaid = selectedStudent.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
+    const addAdvance = Number(formData.addAdvanceAmount)
+    const totalCashAmount = seatPaid + foodPaid + addAdvance
+
+    if (totalCashAmount <= 0) {
+      toast({ variant: "destructive", title: "Error", description: "Payment amount must be greater than zero." })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const pId = doc(collection(db, "payments")).id
+      const pRecord = {
+        id: pId,
+        amount: totalCashAmount,
+        seatAmount: seatPaid,
+        foodAmount: foodPaid,
+        advanceAmount: addAdvance,
+        buildingId: selectedStudent.buildingId,
+        buildingName: selectedStudent.buildingName,
+        studentName: selectedStudent.name,
+        studentId: selectedStudent.id,
+        roomNumber: selectedStudent.roomNumber,
+        branch: userBranch,
+        type: "income",
+        month: formData.month,
+        year: formData.year,
+        method: formData.method,
+        receiver: formData.receiver,
+        description: formData.description || `Collection for ${formData.month} ${formData.year}`,
+        date: serverTimestamp(),
+        createdAt: serverTimestamp()
+      }
+
+      await setDoc(doc(db, "payments", pId), pRecord)
+
+      const studentRef = doc(db, "students", selectedStudent.id)
+      const mKey = `${formData.month} ${formData.year}`
+      const currentMap = selectedStudent.duesBreakdown || {}
+      
+      if (seatPaid > 0 && currentMap[mKey] !== undefined) {
+        currentMap[mKey] = Math.max(0, currentMap[mKey] - seatPaid)
+        if (currentMap[mKey] === 0) delete currentMap[mKey]
+      }
+
+      await updateDoc(studentRef, {
+        paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }),
+        advanceAmount: increment(addAdvance),
+        duesBreakdown: currentMap,
+        updatedAt: serverTimestamp()
+      })
+
+      toast({ title: "Payment Recorded", description: `Amount ৳${totalCashAmount} collected from ${selectedStudent.name}.` })
+      setIsIncomeDialogOpen(false)
+      setFormData({
+        studentId: "",
+        month: MONTHS[new Date().getMonth()],
+        year: new Date().getFullYear().toString(),
+        amount: "",
+        seatAmount: "",
+        foodAmount: "",
+        addAdvanceAmount: "0",
+        method: "cash",
+        receiver: "",
+        description: ""
+      })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
   const isLoading = buildingsLoading || studentsLoading || paymentsLoading || expensesLoading || transfersLoading
 
   if (isLoading) {
@@ -326,7 +472,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-5">
-        {/* Fund Status with Transfer logic applied */}
         <Card className="lg:col-span-3 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
@@ -362,7 +507,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Occupancy Card */}
         <Card className="lg:col-span-2 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
@@ -407,12 +551,157 @@ export default function DashboardPage() {
 
       {/* Quick Action FAB */}
       <div className="fixed bottom-8 right-8 flex flex-col gap-4 items-end">
-        <Link href="/income">
-          <Button size="icon" className="h-14 w-14 rounded-full shadow-2xl bg-primary hover:scale-110 transition-transform border-4 border-white">
-            <Plus size={32} />
-          </Button>
-        </Link>
+        <Button 
+          size="icon" 
+          onClick={() => setIsIncomeDialogOpen(true)}
+          className="h-14 w-14 rounded-full shadow-2xl bg-primary hover:scale-110 transition-transform border-4 border-white"
+        >
+          <Plus size={32} />
+        </Button>
       </div>
+
+      {/* NEW INCOME ENTRY DIALOG */}
+      <Dialog open={isIncomeDialogOpen} onOpenChange={setIsIncomeDialogOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>New Income Entry</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Filtering Controls */}
+            <div className="grid grid-cols-2 gap-2 p-3 bg-secondary/30 rounded-xl border">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Building</Label>
+                <Select value={entryBuildingFilter} onValueChange={setEntryBuildingFilter}>
+                  <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Buildings</SelectItem>
+                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Room No.</Label>
+                <Input 
+                  placeholder="301" 
+                  value={entryRoomFilter} 
+                  onChange={e => setEntryRoomFilter(e.target.value)} 
+                  className="h-8 text-xs bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Select Resident</Label>
+              <Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}>
+                <SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger>
+                <SelectContent>
+                  {filteredStudentsForEntry.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>
+                  ))}
+                  {filteredStudentsForEntry.length === 0 && <SelectItem disabled value="none">No matching residents</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedStudent && (
+              <div className="bg-primary/5 p-4 rounded-xl space-y-3 border border-primary/10 animate-in fade-in zoom-in-95 duration-200">
+                <h4 className="text-[10px] font-bold uppercase text-primary flex items-center gap-1.5"><Calculator size={12}/> Resident Ledger Stats</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white p-2 rounded border shadow-sm">
+                    <p className="text-[8px] uppercase font-bold text-muted-foreground">Monthly Rent</p>
+                    <p className="text-sm font-bold text-slate-800">৳{selectedStudent.monthlyRent}</p>
+                  </div>
+                  <div className={cn("bg-white p-2 rounded border shadow-sm", financialStats.rentDue > 0 ? "border-destructive/30" : "")}>
+                    <p className="text-[8px] uppercase font-bold text-destructive">Overall Rent Due</p>
+                    <p className="text-sm font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-white p-2 rounded border shadow-sm">
+                    <p className="text-[8px] uppercase font-bold text-success">Advance Pool</p>
+                    <p className="text-sm font-bold text-success">৳{(selectedStudent.advanceAmount || 0).toLocaleString()}</p>
+                  </div>
+                  {selectedStudent.paymentSystem === 'non-package' && (
+                    <div className={cn("bg-white p-2 rounded border shadow-sm", financialStats.foodBalance < 0 ? "border-destructive/30" : "border-success/30")}>
+                      <p className={cn("text-[8px] uppercase font-bold", financialStats.foodBalance < 0 ? "text-destructive" : "text-success")}>Food Balance</p>
+                      <p className={cn("text-sm font-bold", financialStats.foodBalance < 0 ? "text-destructive" : "text-success")}>৳{financialStats.foodBalance.toLocaleString()}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="text-[8px] h-4 uppercase bg-white">Plan: {selectedStudent.paymentSystem}</Badge>
+                  <Badge variant="outline" className="text-[8px] h-4 uppercase bg-white">Building: {selectedStudent.buildingName}</Badge>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>For Month</Label>
+                <Select value={formData.month} onValueChange={val => setFormData({...formData, month: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Year</Label>
+                <Select value={formData.year} onValueChange={val => setFormData({...formData, year: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
+              <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Collection Amounts</Label>
+              {selectedStudent?.paymentSystem === 'package' ? (
+                <div className="space-y-2">
+                  <Label className="text-xs">Flat Amount Received (৳)</Label>
+                  <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} placeholder="0.00" /></div>
+                  <div className="space-y-2"><Label className="text-xs">Food Deposit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} placeholder="0.00" /></div>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label>
+                <Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} placeholder="0.00" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Method</Label>
+                <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bkash">Bkash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="bank">Bank</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Received By</Label>
+                <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
+                  <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
+                  <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Textarea 
+              value={formData.description} 
+              onChange={e => setFormData({...formData, description: e.target.value})} 
+              placeholder="Optional notes or receipt no..." 
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCreatePayment} disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
+              {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

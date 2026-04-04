@@ -66,6 +66,18 @@ export default function ExpenseHistoryPage() {
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
 
+  const [formData, setFormData] = useState({
+    category: "others",
+    buildingId: "none",
+    apartmentName: "",
+    amount: "",
+    method: "cash",
+    expensePartyName: "",
+    receiver: "",
+    description: "",
+    expenseDate: new Date().toISOString().split('T')[0]
+  })
+
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -82,6 +94,12 @@ export default function ExpenseHistoryPage() {
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
+
+  const staffQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "staff"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: staffList } = useCollection(staffQuery)
 
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -115,6 +133,46 @@ export default function ExpenseHistoryPage() {
   const totalFilteredExpense = useMemo(() => {
     return filteredExpenses.reduce((acc, curr) => acc + (curr.amount || 0), 0)
   }, [filteredExpenses])
+
+  const handleCreateExpense = async () => {
+    if (!formData.amount || !formData.expensePartyName) {
+      toast({ variant: "destructive", title: "Error", description: "Amount and Expenser Name are required." })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const expenseId = doc(collection(db, "expenses")).id
+      const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
+      
+      await setDoc(doc(db, "expenses", expenseId), {
+        ...formData,
+        id: expenseId,
+        amount: Number(formData.amount),
+        branch: userBranch,
+        buildingName: selectedBuilding?.name || "General",
+        createdAt: serverTimestamp()
+      })
+
+      toast({ title: "Expense Recorded", description: `Amount ৳${formData.amount} saved.` })
+      setIsEntryOpen(false)
+      setFormData({
+        category: "others",
+        buildingId: "none",
+        apartmentName: "",
+        amount: "",
+        method: "cash",
+        expensePartyName: "",
+        receiver: "",
+        description: "",
+        expenseDate: new Date().toISOString().split('T')[0]
+      })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
 
@@ -293,6 +351,77 @@ export default function ExpenseHistoryPage() {
           <Plus size={32} className="text-white" />
         </Button>
       </div>
+
+      {/* NEW EXPENSE DIALOG */}
+      <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Record New Expense</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={formData.category} onValueChange={val => setFormData({...formData, category: val})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Building / Property</Label>
+              <Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val})}>
+                <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">General (No Building)</SelectItem>
+                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Amount (৳)</Label>
+                <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
+              </div>
+              <div className="space-y-2">
+                <Label>Method</Label>
+                <Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bkash">Bkash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="bank">Bank</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Expenser (Who Paid?)</Label>
+              <Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}>
+                <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
+                <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Expense Date</Label>
+              <Input type="date" value={formData.expenseDate} onChange={e => setFormData({...formData, expenseDate: e.target.value})} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="What was this for?" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCreateExpense} disabled={isSubmitting} className="w-full h-12 text-lg font-bold bg-expense hover:bg-expense/90">
+              {isSubmitting ? <Loader2 className="animate-spin" /> : "Save Expense Record"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
