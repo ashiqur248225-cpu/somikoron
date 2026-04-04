@@ -23,6 +23,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
+import Link from "next/link"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const CHART_COLORS = ['#296EB3', '#F06A6A', '#4CAF50', '#FF9800', '#9C27B0', '#00BCD4', '#607D8B', '#E91E63'];
 
@@ -46,8 +48,11 @@ export default function ReportsPage() {
   
   // User Context
   const [userBranch, setUserBranch] = useState("Main Branch")
+  const [userName, setUserName] = useState("")
+
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setUserName(localStorage.getItem("user_name") || "User")
   }, [])
 
   // Queries
@@ -237,23 +242,34 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
-        <div className="flex items-center gap-4">
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-3xl font-bold text-primary tracking-tight">Performance Reports</h1>
-            <p className="text-muted-foreground font-medium text-sm">Deep analysis for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Performance Reports</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
+              Deep analysis for <span className="font-bold text-foreground">{userBranch}</span>.
+            </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
-            <FileSpreadsheet size={16} /> Export CSV
+        
+        <div className="ml-auto flex items-center gap-3">
+          <div className="hidden sm:flex gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> CSV</Button>
+          </div>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}>
+            <Download size={16} /> <span className="hidden sm:inline">Export PDF</span>
           </Button>
-          <Button variant="outline" className="gap-2" onClick={handlePrint}>
-            <Download size={16} /> Export PDF
-          </Button>
-          <Button className="gap-2"><Share2 size={16} /> Share Report</Button>
+
+          <Link href="/profile">
+            <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
+                {userName ? userName.substring(0, 2) : "U"}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
         </div>
       </div>
 

@@ -30,6 +30,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import Link from "next/link"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -42,6 +44,7 @@ export default function IncomeHistoryPage() {
   // User Context
   const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
+  const [userName, setUserName] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [canRequest, setCanRequest] = useState(true)
 
@@ -60,11 +63,13 @@ export default function IncomeHistoryPage() {
   useEffect(() => {
     const role = localStorage.getItem("user_role") || "Manager"
     const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const name = localStorage.getItem("user_name") || "User"
     const assignedId = localStorage.getItem("assigned_building_id") || "none"
     const reqStatus = localStorage.getItem("can_request_income") !== "false"
 
     setUserRole(role)
     setUserBranch(branch)
+    setUserName(name)
     setAssignedBuildingId(assignedId)
     setCanRequest(reqStatus)
 
@@ -269,24 +274,39 @@ export default function IncomeHistoryPage() {
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
-        <div className="flex items-center gap-4">
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Income History</h1>
-            <p className="text-muted-foreground mt-1">Receipts for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Income History</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
+              Receipts for <span className="font-bold text-foreground">{userBranch}</span>.
+            </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" type="button" className="gap-2"><FileSpreadsheet size={16} /> Export CSV</Button>
+        
+        <div className="ml-auto flex items-center gap-3">
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button className="gap-2"><Download size={16} /> Export / Share</Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-2">
+                <Download size={16} /> <span className="hidden sm:inline">Export</span>
+              </Button>
+            </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={handlePrint} className="cursor-pointer"><FileText size={14} className="mr-2" /> Download PDF (Print)</DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer"><Share2 size={14} className="mr-2" /> Share Report</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Link href="/profile">
+            <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
+                {userName ? userName.substring(0, 2) : "U"}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
         </div>
       </div>
 

@@ -12,6 +12,8 @@ import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc, setDoc, serverTimestamp } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import Link from "next/link"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export default function SettingsPage() {
   const { toast } = useToast()
@@ -19,9 +21,11 @@ export default function SettingsPage() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [rate, setRate] = useState("")
   const [userBranch, setUserBranch] = useState("Main Branch")
+  const [userName, setUserName] = useState("")
   
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setUserName(localStorage.getItem("user_name") || "User")
   }, [])
 
   // Opening Balances State
@@ -109,12 +113,27 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-20">
-      <div className="flex items-center gap-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
-        <div>
-          <h1 className="text-3xl font-headline font-bold text-primary">Global Settings</h1>
-          <p className="text-muted-foreground mt-1">Configure parameters for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex items-center gap-2">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
+          <div>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Settings</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
+              Configure parameters for <span className="font-bold text-foreground">{userBranch}</span>.
+            </p>
+          </div>
+        </div>
+        
+        <div className="ml-auto flex items-center gap-3">
+          <Link href="/profile">
+            <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
+                {userName ? userName.substring(0, 2) : "U"}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
         </div>
       </div>
 

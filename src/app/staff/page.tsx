@@ -34,6 +34,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import Link from "next/link"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export default function StaffPage() {
   const { toast } = useToast()
@@ -47,10 +49,12 @@ export default function StaffPage() {
   
   const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
+  const [userName, setUserName] = useState("")
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setUserName(localStorage.getItem("user_name") || "User")
   }, [])
 
   const currentTab = searchParams.get('type') || "management"
@@ -142,110 +146,126 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-4">
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-3xl font-bold text-primary tracking-tight">Staff Management</h1>
-            <p className="text-muted-foreground text-sm">Managing staff for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Staff Management</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
+              Managing staff for <span className="font-bold text-foreground">{userBranch}</span>.
+            </p>
           </div>
         </div>
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 h-11 px-6 rounded-xl shadow-lg"><Plus size={18} /> Add {currentTab === 'management' ? 'Management' : 'Working'} Staff</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>New Staff Enrollment</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Assign to Branch</Label>
-                <Select value={formData.branch} onValueChange={val => setFormData({...formData, branch: val})}>
-                  <SelectTrigger><SelectValue placeholder="Select Branch" /></SelectTrigger>
-                  <SelectContent>
-                    {branches?.map(b => (
-                      <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Staff Category</Label>
-                <Select value={formData.staffType} onValueChange={val => setFormData({...formData, staffType: val, role: val === 'management' ? 'Branch Manager' : 'Cook'})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="management">Management Staff (System Access)</SelectItem>
-                    <SelectItem value="working">Working Staff (Utility/Service)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2"><Label>Full Name</Label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Employee Name" /></div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Phone Number</Label><Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} maxLength={11} placeholder="01XXXXXXXXX" /></div>
-                <div className="space-y-2"><Label>Monthly Salary (৳)</Label><Input type="number" value={formData.monthlySalary} onChange={e => setFormData({...formData, monthlySalary: e.target.value})} /></div>
-              </div>
-
-              <div className="space-y-2"><Label>Home Address</Label><Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Village, Post, Dist" /></div>
-
-              {formData.staffType === 'management' ? (
-                <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>System Role</Label>
-                      <Select value={formData.role} onValueChange={val => setFormData({...formData, role: val})}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Admin">Admin</SelectItem>
-                          <SelectItem value="Branch Manager">Branch Manager</SelectItem>
-                          <SelectItem value="Building Manager">Building Manager</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2"><Label>Login Password</Label><Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="••••••••" /></div>
-                  </div>
-
-                  {formData.role === 'Building Manager' && (
-                    <div className="space-y-2">
-                      <Label>Assign Building</Label>
-                      <Select value={formData.assignedBuildingId} onValueChange={val => setFormData({...formData, assignedBuildingId: val})}>
-                        <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No Building (Floating)</SelectItem>
-                          {buildings?.map(b => (
-                            <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                  <Label>Worker Role</Label>
-                  <Select value={formData.role} onValueChange={val => setFormData({...formData, role: val})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+        
+        <div className="ml-auto flex items-center gap-3">
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-2">
+                <Plus size={18} /> <span className="hidden sm:inline">Add Staff</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>New Staff Enrollment</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Assign to Branch</Label>
+                  <Select value={formData.branch} onValueChange={val => setFormData({...formData, branch: val})}>
+                    <SelectTrigger><SelectValue placeholder="Select Branch" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Cook">Head Cook</SelectItem>
-                      <SelectItem value="Assistant Cook">Assistant Cook</SelectItem>
-                      <SelectItem value="Cleaner">Cleaner</SelectItem>
-                      <SelectItem value="Security">Security Guard</SelectItem>
-                      <SelectItem value="Electrician">Electrician</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
+                      {branches?.map(b => (
+                        <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button onClick={handleCreate} disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
-                {isSubmitting ? <Loader2 className="animate-spin" /> : "Save Staff Member"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+
+                <div className="space-y-2">
+                  <Label>Staff Category</Label>
+                  <Select value={formData.staffType} onValueChange={val => setFormData({...formData, staffType: val, role: val === 'management' ? 'Branch Manager' : 'Cook'})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="management">Management Staff (System Access)</SelectItem>
+                      <SelectItem value="working">Working Staff (Utility/Service)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2"><Label>Full Name</Label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Employee Name" /></div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label>Phone Number</Label><Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} maxLength={11} placeholder="01XXXXXXXXX" /></div>
+                  <div className="space-y-2"><Label>Monthly Salary (৳)</Label><Input type="number" value={formData.monthlySalary} onChange={e => setFormData({...formData, monthlySalary: e.target.value})} /></div>
+                </div>
+
+                <div className="space-y-2"><Label>Home Address</Label><Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Village, Post, Dist" /></div>
+
+                {formData.staffType === 'management' ? (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>System Role</Label>
+                        <Select value={formData.role} onValueChange={val => setFormData({...formData, role: val})}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Admin">Admin</SelectItem>
+                            <SelectItem value="Branch Manager">Branch Manager</SelectItem>
+                            <SelectItem value="Building Manager">Building Manager</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2"><Label>Login Password</Label><Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="••••••••" /></div>
+                    </div>
+
+                    {formData.role === 'Building Manager' && (
+                      <div className="space-y-2">
+                        <Label>Assign Building</Label>
+                        <Select value={formData.assignedBuildingId} onValueChange={val => setFormData({...formData, assignedBuildingId: val})}>
+                          <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No Building (Floating)</SelectItem>
+                            {buildings?.map(b => (
+                              <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                    <Label>Worker Role</Label>
+                    <Select value={formData.role} onValueChange={val => setFormData({...formData, role: val})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Cook">Head Cook</SelectItem>
+                        <SelectItem value="Assistant Cook">Assistant Cook</SelectItem>
+                        <SelectItem value="Cleaner">Cleaner</SelectItem>
+                        <SelectItem value="Security">Security Guard</SelectItem>
+                        <SelectItem value="Electrician">Electrician</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button onClick={handleCreate} disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
+                  {isSubmitting ? <Loader2 className="animate-spin" /> : "Save Staff Member"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Link href="/profile">
+            <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
+                {userName ? userName.substring(0, 2) : "U"}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
+        </div>
       </div>
 
       <Tabs defaultValue={currentTab} onValueChange={(val) => router.push(`/staff?type=${val}`)}>
@@ -257,7 +277,6 @@ export default function StaffPage() {
         <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl">
           <CardHeader className="pb-4 border-b">
             <div className="relative w-full md:max-w-md">
-              Search Staff
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Search name or phone..." className="pl-10 bg-slate-50 border-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>

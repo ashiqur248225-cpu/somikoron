@@ -51,6 +51,8 @@ import { cn } from "@/lib/utils"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import Link from "next/link"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 interface SeatDetail {
   seatNo: string;
@@ -78,11 +80,13 @@ export default function BuildingsPage() {
   // User Context
   const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("Main Branch")
+  const [userName, setUserName] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setUserName(localStorage.getItem("user_name") || "User")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
 
@@ -271,131 +275,145 @@ export default function BuildingsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-4">
+    <div className="space-y-8 pb-20">
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Buildings</h1>
-            <p className="text-muted-foreground mt-1">Manage infrastructure for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Buildings</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
+              Manage infrastructure for <span className="font-bold text-foreground">{userBranch}</span>.
+            </p>
           </div>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="flex gap-2">
-              <Plus size={18} /> Add New Building
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add Building</DialogTitle>
-              <DialogDescription>Define apartments with meters, rooms, and seats.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Building Name</Label>
-                  <Input value={newBuilding.name} onChange={e => setNewBuilding({...newBuilding, name: e.target.value})} placeholder="Dream Haven" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Address</Label>
-                  <Input value={newBuilding.address} onChange={e => setNewBuilding({...newBuilding, address: e.target.value})} placeholder="Location" />
-                </div>
-              </div>
-
-              <div className="p-3 bg-secondary/30 rounded-lg border flex items-center justify-between">
-                <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
-                  <MapIcon size={12} /> Target Branch: <span className="text-primary">{userBranch}</span>
-                </p>
-                <Badge variant="outline" className="text-[10px] bg-white">Auto-assigned</Badge>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <Label className="font-bold">Apartment Configuration</Label>
-                  <Button variant="outline" size="sm" onClick={addApartment} className="h-8"><Plus size={14} className="mr-1" /> Add Apartment</Button>
-                </div>
-
-                <ScrollArea className="h-[400px] border rounded-md p-4">
-                  <div className="space-y-8">
-                    {apartments.map((apt, aptIdx) => (
-                      <div key={aptIdx} className="p-4 border-2 rounded-xl bg-secondary/5 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase">Apt Name/No</Label>
-                            <Input value={apt.name} placeholder="e.g. C2" onChange={e => updateApartmentField(aptIdx, "name", e.target.value)} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase flex items-center gap-1"><Zap size={10} className="text-primary"/> Meter No.</Label>
-                            <Input value={apt.meterNo} placeholder="Meter ID" onChange={e => updateApartmentField(aptIdx, "meterNo", e.target.value)} />
-                          </div>
-                          <Button variant="ghost" size="sm" onClick={() => removeApartment(aptIdx)} className="text-destructive h-10">
-                            <Trash2 size={16} />
-                          </Button>
-                        </div>
-
-                        <div className="ml-4 space-y-4 pl-4 border-l-2 border-primary/20">
-                          {apt.rooms.map((room, roomIdx) => (
-                            <div key={roomIdx} className="space-y-3 bg-background p-3 rounded-lg border">
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                                <div className="space-y-1">
-                                  <Label className="text-[10px] font-bold">Room No.</Label>
-                                  <Input value={room.roomNo} placeholder="301" onChange={e => updateRoomField(aptIdx, roomIdx, "roomNo", e.target.value)} />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className="text-[10px] font-bold">Seat Count</Label>
-                                  <Input type="number" value={room.seatCount} placeholder="Seats" onChange={e => updateRoomField(aptIdx, roomIdx, "seatCount", e.target.value)} />
-                                </div>
-                                <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(aptIdx, roomIdx)} className="text-destructive">
-                                  <XCircle size={16} />
-                                </Button>
-                              </div>
-
-                              <div className="flex flex-wrap gap-1.5">
-                                {room.seats.map((seat, sIdx) => (
-                                  <button
-                                    key={sIdx}
-                                    onClick={() => toggleSeatStatus(aptIdx, roomIdx, sIdx)}
-                                    className={cn(
-                                      "px-2 py-1 rounded text-[10px] font-bold border",
-                                      seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive"
-                                    )}
-                                  >
-                                    S-{seat.seatNo}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                          <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(aptIdx)} className="text-primary h-8"><Plus size={14} className="mr-1"/> Add Room to {apt.name || 'Apt'}</Button>
-                        </div>
-                      </div>
-                    ))}
+        
+        <div className="ml-auto flex items-center gap-3">
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="flex gap-2">
+                <Plus size={18} /> <span className="hidden sm:inline">New Building</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add Building</DialogTitle>
+                <DialogDescription>Define apartments with meters, rooms, and seats.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-6 py-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Building Name</Label>
+                    <Input value={newBuilding.name} onChange={e => setNewBuilding({...newBuilding, name: e.target.value})} placeholder="Dream Haven" />
                   </div>
-                </ScrollArea>
-              </div>
+                  <div className="space-y-2">
+                    <Label>Address</Label>
+                    <Input value={newBuilding.address} onChange={e => setNewBuilding({...newBuilding, address: e.target.value})} placeholder="Location" />
+                  </div>
+                </div>
 
-              <div className="grid grid-cols-3 gap-4 pt-4 border-t">
-                 <div className="text-center bg-primary/5 p-2 rounded border">
-                    <p className="text-[10px] uppercase text-muted-foreground font-bold">Total Seats</p>
-                    <p className="text-xl font-bold text-primary">{stats.total}</p>
-                 </div>
-                 <div className="text-center bg-success/5 p-2 rounded border">
-                    <p className="text-[10px] uppercase text-success font-bold">Occupied</p>
-                    <p className="text-xl font-bold text-success">{stats.occupied}</p>
-                 </div>
-                 <div className="text-center bg-destructive/5 p-2 rounded border">
-                    <p className="text-[10px] uppercase text-destructive font-bold">Empty</p>
-                    <p className="text-xl font-bold text-destructive">{stats.empty}</p>
-                 </div>
+                <div className="p-3 bg-secondary/30 rounded-lg border flex items-center justify-between">
+                  <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
+                    <MapIcon size={12} /> Target Branch: <span className="text-primary">{userBranch}</span>
+                  </p>
+                  <Badge variant="outline" className="text-[10px] bg-white">Auto-assigned</Badge>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label className="font-bold">Apartment Configuration</Label>
+                    <Button variant="outline" size="sm" onClick={addApartment} className="h-8"><Plus size={14} className="mr-1" /> Add Apartment</Button>
+                  </div>
+
+                  <ScrollArea className="h-[400px] border rounded-md p-4">
+                    <div className="space-y-8">
+                      {apartments.map((apt, aptIdx) => (
+                        <div key={aptIdx} className="p-4 border-2 rounded-xl bg-secondary/5 space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase">Apt Name/No</Label>
+                              <Input value={apt.name} placeholder="e.g. C2" onChange={e => updateApartmentField(aptIdx, "name", e.target.value)} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase flex items-center gap-1"><Zap size={10} className="text-primary"/> Meter No.</Label>
+                              <Input value={apt.meterNo} placeholder="Meter ID" onChange={e => updateApartmentField(aptIdx, "meterNo", e.target.value)} />
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => removeApartment(aptIdx)} className="text-destructive h-10">
+                              <Trash2 size={16} />
+                            </Button>
+                          </div>
+
+                          <div className="ml-4 space-y-4 pl-4 border-l-2 border-primary/20">
+                            {apt.rooms.map((room, roomIdx) => (
+                              <div key={roomIdx} className="space-y-3 bg-background p-3 rounded-lg border">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold">Room No.</Label>
+                                    <Input value={room.roomNo} placeholder="301" onChange={e => updateRoomField(aptIdx, roomIdx, "roomNo", e.target.value)} />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold">Seat Count</Label>
+                                    <Input type="number" value={room.seatCount} placeholder="Seats" onChange={e => updateRoomField(aptIdx, roomIdx, "seatCount", e.target.value)} />
+                                  </div>
+                                  <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(aptIdx, roomIdx)} className="text-destructive">
+                                    <XCircle size={16} />
+                                  </Button>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1.5">
+                                  {room.seats.map((seat, sIdx) => (
+                                    <button
+                                      key={sIdx}
+                                      onClick={() => toggleSeatStatus(aptIdx, roomIdx, sIdx)}
+                                      className={cn(
+                                        "px-2 py-1 rounded text-[10px] font-bold border",
+                                        seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive"
+                                      )}
+                                    >
+                                      S-{seat.seatNo}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                            <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(aptIdx)} className="text-primary h-8"><Plus size={14} className="mr-1"/> Add Room to {apt.name || 'Apt'}</Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                   <div className="text-center bg-primary/5 p-2 rounded border">
+                      <p className="text-[10px] uppercase text-muted-foreground font-bold">Total Seats</p>
+                      <p className="text-xl font-bold text-primary">{stats.total}</p>
+                   </div>
+                   <div className="text-center bg-success/5 p-2 rounded border">
+                      <p className="text-[10px] uppercase text-success font-bold">Occupied</p>
+                      <p className="text-xl font-bold text-success">{stats.occupied}</p>
+                   </div>
+                   <div className="text-center bg-destructive/5 p-2 rounded border">
+                      <p className="text-[10px] uppercase text-destructive font-bold">Empty</p>
+                      <p className="text-xl font-bold text-destructive">{stats.empty}</p>
+                   </div>
+                </div>
               </div>
-            </div>
-            <DialogFooter>
-              <Button onClick={handleCreate} className="w-full h-12 text-lg">Save Building Configuration</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button onClick={handleCreate} className="w-full h-12 text-lg">Save Building Configuration</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Link href="/profile">
+            <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
+                {userName ? userName.substring(0, 2) : "U"}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
+        </div>
       </div>
 
       {/* Advanced Filter Bar */}
