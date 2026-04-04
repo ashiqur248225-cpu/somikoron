@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Users, Search, Filter, Building2, DoorOpen, Loader2, Eye, 
   CircleAlert, XCircle, Info, FileSpreadsheet, Download, 
-  CheckCircle2, Clock, Wallet, LayoutGrid, RotateCcw, ArrowDownRight, AlertTriangle, Briefcase, GraduationCap, Printer
+  CheckCircle2, Clock, Wallet, LayoutGrid, RotateCcw, ArrowDownRight, AlertTriangle, Briefcase, GraduationCap, Printer, TrendingUp, UserCheck, UserMinus
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -22,10 +22,12 @@ import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useToast } from "@/hooks/use-toast"
 
 export default function DuesPage() {
   const router = useRouter()
   const db = useFirestore()
+  const { toast } = useToast()
   
   // Search & Basic Filters
   const [searchTerm, setSearchTerm] = useState("")
@@ -63,10 +65,17 @@ export default function DuesPage() {
       const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
       const now = new Date()
       const endDate = s.isActive ? now : (s.leftAt?.toDate?.() || now)
+      
+      // Calculate Months Elapsed
       const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
       const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (s.monthlyRent || 0)
+      
+      // Historical Dues from the map
       const historicalRentDue = s.duesBreakdown ? Object.values(s.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
+      
+      // Payments Logic
       const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || 0), 0) || 0
+      
       const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
       return { ...s, rentDue, totalDue: rentDue, isPaid: rentDue <= 0 }
     })
@@ -85,8 +94,11 @@ export default function DuesPage() {
     })
   }, [processedStudents, searchTerm, buildingFilter, paymentStatusFilter, roomFilter, planFilter, residentStatusFilter])
 
-  const totalOutstanding = useMemo(() => {
-    return filteredData.reduce((acc, curr) => acc + (curr.totalDue || 0), 0)
+  const stats = useMemo(() => {
+    const totalDue = filteredData.reduce((acc, curr) => acc + (curr.totalDue || 0), 0)
+    const paidCount = filteredData.filter(s => s.isPaid).length
+    const unpaidCount = filteredData.filter(s => !s.isPaid).length
+    return { totalDue, paidCount, unpaidCount }
   }, [filteredData])
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
@@ -131,15 +143,11 @@ export default function DuesPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Outstanding Dues</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Due</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Rent receivables for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <div className="hidden sm:flex flex-col text-right mr-2">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Filtered Dues</p>
-            <p className="text-sm font-black text-destructive">৳{totalOutstanding.toLocaleString()}</p>
-          </div>
           <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
           <Link href="/profile">
@@ -148,6 +156,42 @@ export default function DuesPage() {
             </Avatar>
           </Link>
         </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid gap-6 grid-cols-1 md:grid-cols-3">
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden group hover:shadow-md transition-all">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-destructive">Total Outstanding Due</CardTitle>
+            <div className="bg-destructive/10 p-1.5 rounded-full"><TrendingUp className="h-4 w-4 text-destructive" /></div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-black text-slate-900">৳{stats.totalDue.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">Filter based receivables</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden group hover:shadow-md transition-all">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-success">Paid Residents</CardTitle>
+            <div className="bg-success/10 p-1.5 rounded-full"><UserCheck className="h-4 w-4 text-success" /></div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-black text-slate-900">{stats.paidCount}</div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">Zero balance accounts</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-orange-500 rounded-2xl overflow-hidden group hover:shadow-md transition-all">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-orange-600">Pending Residents</CardTitle>
+            <div className="bg-orange-50 p-1.5 rounded-full"><UserMinus className="h-4 w-4 text-orange-600" /></div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-black text-slate-900">{stats.unpaidCount}</div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">Residents with dues</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Advanced Filter Panel */}

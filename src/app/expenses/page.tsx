@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert, ArrowDownRight } from "lucide-react"
+import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert, ArrowDownRight, ArrowDownCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -112,6 +112,10 @@ export default function ExpenseHistoryPage() {
     })
   }, [expenses, categoryFilter, buildingFilter, searchTerm, startDate, endDate])
 
+  const totalFilteredExpense = useMemo(() => {
+    return filteredExpenses.reduce((acc, curr) => acc + (curr.amount || 0), 0)
+  }, [filteredExpenses])
+
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
 
   const handleExportCSV = () => {
@@ -154,7 +158,7 @@ export default function ExpenseHistoryPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Expense Records</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Expense</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Spending for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
@@ -168,6 +172,18 @@ export default function ExpenseHistoryPage() {
           </Link>
         </div>
       </div>
+
+      {/* Summary Card */}
+      <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden group hover:shadow-md transition-all">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-xs font-bold uppercase tracking-widest text-destructive">Total Filtered Expense</CardTitle>
+          <div className="bg-destructive/10 p-1.5 rounded-full"><ArrowDownCircle className="h-4 w-4 text-destructive" /></div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-3xl font-black text-slate-900">৳{totalFilteredExpense.toLocaleString()}</div>
+          <p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">Based on current filters</p>
+        </CardContent>
+      </Card>
 
       <div className="bg-secondary/20 p-4 rounded-xl border space-y-4 print:hidden">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">

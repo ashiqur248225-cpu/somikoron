@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert, Calculator, AlertCircle, ArrowUpRight } from "lucide-react"
+import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert, Calculator, AlertCircle, ArrowUpRight, ArrowUpCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, orderBy, limit, where } from "firebase/firestore"
@@ -121,6 +121,10 @@ export default function IncomeHistoryPage() {
       return matchesStartDate && matchesEndDate && matchesBuilding && matchesMethod && matchesSearch
     })
   }, [payments, startDate, endDate, buildingFilter, methodFilter, searchTerm])
+
+  const totalFilteredIncome = useMemo(() => {
+    return filteredPayments.reduce((acc, curr) => acc + (curr.amount || 0), 0)
+  }, [filteredPayments])
 
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver) {
@@ -250,7 +254,7 @@ export default function IncomeHistoryPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Income History</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Income</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Receipts for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
@@ -264,6 +268,18 @@ export default function IncomeHistoryPage() {
           </Link>
         </div>
       </div>
+
+      {/* Summary Card */}
+      <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden group hover:shadow-md transition-all">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-xs font-bold uppercase tracking-widest text-success">Total Filtered Income</CardTitle>
+          <div className="bg-success/10 p-1.5 rounded-full"><ArrowUpCircle className="h-4 w-4 text-success" /></div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-3xl font-black text-slate-900">৳{totalFilteredIncome.toLocaleString()}</div>
+          <p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">Based on current filters</p>
+        </CardContent>
+      </Card>
 
       {/* Date & Search Filter Panel */}
       <div className="bg-secondary/20 p-4 rounded-xl border space-y-4 print:hidden">

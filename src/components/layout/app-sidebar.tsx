@@ -85,9 +85,9 @@ export function AppSidebar() {
     { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Pending Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
     { title: "Manager Requests", url: "/manager-requests", icon: BellRing, roles: ["Admin", "Branch Manager"] },
-    { title: "Income History", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager", "Building Manager"] },
-    { title: "Expense History", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager", "Building Manager"] },
-    { title: "Dues Tracking", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Income", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },
     { 
       title: "Staff & Roles", 
