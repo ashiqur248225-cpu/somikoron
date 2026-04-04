@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -24,7 +24,8 @@ import {
   Search, 
   Filter, 
   Bed,
-  CircleDot
+  CircleDot,
+  MapPin as MapIcon
 } from "lucide-react"
 import {
   Dialog,
@@ -44,7 +45,7 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
-import { collection, serverTimestamp } from "firebase/firestore"
+import { collection, serverTimestamp, query, where } from "firebase/firestore"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -74,25 +75,60 @@ export default function BuildingsPage() {
   const db = useFirestore()
   const [open, setOpen] = useState(false)
   
+  // User Context
+  const [userRole, setUserRole] = useState("")
+  const [userBranch, setUserBranch] = useState("")
+  const [assignedBuildingId, setAssignedBuildingId] = useState("")
+
+  useEffect(() => {
+    setUserRole(localStorage.getItem("user_role") || "Manager")
+    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
+  }, [])
+
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBuilding, setBuildingFilter] = useState("all")
-  const [filterRoomType, setRoomTypeFilter] = useState("all") // all, single, double, triple+
-  const [filterAvailability, setAvailabilityFilter] = useState("all") // all, empty_only
+  const [filterRoomType, setRoomTypeFilter] = useState("all") 
+  const [filterAvailability, setAvailabilityFilter] = useState("all")
 
   const [newBuilding, setNewBuilding] = useState({ 
     name: "", 
-    address: ""
+    address: "",
+    branch: ""
   })
   
   const [apartments, setApartments] = useState<ApartmentDetail[]>([
     { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [] }] }
   ])
 
-  const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
+  // Fetch Branches for Admin Selection
+  const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
+  const { data: branches } = useCollection(branchesQuery)
+
+  // Filtered Buildings Query
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!userRole) return null
+    if (userRole === 'Admin') {
+      if (userBranch === 'All Branches') return collection(db, "buildings")
+      return query(collection(db, "buildings"), where("branch", "==", userBranch))
+    }
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userRole, userBranch])
+  
   const { data: buildings, isLoading } = useCollection(buildingsQuery)
 
-  // Derived state: Flattened Rooms for detailed search
+  // Initialize building branch based on context
+  useEffect(() => {
+    if (open) {
+      setNewBuilding(prev => ({
+        ...prev,
+        branch: userRole === 'Admin' ? (userBranch === 'All Branches' ? '' : userBranch) : userBranch
+      }))
+    }
+  }, [open, userRole, userBranch])
+
+  // Derived state: Flattened Rooms
   const allFlattenedRooms = useMemo(() => {
     if (!buildings) return []
     const rooms: any[] = []
@@ -201,8 +237,8 @@ export default function BuildingsPage() {
   }, [apartments])
 
   const handleCreate = () => {
-    if (!newBuilding.name || !newBuilding.address) {
-      toast({ variant: "destructive", title: "Error", description: "Name and Address are required." })
+    if (!newBuilding.name || !newBuilding.address || !newBuilding.branch) {
+      toast({ variant: "destructive", title: "Error", description: "Name, Address, and Branch are required." })
       return
     }
 
@@ -233,9 +269,9 @@ export default function BuildingsPage() {
     })
 
     setOpen(false)
-    setNewBuilding({ name: "", address: "" })
+    setNewBuilding({ name: "", address: "", branch: "" })
     setApartments([{ name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [] }] }])
-    toast({ title: "Building Created", description: "Hierarchy Apartment -> Room -> Seat saved." })
+    toast({ title: "Building Created", description: `Hierarchy saved under branch: ${newBuilding.branch}` })
   }
 
   return (
@@ -261,7 +297,7 @@ export default function BuildingsPage() {
               <DialogDescription>Define apartments with meters, rooms, and seats.</DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Building Name</Label>
                   <Input value={newBuilding.name} onChange={e => setNewBuilding({...newBuilding, name: e.target.value})} placeholder="Dream Haven" />
@@ -271,6 +307,31 @@ export default function BuildingsPage() {
                   <Input value={newBuilding.address} onChange={e => setNewBuilding({...newBuilding, address: e.target.value})} placeholder="Location" />
                 </div>
               </div>
+
+              {userRole === 'Admin' && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2"><MapIcon size={14} className="text-primary"/> Select Target Branch</Label>
+                  <Select value={newBuilding.branch} onValueChange={val => setNewBuilding({...newBuilding, branch: val})}>
+                    <SelectTrigger className="bg-secondary/30">
+                      <SelectValue placeholder="Select Branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches?.map(b => (
+                        <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground italic">* এডমিন হিসেবে আপনি যেকোনো ব্রাঞ্চের জন্য বিল্ডিং তৈরি করতে পারেন।</p>
+                </div>
+              )}
+
+              {userRole !== 'Admin' && (
+                <div className="p-3 bg-secondary/20 rounded-lg border">
+                  <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
+                    <MapIcon size={12} /> Assigned Branch: <span className="text-primary">{userBranch}</span>
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -503,6 +564,11 @@ export default function BuildingsPage() {
                 </div>
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
                   <MapPin size={12} /> <span>{building.address}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-1">
+                  <Badge variant="secondary" className="text-[9px] h-4 px-1.5 uppercase font-bold">
+                    {building.branch}
+                  </Badge>
                 </div>
               </CardHeader>
               <CardContent>
