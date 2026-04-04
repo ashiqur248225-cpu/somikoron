@@ -392,7 +392,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="border-none shadow-sm">
+        <Card className="border-none shadow-sm h-fit">
           <CardHeader><CardTitle className="text-lg">Contact & Location</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-3 text-sm"><Phone className="text-primary" size={16} /><span className="font-bold">{student.phone}</span></div>
@@ -404,18 +404,29 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         <Card className="border-none shadow-sm md:col-span-2">
           <CardHeader><CardTitle className="text-lg">Financial Overview</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
+            <div className="grid gap-4 grid-cols-2">
               <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
                 <p className="text-[10px] uppercase text-orange-600 font-bold">Monthly Rent</p>
                 <p className="text-lg font-bold text-orange-600">৳{student.monthlyRent}</p>
               </div>
-              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20"><p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p><p className="text-lg font-bold">৳{student.advanceAmount || 0}</p></div>
-              <div className="p-3 rounded-lg bg-secondary/50 border border-secondary"><p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p><p className="text-lg font-bold">৳{student.serviceCharge || 0}</p></div>
+              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p>
+                <p className="text-lg font-bold">৳{student.advanceAmount || 0}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-secondary/50 border border-secondary">
+                <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p>
+                <p className="text-lg font-bold">৳{student.serviceCharge || 0}</p>
+              </div>
               
-              {financialStats.rentDue > 0 && (
+              {financialStats.rentDue > 0 ? (
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                   <p className="text-[10px] uppercase text-destructive font-bold">Total Rent Due</p>
                   <p className="text-lg font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p>
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg bg-success/10 border border-success/20">
+                  <p className="text-[10px] uppercase text-success font-bold">Rent Status</p>
+                  <p className="text-lg font-bold text-success">No Dues</p>
                 </div>
               )}
               
