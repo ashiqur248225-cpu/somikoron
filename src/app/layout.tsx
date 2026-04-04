@@ -1,3 +1,4 @@
+
 import type {Metadata} from 'next';
 import './globals.css';
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
@@ -5,6 +6,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar"
 import { Toaster } from "@/components/ui/toaster"
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { AuthGuard } from '@/components/auth-guard';
+import { LayoutWrapper } from '@/components/layout-wrapper';
 
 export const metadata: Metadata = {
   title: 'Somikoron - Building & Student Management',
@@ -26,14 +28,9 @@ export default function RootLayout({
       <body className="font-body antialiased bg-background">
         <FirebaseClientProvider>
           <AuthGuard>
-            <SidebarProvider>
-              <AppSidebar />
-              <SidebarInset>
-                <main className="flex-1 p-4 md:p-8">
-                  {children}
-                </main>
-              </SidebarInset>
-            </SidebarProvider>
+            <LayoutWrapper>
+              {children}
+            </LayoutWrapper>
           </AuthGuard>
           <Toaster />
         </FirebaseClientProvider>

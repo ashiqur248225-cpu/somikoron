@@ -13,10 +13,14 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, addDoc, serverTimestamp, query, where } from "firebase/firestore"
-import { UserPlus, CheckCircle2, Building2, MapPin, GraduationCap, Phone, Info, Loader2, AlertTriangle } from "lucide-react"
+import { UserPlus, CheckCircle2, Building2, MapPin, GraduationCap, Phone, Info, Loader2, AlertTriangle, UserCircle } from "lucide-react"
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
 const GROUPS = ["Science", "Commerce", "Arts", "Other"]
+const OCCUPATIONS = [
+  { id: "student", label: "Student" },
+  { id: "job_holder", label: "Job Holder" }
+]
 
 export default function PublicRegisterPage() {
   const { toast } = useToast()
@@ -38,6 +42,7 @@ export default function PublicRegisterPage() {
 
   const [formData, setFormData] = useState({
     type: urlType, // new or old from URL
+    occupation: "student",
     name: "",
     fatherName: "",
     motherName: "",
@@ -152,50 +157,61 @@ export default function PublicRegisterPage() {
             <div className="h-2 bg-primary w-full" />
             <CardHeader>
               <div className="flex items-center gap-2 text-primary">
-                <Info size={20} />
+                <UserCircle size={20} />
                 <CardTitle className="text-xl">Basic Information (ব্যক্তিগত তথ্য)</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Full Name (নাম)</Label>
-                  <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="আপনার পুরো নাম লিখুন" className="bg-secondary/20 border-none h-11" />
+                  <Label>Occupation (পেশা)</Label>
+                  <Select value={formData.occupation} onValueChange={val => setFormData({...formData, occupation: val})}>
+                    <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue placeholder="Select occupation" /></SelectTrigger>
+                    <SelectContent>
+                      {OCCUPATIONS.map(occ => <SelectItem key={occ.id} value={occ.id}>{occ.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label>Full Name (নাম)</Label>
+                  <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="আপনার পুরো নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
                   <Label>Date of Birth (জন্ম তারিখ)</Label>
-                  <Input required type="date" value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} className="bg-secondary/20 border-none h-11" />
+                  <Input required type="date" value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} className="border-2 border-slate-200 h-11" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Blood Group (রক্তের গ্রুপ)</Label>
+                  <Select value={formData.bloodGroup} onValueChange={val => setFormData({...formData, bloodGroup: val})}>
+                    <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue placeholder="Select blood group" /></SelectTrigger>
+                    <SelectContent>{BLOOD_GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Father's Name (পিতার নাম)</Label>
-                  <Input required value={formData.fatherName} onChange={e => setFormData({...formData, fatherName: e.target.value})} className="bg-secondary/20 border-none h-11" />
+                  <Input required value={formData.fatherName} onChange={e => setFormData({...formData, fatherName: e.target.value})} placeholder="পিতার নাম লিখুন" className="border-2 border-slate-200 h-11" />
                 </div>
                 <div className="space-y-2">
                   <Label>Mother's Name (মাতার নাম)</Label>
-                  <Input required value={formData.motherName} onChange={e => setFormData({...formData, motherName: e.target.value})} className="bg-secondary/20 border-none h-11" />
+                  <Input required value={formData.motherName} onChange={e => setFormData({...formData, motherName: e.target.value})} placeholder="মাতার নাম লিখুন" className="border-2 border-slate-200 h-11" />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Blood Group (রক্তের গ্রুপ)</Label>
-                  <Select value={formData.bloodGroup} onValueChange={val => setFormData({...formData, bloodGroup: val})}>
-                    <SelectTrigger className="bg-secondary/20 border-none h-11"><SelectValue /></SelectTrigger>
-                    <SelectContent>{BLOOD_GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Label>Personal Phone (নিজস্ব মোবাইল)</Label>
+                  <Input required maxLength={11} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="01XXXXXXXXX" className="border-2 border-slate-200 h-11" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Personal Phone (নিজস্ব মোবাইল)</Label>
-                  <Input required maxLength={11} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="01XXXXXXXXX" className="bg-secondary/20 border-none h-11" />
+                  <Label>Guardian's Phone (অভিভাবকের মোবাইল)</Label>
+                  <Input required maxLength={11} value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} placeholder="জরুরী যোগাযোগের জন্য" className="border-2 border-slate-200 h-11" />
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Guardian's Phone (অভিভাবকের মোবাইল)</Label>
-                <Input required maxLength={11} value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} placeholder="জরুরী যোগাযোগের জন্য" className="bg-secondary/20 border-none h-11" />
               </div>
             </CardContent>
           </Card>
@@ -210,19 +226,19 @@ export default function PublicRegisterPage() {
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>District (জেলা)</Label>
-                <Input required value={formData.district} onChange={e => setFormData({...formData, district: e.target.value})} className="bg-secondary/20 border-none h-11" />
+                <Input required value={formData.district} onChange={e => setFormData({...formData, district: e.target.value})} placeholder="জেলার নাম" className="border-2 border-slate-200 h-11" />
               </div>
               <div className="space-y-2">
                 <Label>Upazila (উপজেলা)</Label>
-                <Input required value={formData.upazila} onChange={e => setFormData({...formData, upazila: e.target.value})} className="bg-secondary/20 border-none h-11" />
+                <Input required value={formData.upazila} onChange={e => setFormData({...formData, upazila: e.target.value})} placeholder="উপজেলার নাম" className="border-2 border-slate-200 h-11" />
               </div>
               <div className="space-y-2">
                 <Label>Post Office (ডাকঘর)</Label>
-                <Input required value={formData.postOffice} onChange={e => setFormData({...formData, postOffice: e.target.value})} className="bg-secondary/20 border-none h-11" />
+                <Input required value={formData.postOffice} onChange={e => setFormData({...formData, postOffice: e.target.value})} placeholder="ডাকঘরের নাম" className="border-2 border-slate-200 h-11" />
               </div>
               <div className="space-y-2">
                 <Label>Village/Area (গ্রাম/পাড়া)</Label>
-                <Input required value={formData.village} onChange={e => setFormData({...formData, village: e.target.value})} className="bg-secondary/20 border-none h-11" />
+                <Input required value={formData.village} onChange={e => setFormData({...formData, village: e.target.value})} placeholder="গ্রাম বা এলাকার নাম" className="border-2 border-slate-200 h-11" />
               </div>
             </CardContent>
           </Card>
@@ -231,20 +247,24 @@ export default function PublicRegisterPage() {
             <CardHeader>
               <div className="flex items-center gap-2 text-primary">
                 <GraduationCap size={20} />
-                <CardTitle className="text-xl">Education Info (শিক্ষা প্রতিষ্ঠান)</CardTitle>
+                <CardTitle className="text-xl">{formData.occupation === 'student' ? 'Education Info (শিক্ষা প্রতিষ্ঠান)' : 'Work Info (কর্মসংস্থান)'}</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Institute Name (প্রতিষ্ঠানের নাম)</Label>
-                <Input required value={formData.institute} onChange={e => setFormData({...formData, institute: e.target.value})} className="bg-secondary/20 border-none h-11" />
+                <Label>{formData.occupation === 'student' ? 'Institute Name (প্রতিষ্ঠানের নাম)' : 'Company Name (প্রতিষ্ঠানের নাম)'}</Label>
+                <Input required value={formData.institute} onChange={e => setFormData({...formData, institute: e.target.value})} placeholder="প্রতিষ্ঠানের নাম লিখুন" className="border-2 border-slate-200 h-11" />
               </div>
               <div className="space-y-2">
-                <Label>Group/Department (বিভাগ)</Label>
-                <Select value={formData.group} onValueChange={val => setFormData({...formData, group: val})}>
-                  <SelectTrigger className="bg-secondary/20 border-none h-11"><SelectValue /></SelectTrigger>
-                  <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                </Select>
+                <Label>{formData.occupation === 'student' ? 'Group/Department (বিভাগ)' : 'Designation (পদবী)'}</Label>
+                {formData.occupation === 'student' ? (
+                  <Select value={formData.group} onValueChange={val => setFormData({...formData, group: val})}>
+                    <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue placeholder="বিভাগ সিলেক্ট করুন" /></SelectTrigger>
+                    <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={formData.group} onChange={e => setFormData({...formData, group: e.target.value})} placeholder="আপনার পদবী লিখুন" className="border-2 border-slate-200 h-11" />
+                )}
               </div>
             </CardContent>
           </Card>
@@ -262,21 +282,21 @@ export default function PublicRegisterPage() {
                 <div className="space-y-2">
                   <Label>Building</Label>
                   <Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val, roomNumber: "", seatNumber: ""})}>
-                    <SelectTrigger className="bg-white border-none h-11 shadow-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectTrigger className="bg-white border-2 border-slate-200 h-11 shadow-sm"><SelectValue placeholder="সিলেক্ট করুন" /></SelectTrigger>
                     <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Room No.</Label>
                   <Select disabled={!formData.buildingId} value={formData.roomNumber} onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}>
-                    <SelectTrigger className="bg-white border-none h-11 shadow-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectTrigger className="bg-white border-2 border-slate-200 h-11 shadow-sm"><SelectValue placeholder="রুম নম্বর" /></SelectTrigger>
                     <SelectContent>{roomsInBuilding.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Seat</Label>
                   <Select disabled={!formData.roomNumber} value={formData.seatNumber} onValueChange={val => setFormData({...formData, seatNumber: val})}>
-                    <SelectTrigger className="bg-white border-none h-11 shadow-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectTrigger className="bg-white border-2 border-slate-200 h-11 shadow-sm"><SelectValue placeholder="সিট নম্বর" /></SelectTrigger>
                     <SelectContent>{emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
@@ -286,7 +306,7 @@ export default function PublicRegisterPage() {
 
           <div className="space-y-2">
             <Label className="font-bold ml-1">Additional Message (অতিরিক্ত কিছু বলার থাকলে)</Label>
-            <Textarea value={formData.message} onChange={e => setFormData({...formData, message: e.target.value})} placeholder="আপনার কোনো বিশেষ অনুরোধ থাকলে এখানে লিখুন..." className="bg-secondary/20 border-none min-h-[100px] rounded-2xl" />
+            <Textarea value={formData.message} onChange={e => setFormData({...formData, message: e.target.value})} placeholder="আপনার কোনো বিশেষ অনুরোধ থাকলে এখানে লিখুন..." className="border-2 border-slate-200 min-h-[100px] rounded-2xl" />
           </div>
 
           <Button type="submit" className="w-full h-16 text-2xl font-black rounded-3xl shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={isSubmitting}>

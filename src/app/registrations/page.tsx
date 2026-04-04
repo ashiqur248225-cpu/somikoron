@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { 
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
-  MapPin, GraduationCap, Calendar, Clock, Filter, Trash2
+  MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -133,6 +133,7 @@ export default function RegistrationsPage() {
       await setDoc(doc(db, "students", studentId), {
         id: studentId,
         name: selectedReg.name,
+        occupation: selectedReg.occupation || "student",
         phone: selectedReg.phone,
         parentPhone: selectedReg.parentPhone,
         address: `${selectedReg.village}, ${selectedReg.postOffice}, ${selectedReg.upazila}, ${selectedReg.district}`,
@@ -211,7 +212,7 @@ export default function RegistrationsPage() {
               <TableHeader className="bg-secondary/30">
                 <TableRow>
                   <TableHead>Student</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead>Type & Occupation</TableHead>
                   <TableHead>Requested Info</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -226,9 +227,15 @@ export default function RegistrationsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={reg.type === 'old' ? 'border-primary text-primary' : 'border-orange-500 text-orange-500'}>
-                        {reg.type === 'old' ? 'Existing' : 'New Admission'}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant="outline" className={reg.type === 'old' ? 'border-primary text-primary w-fit' : 'border-orange-500 text-orange-500 w-fit'}>
+                          {reg.type === 'old' ? 'Existing' : 'New Admission'}
+                        </Badge>
+                        <span className="text-[10px] font-bold uppercase flex items-center gap-1 text-muted-foreground">
+                          {reg.occupation === 'job_holder' ? <Briefcase size={10} /> : <GraduationCap size={10} />}
+                          {reg.occupation?.replace('_', ' ') || 'Student'}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground">
@@ -258,7 +265,7 @@ export default function RegistrationsPage() {
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Registration Details</DialogTitle>
+            <DialogTitle>Registration Details: {selectedReg?.name}</DialogTitle>
             <DialogDescription>Review and finalize student enrollment.</DialogDescription>
           </DialogHeader>
           
@@ -269,9 +276,10 @@ export default function RegistrationsPage() {
                   <div className="p-4 bg-secondary/20 rounded-xl border space-y-3">
                     <h3 className="font-bold flex items-center gap-2 text-primary">Student Info</h3>
                     <div className="text-sm grid grid-cols-2 gap-2">
+                      <span className="text-muted-foreground">Occupation:</span> <span className="capitalize font-bold">{selectedReg.occupation?.replace('_', ' ')}</span>
                       <span className="text-muted-foreground">Phone:</span> <span>{selectedReg.phone}</span>
                       <span className="text-muted-foreground">Parent:</span> <span>{selectedReg.parentPhone}</span>
-                      <span className="text-muted-foreground">Institute:</span> <span>{selectedReg.institute}</span>
+                      <span className="text-muted-foreground">{selectedReg.occupation === 'job_holder' ? 'Company:' : 'Institute:'}</span> <span>{selectedReg.institute}</span>
                     </div>
                   </div>
                 </div>
