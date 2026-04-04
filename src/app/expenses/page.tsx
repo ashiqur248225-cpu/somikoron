@@ -82,6 +82,8 @@ export default function ExpenseHistoryPage() {
   const [formData, setFormData] = useState({
     category: "others",
     buildingId: "",
+    apartmentName: "",
+    meterNo: "",
     amount: "",
     method: "cash",
     expensePartyName: "",
@@ -100,7 +102,10 @@ export default function ExpenseHistoryPage() {
   }, [db, userBranch, userRole, assignedBuildingId])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
+  const staffQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "staff"), where("branch", "==", userBranch))
+  }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
 
   const expensesQuery = useMemoFirebase(() => {
@@ -144,6 +149,9 @@ export default function ExpenseHistoryPage() {
 
   const totalFilteredExpense = useMemo(() => filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0), [filteredExpenses])
 
+  const selectedBuildingForForm = buildings?.find(b => b.id === formData.buildingId)
+  const apartmentsInBuilding = selectedBuildingForForm?.apartmentsDetail || []
+
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.amount || !formData.buildingId || !formData.expensePartyName) {
@@ -152,13 +160,13 @@ export default function ExpenseHistoryPage() {
     }
 
     setIsSubmitting(true)
-    const building = buildings?.find(b => b.id === formData.buildingId)
+    const building = selectedBuildingForForm
     
     const recordPayload = {
       ...formData,
       amount: Number(formData.amount),
       buildingName: building?.name || "General",
-      branch: userBranch, // CRITICAL
+      branch: userBranch,
       createdAt: serverTimestamp(),
       requestedBy: localStorage.getItem("somikoron_auth_id") || "system",
       requestedByName: localStorage.getItem("user_name")
@@ -180,7 +188,7 @@ export default function ExpenseHistoryPage() {
       }
       setIsEntryOpen(false)
       setFormData({
-        category: "others", buildingId: assignedBuildingId || "", amount: "", method: "cash", 
+        category: "others", buildingId: assignedBuildingId || "", apartmentName: "", meterNo: "", amount: "", method: "cash", 
         expensePartyName: "", receiver: "", description: "",
         expenseDate: new Date().toISOString().split('T')[0],
       })
@@ -309,7 +317,12 @@ export default function ExpenseHistoryPage() {
                 <TableRow key={e.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/expenses/${e.id}`)}>
                   <TableCell className="text-xs">{new Date(e.expenseDate).toLocaleDateString()}</TableCell>
                   <TableCell><Badge variant="secondary" className="capitalize text-[10px]">{e.category}</Badge></TableCell>
-                  <TableCell className="text-xs">{e.buildingName}</TableCell>
+                  <TableCell className="text-xs">
+                    <div className="flex flex-col">
+                      <span>{e.buildingName}</span>
+                      {e.apartmentName && <span className="text-[9px] text-muted-foreground">Unit: {e.apartmentName}</span>}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-xs font-medium">{e.expensePartyName}</TableCell>
                   <TableCell className="text-right font-bold text-expense">৳{e.amount?.toLocaleString()}</TableCell>
                 </TableRow>
@@ -348,7 +361,7 @@ export default function ExpenseHistoryPage() {
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Category</Label>
-              <Select value={formData.category} onValueChange={val => setFormData({...formData, category: val})}>
+              <Select value={formData.category} onValueChange={val => setFormData({...formData, category: val, apartmentName: "", meterNo: ""})}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent>
               </Select>
@@ -356,13 +369,41 @@ export default function ExpenseHistoryPage() {
 
             <div className="space-y-2">
               <Label>Target Building</Label>
-              <Select value={formData.buildingId} onValueChange={(val) => setFormData({...formData, buildingId: val})}>
+              <Select value={formData.buildingId} onValueChange={(val) => setFormData({...formData, buildingId: val, apartmentName: "", meterNo: ""})}>
                 <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
                 <SelectContent>
                   {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+
+            {formData.category === 'electricity' && formData.buildingId && (
+              <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 space-y-4 animate-in fade-in slide-in-from-top-2">
+                <div className="space-y-2">
+                  <Label className="text-primary font-bold flex items-center gap-1.5"><LayoutGrid size={14}/> Select Apartment / Unit</Label>
+                  <Select 
+                    value={formData.apartmentName} 
+                    onValueChange={(val) => {
+                      const apt = apartmentsInBuilding.find((a: any) => a.name === val);
+                      setFormData({ ...formData, apartmentName: val, meterNo: apt?.meterNo || "" });
+                    }}
+                  >
+                    <SelectTrigger className="bg-white"><SelectValue placeholder="Select Apt" /></SelectTrigger>
+                    <SelectContent>
+                      {apartmentsInBuilding.map((apt: any) => (
+                        <SelectItem key={apt.id || apt.name} value={apt.name}>{apt.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {formData.meterNo && (
+                  <div className="space-y-1 bg-white p-2 rounded border">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Zap size={10} className="text-primary"/> Linked Meter Number</Label>
+                    <p className="text-sm font-bold text-primary">{formData.meterNo}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Paid By (Expenser/Manager)</Label>

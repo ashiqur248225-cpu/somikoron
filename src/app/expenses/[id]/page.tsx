@@ -74,7 +74,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
         category: expense.category,
         buildingId: expense.buildingId || "",
         apartmentName: expense.apartmentName || "",
-        roomNumber: expense.roomNumber || "",
+        meterNo: expense.meterNo || "",
         amount: expense.amount.toString(),
         method: expense.method,
         expensePartyName: expense.expensePartyName,
@@ -193,7 +193,10 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground">Allocation</Label>
                 <h3 className="font-bold">{expense.buildingName}</h3>
                 {expense.apartmentName && expense.apartmentName !== 'none' && (
-                  <p className="text-xs text-muted-foreground">Unit: {expense.apartmentName} {expense.roomNumber ? `| Room ${expense.roomNumber}` : ''}</p>
+                  <div className="flex gap-4 mt-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><LayoutGrid size={12}/> Unit: {expense.apartmentName}</p>
+                    {expense.meterNo && <p className="text-xs text-primary font-bold flex items-center gap-1"><Zap size={12}/> Meter: {expense.meterNo}</p>}
+                  </div>
                 )}
               </div>
             </div>
@@ -221,7 +224,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
 
               <div className="space-y-2">
                 <Label>Target Building</Label>
-                <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, apartmentName: "none"})}>
+                <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, apartmentName: "", meterNo: ""})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">General / No Building</SelectItem>
@@ -229,6 +232,27 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                   </SelectContent>
                 </Select>
               </div>
+
+              {editForm.category === 'electricity' && editForm.buildingId && (
+                <div className="p-3 bg-secondary/20 rounded-lg space-y-3 border">
+                  <Label className="text-xs font-bold uppercase">Unit Selection</Label>
+                  <Select 
+                    value={editForm.apartmentName} 
+                    onValueChange={(val) => {
+                      const apt = apartmentsInBuilding.find((a: any) => a.name === val);
+                      setEditForm({ ...editForm, apartmentName: val, meterNo: apt?.meterNo || "" });
+                    }}
+                  >
+                    <SelectTrigger className="bg-white"><SelectValue placeholder="Select Unit" /></SelectTrigger>
+                    <SelectContent>
+                      {apartmentsInBuilding.map((apt: any) => (
+                        <SelectItem key={apt.id || apt.name} value={apt.name}>{apt.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {editForm.meterNo && <p className="text-[10px] font-bold text-primary">Linked Meter: {editForm.meterNo}</p>}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Paid By (Expenser Name)</Label>
