@@ -547,7 +547,7 @@ export default function RegistrationsPage() {
                           <Label className="text-[10px] uppercase font-bold text-success flex items-center gap-1"><History size={10}/> Current Collection (Income)</Label>
                           <div className="grid grid-cols-2 gap-2">
                             <div className="space-y-1">
-                              <Label className="text-[9px]">Admission Rent (৳)</Label>
+                              <Label className="text-[9px]">Current Month Rent (৳)</Label>
                               <Input type="number" className="h-8 text-xs" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} placeholder="Running Month" />
                             </div>
                             {approvalForm.paymentSystem === 'non-package' && (
