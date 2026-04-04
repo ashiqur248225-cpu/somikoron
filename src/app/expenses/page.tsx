@@ -162,8 +162,9 @@ export default function ExpenseHistoryPage() {
 
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.amount || !formData.buildingId || !formData.expensePartyName || !formData.receiver) {
-      toast({ variant: "destructive", title: "Error", description: "Amount, Building, Paid By and Receiver are required." })
+    // Validation: Receiver is only required for 'salary' category
+    if (!formData.amount || !formData.buildingId || !formData.expensePartyName || (formData.category === 'salary' && !formData.receiver)) {
+      toast({ variant: "destructive", title: "Error", description: "Required fields are missing." })
       return
     }
 
@@ -177,7 +178,8 @@ export default function ExpenseHistoryPage() {
       branch: userBranch,
       createdAt: serverTimestamp(),
       requestedBy: localStorage.getItem("somikoron_auth_id") || "system",
-      requestedByName: localStorage.getItem("user_name")
+      requestedByName: localStorage.getItem("user_name"),
+      receiver: formData.category === 'salary' ? formData.receiver : (formData.receiver || "N/A")
     }
 
     try {
@@ -423,30 +425,25 @@ export default function ExpenseHistoryPage() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>{formData.category === 'salary' ? "Paid To (Staff Name)" : "Paid To (Receiver Name)"}</Label>
-              <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Who is receiving?" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Staff Members</SelectLabel>
-                    {staffList?.map(s => (
-                      <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                    ))}
-                  </SelectGroup>
-                  {parties && parties.length > 0 && (
+            {/* Paid To: Shown only for Salary category */}
+            {formData.category === 'salary' && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                <Label>Paid To (Staff Name)</Label>
+                <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Who is receiving?" />
+                  </SelectTrigger>
+                  <SelectContent>
                     <SelectGroup>
-                      <SelectLabel>Parties / Vendors</SelectLabel>
-                      {parties.map(p => (
-                        <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                      <SelectLabel>Staff Members</SelectLabel>
+                      {staffList?.map(s => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
                       ))}
                     </SelectGroup>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Amount (৳)</Label><Input type="number" placeholder="0.00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} /></div>

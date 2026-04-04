@@ -104,6 +104,12 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
 
   const handleUpdate = async () => {
     if (!expenseRef || !editForm) return
+    
+    if (editForm.category === 'salary' && !editForm.receiver) {
+      toast({ variant: "destructive", title: "Error", description: "Staff selection is required for salary." })
+      return
+    }
+
     setIsUpdating(true)
     const building = buildings?.find(b => b.id === editForm.buildingId)
     try {
@@ -111,7 +117,8 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
         ...editForm,
         amount: Number(editForm.amount),
         buildingName: building?.name || "General",
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        receiver: editForm.category === 'salary' ? editForm.receiver : (editForm.receiver || "N/A")
       })
       toast({ title: "Updated", description: "Expense record saved." })
       setIsEditDialogOpen(false)
@@ -191,10 +198,12 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCheck size={10}/> Paid By (Expenser)</Label>
               <p className="font-semibold">{expense.expensePartyName}</p>
             </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCircle size={10}/> Paid To (Receiver)</Label>
-              <p className="font-semibold text-primary">{expense.receiver || "N/A"}</p>
-            </div>
+            {expense.category === 'salary' && (
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCircle size={10}/> Paid To (Staff Name)</Label>
+                <p className="font-semibold text-primary">{expense.receiver || "N/A"}</p>
+              </div>
+            )}
             <div className="space-y-1">
               <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><Wallet size={10}/> Payment Method</Label>
               <Badge variant="outline" className="uppercase font-bold">{expense.method}</Badge>
@@ -279,24 +288,20 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label>Paid To (Receiver Name)</Label>
-                <Select value={editForm.receiver} onValueChange={val => setEditForm({...editForm, receiver: val})}>
-                  <SelectTrigger><SelectValue placeholder="Select Receiver" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Staff Members</SelectLabel>
-                      {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                    </SelectGroup>
-                    {parties && parties.length > 0 && (
+              {editForm.category === 'salary' && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                  <Label>Paid To (Staff Name)</Label>
+                  <Select value={editForm.receiver} onValueChange={val => setEditForm({...editForm, receiver: val})}>
+                    <SelectTrigger><SelectValue placeholder="Select Staff" /></SelectTrigger>
+                    <SelectContent>
                       <SelectGroup>
-                        <SelectLabel>Parties / Vendors</SelectLabel>
-                        {parties.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                        <SelectLabel>Staff Members</SelectLabel>
+                        {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                       </SelectGroup>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>Amount (৳)</Label><Input type="number" value={editForm.amount} onChange={e => setEditForm({...editForm, amount: e.target.value})} /></div>
