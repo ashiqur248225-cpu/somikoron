@@ -146,10 +146,12 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t p-4 group-data-[collapsible=icon]:hidden space-y-4">
-        <Button variant="ghost" className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleLogout}>
-          <LogOut size={16} />
-          <span>Logout Session</span>
-        </Button>
+        {userRole !== 'Admin' && (
+          <Button variant="ghost" className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleLogout}>
+            <LogOut size={16} />
+            <span>Logout Session</span>
+          </Button>
+        )}
         <div className="text-[10px] text-muted-foreground">© 2024 Somikoron ERP</div>
       </SidebarFooter>
     </Sidebar>
