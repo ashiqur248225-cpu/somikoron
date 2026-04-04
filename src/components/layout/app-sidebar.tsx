@@ -17,7 +17,6 @@ import {
   UserPlus,
   LogOut,
   MapPin,
-  RefreshCw,
   BellRing
 } from "lucide-react"
 import {
@@ -106,9 +105,6 @@ export function AppSidebar() {
     <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader className="border-b px-4 py-4">
         <div className="flex items-center gap-2">
-          <div className="bg-primary p-1.5 rounded-lg text-white">
-            <RefreshCw size={18} className="group-data-[collapsible=icon]:rotate-90 transition-transform" />
-          </div>
           <span className="text-xl font-black text-primary tracking-tight group-data-[collapsible=icon]:hidden">Somikoron</span>
         </div>
       </SidebarHeader>
