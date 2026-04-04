@@ -270,6 +270,7 @@ export default function DashboardPage() {
       buildingName: building?.name || "Unknown",
       studentName: selectedStudent?.name || "Unknown",
       studentId: paymentForm.studentId,
+      roomNumber: selectedRoomNumber,
       type: "income",
       month: paymentForm.month,
       year: paymentForm.year,

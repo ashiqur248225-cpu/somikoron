@@ -213,7 +213,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
       if (manualAmt > 0) {
         const isRefund = exitSettlement.mode === 'refund'
         const manualRecord = {
-          amount: manualAmt, buildingId: student.buildingId, buildingName: student.buildingName, studentName: student.name, studentId: student.id,
+          amount: manualAmt, buildingId: student.buildingId, buildingName: student.buildingName, studentName: student.name, studentId: student.id, roomNumber: student.roomNumber,
           type: isRefund ? "refund" : "income", month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(),
           method: exitPayment.method, receiver: exitPayment.receiver, description: isRefund ? `Refund at Exit: ${exitPayment.description}` : `Exit Payment: ${exitPayment.description}`,
           date: new Date().toISOString()
@@ -267,6 +267,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         buildingName: student.buildingName, 
         studentName: student.name, 
         studentId: student.id, 
+        roomNumber: student.roomNumber,
         type: "income", 
         month: paymentData.month, 
         year: paymentData.year, 
