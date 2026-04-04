@@ -8,9 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Loader2, Lock, Smartphone, ShieldCheck, ArrowRight } from "lucide-react"
+import { Loader2, Lock, Smartphone, ShieldCheck } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import Link from "next/link"
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
@@ -106,7 +105,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
               <CardTitle className="text-xl">User Login</CardTitle>
               <CardDescription>Verify your credentials to access your branch.</CardDescription>
             </CardHeader>
-            <CardContent className="pt-4 space-y-6">
+            <CardContent className="pt-4">
               <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-2">
                   <Label htmlFor="number" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Mobile No.</Label>
@@ -124,15 +123,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
                 </div>
                 <Button type="submit" className="w-full h-12 text-lg font-bold shadow-lg" disabled={isLoading}>{isLoading ? <Loader2 className="animate-spin mr-2" /> : "Verify & Access"}</Button>
               </form>
-
-              <div className="pt-4 border-t text-center">
-                <p className="text-xs text-muted-foreground mb-3">Don't have a hostel registered yet?</p>
-                <Link href="/hostel-registration">
-                  <Button variant="outline" className="w-full gap-2 text-xs font-bold uppercase tracking-wider h-10 border-primary/20 hover:bg-primary/5">
-                    Register New Hostel <ArrowRight size={14} />
-                  </Button>
-                </Link>
-              </div>
             </CardContent>
           </Card>
         </div>
