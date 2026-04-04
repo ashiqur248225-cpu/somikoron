@@ -55,7 +55,7 @@ export default function DashboardPage() {
   const [timeFilter, setTimeFilter] = useState("month")
 
   const [userRole, setUserRole] = useState("")
-  const [userBranch, setUserBranch] = useState("")
+  const [userBranch, setUserBranch] = useState("Main Branch")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
   useEffect(() => {
@@ -67,12 +67,9 @@ export default function DashboardPage() {
   const [selectedBuildingId, setSelectedBuildingId] = useState("")
   const [selectedRoomNumber, setSelectedRoomNumber] = useState("")
 
-  // Data Fetching with Branch & Role Filtering
+  // CRITICAL: Filter ALL queries by the user's active branch
   const buildingsQuery = useMemoFirebase(() => {
-    if (userRole === 'Admin') {
-      if (userBranch === 'All Branches') return collection(db, "buildings")
-      return query(collection(db, "buildings"), where("branch", "==", userBranch))
-    }
+    if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
       return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
     }
@@ -81,10 +78,7 @@ export default function DashboardPage() {
   const { data: buildings } = useCollection(buildingsQuery)
 
   const studentsQuery = useMemoFirebase(() => {
-    if (userRole === 'Admin') {
-      if (userBranch === 'All Branches') return collection(db, "students")
-      return query(collection(db, "students"), where("branch", "==", userBranch))
-    }
+    if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
       return query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
     }
@@ -96,15 +90,15 @@ export default function DashboardPage() {
   const { data: staffList } = useCollection(staffQuery)
 
   const allPaymentsQuery = useMemoFirebase(() => {
-    if (userRole === 'Admin' && userBranch === 'All Branches') return collection(db, "payments")
+    if (!userBranch) return null
     return query(collection(db, "payments"), where("branch", "==", userBranch))
-  }, [db, userRole, userBranch])
+  }, [db, userBranch])
   const { data: allPayments } = useCollection(allPaymentsQuery)
 
   const allExpensesQuery = useMemoFirebase(() => {
-    if (userRole === 'Admin' && userBranch === 'All Branches') return collection(db, "expenses")
+    if (!userBranch) return null
     return query(collection(db, "expenses"), where("branch", "==", userBranch))
-  }, [db, userRole, userBranch])
+  }, [db, userBranch])
   const { data: allExpenses } = useCollection(allExpensesQuery)
 
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
@@ -255,7 +249,7 @@ export default function DashboardPage() {
       studentName: selectedStudent?.name || "Unknown",
       studentId: paymentForm.studentId,
       roomNumber: selectedRoomNumber || selectedStudent?.roomNumber || "N/A",
-      branch: userBranch,
+      branch: userBranch, // CRITICAL
       type: "income",
       month: paymentForm.month,
       year: paymentForm.year,

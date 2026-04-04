@@ -77,7 +77,7 @@ export default function BuildingsPage() {
   
   // User Context
   const [userRole, setUserRole] = useState("")
-  const [userBranch, setUserBranch] = useState("")
+  const [userBranch, setUserBranch] = useState("Main Branch")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
   useEffect(() => {
@@ -102,31 +102,27 @@ export default function BuildingsPage() {
     { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [] }] }
   ])
 
-  // Fetch Branches for Admin Selection
+  // Branch Selection Logic
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
   const { data: branches } = useCollection(branchesQuery)
 
-  // Filtered Buildings Query
+  // CRITICAL: Filter buildings strictly by the user's active branch
   const buildingsQuery = useMemoFirebase(() => {
-    if (!userRole) return null
-    if (userRole === 'Admin') {
-      if (userBranch === 'All Branches') return collection(db, "buildings")
-      return query(collection(db, "buildings"), where("branch", "==", userBranch))
-    }
+    if (!userBranch) return null
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userRole, userBranch])
+  }, [db, userBranch])
   
   const { data: buildings, isLoading } = useCollection(buildingsQuery)
 
-  // Initialize building branch based on context
+  // Initialize building branch based on context when opening dialog
   useEffect(() => {
     if (open) {
       setNewBuilding(prev => ({
         ...prev,
-        branch: userRole === 'Admin' ? (userBranch === 'All Branches' ? '' : userBranch) : userBranch
+        branch: userBranch // System auto-selects active branch
       }))
     }
-  }, [open, userRole, userBranch])
+  }, [open, userBranch])
 
   // Derived state: Flattened Rooms
   const allFlattenedRooms = useMemo(() => {
@@ -282,7 +278,7 @@ export default function BuildingsPage() {
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Buildings</h1>
-            <p className="text-muted-foreground mt-1">Manage Apartment &rarr; Room &rarr; Seat hierarchy.</p>
+            <p className="text-muted-foreground mt-1">Manage infrastructure for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -308,30 +304,12 @@ export default function BuildingsPage() {
                 </div>
               </div>
 
-              {userRole === 'Admin' && (
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2"><MapIcon size={14} className="text-primary"/> Select Target Branch</Label>
-                  <Select value={newBuilding.branch} onValueChange={val => setNewBuilding({...newBuilding, branch: val})}>
-                    <SelectTrigger className="bg-secondary/30">
-                      <SelectValue placeholder="Select Branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {branches?.map(b => (
-                        <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[10px] text-muted-foreground italic">* এডমিন হিসেবে আপনি যেকোনো ব্রাঞ্চের জন্য বিল্ডিং তৈরি করতে পারেন।</p>
-                </div>
-              )}
-
-              {userRole !== 'Admin' && (
-                <div className="p-3 bg-secondary/20 rounded-lg border">
-                  <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
-                    <MapIcon size={12} /> Assigned Branch: <span className="text-primary">{userBranch}</span>
-                  </p>
-                </div>
-              )}
+              <div className="p-3 bg-secondary/30 rounded-lg border flex items-center justify-between">
+                <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
+                  <MapIcon size={12} /> Target Branch: <span className="text-primary">{userBranch}</span>
+                </p>
+                <Badge variant="outline" className="text-[10px] bg-white">Auto-assigned</Badge>
+              </div>
 
               <div className="space-y-4">
                 <div className="flex justify-between items-center">

@@ -1,6 +1,7 @@
+
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -12,7 +13,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, orderBy, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment } from "firebase/firestore"
+import { collection, query, orderBy, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -35,14 +36,25 @@ export default function RegistrationsPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   
-  const userRole = typeof window !== 'undefined' ? localStorage.getItem("user_role") : "Manager"
-  const userBranch = typeof window !== 'undefined' ? localStorage.getItem("user_branch") : ""
+  const [userRole, setUserRole] = useState("Manager")
+  const [userBranch, setUserBranch] = useState("Main Branch")
 
-  // Fetch pending registrations
-  const regQuery = useMemoFirebase(() => query(collection(db, "registrations"), orderBy("createdAt", "desc")), [db])
+  useEffect(() => {
+    setUserRole(localStorage.getItem("user_role") || "Manager")
+    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+  }, [])
+
+  // CRITICAL: Filter pending requests by branch
+  const regQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "registrations"), where("branch", "==", userBranch), orderBy("createdAt", "desc"))
+  }, [db, userBranch])
   const { data: registrations, isLoading } = useCollection(regQuery)
 
-  const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
@@ -93,10 +105,9 @@ export default function RegistrationsPage() {
       const totalInitial = rentPaid + advPaid + svcPaid
 
       // Create Payment Record
-      let paymentRecord = null
       if (totalInitial > 0) {
         const pId = doc(collection(db, "payments")).id
-        paymentRecord = {
+        await setDoc(doc(db, "payments", pId), {
           id: pId,
           amount: totalInitial,
           seatAmount: rentPaid,
@@ -107,19 +118,20 @@ export default function RegistrationsPage() {
           studentName: selectedReg.name,
           studentId: studentId,
           roomNumber: rNum,
+          branch: userBranch, // CRITICAL
           type: "income",
           month: new Date().toLocaleString('default', { month: 'long' }),
           year: new Date().getFullYear().toString(),
           method: approvalForm.method,
           receiver: approvalForm.receiver,
           description: `Initial payment at registration.`,
-          date: new Date().toISOString()
-        }
-        await setDoc(doc(db, "payments", pId), { ...paymentRecord, date: serverTimestamp() })
+          date: serverTimestamp()
+        })
       }
 
       // Create Student
       await setDoc(doc(db, "students", studentId), {
+        id: studentId,
         name: selectedReg.name,
         phone: selectedReg.phone,
         parentPhone: selectedReg.parentPhone,
@@ -136,8 +148,7 @@ export default function RegistrationsPage() {
         billingStartDate: approvalForm.billingStartDate,
         paymentSystem: selectedReg.group === 'Other' ? 'non-package' : 'package',
         isActive: true,
-        paymentsHistory: paymentRecord ? [paymentRecord] : [],
-        branch: userBranch,
+        branch: userBranch, // CRITICAL
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })
@@ -180,19 +191,6 @@ export default function RegistrationsPage() {
     }
   }
 
-  const handleDeleteRequest = async (id: string) => {
-    if (userRole !== 'Admin') {
-      toast({ variant: "destructive", title: "Denied", description: "Only Admins can reject requests." })
-      return
-    }
-    try {
-      await deleteDoc(doc(db, "registrations", id))
-      toast({ title: "Rejected", description: "Request removed." })
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    }
-  }
-
   return (
     <div className="space-y-8">
       <div className="flex items-center gap-4">
@@ -200,7 +198,7 @@ export default function RegistrationsPage() {
         <Separator orientation="vertical" className="mr-2 h-4" />
         <div>
           <h1 className="text-3xl font-headline font-bold text-primary">Pending Registrations</h1>
-          <p className="text-muted-foreground mt-1">Review student applications from the public link.</p>
+          <p className="text-muted-foreground mt-1">Review student applications for <span className="font-bold text-foreground">{userBranch}</span>.</p>
         </div>
       </div>
 
@@ -213,9 +211,8 @@ export default function RegistrationsPage() {
               <TableHeader className="bg-secondary/30">
                 <TableRow>
                   <TableHead>Student</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Location Details</TableHead>
-                  <TableHead>Applied On</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Requested Info</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -234,13 +231,9 @@ export default function RegistrationsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Building2 size={12} /> {reg.buildingName || "Not assigned"}
-                        {reg.roomNumber && <span> • Room {reg.roomNumber}</span>}
+                      <div className="text-xs text-muted-foreground">
+                        {reg.buildingName} • Room {reg.roomNumber || 'Any'}
                       </div>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {reg.createdAt?.toDate?.() ? reg.createdAt.toDate().toLocaleDateString() : "Recently"}
                     </TableCell>
                     <TableCell className="text-right space-x-2">
                       <Button variant="outline" size="sm" onClick={() => {
@@ -248,18 +241,13 @@ export default function RegistrationsPage() {
                         setIsDetailOpen(true)
                         setApprovalForm({...approvalForm, buildingId: reg.buildingId || "", roomNumber: reg.roomNumber || "", seatNumber: reg.seatNumber || ""})
                       }}>
-                        <Eye size={14} className="mr-1" /> View & Approve
+                        <Eye size={14} className="mr-1" /> Process
                       </Button>
-                      {userRole === 'Admin' && (
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteRequest(reg.id)}>
-                          <Trash2 size={14} />
-                        </Button>
-                      )}
                     </TableCell>
                   </TableRow>
                 ))}
                 {registrations?.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No pending requests.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No pending requests for this branch.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -270,7 +258,7 @@ export default function RegistrationsPage() {
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Registration Details: {selectedReg?.name}</DialogTitle>
+            <DialogTitle>Registration Details</DialogTitle>
             <DialogDescription>Review and finalize student enrollment.</DialogDescription>
           </DialogHeader>
           
@@ -279,23 +267,12 @@ export default function RegistrationsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div className="p-4 bg-secondary/20 rounded-xl border space-y-3">
-                    <h3 className="font-bold flex items-center gap-2"><Clock size={16} className="text-primary"/> Personal Information</h3>
+                    <h3 className="font-bold flex items-center gap-2 text-primary">Student Info</h3>
                     <div className="text-sm grid grid-cols-2 gap-2">
-                      <span className="text-muted-foreground">Father:</span> <span>{selectedReg.fatherName}</span>
-                      <span className="text-muted-foreground">Mother:</span> <span>{selectedReg.motherName}</span>
-                      <span className="text-muted-foreground">DOB:</span> <span>{selectedReg.dob}</span>
-                      <span className="text-muted-foreground">Blood:</span> <span>{selectedReg.bloodGroup}</span>
                       <span className="text-muted-foreground">Phone:</span> <span>{selectedReg.phone}</span>
-                      <span className="text-muted-foreground">Parent Phone:</span> <span>{selectedReg.parentPhone}</span>
+                      <span className="text-muted-foreground">Parent:</span> <span>{selectedReg.parentPhone}</span>
+                      <span className="text-muted-foreground">Institute:</span> <span>{selectedReg.institute}</span>
                     </div>
-                  </div>
-                  <div className="p-4 bg-secondary/20 rounded-xl border space-y-3">
-                    <h3 className="font-bold flex items-center gap-2"><MapPin size={16} className="text-primary"/> Address</h3>
-                    <p className="text-sm">{selectedReg.village}, {selectedReg.postOffice}, {selectedReg.upazila}, {selectedReg.district}</p>
-                  </div>
-                  <div className="p-4 bg-secondary/20 rounded-xl border space-y-3">
-                    <h3 className="font-bold flex items-center gap-2"><GraduationCap size={16} className="text-primary"/> Education</h3>
-                    <p className="text-sm">{selectedReg.institute} ({selectedReg.group})</p>
                   </div>
                 </div>
 
@@ -333,41 +310,17 @@ export default function RegistrationsPage() {
                         <Input type="number" className="h-9" value={approvalForm.monthlyRent} onChange={e => setApprovalForm({...approvalForm, monthlyRent: e.target.value})} />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold">Billing Start</Label>
-                        <Input type="date" className="h-9" value={approvalForm.billingStartDate} onChange={e => setApprovalForm({...approvalForm, billingStartDate: e.target.value})} />
+                        <Label className="text-[10px] uppercase font-bold">Initial Payment (৳)</Label>
+                        <Input type="number" className="h-9" value={approvalForm.initialPayment} onChange={e => setApprovalForm({...approvalForm, initialPayment: e.target.value})} />
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold">Initial Rent (৳)</Label>
-                        <Input type="number" className="h-8 text-xs" value={approvalForm.initialPayment} onChange={e => setApprovalForm({...approvalForm, initialPayment: e.target.value})} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold">Advance (৳)</Label>
-                        <Input type="number" className="h-8 text-xs" value={approvalForm.advanceAmount} onChange={e => setApprovalForm({...approvalForm, advanceAmount: e.target.value})} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold">Service Fee (৳)</Label>
-                        <Input type="number" className="h-8 text-xs" value={approvalForm.serviceCharge} onChange={e => setApprovalForm({...approvalForm, serviceCharge: e.target.value})} />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold">Payment Receiver</Label>
-                        <Select value={approvalForm.receiver} onValueChange={val => setApprovalForm({...approvalForm, receiver: val})}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Staff" /></SelectTrigger>
-                          <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold">Method</Label>
-                        <Select value={approvalForm.method} onValueChange={val => setApprovalForm({...approvalForm, method: val})}>
-                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem></SelectContent>
-                        </Select>
-                      </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase font-bold">Payment Receiver</Label>
+                      <Select value={approvalForm.receiver} onValueChange={val => setApprovalForm({...approvalForm, receiver: val})}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Staff" /></SelectTrigger>
+                        <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
@@ -376,10 +329,8 @@ export default function RegistrationsPage() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDetailOpen(false)}>Cancel</Button>
-            <Button onClick={handleApprove} disabled={isProcessing || !approvalForm.seatNumber} className="bg-success hover:bg-success/90">
-              {isProcessing ? <Loader2 className="animate-spin" /> : <UserCheck size={16} className="mr-2" />}
-              Finalize & Approve Admission
+            <Button onClick={handleApprove} disabled={isProcessing || !approvalForm.seatNumber} className="bg-success hover:bg-success/90 w-full">
+              {isProcessing ? <Loader2 className="animate-spin" /> : "Approve Admission"}
             </Button>
           </DialogFooter>
         </DialogContent>

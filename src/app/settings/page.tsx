@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark } from "lucide-react"
+import { Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, Link as LinkIcon, Copy, CheckCircle2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc, setDoc, serverTimestamp } from "firebase/firestore"
@@ -18,7 +18,12 @@ export default function SettingsPage() {
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
   const [rate, setRate] = useState("")
+  const [userBranch, setUserBranch] = useState("Main Branch")
   
+  useEffect(() => {
+    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+  }, [])
+
   // Opening Balances State
   const [balances, setBalances] = useState({
     cash: "0",
@@ -88,6 +93,18 @@ export default function SettingsPage() {
     }
   }
 
+  const copyToClipboard = (text: string) => {
+    const baseUrl = window.location.origin
+    const fullUrl = `${baseUrl}${text}`
+    navigator.clipboard.writeText(fullUrl)
+    toast({ title: "Copied!", description: "Link copied to clipboard." })
+  }
+
+  const regLinks = [
+    { label: "New Student Registration", type: "new", icon: LinkIcon },
+    { label: "Existing Resident (Data Import)", type: "old", icon: LinkIcon }
+  ]
+
   if (isConfigLoading || isBalancesLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
 
   return (
@@ -97,9 +114,33 @@ export default function SettingsPage() {
         <Separator orientation="vertical" className="mr-2 h-4" />
         <div>
           <h1 className="text-3xl font-headline font-bold text-primary">Global Settings</h1>
-          <p className="text-muted-foreground mt-1">Configure hostel-wide parameters and opening balances.</p>
+          <p className="text-muted-foreground mt-1">Configure parameters for <span className="font-bold text-foreground">{userBranch}</span>.</p>
         </div>
       </div>
+
+      <Card className="border-none shadow-sm border-l-4 border-l-primary bg-primary/5">
+        <CardHeader>
+          <div className="flex items-center gap-2 text-primary">
+            <LinkIcon size={20} />
+            <CardTitle>Public Registration Links</CardTitle>
+          </div>
+          <CardDescription>Share these links with students to collect their information for this branch.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {regLinks.map((link) => (
+            <div key={link.type} className="flex flex-col md:flex-row gap-3 items-start md:items-center p-3 bg-background rounded-lg border shadow-sm">
+              <div className="flex-1">
+                <p className="text-sm font-bold">{link.label}</p>
+                <p className="text-[10px] text-muted-foreground truncate">/register?branch={encodeURIComponent(userBranch)}&type={link.type}</p>
+              </div>
+              <Button size="sm" variant="secondary" className="gap-2" onClick={() => copyToClipboard(`/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`)}>
+                <Copy size={14} /> Copy Link
+              </Button>
+            </div>
+          ))}
+          <p className="text-[10px] text-muted-foreground italic mt-2">* এই লিঙ্কগুলো ব্যবহার করে স্টুডেন্টরা আবেদন করলে সেগুলো সরাসরি আপনার "Pending Requests" সেকশনে জমা হবে।</p>
+        </CardContent>
+      </Card>
 
       <Card className="border-none shadow-sm">
         <CardHeader>

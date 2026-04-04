@@ -41,7 +41,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, updateDoc, increment } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, updateDoc, increment, query, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
@@ -68,11 +68,24 @@ export default function StudentsPage() {
   const [roomFilter, setRoomFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
   const [planFilter, setPlanFilter] = useState("all")
+  
+  // User Context
+  const [userBranch, setUserBranch] = useState("Main Branch")
+  useEffect(() => {
+    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+  }, [])
 
-  const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
+  // CRITICAL: Filter data by branch
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  const studentsQuery = useMemoFirebase(() => collection(db, "students"), [db])
+  const studentsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "students"), where("branch", "==", userBranch))
+  }, [db, userBranch])
   const { data: students, isLoading } = useCollection(studentsQuery)
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
@@ -233,6 +246,7 @@ export default function StudentsPage() {
         studentName: formData.name,
         studentId: studentId,
         roomNumber: formData.roomNumber,
+        branch: userBranch,
         type: "income",
         month: new Date().toLocaleString('default', { month: 'long' }),
         year: new Date().getFullYear().toString(),
@@ -243,8 +257,10 @@ export default function StudentsPage() {
       } : null
 
       if (paymentRecord && formData.type === 'new') {
-        await setDoc(doc(db, "payments", doc(collection(db, "payments")).id), {
+        const pId = doc(collection(db, "payments")).id
+        await setDoc(doc(db, "payments", pId), {
           ...paymentRecord,
+          id: pId,
           date: serverTimestamp(),
           createdAt: serverTimestamp(),
         })
@@ -252,6 +268,8 @@ export default function StudentsPage() {
 
       await setDoc(studentRef, {
         ...formData,
+        id: studentId,
+        branch: userBranch,
         dueAmount: startingRentDue,
         foodDueAmount: startingFoodDue,
         advanceAmount: advPaid,
@@ -330,94 +348,40 @@ export default function StudentsPage() {
       const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
       const now = new Date()
       const endDate = s.isActive ? now : (s.leftAt?.toDate?.() || now)
-      
       const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
-      
       const historicalRentDue = Number(s.dueAmount) || 0
       const generatedRent = (monthsElapsed > 0 ? monthsElapsed : 0) * (s.monthlyRent || 0)
-      
       const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
         const isRefund = curr.type === 'refund'
-        const rentPortion = (curr.seatAmount !== undefined) 
-          ? Number(curr.seatAmount) 
-          : (s.paymentSystem === 'package' ? Number(curr.amount) : 0)
+        const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (s.paymentSystem === 'package' ? Number(curr.amount) : 0)
         return acc + (isRefund ? -rentPortion : rentPortion)
       }, 0) || 0
-      
       const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
-
       const historicalFoodDue = Number(s.foodDueAmount) || 0
       const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-      
       const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
         const isRefund = curr.type === 'refund'
-        const foodPortion = (curr.foodAmount !== undefined) 
-          ? Number(curr.foodAmount) 
-          : (s.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
+        const foodPortion = (curr.foodAmount !== undefined) ? Number(curr.foodAmount) : (s.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
         return acc + (isRefund ? -foodPortion : foodPortion)
       }, 0) || 0
-      
       const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
-      
-      // Meal stats (most recent month entry)
       const latestMeal = s.mealsHistory && s.mealsHistory.length > 0 ? s.mealsHistory[s.mealsHistory.length - 1] : {}
 
-      return {
-        ...s,
-        rentDue,
-        foodBalance,
-        totalMeals: latestMeal.totalMeals || 0,
-        mealRate: latestMeal.perMealCost || 0,
-        mealTotalCost: latestMeal.totalCost || 0
-      }
+      return { ...s, rentDue, foodBalance, totalMeals: latestMeal.totalMeals || 0, mealRate: latestMeal.perMealCost || 0, mealTotalCost: latestMeal.totalCost || 0 }
     })
 
-    const headers = [
-      "Resident Name", "Phone", "Parent Phone", "Building", "Room", "Seat", "Status", "Plan", 
-      "Monthly Rent", "Advance Balance", "Current Rent Due", "Food Balance (Credit/Due)", 
-      "Meals (Last Entry)", "Meal Rate", "Meal Cost", "Address"
-    ]
-    
-    const rows = reportData.map(s => [
-      s.name,
-      s.phone || "N/A",
-      s.parentPhone || "N/A",
-      s.buildingName,
-      s.roomNumber,
-      s.seatNumber,
-      s.isActive ? "Active" : "Left",
-      s.paymentSystem.toUpperCase(),
-      s.monthlyRent,
-      s.advanceAmount || 0,
-      s.rentDue,
-      s.foodBalance >= 0 ? `Credit: ৳${s.foodBalance}` : `Due: ৳${Math.abs(s.foodBalance)}`,
-      s.totalMeals,
-      s.mealRate,
-      s.mealTotalCost,
-      `"${s.address?.replace(/"/g, '""') || ""}"`
-    ])
+    const headers = ["Resident Name", "Phone", "Parent Phone", "Building", "Room", "Seat", "Status", "Plan", "Monthly Rent", "Advance Balance", "Current Rent Due", "Food Balance (Credit/Due)", "Meals (Last Entry)", "Meal Rate", "Meal Cost", "Address"]
+    const rows = reportData.map(s => [s.name, s.phone || "N/A", s.parentPhone || "N/A", s.buildingName, s.roomNumber, s.seatNumber, s.isActive ? "Active" : "Left", s.paymentSystem.toUpperCase(), s.monthlyRent, s.advanceAmount || 0, s.rentDue, s.foodBalance >= 0 ? `Credit: ৳${s.foodBalance}` : `Due: ৳${Math.abs(s.foodBalance)}`, s.totalMeals, s.mealRate, s.mealTotalCost, `"${s.address?.replace(/"/g, '""') || ""}"`])
 
-    let csvContent = "data:text/csv;charset=utf-8,"
-    csvContent += "SOMIKORON DETAILED RESIDENT REPORT\n"
-    csvContent += `Generated on: ${new Date().toLocaleString()}\n`
-    csvContent += `Filters - Building: ${buildingFilter}, Status: ${statusFilter}, Plan: ${planFilter}\n\n`
-    csvContent += headers.join(",") + "\n"
+    let csvContent = "data:text/csv;charset=utf-8,SOMIKORON DETAILED RESIDENT REPORT\n"
+    csvContent += `Generated on: ${new Date().toLocaleString()}\nFilters - Branch: ${userBranch}, Building: ${buildingFilter}\n\n` + headers.join(",") + "\n"
     rows.forEach(row => { csvContent += row.join(",") + "\n" })
-
     const encodedUri = encodeURI(csvContent)
-    const link = document.createElement("a")
-    link.setAttribute("href", encodedUri)
-    link.setAttribute("download", `Residents_Full_Report_${new Date().toISOString().split('T')[0]}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    const link = document.createElement("a"); link.setAttribute("href", encodedUri); link.setAttribute("download", `Residents_${userBranch}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link)
   }
 
-  const handlePrint = () => {
-    if (typeof window !== "undefined") {
-      window.print();
-    }
-  }
+  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
@@ -427,26 +391,16 @@ export default function StudentsPage() {
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Residents</h1>
-            <p className="text-muted-foreground mt-1">Manage Building &rarr; Room &rarr; Seat Hierarchy</p>
+            <p className="text-muted-foreground mt-1">Manage occupants for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
         <div className="flex gap-2">
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Download size={16} /> Export / Share
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2"><Download size={16} /> Export / Share</Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleExportCSV} className="cursor-pointer">
-                <FileSpreadsheet size={14} className="mr-2" /> Export CSV (Full Detail)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer">
-                <FileText size={14} className="mr-2" /> Download PDF (Print)
-              </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer">
-                <Share2 size={14} className="mr-2" /> Share List
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportCSV} className="cursor-pointer"><FileSpreadsheet size={14} className="mr-2" /> Export CSV (Full Detail)</DropdownMenuItem>
+              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer"><FileText size={14} className="mr-2" /> Download PDF (Print)</DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer"><Share2 size={14} className="mr-2" /> Share List</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Dialog open={open} onOpenChange={setOpen}>
@@ -476,91 +430,7 @@ export default function StudentsPage() {
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2"><Calendar size={14} className="text-primary"/> Billing Start Date (Hostel Entry Date)</Label>
                     <Input type="date" value={formData.billingStartDate} onChange={e => setFormData({...formData, billingStartDate: e.target.value})} />
-                    <p className="text-[10px] text-muted-foreground italic">* ভাড়া গণনার সময় এই তারিখ থেকে প্রতি মাস হিসাব করা হবে।</p>
                   </div>
-                </div>
-
-                <div className="p-4 bg-secondary/20 rounded-lg border space-y-4">
-                  <div className="space-y-2">
-                    <Label className="font-bold">Student Type</Label>
-                    <RadioGroup 
-                      value={formData.type} 
-                      onValueChange={val => setFormData({...formData, type: val})}
-                      className="flex gap-6 pt-2"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="new" id="new-std" />
-                        <Label htmlFor="new-std" className="cursor-pointer">New Student</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="old" id="old-std" />
-                        <Label htmlFor="old-std" className="cursor-pointer">Old Student (Existing Data)</Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-
-                  {formData.type === 'old' && (
-                    <div className="border-t pt-4 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <Label className="font-bold text-destructive">Initial RENT Due (৳)</Label>
-                        <RadioGroup 
-                          value={formData.dueInputMethod} 
-                          onValueChange={(val: any) => setFormData({...formData, dueInputMethod: val})}
-                          className="flex gap-4"
-                        >
-                          <div className="flex items-center space-x-1.5">
-                            <RadioGroupItem value="total" id="due-total" />
-                            <Label htmlFor="due-total" className="text-xs cursor-pointer">Total Amount</Label>
-                          </div>
-                          <div className="flex items-center space-x-1.5">
-                            <RadioGroupItem value="breakdown" id="due-breakdown" />
-                            <Label htmlFor="due-breakdown" className="text-xs cursor-pointer">Monthly Breakdown</Label>
-                          </div>
-                        </RadioGroup>
-                      </div>
-
-                      {formData.dueInputMethod === 'total' ? (
-                        <div className="space-y-2">
-                          <Input type="number" value={formData.dueAmount} onChange={e => setFormData({...formData, dueAmount: e.target.value})} placeholder="0.00" />
-                          <p className="text-[10px] text-muted-foreground italic">* অ্যাপ ব্যবহারের আগে থেকে থাকা মোট বকেয়া ভাড়া।</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {monthlyDues.map((due, idx) => (
-                            <div key={idx} className="flex gap-2 items-end">
-                              <div className="flex-1 space-y-1">
-                                <Label className="text-[10px]">Month</Label>
-                                <Select value={due.month} onValueChange={val => updateMonthlyDueRow(idx, 'month', val)}>
-                                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                  <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                                </Select>
-                              </div>
-                              <div className="w-20 space-y-1">
-                                <Label className="text-[10px]">Year</Label>
-                                <Select value={due.year} onValueChange={val => updateMonthlyDueRow(idx, 'year', val)}>
-                                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                  <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                                </Select>
-                              </div>
-                              <div className="flex-1 space-y-1">
-                                <Label className="text-[10px]">Amount</Label>
-                                <Input type="number" className="h-8 text-xs" value={due.amount} onChange={e => updateMonthlyDueRow(idx, 'amount', e.target.value)} placeholder="0.00" />
-                              </div>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeMonthlyDueRow(idx)}><Trash2 size={14}/></Button>
-                            </div>
-                          ))}
-                          <Button variant="outline" size="sm" className="w-full text-[10px] h-7" onClick={addMonthlyDueRow}><Plus size={12}/> Add Month</Button>
-                        </div>
-                      )}
-
-                      {formData.paymentSystem === 'non-package' && (
-                        <div className="space-y-2 pt-2">
-                          <Label className="font-bold text-destructive">Previous FOOD Due (৳)</Label>
-                          <Input type="number" value={formData.foodDueAmount} onChange={e => setFormData({...formData, foodDueAmount: e.target.value})} placeholder="0.00" />
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -568,18 +438,10 @@ export default function StudentsPage() {
                   <div className="space-y-2"><Label>Student Phone</Label><Input placeholder="11 Digit Mobile Number" maxLength={11} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Parent's Phone</Label><Input placeholder="11 Digit Contact" maxLength={11} value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} /></div>
-                  <div className="space-y-2"><Label>Permanent Address</Label><Textarea placeholder="Full Address Details" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
-                </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
                    <div className="space-y-1">
-                      <Label className="text-[10px] font-bold flex items-center gap-1"><Building2 size={10}/> Building</Label>
-                      <Select onValueChange={val => setFormData({...formData, buildingId: val, roomNumber: "", seatNumber: ""})}>
-                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                      </Select>
+                      <Label className="text-[10px] font-bold">Branch</Label>
+                      <div className="h-9 flex items-center px-3 bg-white rounded border text-xs font-bold text-primary">{userBranch}</div>
                    </div>
                    <div className="space-y-1">
                       <Label className="text-[10px] font-bold flex items-center gap-1"><DoorOpen size={10}/> Room No.</Label>
@@ -598,35 +460,16 @@ export default function StudentsPage() {
                 </div>
 
                 <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
-                  <Label className="font-bold text-success">{formData.type === 'old' ? 'Existing/Past Payments' : 'Initial Payments & Fees'}</Label>
+                  <Label className="font-bold text-success">Initial Payments & Fees</Label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>Rent Payment (৳)</Label><Input type="number" value={formData.initialRentPayment} onChange={e => setFormData({...formData, initialRentPayment: e.target.value})} placeholder="0.00" /></div>
-                    {formData.paymentSystem === 'non-package' && (
-                      <div className="space-y-2"><Label>Food Payment (৳)</Label><Input type="number" value={formData.initialFoodPayment} onChange={e => setFormData({...formData, initialFoodPayment: e.target.value})} placeholder="0.00" /></div>
-                    )}
+                    <div className="space-y-2"><Label>Payment Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Advance / Security (৳)</Label><Input type="number" value={formData.advanceAmount} onChange={e => setFormData({...formData, advanceAmount: e.target.value})} placeholder="0.00" /></div>
-                    <div className="space-y-2"><Label>Service Charge (৳)</Label><Input type="number" value={formData.serviceCharge} onChange={e => setFormData({...formData, serviceCharge: e.target.value})} placeholder="0.00" /></div>
-                  </div>
-                  
-                  {formData.type === 'new' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-                      <div className="space-y-2"><Label>Payment Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
-                      <div className="space-y-2"><Label>Payment Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-                    </div>
-                  )}
-
-                  {formData.type === 'old' && (
-                    <p className="text-[10px] text-muted-foreground p-2 bg-secondary/50 rounded italic">
-                      * দ্রষ্টব্য: পুরাতন শিক্ষার্থীদের জন্য, এই মানগুলি শুধুমাত্র রেকর্ড রাখার জন্য সংরক্ষণ করা হয়। এগুলি আজকের মোট আয় বা নিট ব্যালেন্সে যোগ করা হবে না, কারণ অর্থটি অতীতেই প্রাপ্ত হয়েছে।
-                    </p>
-                  )}
                 </div>
               </div>
               <DialogFooter>
                 <Button onClick={handleRegister} className="w-full h-12 text-lg font-bold" disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="animate-spin"/> : formData.type === 'old' ? "Import Old Resident" : "Register & Occupy Seat"}
+                  {isSubmitting ? <Loader2 className="animate-spin"/> : "Register Resident"}
                 </Button>
               </DialogFooter>
             </DialogContent>

@@ -53,9 +53,19 @@ export function AppSidebar() {
   const [userBranch, setUserBranch] = React.useState("")
 
   React.useEffect(() => {
-    setUserRole(localStorage.getItem("user_role") || "Manager")
-    setUserName(localStorage.getItem("user_name") || "User")
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    const role = localStorage.getItem("user_role") || "Manager"
+    const name = localStorage.getItem("user_name") || "User"
+    let branch = localStorage.getItem("user_branch")
+    
+    // Default to 'Main Branch' if no branch is set
+    if (!branch) {
+      branch = "Main Branch"
+      localStorage.setItem("user_branch", branch)
+    }
+
+    setUserRole(role)
+    setUserName(name)
+    setUserBranch(branch)
   }, [])
 
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
@@ -87,7 +97,7 @@ export function AppSidebar() {
   const handleBranchSwitch = (newBranch: string) => {
     localStorage.setItem("user_branch", newBranch)
     setUserBranch(newBranch)
-    window.location.reload() // Force reload to refresh all queries
+    window.location.reload() // Force reload to refresh all branch-filtered queries
   }
 
   return (
@@ -109,7 +119,7 @@ export function AppSidebar() {
                   <SelectValue placeholder="Switch Branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All Branches">All Branches</SelectItem>
+                  {/* Removed "All Branches" as per user request */}
                   {branches?.map(b => (
                     <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
                   ))}

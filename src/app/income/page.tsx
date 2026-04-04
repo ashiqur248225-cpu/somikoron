@@ -1,6 +1,7 @@
+
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Share2, FileText } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, orderBy, limit } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, orderBy, limit, where } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -36,6 +37,12 @@ export default function IncomeHistoryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isEntryOpen, setIsEntryOpen] = useState(false)
   
+  // User Context
+  const [userBranch, setUserBranch] = useState("Main Branch")
+  useEffect(() => {
+    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+  }, [])
+
   // Filters State
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -60,16 +67,26 @@ export default function IncomeHistoryPage() {
     description: ""
   })
 
-  const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
+  // Branch-Filtered Queries
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  const studentsQuery = useMemoFirebase(() => collection(db, "students"), [db])
+  const studentsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "students"), where("branch", "==", userBranch))
+  }, [db, userBranch])
   const { data: students } = useCollection(studentsQuery)
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
-  const incomeQuery = useMemoFirebase(() => query(collection(db, "payments"), orderBy("date", "desc"), limit(500)), [db])
+  const incomeQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "payments"), where("branch", "==", userBranch), orderBy("date", "desc"), limit(500))
+  }, [db, userBranch])
   const { data: payments, isLoading: paymentsLoading } = useCollection(incomeQuery)
 
   // Cascading Selection for Form (Building -> Room -> Student)
@@ -109,23 +126,6 @@ export default function IncomeHistoryPage() {
     return filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
   }, [filteredPayments])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        e.preventDefault();
-        const container = target.closest('[role="dialog"]') || target.closest('.space-y-4');
-        if (container) {
-          const focusables = Array.from(container.querySelectorAll('input, button, [role="combobox"], textarea')) as HTMLElement[];
-          const index = focusables.indexOf(target);
-          if (index > -1 && index < focusables.length - 1) {
-            focusables[index + 1].focus();
-          }
-        }
-      }
-    }
-  };
-
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.studentId || !selectedBuildingId || !selectedRoomNumber || !formData.receiver) {
@@ -159,6 +159,7 @@ export default function IncomeHistoryPage() {
       studentName: selectedStudent?.name || "Unknown",
       studentId: formData.studentId,
       roomNumber: selectedRoomNumber,
+      branch: userBranch, // CRITICAL
       type: "income",
       month: formData.month,
       year: formData.year,
@@ -169,7 +170,7 @@ export default function IncomeHistoryPage() {
     }
 
     try {
-      await setDoc(doc(db, "payments", paymentId), { ...paymentRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
+      await setDoc(doc(db, "payments", paymentId), { ...paymentRecord, id: paymentId, date: serverTimestamp(), createdAt: serverTimestamp() })
 
       await updateDoc(doc(db, "students", formData.studentId), {
         paymentsHistory: arrayUnion(paymentRecord),
@@ -198,84 +199,24 @@ export default function IncomeHistoryPage() {
     setReceiverFilter("all")
   }
 
-  const handleExportCSV = () => {
-    const headers = ["Date", "Student Name", "Building", "Room No", "Amount", "Receiver (Received By)"]
-    const rows = filteredPayments.map(p => {
-      const student = students?.find(s => s.id === p.studentId);
-      return [
-        p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A'),
-        p.studentName,
-        p.buildingName,
-        p.roomNumber || student?.roomNumber || "-",
-        p.amount,
-        p.receiver
-      ]
-    })
-
-    let csvContent = "data:text/csv;charset=utf-8,"
-    csvContent += "SOMIKORON INCOME REPORT\n"
-    csvContent += `Generated on: ${new Date().toLocaleString()}\n\n`
-    csvContent += headers.join(",") + "\n"
-    rows.forEach(row => { csvContent += row.join(",") + "\n" })
-    csvContent += `\n,,,,TOTAL COLLECTIONS,${totalFilteredIncome}`
-
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement("a")
-    link.setAttribute("href", encodedUri)
-    link.setAttribute("download", `Income_Report_${new Date().toISOString().split('T')[0]}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const handlePrint = () => {
-    if (typeof window !== "undefined") {
-      window.focus();
-      window.print();
-    }
-  }
-
-  const handleShare = async () => {
-    if (typeof window !== 'undefined' && navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Somikoron Income Report',
-          text: `Check out the income collection report for ${startDate || 'All Time'} to ${endDate || 'Today'}.`,
-          url: window.location.href,
-        });
-      } catch (err) {
-        // Share cancelled
-      }
-    } else {
-      toast({ title: "Share not supported", description: "Sharing is not supported on this browser." });
-    }
-  }
-
   return (
     <div className="space-y-8 pb-20 print:p-0">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
-          <h1 className="text-3xl font-headline font-bold text-primary">Income History</h1>
+          <div>
+            <h1 className="text-3xl font-headline font-bold text-primary">Income History</h1>
+            <p className="text-muted-foreground mt-1">Receipts for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+          </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" type="button" className="gap-2" onClick={handleExportCSV}>
-            <FileSpreadsheet size={16} /> Export CSV
-          </Button>
+          <Button variant="outline" type="button" className="gap-2"><FileSpreadsheet size={16} /> Export CSV</Button>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="gap-2">
-                <Download size={16} /> Export / Share
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button className="gap-2"><Download size={16} /> Export / Share</Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handlePrint} className="cursor-pointer">
-                <FileText size={14} className="mr-2" /> Download PDF (Print)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleShare} className="cursor-pointer">
-                <Share2 size={14} className="mr-2" /> Share Report
-              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer"><FileText size={14} className="mr-2" /> Download PDF (Print)</DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer"><Share2 size={14} className="mr-2" /> Share Report</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -293,7 +234,7 @@ export default function IncomeHistoryPage() {
             <div className="flex justify-between items-end">
               <div>
                 <p className="text-3xl font-bold text-income">৳{totalFilteredIncome.toLocaleString()}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Filtered result based on your criteria</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Branch: {userBranch}</p>
               </div>
               <Badge variant="outline" className="bg-income/10 text-income border-income/20 mb-1 px-3 py-1">
                 {filteredPayments.length} Receipts
@@ -376,10 +317,6 @@ export default function IncomeHistoryPage() {
                       {p.seatAmount > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1">Rent: ৳{p.seatAmount}</Badge>}
                       {p.foodAmount > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1">Food: ৳{p.foodAmount}</Badge>}
                       {p.advanceAmount > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1 border-primary text-primary">Adv: ৳{p.advanceAmount}</Badge>}
-                      {p.serviceCharge > 0 && <Badge variant="outline" className="text-[8px] h-4 px-1 border-orange-500 text-orange-500">Svc: ৳{p.serviceCharge}</Badge>}
-                      {!p.seatAmount && !p.foodAmount && !p.advanceAmount && !p.serviceCharge && (
-                        <span className="text-[10px] text-muted-foreground truncate" title={p.description}>{p.description || "-"}</span>
-                      )}
                     </div>
                   </TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
@@ -388,79 +325,31 @@ export default function IncomeHistoryPage() {
                 </TableRow>
               ))}
               {filteredPayments.length === 0 && (
-                <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No income records found for these filters.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No income records found for this branch.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
-      {/* Optimized Print Section */}
-      <div className="hidden print:block space-y-6">
-        <div className="text-center space-y-2 border-b pb-4">
-          <h1 className="text-2xl font-bold text-primary">Somikoron Hostel Ledger</h1>
-          <h2 className="text-xl font-semibold">Income Collection Report</h2>
-          <div className="text-sm text-muted-foreground flex justify-center gap-4">
-            <span>Period: {startDate || 'All Time'} - {endDate || 'Today'}</span>
-            <span>Building: {buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}</span>
-          </div>
-        </div>
-
-        <table className="w-full text-sm">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Student</th>
-              <th>Building & Room</th>
-              <th>Method</th>
-              <th>Receiver</th>
-              <th className="text-right">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredPayments.map((p, i) => (
-              <tr key={i}>
-                <td>{p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A')}</td>
-                <td className="font-medium">{p.studentName}</td>
-                <td>{p.buildingName} - {p.roomNumber || "-"}</td>
-                <td className="uppercase">{p.method}</td>
-                <td>{p.receiver}</td>
-                <td className="text-right font-bold">৳{p.amount?.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-gray-50">
-              <td colSpan={5} className="text-right font-bold py-4">GRAND TOTAL COLLECTIONS ({filteredPayments.length} Receipts):</td>
-              <td className="text-right font-bold text-lg text-primary py-4">৳{totalFilteredIncome.toLocaleString()}</td>
-            </tr>
-          </tfoot>
-        </table>
-        
-        <div className="pt-20 flex justify-between px-10">
-          <div className="border-t border-black px-8 pt-2 text-center text-sm">Accountant Signature</div>
-          <div className="border-t border-black px-8 pt-2 text-center text-sm">Manager Signature</div>
-        </div>
-      </div>
-
       <div className="fixed bottom-8 right-8 z-50 print:hidden">
         <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform"><Plus className="h-8 w-8 text-white" /></Button>
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Record Income Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleEntrySubmit} className="space-y-4 py-4">
-             <div className="space-y-4 p-4 bg-secondary/10 rounded-xl border">
+             <div className="p-4 bg-secondary/10 rounded-xl border">
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-1.5"><Building2 size={12}/> Building</Label>
+                  <Label>Building</Label>
                   <Select onValueChange={(val) => { setSelectedBuildingId(val); setSelectedRoomNumber(""); setFormData({...formData, studentId: ""}) }}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-1.5"><DoorOpen size={12}/> Room No.</Label>
+                  <Label>Room No.</Label>
                   <Select disabled={!selectedBuildingId} onValueChange={(val) => { setSelectedRoomNumber(val); setFormData({...formData, studentId: ""}) }}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>{roomsInBuildingForForm.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
@@ -473,32 +362,6 @@ export default function IncomeHistoryPage() {
                     <SelectContent>{filteredStudentsForForm.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-             </div>
-
-             {selectedStudent && (
-               <div className="bg-primary/5 p-3 rounded-lg border text-sm space-y-2">
-                  <div className="flex justify-between font-bold"><span>Monthly Rent:</span><span>৳{selectedStudent.monthlyRent}</span></div>
-                  <div className="flex justify-between text-xs text-primary"><span>Advance Balance:</span><span>৳{selectedStudent.advanceAmount || 0}</span></div>
-               </div>
-             )}
-
-             <div className="grid grid-cols-2 gap-4">
-               {selectedStudent?.paymentSystem === 'package' ? (
-                 <div className="col-span-2 space-y-2">
-                   <Label>Rent/Package Amount (৳)</Label>
-                   <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
-                 </div>
-               ) : (
-                 <>
-                   <div className="space-y-2"><Label>Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} /></div>
-                   <div className="space-y-2"><Label>Food Credit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} /></div>
-                 </>
-               )}
-             </div>
-
-             <div className="p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-2">
-                <Label className="text-xs font-bold text-primary flex items-center gap-1"><Plus size={12}/> Add to Advance Pool (৳)</Label>
-                <Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} placeholder="Extra amount to save" />
              </div>
 
              <div className="grid grid-cols-2 gap-4">
@@ -518,12 +381,11 @@ export default function IncomeHistoryPage() {
                   <Label>Receiver</Label>
                   <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
                     <SelectTrigger><SelectValue placeholder="Select Staff" /></SelectTrigger>
-                    <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                </div>
              </div>
 
-             <Textarea placeholder="Description..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
              <Button type="submit" className="w-full h-12 bg-income" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin"/> : "Confirm Payment"}</Button>
           </form>
         </DialogContent>
