@@ -9,7 +9,9 @@ import { Label } from "@/components/ui/label"
 import { 
   Select, 
   SelectContent, 
+  SelectGroup,
   SelectItem, 
+  SelectLabel,
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select"
@@ -108,6 +110,12 @@ export default function ExpenseHistoryPage() {
   }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
 
+  const partiesQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "expenseParties"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: parties } = useCollection(partiesQuery)
+
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -154,8 +162,8 @@ export default function ExpenseHistoryPage() {
 
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.amount || !formData.buildingId || !formData.expensePartyName) {
-      toast({ variant: "destructive", title: "Error", description: "Amount, Building and Expenser name are required." })
+    if (!formData.amount || !formData.buildingId || !formData.expensePartyName || !formData.receiver) {
+      toast({ variant: "destructive", title: "Error", description: "Amount, Building, Paid By and Receiver are required." })
       return
     }
 
@@ -416,33 +424,28 @@ export default function ExpenseHistoryPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>{formData.category === 'salary' ? "Paid To (Staff Name)" : "Receiver (Party/Vendor Name)"}</Label>
-              <div className="relative">
-                <Input 
-                  value={formData.receiver} 
-                  onChange={e => setFormData({...formData, receiver: e.target.value})} 
-                  placeholder={formData.category === 'salary' ? "Employee Name" : "Receiver Name"} 
-                />
-                {formData.category === 'salary' && (
-                  <div className="mt-2">
-                    <p className="text-[10px] text-muted-foreground mb-1 uppercase font-bold">Quick Select Staff:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {staffList?.map(s => (
-                        <Button 
-                          key={s.id} 
-                          type="button" 
-                          variant="outline" 
-                          size="sm" 
-                          className="h-6 text-[9px] px-2"
-                          onClick={() => setFormData({...formData, receiver: s.name})}
-                        >
-                          {s.name}
-                        </Button>
+              <Label>{formData.category === 'salary' ? "Paid To (Staff Name)" : "Paid To (Receiver Name)"}</Label>
+              <Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Who is receiving?" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Staff Members</SelectLabel>
+                    {staffList?.map(s => (
+                      <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                  {parties && parties.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Parties / Vendors</SelectLabel>
+                      {parties.map(p => (
+                        <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
                       ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

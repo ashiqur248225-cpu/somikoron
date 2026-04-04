@@ -4,7 +4,7 @@
 import React, { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, updateDoc, deleteDoc, serverTimestamp, collection } from "firebase/firestore"
+import { doc, updateDoc, deleteDoc, serverTimestamp, collection, query, where } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,7 +35,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { 
+  Select, 
+  SelectContent, 
+  SelectGroup, 
+  SelectItem, 
+  SelectLabel, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 
 const EXPENSE_CATEGORIES = [
@@ -63,8 +71,17 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
+  const staffQuery = useMemoFirebase(() => {
+    if (!expense?.branch) return collection(db, "staff")
+    return query(collection(db, "staff"), where("branch", "==", expense.branch))
+  }, [db, expense?.branch])
   const { data: staffList } = useCollection(staffQuery)
+
+  const partiesQuery = useMemoFirebase(() => {
+    if (!expense?.branch) return collection(db, "expenseParties")
+    return query(collection(db, "expenseParties"), where("branch", "==", expense.branch))
+  }, [db, expense?.branch])
+  const { data: parties } = useCollection(partiesQuery)
 
   const [editForm, setEditForm] = useState<any>(null)
 
@@ -263,8 +280,22 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               </div>
 
               <div className="space-y-2">
-                <Label>Paid To (Receiver/Staff Name)</Label>
-                <Input value={editForm.receiver} onChange={e => setEditForm({...editForm, receiver: e.target.value})} placeholder="Who received the money?" />
+                <Label>Paid To (Receiver Name)</Label>
+                <Select value={editForm.receiver} onValueChange={val => setEditForm({...editForm, receiver: val})}>
+                  <SelectTrigger><SelectValue placeholder="Select Receiver" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Staff Members</SelectLabel>
+                      {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                    </SelectGroup>
+                    {parties && parties.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel>Parties / Vendors</SelectLabel>
+                        {parties.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                      </SelectGroup>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
