@@ -22,12 +22,7 @@ import { collection, query, orderBy, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
 
 const CHART_COLORS = ['#296EB3', '#F06A6A', '#4CAF50', '#FF9800', '#9C27B0', '#00BCD4', '#607D8B', '#E91E63'];
 
@@ -43,6 +38,7 @@ const EXPENSE_LABELS: Record<string, string> = {
 }
 
 export default function ReportsPage() {
+  const { toast } = useToast()
   const db = useFirestore()
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
@@ -63,21 +59,36 @@ export default function ReportsPage() {
 
   const paymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "payments"), where("branch", "==", userBranch), orderBy("date", "desc"))
+    return query(collection(db, "payments"), where("branch", "==", userBranch))
   }, [db, userBranch])
-  const { data: payments, isLoading: paymentsLoading } = useCollection(paymentsQuery)
+  const { data: rawPayments, isLoading: paymentsLoading } = useCollection(paymentsQuery)
 
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "expenses"), where("branch", "==", userBranch), orderBy("expenseDate", "desc"))
+    return query(collection(db, "expenses"), where("branch", "==", userBranch))
   }, [db, userBranch])
-  const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
+  const { data: rawExpenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: students } = useCollection(studentsQuery)
+
+  // Memoized sorted data
+  const payments = useMemo(() => {
+    if (!rawPayments) return []
+    return [...rawPayments].sort((a, b) => {
+      const d1 = a.date?.toDate ? a.date.toDate() : new Date(a.date)
+      const d2 = b.date?.toDate ? b.date.toDate() : new Date(b.date)
+      return d2.getTime() - d1.getTime()
+    })
+  }, [rawPayments])
+
+  const expenses = useMemo(() => {
+    if (!rawExpenses) return []
+    return [...rawExpenses].sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime())
+  }, [rawExpenses])
 
   const filteredData = useMemo(() => {
     if (!payments || !expenses) return { income: [], expense: [] }
@@ -101,7 +112,6 @@ export default function ReportsPage() {
     const totalIncome = filteredData.income.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     const totalExpense = filteredData.expense.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     
-    // Dues calculation (Current context)
     const activeStudents = (students || []).filter(s => s.isActive && (buildingFilter === "all" || s.buildingId === buildingFilter))
     const totalDues = activeStudents.reduce((acc, s) => {
       const histDues = s.duesBreakdown ? Object.values(s.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
@@ -112,9 +122,7 @@ export default function ReportsPage() {
     const occupiedSeats = (buildings || []).filter(b => buildingFilter === "all" || b.id === buildingFilter).reduce((acc, b) => acc + (b.occupiedSeats || 0), 0)
     const occupancyRate = totalSeats > 0 ? (occupiedSeats / totalSeats) * 100 : 0
 
-    // Health Score calculation
-    // Factors: Occupancy (40%), Collection Ratio (40%), Profit Margin (20%)
-    const collectionEfficiency = totalIncome > 0 ? (totalIncome / (totalIncome + totalDues)) : 0
+    const collectionEfficiency = (totalIncome + totalDues) > 0 ? (totalIncome / (totalIncome + totalDues)) : 0
     const profitMargin = totalIncome > 0 ? (Math.max(0, totalIncome - totalExpense) / totalIncome) : 0
     
     const healthScore = Math.round(
@@ -123,8 +131,6 @@ export default function ReportsPage() {
       (profitMargin * 100 * 0.2)
     )
 
-    // Charts Data
-    // 1. Trend Data (grouped by date)
     const trendMap: Record<string, { name: string, income: number, expense: number }> = {}
     filteredData.income.forEach(p => {
       const d = (p.date?.toDate ? p.date.toDate() : new Date(p.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
@@ -138,7 +144,6 @@ export default function ReportsPage() {
     })
     const trendData = Object.values(trendMap).sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime())
 
-    // 2. Expense Category Data
     const expenseCatMap: Record<string, number> = {}
     filteredData.expense.forEach(e => {
       const cat = e.category || 'others'
@@ -149,7 +154,6 @@ export default function ReportsPage() {
       value
     }))
 
-    // 3. Building Comparison
     const buildingComparison = (buildings || []).map(b => {
       const bIncome = filteredData.income.filter(p => p.buildingId === b.id).reduce((acc, curr) => acc + curr.amount, 0)
       const bExpense = filteredData.expense.filter(e => e.buildingId === b.id).reduce((acc, curr) => acc + curr.amount, 0)
@@ -175,6 +179,60 @@ export default function ReportsPage() {
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
 
+  const handleExportCSV = () => {
+    try {
+      const headers = ["Date", "Type", "Category/Purpose", "Entity Name", "Building", "Method", "Amount"];
+      const rows = [];
+
+      // Add Incomes
+      filteredData.income.forEach(p => {
+        const date = (p.date?.toDate ? p.date.toDate() : new Date(p.date)).toLocaleDateString();
+        rows.push([
+          date,
+          "Income",
+          "Payment Collection",
+          p.studentName,
+          p.buildingName,
+          p.method,
+          p.amount
+        ]);
+      });
+
+      // Add Expenses
+      filteredData.expense.forEach(e => {
+        const date = new Date(e.expenseDate).toLocaleDateString();
+        rows.push([
+          date,
+          "Expense",
+          EXPENSE_LABELS[e.category] || e.category,
+          e.receiver || e.expensePartyName,
+          e.buildingName,
+          e.method,
+          e.amount
+        ]);
+      });
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.map(val => `"${val}"`).join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `somikoron_report_${startDate}_to_${endDate}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({ title: "Export Success", description: "CSV file has been downloaded." });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Export Failed", description: err.message });
+    }
+  }
+
   if (paymentsLoading || expensesLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
 
   return (
@@ -189,7 +247,12 @@ export default function ReportsPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={handlePrint}><Download size={16} /> Export PDF</Button>
+          <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
+            <FileSpreadsheet size={16} /> Export CSV
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={handlePrint}>
+            <Download size={16} /> Export PDF
+          </Button>
           <Button className="gap-2"><Share2 size={16} /> Share Report</Button>
         </div>
       </div>
