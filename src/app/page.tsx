@@ -20,7 +20,8 @@ import {
   AlertCircle,
   Users,
   BellRing,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  ChevronDown
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -32,6 +33,13 @@ import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -41,6 +49,7 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
+  const [timeRange, setTimeRange] = useState("this_month")
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
@@ -96,28 +105,51 @@ export default function DashboardPage() {
   }, [db, userBranch, userRole])
   const { data: pendingMgrRequests } = useCollection(managerRequestsQuery)
 
-  // 6. Opening Balances Config (Branch-specific config would be ideal, but for now global)
+  // 6. Opening Balances Config
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances } = useDoc(balancesRef)
 
+  const isWithinRange = (date: Date, range: string) => {
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    
+    if (range === 'today') {
+      return date >= startOfToday
+    }
+    if (range === 'this_week') {
+      const day = now.getDay()
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1) // Monday
+      const startOfWeek = new Date(new Date(now).setDate(diff))
+      startOfWeek.setHours(0, 0, 0, 0)
+      return date >= startOfWeek
+    }
+    if (range === 'this_month') {
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+    }
+    if (range === 'this_year') {
+      return date.getFullYear() === now.getFullYear()
+    }
+    return true
+  }
+
   const stats = useMemo(() => {
     const now = new Date()
-    const currentMonthName = MONTHS[now.getMonth()]
-    const currentYearStr = now.getFullYear().toString()
 
-    // Monthly Totals filtered by Branch (Already in Query)
-    const monthlyIncome = (allPayments || [])
-      .filter(p => p.month === currentMonthName && p.year === currentYearStr)
-      .reduce((acc, p) => acc + (p.amount || 0), 0)
+    // Filter payments and expenses based on selected timeRange
+    const filteredPayments = (allPayments || []).filter(p => {
+      const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
+      return isWithinRange(pDate, timeRange)
+    })
 
-    const monthlyExpense = (allExpenses || [])
-      .filter(e => {
-        const eDate = e.expenseDate ? new Date(e.expenseDate) : null
-        return eDate && eDate.getMonth() === now.getMonth() && eDate.getFullYear() === now.getFullYear()
-      })
-      .reduce((acc, e) => acc + (e.amount || 0), 0)
+    const filteredExpenses = (allExpenses || []).filter(e => {
+      const eDate = e.expenseDate ? new Date(e.expenseDate) : null
+      return eDate && isWithinRange(eDate, timeRange)
+    })
 
-    // Dues Calculation Logic (Mirroring Dues Page)
+    const totalIncome = filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
+    const totalExpense = filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
+
+    // Dues Calculation (Always shows total outstanding for active residents)
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, s) => {
       const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
       const endDate = now
@@ -148,7 +180,7 @@ export default function DashboardPage() {
       return sAcc + rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
     }, 0)
 
-    // Fund status based on all transactions for THIS branch
+    // Fund status based on ALL history for THIS branch
     const fund = { 
       cash: Number(openingBalances?.cash || 0), 
       bank: Number(openingBalances?.bank || 0), 
@@ -164,13 +196,13 @@ export default function DashboardPage() {
     });
 
     return { 
-      income: monthlyIncome, 
-      expense: monthlyExpense, 
+      income: totalIncome, 
+      expense: totalExpense, 
       dues: totalDues, 
       fund,
       activeResidents: (students || []).filter(s => s.isActive).length
     }
-  }, [allPayments, allExpenses, students, openingBalances])
+  }, [allPayments, allExpenses, students, openingBalances, timeRange])
 
   const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
 
@@ -194,9 +226,21 @@ export default function DashboardPage() {
           <p className="text-muted-foreground font-medium text-sm">Real-time overview for <span className="text-foreground font-bold">{userBranch}</span>.</p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="outline" className="bg-white border-slate-200 px-4 py-2 text-slate-600 font-bold flex gap-2">
-            <CalendarIcon size={14} /> {MONTHS[new Date().getMonth()]} {new Date().getFullYear()}
-          </Badge>
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-[160px] bg-white border-slate-200 font-bold text-slate-600 h-10 px-4 rounded-xl shadow-sm">
+              <div className="flex items-center gap-2">
+                <CalendarIcon size={14} className="text-primary" />
+                <SelectValue placeholder="Select period" />
+              </div>
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-slate-100">
+              <SelectItem value="today" className="font-medium">This Day</SelectItem>
+              <SelectItem value="this_week" className="font-medium">This Week</SelectItem>
+              <SelectItem value="this_month" className="font-medium">This Month</SelectItem>
+              <SelectItem value="this_year" className="font-medium">This Year</SelectItem>
+            </SelectContent>
+          </Select>
+
           {userRole !== 'Building Manager' && pendingMgrRequests && pendingMgrRequests.length > 0 && (
             <Link href="/manager-requests">
               <Button variant="outline" className="bg-orange-50 border-orange-200 text-orange-600 animate-pulse gap-2 rounded-xl">
@@ -205,9 +249,9 @@ export default function DashboardPage() {
             </Link>
           )}
           <Link href="/profile">
-            <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer">
-              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs">
-                {userName ? userName.substring(0, 2).toUpperCase() : "U"}
+            <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
+                {userName ? userName.substring(0, 2) : "U"}
               </AvatarFallback>
             </Avatar>
           </Link>
@@ -223,7 +267,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">৳{stats.income.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Total For Month</p>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1 capitalize">For {timeRange.replace('_', ' ')}</p>
           </CardContent>
         </Card>
 
@@ -234,7 +278,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">৳{stats.expense.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Total For Month</p>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1 capitalize">For {timeRange.replace('_', ' ')}</p>
           </CardContent>
         </Card>
 
@@ -266,7 +310,7 @@ export default function DashboardPage() {
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg font-bold text-slate-800">Branch Fund Status</CardTitle>
-              <p className="text-xs text-muted-foreground font-medium mt-1">Cumulative balances for {userBranch}.</p>
+              <p className="text-xs text-muted-foreground font-medium mt-1">Opening + Transactions (including transfers).</p>
             </div>
             <div className="bg-primary/5 p-3 rounded-2xl text-primary border border-primary/10"><CircleDollarSign size={24} /></div>
           </CardHeader>
