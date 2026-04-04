@@ -145,8 +145,8 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-4xl font-black text-primary tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground font-medium">Real-time overview of your hostel network.</p>
+          <h1 className="text-3xl font-bold text-primary tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground font-medium text-sm">Real-time overview of your hostel network.</p>
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="bg-white border-slate-200 px-4 py-2 text-slate-600 font-bold flex gap-2">
@@ -166,44 +166,44 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-success">Income</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-widest text-success">Income</CardTitle>
             <div className="bg-success/10 p-1.5 rounded-full"><ArrowUpCircle className="h-4 w-4 text-success" /></div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-slate-900">৳{stats.income.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-slate-900">৳{stats.income.toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground font-bold mt-1">Total For Month</p>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-destructive">Expenses</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-widest text-destructive">Expenses</CardTitle>
             <div className="bg-destructive/10 p-1.5 rounded-full"><ArrowDownCircle className="h-4 w-4 text-destructive" /></div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-slate-900">৳{stats.expense.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-slate-900">৳{stats.expense.toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground font-bold mt-1">Total For Month</p>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-rose-400 rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-rose-500">Total Dues</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-widest text-rose-500">Total Dues</CardTitle>
             <div className="bg-rose-100 p-1.5 rounded-full"><TrendingUp className="h-4 w-4 text-rose-500" /></div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-slate-900">৳{stats.dues.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-slate-900">৳{stats.dues.toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground font-bold mt-1">Current outstanding</p>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-primary rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-primary">Residents</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-widest text-primary">Residents</CardTitle>
             <div className="bg-primary/10 p-1.5 rounded-full"><Building2 className="h-4 w-4 text-primary" /></div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-slate-900">{students?.filter(s => s.isActive).length || 0}</div>
+            <div className="text-2xl font-bold text-slate-900">{students?.filter(s => s.isActive).length || 0}</div>
             <p className="text-[10px] text-muted-foreground font-bold mt-1">Active in {buildings?.length || 0} properties</p>
           </CardContent>
         </Card>
@@ -213,7 +213,7 @@ export default function DashboardPage() {
         <Card className="lg:col-span-3 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-xl font-black text-slate-800">Total Fund Status</CardTitle>
+              <CardTitle className="text-lg font-bold text-slate-800">Total Fund Status</CardTitle>
               <p className="text-xs text-muted-foreground font-medium mt-1">Opening + Transactions (including transfers).</p>
             </div>
             <div className="bg-primary/5 p-3 rounded-2xl text-primary border border-primary/10"><CircleDollarSign size={24} /></div>
@@ -221,26 +221,26 @@ export default function DashboardPage() {
           <CardContent className="p-8 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="p-6 rounded-3xl border bg-white shadow-sm space-y-3 group hover:border-primary/30 transition-colors">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest"><Banknote size={14} className="text-slate-400"/> Cash in Hand</div>
-                <div className="text-3xl font-black text-slate-800 tracking-tighter">৳{stats.fund.cash.toLocaleString()}</div>
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-muted-foreground tracking-widest"><Banknote size={14} className="text-slate-400"/> Cash in Hand</div>
+                <div className="text-2xl font-bold text-slate-800 tracking-tighter">৳{stats.fund.cash.toLocaleString()}</div>
               </div>
               <div className="p-6 rounded-3xl border bg-white shadow-sm space-y-3 group hover:border-primary/30 transition-colors">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest"><Landmark size={14} className="text-slate-400"/> Bank Account</div>
-                <div className="text-3xl font-black text-slate-800 tracking-tighter">৳{stats.fund.bank.toLocaleString()}</div>
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-muted-foreground tracking-widest"><Landmark size={14} className="text-slate-400"/> Bank Account</div>
+                <div className="text-2xl font-bold text-slate-800 tracking-tighter">৳{stats.fund.bank.toLocaleString()}</div>
               </div>
               <div className="p-6 rounded-3xl border bg-white shadow-sm space-y-3 group hover:border-primary/30 transition-colors">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest"><Smartphone size={14} className="text-primary/60"/> Bkash Wallet</div>
-                <div className="text-3xl font-black text-primary tracking-tighter">৳{stats.fund.bkash.toLocaleString()}</div>
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-primary/60 tracking-widest"><Smartphone size={14} className="text-primary/60"/> Bkash Wallet</div>
+                <div className="text-2xl font-bold text-primary tracking-tighter">৳{stats.fund.bkash.toLocaleString()}</div>
               </div>
               <div className="p-6 rounded-3xl border bg-white shadow-sm space-y-3 group hover:border-primary/30 transition-colors">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-orange-500/60 tracking-widest"><Smartphone size={14} className="text-orange-400"/> Nagad Wallet</div>
-                <div className="text-3xl font-black text-orange-500 tracking-tighter">৳{stats.fund.nagad.toLocaleString()}</div>
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-orange-500/60 tracking-widest"><Smartphone size={14} className="text-orange-400"/> Nagad Wallet</div>
+                <div className="text-2xl font-bold text-orange-500 tracking-tighter">৳{stats.fund.nagad.toLocaleString()}</div>
               </div>
             </div>
             
             <div className="pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-              <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Combined Net Balance:</p>
-              <div className="text-5xl font-black text-primary tracking-tighter">৳{combinedBalance.toLocaleString()}</div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Combined Net Balance:</p>
+              <div className="text-3xl font-bold text-primary tracking-tighter">৳{combinedBalance.toLocaleString()}</div>
             </div>
           </CardContent>
         </Card>
@@ -248,7 +248,7 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-xl font-black text-white bg-primary px-4 py-1 rounded-lg">Property Occupancy</CardTitle>
+              <CardTitle className="text-lg font-bold text-white bg-primary px-4 py-1 rounded-lg">Property Occupancy</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="p-8">
@@ -258,13 +258,13 @@ export default function DashboardPage() {
                 return (
                   <div key={b.id} className="space-y-3">
                     <div className="flex justify-between items-end">
-                      <p className="text-base font-black text-slate-700">{b.name}</p>
+                      <p className="text-sm font-bold text-slate-700">{b.name}</p>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-400">{b.occupiedSeats}/{b.totalSeats} seats</span>
-                        <span className="text-sm font-black text-primary">{occupancy}%</span>
+                        <span className="text-[10px] font-bold text-slate-400">{b.occupiedSeats}/{b.totalSeats} seats</span>
+                        <span className="text-xs font-bold text-primary">{occupancy}%</span>
                       </div>
                     </div>
-                    <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
                       <div 
                         className={cn(
                           "h-full transition-all duration-1000 ease-out rounded-full",
@@ -279,7 +279,7 @@ export default function DashboardPage() {
               {(!buildings || buildings.length === 0) && (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground opacity-30">
                   <Building2 size={64} strokeWidth={1} />
-                  <p className="mt-4 font-bold">No Properties Found</p>
+                  <p className="mt-4 font-bold text-sm">No Properties Found</p>
                 </div>
               )}
             </div>
