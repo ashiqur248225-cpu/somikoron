@@ -50,7 +50,16 @@ export default function StudentsPage() {
   // User Context
   const [userBranch, setUserBranch] = useState("Main Branch")
   useEffect(() => {
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const role = localStorage.getItem("user_role") || "Manager"
+    const assignedId = localStorage.getItem("assigned_building_id") || "none"
+    
+    setUserBranch(branch)
+
+    // Auto-filter for Building Manager
+    if (role === 'Building Manager' && assignedId !== 'none') {
+      setBuildingFilter(assignedId)
+    }
   }, [])
 
   // CRITICAL: Filter data by branch
@@ -98,7 +107,7 @@ export default function StudentsPage() {
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
+      <div className="flex flex-col md:flex-row justify-between gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />

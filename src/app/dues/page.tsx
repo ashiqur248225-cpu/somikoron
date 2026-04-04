@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Users, Search, Filter, Building2, DoorOpen, Loader2, Eye, 
   CircleAlert, XCircle, Info, FileSpreadsheet, Download, 
-  CheckCircle2, Clock, Wallet, LayoutGrid, RotateCcml
+  CheckCircle2, Clock, Wallet, LayoutGrid, RotateCcw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -43,7 +43,16 @@ export default function DuesPage() {
   // User Context
   const [userBranch, setUserBranch] = useState("Main Branch")
   useEffect(() => {
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const role = localStorage.getItem("user_role") || "Manager"
+    const assignedId = localStorage.getItem("assigned_building_id") || "none"
+    
+    setUserBranch(branch)
+
+    // Auto-filter for Building Manager
+    if (role === 'Building Manager' && assignedId !== 'none') {
+      setBuildingFilter(assignedId)
+    }
   }, [])
 
   // Queries
@@ -57,7 +66,7 @@ export default function DuesPage() {
     if (!userBranch) return null
     return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userBranch])
-  const { data: students, isLoading } = useCollection(studentsQuery)
+  const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
   // Room options based on building
   const roomOptions = useMemo(() => {

@@ -66,13 +66,6 @@ export default function ExpenseHistoryPage() {
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [canRequest, setCanRequest] = useState(true)
 
-  useEffect(() => {
-    setUserRole(localStorage.getItem("user_role") || "Manager")
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
-    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
-    setCanRequest(localStorage.getItem("can_request_expense") !== "false")
-  }, [])
-
   // Filters State
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
@@ -93,6 +86,23 @@ export default function ExpenseHistoryPage() {
     description: "",
     expenseDate: new Date().toISOString().split('T')[0],
   })
+
+  useEffect(() => {
+    const role = localStorage.getItem("user_role") || "Manager"
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const assignedId = localStorage.getItem("assigned_building_id") || "none"
+    const reqStatus = localStorage.getItem("can_request_expense") !== "false"
+
+    setUserRole(role)
+    setUserBranch(branch)
+    setAssignedBuildingId(assignedId)
+    setCanRequest(reqStatus)
+
+    if (role === 'Building Manager' && assignedId !== 'none') {
+      setBuildingFilter(assignedId)
+      setFormData(prev => ({ ...prev, buildingId: assignedId }))
+    }
+  }, [])
 
   // Branch-Filtered Queries
   const buildingsQuery = useMemoFirebase(() => {
@@ -134,12 +144,6 @@ export default function ExpenseHistoryPage() {
       return dateB.getTime() - dateA.getTime()
     })
   }, [rawExpenses])
-
-  useEffect(() => {
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none' && !formData.buildingId) {
-      setFormData(prev => ({ ...prev, buildingId: assignedBuildingId }))
-    }
-  }, [userRole, assignedBuildingId, formData.buildingId])
 
   const filteredExpenses = useMemo(() => {
     if (!expenses) return []
@@ -198,7 +202,7 @@ export default function ExpenseHistoryPage() {
       }
       setIsEntryOpen(false)
       setFormData({
-        category: "others", buildingId: assignedBuildingId || "", apartmentName: "", meterNo: "", amount: "", method: "cash", 
+        category: "others", buildingId: assignedBuildingId !== 'none' ? assignedBuildingId : "", apartmentName: "", meterNo: "", amount: "", method: "cash", 
         expensePartyName: "", receiver: "", description: "",
         expenseDate: new Date().toISOString().split('T')[0],
       })

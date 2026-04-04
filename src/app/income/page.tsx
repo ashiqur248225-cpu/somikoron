@@ -45,13 +45,6 @@ export default function IncomeHistoryPage() {
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [canRequest, setCanRequest] = useState(true)
 
-  useEffect(() => {
-    setUserRole(localStorage.getItem("user_role") || "Manager")
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
-    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
-    setCanRequest(localStorage.getItem("can_request_income") !== "false")
-  }, [])
-
   // Filters State
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -63,6 +56,24 @@ export default function IncomeHistoryPage() {
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("")
   const [selectedRoomNumber, setSelectedRoomNumber] = useState<string>("")
+
+  useEffect(() => {
+    const role = localStorage.getItem("user_role") || "Manager"
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const assignedId = localStorage.getItem("assigned_building_id") || "none"
+    const reqStatus = localStorage.getItem("can_request_income") !== "false"
+
+    setUserRole(role)
+    setUserBranch(branch)
+    setAssignedBuildingId(assignedId)
+    setCanRequest(reqStatus)
+
+    // Auto-select building for Building Manager
+    if (role === 'Building Manager' && assignedId !== 'none') {
+      setSelectedBuildingId(assignedId)
+      setBuildingFilter(assignedId)
+    }
+  }, [])
 
   const [formData, setFormData] = useState({
     studentId: "",
@@ -212,7 +223,7 @@ export default function IncomeHistoryPage() {
       studentName: selectedStudent?.name,
       studentId: formData.studentId,
       roomNumber: selectedRoomNumber,
-      branch: userBranch, // CRITICAL
+      branch: userBranch,
       month: formData.month,
       year: formData.year,
       method: formData.method,

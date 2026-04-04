@@ -43,10 +43,12 @@ export default function RegistrationsPage() {
   
   const [userRole, setUserRole] = useState("Manager")
   const [userBranch, setUserBranch] = useState("Main Branch")
+  const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
 
   const regQuery = useMemoFirebase(() => {
@@ -112,14 +114,14 @@ export default function RegistrationsPage() {
     if (selectedReg) {
       setApprovalForm(prev => ({
         ...prev,
-        buildingId: selectedReg.buildingId || "",
+        buildingId: selectedReg.buildingId || (userRole === 'Building Manager' ? assignedBuildingId : ""),
         roomNumber: selectedReg.roomNumber || "",
         seatNumber: selectedReg.seatNumber || "",
         paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
       }))
       setHistoricalDues([])
     }
-  }, [selectedReg])
+  }, [selectedReg, userRole, assignedBuildingId])
 
   const selectedBuilding = buildings?.find(b => b.id === approvalForm.buildingId)
   const roomsInBuilding = useMemo(() => {
