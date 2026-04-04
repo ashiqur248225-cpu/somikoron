@@ -50,10 +50,15 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         const userData = querySnapshot.docs[0].data()
         
         localStorage.setItem("somikoron_auth", "true")
+        localStorage.setItem("somikoron_auth_id", querySnapshot.docs[0].id)
         localStorage.setItem("user_role", userData.role || "Manager")
         localStorage.setItem("user_branch", userData.branch || "Main Branch")
         localStorage.setItem("user_name", userData.name)
         localStorage.setItem("assigned_building_id", userData.assignedBuildingId || "none")
+        
+        // Save Permissions
+        localStorage.setItem("can_request_income", userData.canRequestIncome !== false ? "true" : "false")
+        localStorage.setItem("can_request_expense", userData.canRequestExpense !== false ? "true" : "false")
         
         setIsAuthenticated(true)
         toast({ title: "Welcome to Somikoron", description: `Logged in as ${userData.role}` })

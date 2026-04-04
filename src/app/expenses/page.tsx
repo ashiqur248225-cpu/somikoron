@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing } from "lucide-react"
+import { Plus, Loader2, Building2, UserCircle, Receipt, Calendar, Wrench, Lightbulb, Utensils, Wifi, Wallet, Zap, LayoutGrid, UserCheck, XCircle, Search, Filter, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -62,11 +62,13 @@ export default function ExpenseHistoryPage() {
   const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
+  const [canRequest, setCanRequest] = useState(true)
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
+    setCanRequest(localStorage.getItem("can_request_expense") !== "false")
   }, [])
 
   // Filters State
@@ -101,11 +103,21 @@ export default function ExpenseHistoryPage() {
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "expenses"), where("buildingId", "==", assignedBuildingId), orderBy("expenseDate", "desc"), limit(500))
+      return query(collection(db, "expenses"), where("buildingId", "==", assignedBuildingId), limit(500))
     }
-    return query(collection(db, "expenses"), where("branch", "==", userBranch), orderBy("expenseDate", "desc"), limit(500))
+    return query(collection(db, "expenses"), where("branch", "==", userBranch), limit(500))
   }, [db, userBranch, userRole, assignedBuildingId])
-  const { data: expenses, isLoading: expensesLoading } = useCollection(expensesQuery)
+  const { data: rawExpenses, isLoading: expensesLoading } = useCollection(expensesQuery)
+
+  // Sort in memory
+  const expenses = useMemo(() => {
+    if (!rawExpenses) return []
+    return [...rawExpenses].sort((a, b) => {
+      const dateA = new Date(a.expenseDate)
+      const dateB = new Date(b.expenseDate)
+      return dateB.getTime() - dateA.getTime()
+    })
+  }, [rawExpenses])
 
   useEffect(() => {
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -244,9 +256,21 @@ export default function ExpenseHistoryPage() {
       </Card>
 
       <div className="fixed bottom-8 right-8 z-50 print:hidden">
-        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:scale-105 transition-transform">
-          {userRole === 'Building Manager' ? <BellRing size={24} className="text-white"/> : <Plus size={32} className="text-white" />}
-        </Button>
+        {userRole === 'Building Manager' ? (
+          canRequest ? (
+            <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:scale-105 transition-transform">
+              <BellRing size={24} className="text-white" />
+            </Button>
+          ) : (
+            <div className="bg-white/80 backdrop-blur-sm p-3 rounded-xl border border-destructive/20 text-destructive text-[10px] font-bold flex items-center gap-2 shadow-sm animate-in fade-in slide-in-from-right-4">
+              <ShieldAlert size={14} /> Request Disabled
+            </div>
+          )
+        ) : (
+          <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-destructive hover:scale-105 transition-transform">
+            <Plus size={32} className="text-white" />
+          </Button>
+        )}
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>

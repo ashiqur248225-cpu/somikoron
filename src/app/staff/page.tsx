@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { UserCog, Search, Plus, Phone, Loader2, Trash2, Shield, Building2, MapPin } from "lucide-react"
+import { UserCog, Search, Plus, Phone, Loader2, Trash2, Shield, Building2, MapPin, CheckCircle2, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { 
   Dialog, 
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, deleteDoc } from "firebase/firestore"
@@ -46,7 +47,9 @@ export default function StaffPage() {
     password: "",
     role: "Branch Manager",
     branch: "Main Branch",
-    assignedBuildingId: "none"
+    assignedBuildingId: "none",
+    canRequestIncome: true,
+    canRequestExpense: true
   })
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
@@ -73,10 +76,15 @@ export default function StaffPage() {
       const staffId = doc(collection(db, "staff")).id
       await setDoc(doc(db, "staff", staffId), {
         ...formData,
+        id: staffId,
         createdAt: serverTimestamp()
       })
       toast({ title: "Success", description: "Staff member added." })
-      setFormData({ name: "", phone: "", password: "", role: "Branch Manager", branch: "Main Branch", assignedBuildingId: "none" })
+      setFormData({ 
+        name: "", phone: "", password: "", role: "Branch Manager", 
+        branch: "Main Branch", assignedBuildingId: "none",
+        canRequestIncome: true, canRequestExpense: true
+      })
       setIsAddOpen(false)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -110,7 +118,7 @@ export default function StaffPage() {
           <DialogTrigger asChild>
             <Button className="gap-2"><Plus size={18} /> Add New Staff</Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Add Staff Member</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2"><Label>Full Name</Label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
@@ -139,21 +147,48 @@ export default function StaffPage() {
                 </Select>
               </div>
               {formData.role === 'Building Manager' && (
-                <div className="space-y-2">
-                  <Label>Assign Building</Label>
-                  <Select value={formData.assignedBuildingId} onValueChange={val => setFormData({...formData, assignedBuildingId: val})}>
-                    <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
-                    <SelectContent>
-                      {buildings?.filter(b => b.branch === formData.branch).map(b => (
-                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-6 animate-in fade-in slide-in-from-top-2">
+                  <div className="space-y-2">
+                    <Label>Assign Building</Label>
+                    <Select value={formData.assignedBuildingId} onValueChange={val => setFormData({...formData, assignedBuildingId: val})}>
+                      <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
+                      <SelectContent>
+                        {buildings?.filter(b => b.branch === formData.branch).map(b => (
+                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-4 p-4 bg-secondary/20 rounded-xl border border-dashed">
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground mb-2">Manager Permissions</p>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm">Allow Income Requests</Label>
+                        <p className="text-[10px] text-muted-foreground">Can submit student payments for approval.</p>
+                      </div>
+                      <Switch 
+                        checked={formData.canRequestIncome} 
+                        onCheckedChange={(val) => setFormData({...formData, canRequestIncome: val})} 
+                      />
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm">Allow Expense Requests</Label>
+                        <p className="text-[10px] text-muted-foreground">Can submit building expenses for approval.</p>
+                      </div>
+                      <Switch 
+                        checked={formData.canRequestExpense} 
+                        onCheckedChange={(val) => setFormData({...formData, canRequestExpense: val})} 
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
             <DialogFooter>
-              <Button onClick={handleCreate} disabled={isSubmitting} className="w-full">
+              <Button onClick={handleCreate} disabled={isSubmitting} className="w-full h-12">
                 {isSubmitting ? <Loader2 className="animate-spin" /> : "Save Staff Member"}
               </Button>
             </DialogFooter>
@@ -177,6 +212,7 @@ export default function StaffPage() {
                 <TableRow>
                   <TableHead>Staff Name</TableHead>
                   <TableHead>Role & Assignment</TableHead>
+                  <TableHead>Permissions</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -190,9 +226,23 @@ export default function StaffPage() {
                         <Badge variant={s.role === 'Admin' ? 'default' : 'secondary'} className="w-fit">{s.role}</Badge>
                         <span className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin size={10} /> {s.branch}</span>
                         {s.assignedBuildingId && s.assignedBuildingId !== 'none' && (
-                          <span className="text-[9px] text-primary flex items-center gap-1 font-bold"><Building2 size={10} /> Assigned Building ID: {s.assignedBuildingId}</span>
+                          <span className="text-[9px] text-primary flex items-center gap-1 font-bold"><Building2 size={10} /> {buildings?.find(b => b.id === s.assignedBuildingId)?.name || 'Assigned Building'}</span>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {s.role === 'Building Manager' ? (
+                        <div className="flex gap-2">
+                          <Badge variant="outline" className={cn("text-[9px] h-5", s.canRequestIncome !== false ? "text-success border-success/30" : "text-destructive border-destructive/30")}>
+                            {s.canRequestIncome !== false ? <CheckCircle2 size={10} className="mr-1" /> : <XCircle size={10} className="mr-1" />} Income
+                          </Badge>
+                          <Badge variant="outline" className={cn("text-[9px] h-5", s.canRequestExpense !== false ? "text-success border-success/30" : "text-destructive border-destructive/30")}>
+                            {s.canRequestExpense !== false ? <CheckCircle2 size={10} className="mr-1" /> : <XCircle size={10} className="mr-1" />} Expense
+                          </Badge>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground italic">Full for {s.role}</span>
+                      )}
                     </TableCell>
                     <TableCell><div className="flex items-center gap-1.5 text-sm"><Phone size={14} className="text-muted-foreground" />{s.phone}</div></TableCell>
                     <TableCell className="text-right">

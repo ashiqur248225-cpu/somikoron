@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing } from "lucide-react"
+import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Share2, FileText, BellRing, ShieldAlert } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, orderBy, limit, where } from "firebase/firestore"
@@ -41,11 +41,13 @@ export default function IncomeHistoryPage() {
   const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
+  const [canRequest, setCanRequest] = useState(true)
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
+    setCanRequest(localStorage.getItem("can_request_income") !== "false")
   }, [])
 
   // Filters State
@@ -312,9 +314,21 @@ export default function IncomeHistoryPage() {
       </Card>
 
       <div className="fixed bottom-8 right-8 z-50 print:hidden flex flex-col gap-2">
-        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform">
-          {userRole === 'Building Manager' ? <BellRing size={24} className="text-white" /> : <Plus size={32} className="text-white" />}
-        </Button>
+        {userRole === 'Building Manager' ? (
+          canRequest ? (
+            <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform">
+              <BellRing size={24} className="text-white" />
+            </Button>
+          ) : (
+            <div className="bg-white/80 backdrop-blur-sm p-3 rounded-xl border border-destructive/20 text-destructive text-[10px] font-bold flex items-center gap-2 shadow-sm animate-in fade-in slide-in-from-right-4">
+              <ShieldAlert size={14} /> Request Disabled
+            </div>
+          )
+        ) : (
+          <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform">
+            <Plus size={32} className="text-white" />
+          </Button>
+        )}
       </div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
