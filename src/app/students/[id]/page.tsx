@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
@@ -17,7 +18,8 @@ import {
   AlertCircle, CheckCircle,
   History, MoreVertical, Edit, Trash2,
   Calendar,
-  Clock
+  Clock,
+  UtensilsCrossed
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -85,33 +87,29 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     description: "" 
   })
 
-  const [exitPayment, setExitPayment] = useState({ amount: "0", method: "cash", receiver: "", description: "" })
-  const [editForm, setEditForm] = useState({ name: "", phone: "", parentPhone: "", address: "", monthlyRent: "", paymentSystem: "package", billingStartDate: "" })
+  const [mealLogData, setMealLogData] = useState({
+    month: MONTHS[new Date().getMonth()],
+    year: new Date().getFullYear().toString(),
+    count: ""
+  })
 
+  const [exitPayment, setExitPayment] = useState({ amount: "0", method: "cash", receiver: "", description: "" })
+  
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
+  const mealRateRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
+  const { data: mealRateConfig } = useDoc(mealRateRef)
+  const currentMealRate = mealRateConfig?.rate || 0
+
   useEffect(() => {
     const action = searchParams.get('action')
     if (action === 'payment') setIsPaymentDialogOpen(true)
+    if (action === 'meals') setIsLogMealDialogOpen(true)
   }, [searchParams])
-
-  useMemo(() => {
-    if (student) {
-      setEditForm({
-        name: student.name || "",
-        phone: student.phone || "",
-        parentPhone: student.parentPhone || "",
-        address: student.address || "",
-        monthlyRent: (student.monthlyRent || 0).toString(),
-        paymentSystem: student.paymentSystem || "package",
-        billingStartDate: student.billingStartDate || ""
-      })
-    }
-  }, [student])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -298,6 +296,32 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     }
   }
 
+  const handleLogMealSubmit = async () => {
+    if (!student || !studentRef || !mealLogData.count) return
+    setIsUpdating(true)
+    const count = Number(mealLogData.count)
+    const totalCost = count * currentMealRate
+
+    try {
+      await updateDoc(studentRef, {
+        mealsHistory: arrayUnion({
+          month: `${mealLogData.month} ${mealLogData.year}`,
+          totalMeals: count,
+          perMealCost: currentMealRate,
+          totalCost: totalCost,
+          date: new Date().toISOString()
+        }),
+        updatedAt: serverTimestamp()
+      })
+      toast({ title: "Meals Logged", description: `Recorded ${count} meals for ${mealLogData.month}.` })
+      setIsLogMealDialogOpen(false)
+      setIsUpdating(false)
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+      setIsUpdating(false)
+    }
+  }
+
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
   if (!student) return <div className="text-center p-20">Student not found.</div>
 
@@ -387,8 +411,20 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
               </div>
               <div className="p-3 rounded-lg bg-primary/10 border border-primary/20"><p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p><p className="text-lg font-bold">৳{student.advanceAmount || 0}</p></div>
               <div className="p-3 rounded-lg bg-secondary/50 border border-secondary"><p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p><p className="text-lg font-bold">৳{student.serviceCharge || 0}</p></div>
-              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20"><p className="text-[10px] uppercase text-destructive font-bold">Total Rent Due</p><p className="text-lg font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p></div>
-              {student.paymentSystem === 'non-package' && (<div className={cn("p-3 rounded-lg border", financialStats.foodBalance >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20")}><p className={cn("text-[10px] uppercase font-bold", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")}>Food Balance</p><p className="text-lg font-bold">৳{financialStats.foodBalance.toLocaleString()}</p></div>)}
+              
+              {financialStats.rentDue > 0 && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <p className="text-[10px] uppercase text-destructive font-bold">Total Rent Due</p>
+                  <p className="text-lg font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p>
+                </div>
+              )}
+              
+              {student.paymentSystem === 'non-package' && (
+                <div className={cn("p-3 rounded-lg border", financialStats.foodBalance >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20")}>
+                  <p className={cn("text-[10px] uppercase font-bold", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")}>Food Balance</p>
+                  <p className="text-lg font-bold">৳{financialStats.foodBalance.toLocaleString()}</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -398,7 +434,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         <TabsList className="bg-secondary/50 p-1 mb-4">
           <TabsTrigger value="payments" className="flex gap-2"><CreditCard size={14} /> Payments</TabsTrigger>
           <TabsTrigger value="dues" className="flex gap-2"><Clock size={14} /> Dues Breakdown</TabsTrigger>
-          {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meals</TabsTrigger>}
+          {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex gap-2"><Utensils size={14} /> Meals History</TabsTrigger>}
         </TabsList>
         
         <TabsContent value="payments">
@@ -435,17 +471,28 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         {student.paymentSystem === 'non-package' && (
           <TabsContent value="meals">
             <Card className="border-none shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm">Logged Meals History</CardTitle>
+                  <CardDescription>Meal entries at ৳{currentMealRate}/meal.</CardDescription>
+                </div>
+                <Button onClick={() => setIsLogMealDialogOpen(true)} variant="outline" size="sm" className="gap-2">
+                  <UtensilsCrossed size={14} /> Log Monthly Meals
+                </Button>
+              </CardHeader>
               <CardContent className="p-0">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Period</TableHead><TableHead>Count</TableHead><TableHead className="text-right">Cost (৳)</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Month</TableHead><TableHead>Total Meals</TableHead><TableHead>Rate</TableHead><TableHead className="text-right">Total Cost</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {student.mealsHistory?.map((m: any, idx: number) => (
                       <TableRow key={idx}>
                         <TableCell className="font-medium">{m.month}</TableCell>
                         <TableCell className="font-bold">{m.totalMeals}</TableCell>
-                        <TableCell className="text-right font-bold">৳{m.totalCost?.toLocaleString()}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">৳{m.perMealCost}</TableCell>
+                        <TableCell className="text-right font-bold text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell>
                       </TableRow>
                     ))}
+                    {(!student.mealsHistory || student.mealsHistory.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No meal records found.</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -454,7 +501,12 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         )}
       </Tabs>
 
-      <div className="fixed bottom-8 right-8 z-50">
+      <div className="fixed bottom-8 right-8 z-50 flex flex-col gap-2">
+        {student.paymentSystem === 'non-package' && (
+          <Button onClick={() => setIsLogMealDialogOpen(true)} size="icon" className="h-12 w-12 rounded-full shadow-lg border-2 border-white bg-orange-500 hover:bg-orange-600 transition-colors">
+            <Utensils size={20} className="text-white" />
+          </Button>
+        )}
         <Button onClick={() => setIsPaymentDialogOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg border-2 border-white bg-primary">
           <Plus className="h-8 w-8 text-white" />
         </Button>
@@ -525,6 +577,49 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           <DialogFooter>
             <Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg" disabled={isUpdating}>
               {isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Transaction"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isLogMealDialogOpen} onOpenChange={setIsLogMealDialogOpen}>
+        <DialogContent className="max-w-sm" onKeyDown={handleKeyDown}>
+          <DialogHeader><DialogTitle>Log Monthly Meals</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-orange-500/5 p-3 rounded-lg border border-orange-500/20 text-xs flex justify-between">
+              <span className="text-orange-600 font-medium">Standard Meal Rate:</span>
+              <span className="font-bold">৳{currentMealRate}/meal</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Month</Label>
+                <Select value={mealLogData.month} onValueChange={val => setMealLogData({...mealLogData, month: val})}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Year</Label>
+                <Select value={mealLogData.year} onValueChange={val => setMealLogData({...mealLogData, year: val})}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Total Meal Count</Label>
+              <Input type="number" value={mealLogData.count} onChange={e => setMealLogData({...mealLogData, count: e.target.value})} placeholder="e.g. 60" />
+            </div>
+            {Number(mealLogData.count) > 0 && (
+              <div className="p-3 bg-secondary/50 rounded-lg border flex justify-between items-center">
+                <span className="text-xs font-medium">Calculated Cost:</span>
+                <span className="text-lg font-bold text-destructive">৳{(Number(mealLogData.count) * currentMealRate).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={handleLogMealSubmit} className="w-full bg-orange-500 hover:bg-orange-600" disabled={isUpdating || !mealLogData.count}>
+              {isUpdating ? <Loader2 className="animate-spin" /> : "Save Meal Entry"}
             </Button>
           </DialogFooter>
         </DialogContent>

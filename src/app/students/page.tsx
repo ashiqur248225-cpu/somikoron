@@ -232,6 +232,7 @@ export default function StudentsPage() {
         buildingName: selectedBuilding?.name || "Unknown",
         studentName: formData.name,
         studentId: studentId,
+        roomNumber: formData.roomNumber,
         type: "income",
         month: new Date().toLocaleString('default', { month: 'long' }),
         year: new Date().getFullYear().toString(),
@@ -612,7 +613,7 @@ export default function StudentsPage() {
                   {formData.type === 'new' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
                       <div className="space-y-2"><Label>Payment Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
-                      <div className="space-y-2"><Label>Payment Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+                      <div className="space-y-2"><Label>Payment Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff member" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                     </div>
                   )}
 
