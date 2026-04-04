@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, orderBy, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where } from "firebase/firestore"
+import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -44,12 +44,22 @@ export default function RegistrationsPage() {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
   }, [])
 
-  // CRITICAL: Filter pending requests by branch
+  // CRITICAL: Filter pending requests by branch. Removed orderBy to avoid composite index requirement.
   const regQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "registrations"), where("branch", "==", userBranch), orderBy("createdAt", "desc"))
+    return query(collection(db, "registrations"), where("branch", "==", userBranch))
   }, [db, userBranch])
-  const { data: registrations, isLoading } = useCollection(regQuery)
+  const { data: rawRegistrations, isLoading } = useCollection(regQuery)
+
+  // Sort registrations in memory
+  const registrations = useMemo(() => {
+    if (!rawRegistrations) return []
+    return [...rawRegistrations].sort((a, b) => {
+      const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt)
+      const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt)
+      return dateB.getTime() - dateA.getTime()
+    })
+  }, [rawRegistrations])
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -118,7 +128,7 @@ export default function RegistrationsPage() {
           studentName: selectedReg.name,
           studentId: studentId,
           roomNumber: rNum,
-          branch: userBranch, // CRITICAL
+          branch: userBranch,
           type: "income",
           month: new Date().toLocaleString('default', { month: 'long' }),
           year: new Date().getFullYear().toString(),
@@ -149,7 +159,7 @@ export default function RegistrationsPage() {
         billingStartDate: approvalForm.billingStartDate,
         paymentSystem: selectedReg.group === 'Other' ? 'non-package' : 'package',
         isActive: true,
-        branch: userBranch, // CRITICAL
+        branch: userBranch,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       })

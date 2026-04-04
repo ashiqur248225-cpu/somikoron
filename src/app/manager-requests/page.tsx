@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, orderBy, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where } from "firebase/firestore"
+import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -40,12 +40,22 @@ export default function ManagerRequestsPage() {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
   }, [])
 
-  // CRITICAL: Load manager requests for this branch
+  // CRITICAL: Load manager requests for this branch. Removed orderBy to avoid index issues.
   const requestsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "managerRequests"), where("branch", "==", userBranch), orderBy("createdAt", "desc"))
+    return query(collection(db, "managerRequests"), where("branch", "==", userBranch))
   }, [db, userBranch])
-  const { data: requests, isLoading } = useCollection(requestsQuery)
+  const { data: rawRequests, isLoading } = useCollection(requestsQuery)
+
+  // Sort requests in memory to avoid composite index requirement
+  const requests = useMemo(() => {
+    if (!rawRequests) return []
+    return [...rawRequests].sort((a, b) => {
+      const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt)
+      const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt)
+      return dateB.getTime() - dateA.getTime()
+    })
+  }, [rawRequests])
 
   const handleApprove = async () => {
     if (!selectedReq) return
@@ -60,7 +70,8 @@ export default function ManagerRequestsPage() {
           type: "income",
           approvedAt: serverTimestamp(),
           approvedBy: localStorage.getItem("user_name"),
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          date: serverTimestamp() // Ensure actual date is set
         })
 
         // Update Student Advance if applicable

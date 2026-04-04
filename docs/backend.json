@@ -29,14 +29,14 @@
             "type": "object",
             "properties": {
               "id": { "type": "string" },
-              "name": { "type": "string", "description": "e.g., Apartment C2" },
-              "meterNo": { "type": "string", "description": "Electric meter for this apartment" },
+              "name": { "type": "string" },
+              "meterNo": { "type": "string" },
               "rooms": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "roomNo": { "type": "string", "description": "e.g., 301" },
+                    "roomNo": { "type": "string" },
                     "totalSeats": { "type": "number" },
                     "seats": {
                       "type": "array",
@@ -74,49 +74,11 @@
         "buildingId": { "type": "string" },
         "buildingName": { "type": "string" },
         "branch": { "type": "string" },
-        "apartmentName": { "type": "string" },
         "roomNumber": { "type": "string" },
-        "seatNumber": { "type": "string" },
-        "type": { "type": "string", "enum": ["new", "old"] },
-        "dueAmount": { "type": "number" },
-        "advanceAmount": { "type": "number" },
-        "serviceCharge": { "type": "number" },
         "isActive": { "type": "boolean" },
-        "paymentSystem": { "type": "string", "enum": ["package", "non-package"] },
         "monthlyRent": { "type": "number" },
-        "foodCost": { "type": "number" },
-        "foodRate": { "type": "number" },
-        "paymentsHistory": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "date": { "type": "string", "format": "date-time" },
-              "amount": { "type": "number" },
-              "method": { "type": "string" },
-              "receiver": { "type": "string" },
-              "month": { "type": "string" },
-              "year": { "type": "string" },
-              "type": { "type": "string" }
-            }
-          }
-        },
-        "mealsHistory": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "date": { "type": "string", "format": "date" },
-              "month": { "type": "string" },
-              "totalMeals": { "type": "number" },
-              "perMealCost": { "type": "number" },
-              "totalCost": { "type": "number" }
-            }
-          }
-        },
         "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "name", "buildingId", "roomNumber"]
+      }
     },
     "Staff": {
       "title": "Staff",
@@ -127,21 +89,37 @@
         "phone": { "type": "string" },
         "role": { "type": "string", "enum": ["Admin", "Branch Manager", "Building Manager"] },
         "branch": { "type": "string" },
-        "assignedBuildingId": { "type": "string" },
+        "assignedBuildingId": { "type": "string" }
+      }
+    },
+    "ManagerRequest": {
+      "title": "Manager Request",
+      "type": "object",
+      "description": "Income or Expense approval requests from Building Managers.",
+      "properties": {
+        "id": { "type": "string" },
+        "requestType": { "type": "string", "enum": ["income", "expense"] },
+        "amount": { "type": "number" },
+        "branch": { "type": "string" },
+        "buildingName": { "type": "string" },
+        "requestedByName": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     }
   },
   "auth": {
-    "providers": ["password", "anonymous"]
+    "providers": ["anonymous", "password"]
   },
   "firestore": {
     "/branches/{branchId}": { "schema": "Branch", "description": "Hostel Branches" },
     "/buildings/{buildingId}": { "schema": "Building", "description": "Buildings list" },
-    "/students/{studentId}": { "schema": "Student", "description": "Students list" },
-    "/staff/{staffId}": { "schema": "Staff", "description": "Staff and roles" },
-    "/payments/{paymentId}": { "schema": "object", "description": "Global Income" },
-    "/expenses/{expenseId}": { "schema": "object", "description": "Global Expenses" },
-    "/transfers/{transferId}": { "schema": "object", "description": "Fund transfers" }
+    "/students/{studentId}": { "schema": "Student", "description": "Residents list" },
+    "/staff/{staffId}": { "schema": "Staff", "description": "Staff directory" },
+    "/payments/{paymentId}": { "schema": "object", "description": "Income transactions" },
+    "/expenses/{expenseId}": { "schema": "object", "description": "Expense records" },
+    "/transfers/{transferId}": { "schema": "object", "description": "Inter-account transfers" },
+    "/managerRequests/{requestId}": { "schema": "ManagerRequest", "description": "Pending approval requests" },
+    "/registrations/{regId}": { "schema": "object", "description": "Public admission forms" },
+    "/configs/{configId}": { "schema": "object", "description": "Global settings" }
   }
 }

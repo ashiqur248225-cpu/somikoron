@@ -3,7 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // FORCE FULL OPEN ACCESS FOR PROTOTYPING
-    // REFRESH: 2024-05-21-09 (Global open access policy)
+    // REFRESH: 2024-05-21-10 (Forcing rules redeploy to fix permissions)
     match /{document=**} {
       allow read, write: if true;
     }
