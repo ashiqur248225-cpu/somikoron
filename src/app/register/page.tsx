@@ -9,11 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, addDoc, serverTimestamp, query, where } from "firebase/firestore"
-import { UserPlus, CheckCircle2, Building2, MapPin, GraduationCap, Phone, Info, Loader2, AlertTriangle, UserCircle } from "lucide-react"
+import { UserPlus, CheckCircle2, Building2, MapPin, GraduationCap, Loader2, AlertTriangle, UserCircle } from "lucide-react"
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
 const GROUPS = ["Science", "Commerce", "Arts", "Other"]
@@ -290,7 +289,7 @@ export default function PublicRegisterPage() {
                   <Label>Room No.</Label>
                   <Select disabled={!formData.buildingId} value={formData.roomNumber} onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}>
                     <SelectTrigger className="bg-white border-2 border-slate-200 h-11 shadow-sm"><SelectValue placeholder="রুম নম্বর" /></SelectTrigger>
-                    <SelectContent>{roomsInBuilding.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
+                    <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">

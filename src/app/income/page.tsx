@@ -97,11 +97,21 @@ export default function IncomeHistoryPage() {
   const incomeQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "payments"), where("buildingId", "==", assignedBuildingId), orderBy("date", "desc"), limit(500))
+      return query(collection(db, "payments"), where("buildingId", "==", assignedBuildingId), limit(500))
     }
-    return query(collection(db, "payments"), where("branch", "==", userBranch), orderBy("date", "desc"), limit(500))
+    return query(collection(db, "payments"), where("branch", "==", userBranch), limit(500))
   }, [db, userBranch, userRole, assignedBuildingId])
-  const { data: payments, isLoading: paymentsLoading } = useCollection(incomeQuery)
+  const { data: rawPayments, isLoading: paymentsLoading } = useCollection(incomeQuery)
+
+  // Sort in-memory to avoid index requirement
+  const payments = useMemo(() => {
+    if (!rawPayments) return []
+    return [...rawPayments].sort((a, b) => {
+      const dateA = a.date?.toDate?.() || new Date(a.date)
+      const dateB = b.date?.toDate?.() || new Date(b.date)
+      return dateB.getTime() - dateA.getTime()
+    })
+  }, [rawPayments])
 
   // BM should only see their assigned building in the dropdown
   useEffect(() => {
@@ -113,7 +123,9 @@ export default function IncomeHistoryPage() {
   const selectedBuildingForForm = buildings?.find(b => b.id === (selectedBuildingId || assignedBuildingId))
   const roomsInBuildingForForm = useMemo(() => {
     if (!selectedBuildingForForm) return []
-    return selectedBuildingForForm.apartmentsDetail?.flatMap((a: any) => a.rooms || []) || []
+    return selectedBuildingForForm.apartmentsDetail?.flatMap((a: any) => 
+      a.rooms?.map((r: any) => ({ ...r, aptName: a.name })) || []
+    ) || []
   }, [selectedBuildingForForm])
   
   const filteredStudentsForForm = useMemo(() => {
@@ -182,7 +194,6 @@ export default function IncomeHistoryPage() {
 
     try {
       if (userRole === 'Building Manager') {
-        // Building Manager sends a request
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), {
           ...recordPayload,
@@ -191,7 +202,6 @@ export default function IncomeHistoryPage() {
         })
         toast({ title: "Request Sent", description: "Payment request sent to Admin/Branch Manager for approval." })
       } else {
-        // Admin/Branch Manager saves directly
         const paymentId = doc(collection(db, "payments")).id
         await setDoc(doc(db, "payments", paymentId), { ...recordPayload, id: paymentId, type: "income", date: serverTimestamp() })
         
@@ -282,7 +292,9 @@ export default function IncomeHistoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPayments.map((p: any) => (
+              {paymentsLoading ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
+              ) : filteredPayments.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="text-xs">{p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A')}</TableCell>
                   <TableCell className="font-medium">{p.studentName}</TableCell>
@@ -291,7 +303,7 @@ export default function IncomeHistoryPage() {
                   <TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
-              {filteredPayments.length === 0 && (
+              {filteredPayments.length === 0 && !paymentsLoading && (
                 <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No income records found for this building/branch.</TableCell></TableRow>
               )}
             </TableBody>
@@ -301,7 +313,7 @@ export default function IncomeHistoryPage() {
 
       <div className="fixed bottom-8 right-8 z-50 print:hidden flex flex-col gap-2">
         <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary hover:scale-105 transition-transform">
-          {userRole === 'Building Manager' ? <BellRing h={8} w={8} text-white /> : <Plus h-8 w-8 text-white />}
+          {userRole === 'Building Manager' ? <BellRing size={24} className="text-white" /> : <Plus size={32} className="text-white" />}
         </Button>
       </div>
 
@@ -320,7 +332,7 @@ export default function IncomeHistoryPage() {
                   <Label>Room No.</Label>
                   <Select onValueChange={(val) => { setSelectedRoomNumber(val); setFormData({...formData, studentId: ""}) }}>
                     <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>{roomsInBuildingForForm.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
+                    <SelectContent>{roomsInBuildingForForm.map((r: any, idx: number) => <SelectItem key={`${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2 mt-3">

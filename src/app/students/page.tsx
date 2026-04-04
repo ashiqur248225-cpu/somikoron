@@ -38,22 +38,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, updateDoc, increment, query, where } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, updateDoc, increment, query, where, limit } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
-
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const YEARS = ["2024", "2025", "2026", "2027"];
-
-interface MonthlyDue {
-  month: string;
-  year: string;
-  amount: string;
-}
 
 export default function StudentsPage() {
   const { toast } = useToast()
@@ -86,7 +75,17 @@ export default function StudentsPage() {
     if (!userBranch) return null
     return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userBranch])
-  const { data: students, isLoading } = useCollection(studentsQuery)
+  const { data: rawStudents, isLoading } = useCollection(studentsQuery)
+
+  // Sort in-memory
+  const students = useMemo(() => {
+    if (!rawStudents) return []
+    return [...rawStudents].sort((a, b) => {
+      const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt)
+      const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt)
+      return dateB.getTime() - dateA.getTime()
+    })
+  }, [rawStudents])
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
@@ -101,51 +100,15 @@ export default function StudentsPage() {
     seatNumber: "",
     type: "new", 
     dueAmount: "0", 
-    foodDueAmount: "0", 
     initialRentPayment: "0",
-    initialFoodPayment: "0",
     advanceAmount: "0",
     serviceCharge: "0",
     paymentSystem: "package",
     monthlyRent: "",
-    foodCost: "0",
     receiver: "",
     method: "cash",
-    billingStartDate: new Date().toISOString().split('T')[0],
-    dueInputMethod: "total" as "total" | "breakdown"
+    billingStartDate: new Date().toISOString().split('T')[0]
   })
-
-  const [monthlyDues, setMonthlyDues] = useState<MonthlyDue[]>([])
-
-  const addMonthlyDueRow = () => {
-    setMonthlyDues([...monthlyDues, { month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: "" }])
-  }
-
-  const removeMonthlyDueRow = (idx: number) => {
-    setMonthlyDues(monthlyDues.filter((_, i) => i !== idx))
-  }
-
-  const updateMonthlyDueRow = (idx: number, field: keyof MonthlyDue, value: string) => {
-    const updated = [...monthlyDues]
-    updated[idx][field] = value
-    setMonthlyDues(updated)
-  }
-
-  // Dynamic Due Logic for New Students
-  useEffect(() => {
-    if (formData.type === 'new') {
-      const rentPaid = Number(formData.initialRentPayment) || 0;
-      const monthlyRate = Number(formData.monthlyRent) || 0;
-      
-      setFormData(prev => {
-        const calculatedDue = (rentPaid >= monthlyRate && monthlyRate > 0) ? "0" : monthlyRate.toString();
-        if (prev.dueAmount !== calculatedDue) {
-          return { ...prev, dueAmount: calculatedDue };
-        }
-        return prev;
-      });
-    }
-  }, [formData.monthlyRent, formData.type, formData.initialRentPayment])
 
   const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
   
@@ -194,12 +157,11 @@ export default function StudentsPage() {
     }
 
     const rentPaid = Number(formData.initialRentPayment) || 0
-    const foodPaid = Number(formData.initialFoodPayment) || 0
     const advPaid = Number(formData.advanceAmount) || 0
     const svcPaid = Number(formData.serviceCharge) || 0
-    const totalInitialReceived = rentPaid + foodPaid + advPaid + svcPaid
+    const totalInitialReceived = rentPaid + advPaid + svcPaid
     
-    if (formData.type === 'new' && totalInitialReceived > 0 && !formData.receiver) {
+    if (totalInitialReceived > 0 && !formData.receiver) {
       toast({ variant: "destructive", title: "Missing Info", description: "Please select a receiver for the initial payment." })
       return
     }
@@ -211,34 +173,16 @@ export default function StudentsPage() {
       const monthlyRent = Number(formData.monthlyRent)
       const apartmentName = selectedRoom?.aptName || "General"
 
-      // Handle Dues Calculation based on method
-      let startingRentDue = 0
-      if (formData.type === 'old') {
-        if (formData.dueInputMethod === 'total') {
-          startingRentDue = Number(formData.dueAmount) || 0
-        } else {
-          startingRentDue = monthlyDues.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0)
-        }
-      } else {
-        startingRentDue = Number(formData.dueAmount) || 0
-      }
-
-      const startingFoodDue = Number(formData.foodDueAmount) || 0
-
       let detailsArr = []
       if (rentPaid > 0) detailsArr.push(`Rent: ৳${rentPaid}`)
-      if (foodPaid > 0) detailsArr.push(`Food: ৳${foodPaid}`)
       if (advPaid > 0) detailsArr.push(`Advance: ৳${advPaid}`)
       if (svcPaid > 0) detailsArr.push(`Service: ৳${svcPaid}`)
       
-      const isOld = formData.type === 'old'
-      const prefix = isOld ? "[Historical Data] " : "Initial payment: "
-      const detailedDescription = `${prefix}${detailsArr.join(', ')}`
+      const detailedDescription = `Initial payment: ${detailsArr.join(', ')}`
 
       const paymentRecord = totalInitialReceived > 0 ? {
         amount: totalInitialReceived,
         seatAmount: rentPaid,
-        foodAmount: foodPaid,
         advanceAmount: advPaid,
         serviceCharge: svcPaid,
         buildingId: formData.buildingId,
@@ -250,13 +194,13 @@ export default function StudentsPage() {
         type: "income",
         month: new Date().toLocaleString('default', { month: 'long' }),
         year: new Date().getFullYear().toString(),
-        method: isOld ? "historical_import" : formData.method,
-        receiver: isOld ? "System (Data Import)" : formData.receiver,
+        method: formData.method,
+        receiver: formData.receiver,
         description: detailedDescription,
         date: new Date().toISOString()
       } : null
 
-      if (paymentRecord && formData.type === 'new') {
+      if (paymentRecord) {
         const pId = doc(collection(db, "payments")).id
         await setDoc(doc(db, "payments", pId), {
           ...paymentRecord,
@@ -270,8 +214,7 @@ export default function StudentsPage() {
         ...formData,
         id: studentId,
         branch: userBranch,
-        dueAmount: startingRentDue,
-        foodDueAmount: startingFoodDue,
+        dueAmount: Number(formData.dueAmount) || 0,
         advanceAmount: advPaid,
         serviceCharge: svcPaid,
         monthlyRent: monthlyRent,
@@ -280,7 +223,6 @@ export default function StudentsPage() {
         isActive: true,
         paymentsHistory: paymentRecord ? [paymentRecord] : [],
         mealsHistory: [],
-        historicalDuesBreakdown: formData.dueInputMethod === 'breakdown' ? monthlyDues : [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -314,16 +256,14 @@ export default function StudentsPage() {
         updatedAt: serverTimestamp()
       })
 
-      toast({ title: "Registered", description: isOld ? "Historical resident data imported." : "New resident registered successfully." })
+      toast({ title: "Registered", description: "New resident registered successfully." })
       setOpen(false)
       setFormData({
         name: "", phone: "", parentPhone: "", address: "", buildingId: "", roomNumber: "", seatNumber: "",
-        type: "new", dueAmount: "0", foodDueAmount: "0", initialRentPayment: "0", initialFoodPayment: "0", advanceAmount: "0", serviceCharge: "0",
-        paymentSystem: "package", monthlyRent: "", foodCost: "0", receiver: "", method: "cash",
-        billingStartDate: new Date().toISOString().split('T')[0],
-        dueInputMethod: "total"
+        type: "new", dueAmount: "0", initialRentPayment: "0", advanceAmount: "0", serviceCharge: "0",
+        paymentSystem: "package", monthlyRent: "", receiver: "", method: "cash",
+        billingStartDate: new Date().toISOString().split('T')[0]
       })
-      setMonthlyDues([])
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -401,19 +341,22 @@ export default function StudentsPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-secondary/20 rounded-lg border">
                    <div className="space-y-1">
-                      <Label className="text-[10px] font-bold">Branch</Label>
-                      <div className="h-9 flex items-center px-3 bg-white rounded border text-xs font-bold text-primary">{userBranch}</div>
+                      <Label className="text-[10px] font-bold">Building</Label>
+                      <Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val, roomNumber: "", seatNumber: ""})}>
+                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                      </Select>
                    </div>
                    <div className="space-y-1">
                       <Label className="text-[10px] font-bold flex items-center gap-1"><DoorOpen size={10}/> Room No.</Label>
-                      <Select disabled={!formData.buildingId} onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}>
+                      <Select disabled={!formData.buildingId} value={formData.roomNumber} onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}>
                         <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>{allRoomsInSelectedBuilding.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
+                        <SelectContent>{allRoomsInSelectedBuilding.map((r: any, idx: number) => <SelectItem key={`${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                       </Select>
                    </div>
                    <div className="space-y-1">
                       <Label className="text-[10px] font-bold">Seat</Label>
-                      <Select disabled={!formData.roomNumber} onValueChange={val => setFormData({...formData, seatNumber: val})}>
+                      <Select disabled={!formData.roomNumber} value={formData.seatNumber} onValueChange={val => setFormData({...formData, seatNumber: val})}>
                         <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                         <SelectContent>{emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
                       </Select>
@@ -442,7 +385,7 @@ export default function StudentsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end print:hidden">
         <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Search size={10} /> Search Resident</Label><Input placeholder="Name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
         <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Building2 size={10} /> Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all") }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><DoorOpen size={10} /> Room</Label><Select value={roomFilter} onValueChange={setRoomFilter} disabled={buildingFilter === "all"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Rooms</SelectItem>{roomOptions.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><DoorOpen size={10} /> Room</Label><Select value={roomFilter} onValueChange={setRoomFilter} disabled={buildingFilter === "all"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Rooms</SelectItem>{roomOptions.map((r, idx) => <SelectItem key={`${r}-${idx}`} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="active">Active Only</SelectItem><SelectItem value="left">Ex-Residents</SelectItem></SelectContent></Select></div>
         <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Plan</Label><Select value={planFilter} onValueChange={setPlanFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Plans</SelectItem><SelectItem value="package">Package Only</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent></Select></div>
         <Button variant="ghost" className="h-10" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setStatusFilter("active"); setPlanFilter("all") }}><XCircle size={14} className="mr-1" /> Reset</Button>
@@ -473,7 +416,7 @@ export default function StudentsPage() {
                     <TableCell className="text-right print:hidden" onClick={(e) => e.stopPropagation()}><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem onClick={() => router.push(`/students/${s.id}`)} className="cursor-pointer gap-2"><Eye size={14} /> View Profile</DropdownMenuItem><DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=payment`)} className="cursor-pointer gap-2"><Wallet size={14} className="text-success" /> Process Payment</DropdownMenuItem>{s.paymentSystem === 'non-package' && (<DropdownMenuItem onClick={() => router.push(`/students/${s.id}?action=meals`)} className="cursor-pointer gap-2"><Utensils size={14} className="text-primary" /> Log Meals</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></TableCell>
                   </TableRow>
                 ))}
-                {filteredStudents.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found.</TableCell></TableRow>}
+                {filteredStudents.length === 0 && !isLoading && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No students found.</TableCell></TableRow>}
               </TableBody>
             </Table>
           </CardContent>

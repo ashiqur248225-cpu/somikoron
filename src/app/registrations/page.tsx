@@ -191,8 +191,7 @@ export default function RegistrationsPage() {
         monthlyRent: monthlyRent,
         serviceCharge: svcCharge,
         advanceAmount: advAmount,
-        dueAmount: isOld ? histDue : (rentPaid >= monthlyRent ? 0 : monthlyRent), // For new students, if they paid less than rent, mark full rent as due? Or handle balance? 
-        // Better: For new students, we calculate due as (Rent - Paid) if Paid < Rent.
+        dueAmount: isOld ? histDue : (rentPaid >= monthlyRent ? 0 : monthlyRent),
         billingStartDate: approvalForm.billingStartDate,
         paymentSystem: approvalForm.paymentSystem,
         isActive: true,
@@ -342,8 +341,8 @@ export default function RegistrationsPage() {
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Process Application: {selectedReg?.name}</DialogTitle>
-            <DialogDescription>Review information and set financial parameters.</DialogDescription>
+            <DialogTitle>Registration Details: {selectedReg?.name}</DialogTitle>
+            <DialogDescription>Review and finalize student enrollment.</DialogDescription>
           </DialogHeader>
           
           {selectedReg && (
@@ -378,7 +377,7 @@ export default function RegistrationsPage() {
                           <Label className="text-[10px] uppercase font-bold">Room</Label>
                           <Select disabled={!approvalForm.buildingId} value={approvalForm.roomNumber} onValueChange={val => setApprovalForm({...approvalForm, roomNumber: val, seatNumber: ""})}>
                             <SelectTrigger><SelectValue placeholder="Room" /></SelectTrigger>
-                            <SelectContent>{roomsInBuilding.map((r: any) => <SelectItem key={r.roomNo} value={r.roomNo}>Room {r.roomNo}</SelectItem>)}</SelectContent>
+                            <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-1">
@@ -429,7 +428,7 @@ export default function RegistrationsPage() {
                       <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20">
                         <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Rent Due (৳)</Label>
                         <Input type="number" className="h-9 mt-1 border-destructive/30" value={approvalForm.dueAmount} onChange={e => setApprovalForm({...approvalForm, dueAmount: e.target.value})} placeholder="Outstanding balance" />
-                        <p className="text-[9px] text-muted-foreground mt-1.5 italic">* পুরাত স্টুডেন্টের এডভান্স এবং সার্ভিস চার্জ শুধু ডাটা হিসেবে থাকবে, ক্যাশ ব্যালেন্সে যোগ হবে না।</p>
+                        <p className="text-[9px] text-muted-foreground mt-1.5 italic">* পুরাতন স্টুডেন্টের এডভান্স এবং সার্ভিস চার্জ শুধু ডাটা হিসেবে থাকবে, ক্যাশ ব্যালেন্সে যোগ হবে না।</p>
                       </div>
                     ) : (
                       <div className="space-y-4 p-3 bg-success/5 rounded-lg border border-success/20">
