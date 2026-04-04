@@ -11,20 +11,19 @@ import {
   Loader2,
   Plus,
   Wallet,
-  ArrowDownToLine,
   DoorOpen,
   CalendarDays,
   CircleDollarSign,
   Smartphone,
   Banknote,
   Landmark,
-  AlertCircle
+  AlertCircle,
+  Users
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
@@ -46,6 +45,8 @@ import { useFirestore, useCollection, useDoc, useMemoFirebase } from "@/firebase
 import { collection, query, orderBy, limit, where, Timestamp, doc, setDoc, updateDoc, arrayUnion, increment } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { Progress } from "@/components/ui/progress"
+import { cn } from "@/lib/utils"
 
 export default function DashboardPage() {
   const db = useFirestore()
@@ -67,7 +68,7 @@ export default function DashboardPage() {
   const [selectedBuildingId, setSelectedBuildingId] = useState("")
   const [selectedRoomNumber, setSelectedRoomNumber] = useState("")
 
-  // CRITICAL: Filter ALL queries by the user's active branch
+  // Queries
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -100,6 +101,12 @@ export default function DashboardPage() {
     return query(collection(db, "expenses"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: allExpenses } = useCollection(allExpensesQuery)
+
+  const allTransfersQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "transfers"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: allTransfers } = useCollection(allTransfersQuery)
 
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances } = useDoc(balancesRef)
@@ -197,16 +204,7 @@ export default function DashboardPage() {
         return pAcc + (isRefund ? -rentPortion : rentPortion)
       }, 0) || 0
       const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
-      const historicalFoodDue = Number(student.foodDueAmount) || 0
-      const generatedFoodCost = student.mealsHistory?.reduce((fAcc: number, curr: any) => fAcc + (curr.totalCost || 0), 0) || 0
-      const totalFoodPaid = student.paymentsHistory?.reduce((fAcc: number, curr: any) => {
-        const isRefund = curr.type === 'refund'
-        const foodPortion = (curr.foodAmount !== undefined) ? Number(curr.foodAmount) : (student.paymentSystem === 'non-package' ? Number(curr.amount) : 0)
-        return fAcc + (isRefund ? -foodPortion : foodPortion)
-      }, 0) || 0
-      const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
-      const foodDue = foodBalance < 0 ? Math.abs(foodBalance) : 0
-      return sAcc + rentDue + foodDue
+      return sAcc + rentDue
     }, 0)
 
     const fund = { 
@@ -216,13 +214,15 @@ export default function DashboardPage() {
       bank: Number(openingBalances?.bank || 0) 
     };
 
-    if (userRole === 'Admin') {
-      (allPayments || []).forEach(p => { if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) });
-      (allExpenses || []).forEach(e => { if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) });
-    }
+    (allPayments || []).forEach(p => { if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) });
+    (allExpenses || []).forEach(e => { if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) });
+    (allTransfers || []).forEach(t => {
+      if (fund[t.fromAccount as keyof typeof fund] !== undefined) fund[t.fromAccount as keyof typeof fund] -= (t.amount || 0);
+      if (fund[t.toAccount as keyof typeof fund] !== undefined) fund[t.toAccount as keyof typeof fund] += (t.amount || 0);
+    });
 
     return { income, expense, dues: totalDues, fund }
-  }, [allPayments, allExpenses, students, timeFilter, openingBalances, userRole])
+  }, [allPayments, allExpenses, allTransfers, students, timeFilter, openingBalances])
 
   const handleQuickPayment = async () => {
     if (!paymentForm.studentId || !paymentForm.receiver) {
@@ -249,7 +249,7 @@ export default function DashboardPage() {
       studentName: selectedStudent?.name || "Unknown",
       studentId: paymentForm.studentId,
       roomNumber: selectedRoomNumber || selectedStudent?.roomNumber || "N/A",
-      branch: userBranch, // CRITICAL
+      branch: userBranch,
       type: "income",
       month: paymentForm.month,
       year: paymentForm.year,
@@ -279,21 +279,23 @@ export default function DashboardPage() {
     }
   }
 
+  const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
+
   return (
     <div className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
+          <SidebarTrigger className="-ml-1 md:hidden" />
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-3xl font-headline font-bold text-primary">Dashboard</h1>
-            <p className="text-muted-foreground mt-1">Branch: <span className="font-bold text-foreground">{userBranch}</span></p>
+            <p className="text-muted-foreground mt-1">Real-time overview of your hostel network.</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 bg-secondary/50 p-1 rounded-lg">
+        <div className="flex items-center gap-2 bg-white border p-1.5 rounded-xl shadow-sm">
           <CalendarDays size={16} className="ml-2 text-muted-foreground" />
           <Select value={timeFilter} onValueChange={setTimeFilter}>
-            <SelectTrigger className="w-[140px] border-none bg-transparent shadow-none focus:ring-0"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[140px] border-none bg-transparent shadow-none focus:ring-0 font-medium"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="today">Today</SelectItem>
               <SelectItem value="month">This Month</SelectItem>
@@ -304,50 +306,128 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="shadow-sm border-none bg-income/5 border-l-4 border-l-income">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="shadow-sm border-none bg-white border-l-4 border-l-success">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-income">Income</CardTitle>
-            <ArrowUpCircle className="h-4 w-4 text-income" />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-success">Income</CardTitle>
+            <ArrowUpCircle className="h-4 w-4 text-success" />
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold">৳{stats.income.toLocaleString()}</div></CardContent>
+          <CardContent>
+            <div className="text-3xl font-black">৳{stats.income.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold">Total For {timeFilter.replace('Month', ' Month')}</p>
+          </CardContent>
         </Card>
-        <Card className="shadow-sm border-none bg-expense/5 border-l-4 border-l-expense">
+        <Card className="shadow-sm border-none bg-white border-l-4 border-l-destructive">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-expense">Expenses</CardTitle>
-            <ArrowDownCircle className="h-4 w-4 text-expense" />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-destructive">Expenses</CardTitle>
+            <ArrowDownCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold">৳{stats.expense.toLocaleString()}</div></CardContent>
+          <CardContent>
+            <div className="text-3xl font-black">৳{stats.expense.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold">Total For {timeFilter.replace('Month', ' Month')}</p>
+          </CardContent>
         </Card>
-        <Card className="shadow-sm border-none bg-destructive/5 border-l-4 border-l-destructive">
+        <Card className="shadow-sm border-none bg-white border-l-4 border-l-orange-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-destructive">Current Dues</CardTitle>
-            <TrendingUp className="h-4 w-4 text-destructive" />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-orange-500">Total Dues</CardTitle>
+            <TrendingUp className="h-4 w-4 text-orange-500" />
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold">৳{stats.dues.toLocaleString()}</div></CardContent>
+          <CardContent>
+            <div className="text-3xl font-black">৳{stats.dues.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold">Current Outstanding</p>
+          </CardContent>
         </Card>
-        <Card className="shadow-sm border-none bg-primary/5 border-l-4 border-l-primary">
+        <Card className="shadow-sm border-none bg-white border-l-4 border-l-primary">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">Residents</CardTitle>
             <Building2 className="h-4 w-4 text-primary" />
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold">{students?.filter(s => s.isActive).length || 0}</div></CardContent>
+          <CardContent>
+            <div className="text-3xl font-black">{students?.filter(s => s.isActive).length || 0}</div>
+            <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold">Active in {buildings?.length || 0} Properties</p>
+          </CardContent>
         </Card>
       </div>
 
-      {userRole === 'Admin' && (
-        <Card className="shadow-sm border-none">
-          <CardHeader><CardTitle className="text-lg">Total Fund Status (Admin Only)</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="p-4 rounded-xl border bg-secondary/20"><p className="text-[10px] text-muted-foreground uppercase font-bold">Cash</p><p className="text-xl font-bold">৳{stats.fund.cash.toLocaleString()}</p></div>
-              <div className="p-4 rounded-xl border bg-secondary/20"><p className="text-[10px] text-muted-foreground uppercase font-bold">Bank</p><p className="text-xl font-bold">৳{stats.fund.bank.toLocaleString()}</p></div>
-              <div className="p-4 rounded-xl border bg-secondary/20"><p className="text-[10px] text-muted-foreground uppercase font-bold">Bkash</p><p className="text-xl font-bold text-primary">৳{stats.fund.bkash.toLocaleString()}</p></div>
-              <div className="p-4 rounded-xl border bg-secondary/20"><p className="text-[10px] text-muted-foreground uppercase font-bold">Nagad</p><p className="text-xl font-bold text-orange-500">৳{stats.fund.nagad.toLocaleString()}</p></div>
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+        {/* Total Fund Status Column */}
+        <Card className="lg:col-span-2 shadow-sm border-none bg-white rounded-2xl overflow-hidden">
+          <CardHeader className="pb-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-xl font-bold">Total Fund Status</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">Opening + Transactions (including transfers).</p>
+              </div>
+              <div className="bg-primary/10 p-2 rounded-lg text-primary"><CircleDollarSign size={20} /></div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                  <Banknote size={14} /> Cash in Hand
+                </div>
+                <div className="text-2xl font-black text-primary">৳{stats.fund.cash.toLocaleString()}</div>
+              </div>
+              <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                  <Landmark size={14} /> Bank Account
+                </div>
+                <div className="text-2xl font-black text-primary">৳{stats.fund.bank.toLocaleString()}</div>
+              </div>
+              <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-blue-600">
+                  <Smartphone size={14} /> Bkash Wallet
+                </div>
+                <div className="text-2xl font-black text-blue-600">৳{stats.fund.bkash.toLocaleString()}</div>
+              </div>
+              <div className="p-5 rounded-2xl border bg-secondary/5 space-y-2">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-orange-500">
+                  <Smartphone size={14} /> Nagad Wallet
+                </div>
+                <div className="text-2xl font-black text-orange-500">৳{stats.fund.nagad.toLocaleString()}</div>
+              </div>
+            </div>
+            
+            <div className="pt-6 border-t flex flex-col md:flex-row justify-between items-center gap-4">
+              <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Combined Net Balance:</p>
+              <div className="text-4xl font-black text-primary tracking-tighter">৳{combinedBalance.toLocaleString()}</div>
             </div>
           </CardContent>
         </Card>
-      )}
+
+        {/* Property Occupancy Column */}
+        <Card className="shadow-sm border-none bg-white rounded-2xl overflow-hidden">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl font-bold bg-primary/10 w-fit px-3 py-1 rounded text-primary">Property Occupancy</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {buildings?.map((b: any) => {
+                const occupancy = Math.round((b.occupiedSeats / (b.totalSeats || 1)) * 100)
+                return (
+                  <div key={b.id} className="space-y-2">
+                    <div className="flex justify-between items-end">
+                      <div className="space-y-0.5">
+                        <p className="text-sm font-bold">{b.name}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold">{b.occupiedSeats} / {b.totalSeats} Seats</p>
+                      </div>
+                      <span className="text-xs font-black text-primary">{occupancy}%</span>
+                    </div>
+                    <Progress value={occupancy} className="h-2" />
+                  </div>
+                )
+              })}
+              {(!buildings || buildings.length === 0) && (
+                <div className="text-center py-10 space-y-2">
+                  <Building2 className="mx-auto text-muted-foreground/20" size={48} />
+                  <p className="text-xs text-muted-foreground font-medium">No properties registered.</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="fixed bottom-8 right-8 z-50">
         <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
