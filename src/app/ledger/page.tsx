@@ -102,7 +102,7 @@ export default function LedgerPage() {
 
       const csvContent = [
         headers.join(","),
-        ...rows.map(row => row.map(val => `"${val || ''}"`).join(","))
+        ...rows.map(row => row.map(val => `"${(val || '').toString().replace(/"/g, '""')}"`).join(","))
       ].join("\n");
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -128,14 +128,14 @@ export default function LedgerPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Accounting Ledger</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Ledger</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">unified financial records for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
         
         <div className="ml-auto flex items-center gap-3">
-          <Button variant="outline" size="sm" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
-          <Button size="sm" onClick={handlePrint} className="gap-2 shadow-lg">
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
+          <Button size="sm" variant="outline" onClick={handlePrint} className="gap-2 shadow-sm">
             <Printer size={16} /> <span className="hidden sm:inline">Print</span>
           </Button>
 

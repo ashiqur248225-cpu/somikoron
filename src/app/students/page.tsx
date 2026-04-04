@@ -107,7 +107,7 @@ export default function StudentsPage() {
 
       const csvContent = [
         headers.join(","),
-        ...rows.map(row => row.map(val => `"${val || ''}"`).join(","))
+        ...rows.map(row => row.map(val => `"${(val || '').toString().replace(/"/g, '""')}"`).join(","))
       ].join("\n");
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -132,12 +132,12 @@ export default function StudentsPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Resident List</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Residents</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Manage occupants for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">

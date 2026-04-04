@@ -41,7 +41,7 @@ export default function IncomeHistoryPage() {
   const [userName, setUserName] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
-  // Entry Filtering State (New)
+  // Entry Filtering State
   const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
   const [entryRoomFilter, setEntryRoomFilter] = useState("all")
 
@@ -277,24 +277,31 @@ export default function IncomeHistoryPage() {
     }
   }
 
-  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+  const handlePrint = () => { 
+    if (typeof window !== "undefined") { 
+      window.print(); 
+    } 
+  }
 
   const handleExportCSV = () => {
     try {
       const headers = ["Date", "Student", "Building", "Room", "Method", "Amount", "Description"];
-      const rows = filteredPayments.map(p => [
-        p.date?.toDate ? p.date.toDate().toLocaleDateString() : '',
-        p.studentName,
-        p.buildingName,
-        p.roomNumber,
-        p.method,
-        p.amount,
-        p.description
-      ]);
+      const rows = filteredPayments.map(p => {
+        const pDate = p.date?.toDate ? p.date.toDate().toLocaleDateString() : '';
+        return [
+          pDate,
+          p.studentName,
+          p.buildingName,
+          p.roomNumber,
+          p.method,
+          p.amount,
+          p.description
+        ];
+      });
 
       const csvContent = [
         headers.join(","),
-        ...rows.map(row => row.map(val => `"${val || ''}"`).join(","))
+        ...rows.map(row => row.map(val => `"${(val || '').toString().replace(/"/g, '""')}"`).join(","))
       ].join("\n");
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -324,7 +331,7 @@ export default function IncomeHistoryPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><Download size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">

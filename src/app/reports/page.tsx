@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   BarChart3, Calendar, Loader2, TrendingUp, TrendingDown, Wallet, FileSpreadsheet,
   XCircle, Building2, CircleAlert, Download, Share2, FileText, Activity, PieChart as PieChartIcon, Percent, Users,
-  ArrowUpRight, ArrowDownRight, Scale, Zap, Info
+  ArrowUpRight, ArrowDownRight, Scale, Zap, Info, Printer
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -219,7 +219,7 @@ export default function ReportsPage() {
 
       const csvContent = [
         headers.join(","),
-        ...rows.map(row => row.map(val => `"${val}"`).join(","))
+        ...rows.map(row => row.map(val => `"${(val || '').toString().replace(/"/g, '""')}"`).join(","))
       ].join("\n");
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -248,7 +248,7 @@ export default function ReportsPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Performance Reports</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Reports</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
               Deep analysis for <span className="font-bold text-foreground">{userBranch}</span>.
             </p>
@@ -256,11 +256,9 @@ export default function ReportsPage() {
         </div>
         
         <div className="ml-auto flex items-center gap-3">
-          <div className="hidden sm:flex gap-2">
-            <Button variant="outline" size="sm" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> CSV</Button>
-          </div>
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}>
-            <Download size={16} /> <span className="hidden sm:inline">Export PDF</span>
+            <Printer size={16} /> <span className="hidden sm:inline">Print / PDF</span>
           </Button>
 
           <Link href="/profile">
