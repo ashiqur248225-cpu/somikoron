@@ -266,7 +266,7 @@ export default function IncomeHistoryPage() {
         <Card className="bg-income/5 border-none shadow-sm border-l-4 border-l-income">
           <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium text-income flex items-center gap-2">
-              <HandCoins size={16} /> Total Collections (Filtered)
+              Total Collections (Filtered)
             </CardTitle>
           </CardHeader>
           <CardContent>

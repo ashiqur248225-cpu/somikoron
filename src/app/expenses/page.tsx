@@ -141,6 +141,8 @@ export default function ExpenseHistoryPage() {
     })
   }, [expenses, categoryFilter, buildingFilter, methodFilter, expenserFilter, startDate, endDate])
 
+  const totalFilteredExpense = useMemo(() => filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0), [filteredExpenses])
+
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.amount || !formData.buildingId) {
@@ -217,6 +219,21 @@ export default function ExpenseHistoryPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 print:hidden">
+        <Card className="bg-destructive/5 border-none shadow-sm border-l-4 border-l-destructive">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm font-medium text-destructive flex items-center gap-2">
+              Total Expenses (Filtered)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-between items-end">
+              <div><p className="text-3xl font-bold text-destructive">৳{totalFilteredExpense.toLocaleString()}</p></div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {userRole !== 'Building Manager' && (
@@ -338,7 +355,7 @@ export default function ExpenseHistoryPage() {
 
             <div className="space-y-2">
               <Label>Target Building</Label>
-              <Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val})}>
+              <Select value={formData.buildingId} onValueChange={(val) => setFormData({...formData, buildingId: val})}>
                 <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
                 <SelectContent>
                   {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
