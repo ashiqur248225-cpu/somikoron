@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { UserCog, Search, Plus, Phone, Loader2, Trash2, Shield, Building2, MapPin, CheckCircle2, XCircle, Wallet, UserCircle, Briefcase, Eye, ShieldCheck, Lock } from "lucide-react"
+import { UserCog, Search, Plus, Phone, Loader2, Trash2, Shield, Building2, MapPin, CheckCircle2, XCircle, Wallet, UserCircle, Briefcase, Eye, ShieldCheck, Lock, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { 
   Dialog, 
@@ -80,7 +80,6 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
 
   const staffQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    // Admins see all staff in branch, Managers see their branch
     return query(collection(db, "staff"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: staff, isLoading } = useCollection(staffQuery)
@@ -100,6 +99,27 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
     })
   }, [staff, searchTerm, currentTab])
 
+  const generateRandomPassword = () => {
+    return Math.random().toString(36).slice(-8);
+  }
+
+  const handleOpenAddDialog = () => {
+    setFormData({
+      name: "",
+      phone: "",
+      address: "",
+      password: generateRandomPassword(),
+      role: "Branch Manager",
+      staffType: "management",
+      monthlySalary: "0",
+      branch: userBranch,
+      assignedBuildingId: "none",
+      canRequestIncome: false,
+      canRequestExpense: false
+    })
+    setIsAddOpen(true)
+  }
+
   const handleCreate = async () => {
     if (!formData.name || !formData.phone || (formData.role !== 'Admin' && !formData.branch)) {
       toast({ variant: "destructive", title: "Error", description: "Required fields are missing." })
@@ -115,25 +135,11 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
         monthlySalary: Number(formData.monthlySalary),
         createdAt: serverTimestamp(),
         salaryHistory: [],
-        // Ensure switches are correctly set
         canRequestIncome: formData.role === 'Building Manager' ? formData.canRequestIncome : true,
         canRequestExpense: formData.role === 'Building Manager' ? formData.canRequestExpense : true,
       })
       toast({ title: "Success", description: "Staff member added." })
       setIsAddOpen(false)
-      setFormData({
-        name: "",
-        phone: "",
-        address: "",
-        password: "",
-        role: "Branch Manager",
-        staffType: "management",
-        monthlySalary: "0",
-        branch: userBranch,
-        assignedBuildingId: "none",
-        canRequestIncome: false,
-        canRequestExpense: false
-      })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -153,7 +159,7 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Button size="sm" className="gap-2" onClick={() => setIsAddOpen(true)}><Plus size={18} /> <span className="hidden sm:inline">Add Staff</span></Button>
+          <Button size="sm" className="gap-2" onClick={handleOpenAddDialog}><Plus size={18} /> <span className="hidden sm:inline">Add Staff</span></Button>
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
               <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">{userName ? userName.substring(0, 2) : "U"}</AvatarFallback>
@@ -279,7 +285,13 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">System Password <Lock size={10}/></Label>
-                  <Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="••••••••" />
+                  <div className="flex gap-2">
+                    <Input readOnly value={formData.password} className="bg-secondary/30 font-mono" />
+                    <Button type="button" variant="outline" size="icon" onClick={() => setFormData({...formData, password: generateRandomPassword()})}>
+                      <RefreshCw size={14} />
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground italic">Auto-generated for security.</p>
                 </div>
               </div>
               <div className="space-y-2">
