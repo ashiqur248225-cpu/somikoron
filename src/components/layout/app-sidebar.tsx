@@ -105,34 +105,11 @@ export function AppSidebar() {
   return (
     <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader className="border-b px-4 py-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <div className="bg-primary p-1.5 rounded-lg text-white">
-              <RefreshCw size={18} className="group-data-[collapsible=icon]:rotate-90 transition-transform" />
-            </div>
-            <span className="text-xl font-black text-primary tracking-tight group-data-[collapsible=icon]:hidden">Somikoron</span>
+        <div className="flex items-center gap-2">
+          <div className="bg-primary p-1.5 rounded-lg text-white">
+            <RefreshCw size={18} className="group-data-[collapsible=icon]:rotate-90 transition-transform" />
           </div>
-          
-          {userRole === 'Admin' && (
-            <div className="group-data-[collapsible=icon]:hidden space-y-1">
-              <p className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Active Branch</p>
-              <Select value={userBranch} onValueChange={handleBranchSwitch}>
-                <SelectTrigger className="h-8 text-xs bg-secondary/50 border-none font-bold">
-                  <SelectValue placeholder="Switch Branch" />
-                </SelectTrigger>
-                <SelectContent>
-                  {branches?.map(b => (
-                    <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div className="flex flex-col group-data-[collapsible=icon]:hidden pt-1">
-            <span className="text-[10px] font-bold uppercase text-muted-foreground">{userBranch}</span>
-            <span className="text-[9px] text-primary font-medium">{userName} ({userRole})</span>
-          </div>
+          <span className="text-xl font-black text-primary tracking-tight group-data-[collapsible=icon]:hidden">Somikoron</span>
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -156,11 +133,34 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t p-4 group-data-[collapsible=icon]:hidden space-y-4">
+      <SidebarFooter className="border-t p-4 space-y-4 group-data-[collapsible=icon]:hidden">
+        <div className="flex flex-col gap-3">
+          {userRole === 'Admin' && (
+            <div className="space-y-1">
+              <p className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Active Branch</p>
+              <Select value={userBranch} onValueChange={handleBranchSwitch}>
+                <SelectTrigger className="h-8 text-xs bg-secondary/50 border-none font-bold">
+                  <SelectValue placeholder="Switch Branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches?.map(b => (
+                    <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="flex flex-col pt-1">
+            <span className="text-[10px] font-bold uppercase text-muted-foreground">{userBranch}</span>
+            <span className="text-[9px] text-primary font-medium">{userName} ({userRole})</span>
+          </div>
+        </div>
+
         {userRole !== 'Admin' && (
-          <Button variant="ghost" className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleLogout}>
+          <Button variant="ghost" className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 h-9" onClick={handleLogout}>
             <LogOut size={16} />
-            <span>Logout Session</span>
+            <span className="text-xs">Logout Session</span>
           </Button>
         )}
         <div className="text-[10px] text-muted-foreground">© 2024 Somikoron ERP</div>
