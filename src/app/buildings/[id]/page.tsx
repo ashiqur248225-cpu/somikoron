@@ -160,7 +160,7 @@ export default function BuildingDetailsPage({ params }: { params: Promise<{ id: 
                    <p className="text-sm font-bold text-muted-foreground uppercase border-b pb-2">Apartments & Hierarchy (Read-only status in edit)</p>
                    <div className="space-y-6">
                       {editApts.map((apt, aIdx) => (
-                        <div key={apt.id} className="p-4 border-2 rounded-xl bg-secondary/5 space-y-4">
+                        <div key={apt.id || aIdx} className="p-4 border-2 rounded-xl bg-secondary/5 space-y-4">
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                               <Label className="text-[10px] uppercase font-bold">Apt Name</Label>
@@ -181,7 +181,7 @@ export default function BuildingDetailsPage({ params }: { params: Promise<{ id: 
                           </div>
                           <div className="ml-4 pl-4 border-l-2 border-primary/20 space-y-4">
                              {apt.rooms.map((room, rIdx) => (
-                               <div key={room.roomNo} className="p-3 bg-background border rounded-lg">
+                               <div key={`${room.roomNo}-${rIdx}`} className="p-3 bg-background border rounded-lg">
                                   <div className="flex justify-between items-center mb-2">
                                      <span className="text-xs font-bold uppercase">Room {room.roomNo}</span>
                                      <Badge variant="secondary">{room.totalSeats} Seats</Badge>
@@ -275,8 +275,8 @@ export default function BuildingDetailsPage({ params }: { params: Promise<{ id: 
       </div>
 
       <div className="space-y-8">
-        {building.apartmentsDetail?.map((apt: any) => (
-          <div key={apt.id} className="space-y-4">
+        {building.apartmentsDetail?.map((apt: any, aIdx: number) => (
+          <div key={apt.id || aIdx} className="space-y-4">
              <div className="flex items-center gap-4 bg-secondary/30 p-4 rounded-xl border">
                 <div className="bg-primary/10 p-2 rounded-lg text-primary"><LayoutGrid size={24} /></div>
                 <div className="flex-1">
@@ -289,8 +289,8 @@ export default function BuildingDetailsPage({ params }: { params: Promise<{ id: 
              </div>
              
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ml-4">
-                {apt.rooms?.map((room: any) => (
-                  <Card key={room.roomNo} className="border-none shadow-sm overflow-hidden">
+                {apt.rooms?.map((room: any, rIdx: number) => (
+                  <Card key={`${room.roomNo}-${rIdx}`} className="border-none shadow-sm overflow-hidden">
                     <div className="h-1.5 bg-primary/20 w-full" />
                     <CardHeader className="pb-2">
                       <CardTitle className="text-lg">Room {room.roomNo}</CardTitle>
