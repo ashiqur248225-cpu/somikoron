@@ -85,6 +85,7 @@ export default function ExpenseHistoryPage() {
     amount: "",
     method: "cash",
     expensePartyName: "",
+    receiver: "",
     description: "",
     expenseDate: new Date().toISOString().split('T')[0],
   })
@@ -145,8 +146,8 @@ export default function ExpenseHistoryPage() {
 
   const handleEntrySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.amount || !formData.buildingId) {
-      toast({ variant: "destructive", title: "Error", description: "Amount and Building are required." })
+    if (!formData.amount || !formData.buildingId || !formData.expensePartyName) {
+      toast({ variant: "destructive", title: "Error", description: "Amount, Building and Expenser name are required." })
       return
     }
 
@@ -180,7 +181,7 @@ export default function ExpenseHistoryPage() {
       setIsEntryOpen(false)
       setFormData({
         category: "others", buildingId: assignedBuildingId || "", amount: "", method: "cash", 
-        expensePartyName: "", description: "",
+        expensePartyName: "", receiver: "", description: "",
         expenseDate: new Date().toISOString().split('T')[0],
       })
     } catch (err: any) {
@@ -364,13 +365,43 @@ export default function ExpenseHistoryPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Expenser (Staff Name)</Label>
+              <Label>Paid By (Expenser/Manager)</Label>
               <Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}>
-                <SelectTrigger><SelectValue placeholder="Select Staff" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Who is paying?" /></SelectTrigger>
                 <SelectContent>
                   {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{formData.category === 'salary' ? "Paid To (Staff Name)" : "Receiver (Party/Vendor Name)"}</Label>
+              <div className="relative">
+                <Input 
+                  value={formData.receiver} 
+                  onChange={e => setFormData({...formData, receiver: e.target.value})} 
+                  placeholder={formData.category === 'salary' ? "Employee Name" : "Receiver Name"} 
+                />
+                {formData.category === 'salary' && (
+                  <div className="mt-2">
+                    <p className="text-[10px] text-muted-foreground mb-1 uppercase font-bold">Quick Select Staff:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {staffList?.map(s => (
+                        <Button 
+                          key={s.id} 
+                          type="button" 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-6 text-[9px] px-2"
+                          onClick={() => setFormData({...formData, receiver: s.name})}
+                        >
+                          {s.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

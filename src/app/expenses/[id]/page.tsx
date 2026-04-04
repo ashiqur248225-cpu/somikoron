@@ -171,19 +171,17 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               <p className="font-semibold">{new Date(expense.expenseDate).toLocaleDateString('en-IN', { dateStyle: 'full' })}</p>
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCheck size={10}/> Handled By (Expenser)</Label>
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCheck size={10}/> Paid By (Expenser)</Label>
               <p className="font-semibold">{expense.expensePartyName}</p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCircle size={10}/> Paid To (Receiver)</Label>
+              <p className="font-semibold text-primary">{expense.receiver || "N/A"}</p>
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><Wallet size={10}/> Payment Method</Label>
               <Badge variant="outline" className="uppercase font-bold">{expense.method}</Badge>
             </div>
-            {expense.receiver && (
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCircle size={10}/> Receiver / Medium</Label>
-                <p className="font-semibold">{expense.receiver}</p>
-              </div>
-            )}
           </div>
 
           <Separator />
@@ -232,25 +230,17 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                 </Select>
               </div>
 
-              {editForm.buildingId && editForm.buildingId !== "none" && (
-                <div className="space-y-2">
-                  <Label>Apartment / Room (Optional)</Label>
-                  <Select value={editForm.apartmentName} onValueChange={val => setEditForm({...editForm, apartmentName: val})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">-- Select Unit --</SelectItem>
-                      {apartmentsInBuilding.map((a: any) => <SelectItem key={a.name} value={a.name}>{a.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
               <div className="space-y-2">
-                <Label>Expenser (Staff Name)</Label>
+                <Label>Paid By (Expenser Name)</Label>
                 <Select value={editForm.expensePartyName} onValueChange={val => setEditForm({...editForm, expensePartyName: val})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Paid To (Receiver/Staff Name)</Label>
+                <Input value={editForm.receiver} onChange={e => setEditForm({...editForm, receiver: e.target.value})} placeholder="Who received the money?" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
