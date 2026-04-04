@@ -21,7 +21,13 @@ import {
   Clock,
   UtensilsCrossed,
   ChevronLeft,
-  ArrowDownRight
+  ArrowDownRight,
+  ArrowUpRight,
+  Info,
+  Banknote,
+  Smartphone,
+  Landmark,
+  ShieldCheck
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -34,7 +40,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog"
 import {
   AlertDialog,
@@ -74,6 +81,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   const [isUpdating, setIsUpdating] = useState(false)
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isLogMealDialogOpen, setIsLogMealDialogOpen] = useState(false)
+  const [isExitDialogOpen, setIsExitDialogOpen] = useState(false)
   
   const [paymentData, setPaymentData] = useState({ 
     month: MONTHS[new Date().getMonth()], 
@@ -93,6 +101,14 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     count: ""
   })
 
+  const [exitSettlement, setExitSettlement] = useState({
+    refundAmount: "0",
+    collectAmount: "0",
+    method: "cash",
+    staffName: "",
+    description: ""
+  })
+
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
@@ -110,7 +126,7 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
   }, [searchParams])
 
   const financialStats = useMemo(() => {
-    if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [], usableAdvance: 0 }
+    if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [], usableAdvance: 0, totalDue: 0 }
     
     const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
     const now = new Date()
@@ -172,11 +188,24 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     }, 0) || 0
     const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
 
+    const totalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
     const lockedAdvance = student.monthlyRent || 0
     const usableAdvance = Math.max(0, (student.advanceAmount || 0) - lockedAdvance)
 
-    return { rentDue, foodBalance, monthsList: sortedAlloc.reverse(), usableAdvance }
+    return { rentDue, foodBalance, monthsList: sortedAlloc.reverse(), usableAdvance, totalDue }
   }, [student])
+
+  // Effect to initialize exit settlement data
+  useEffect(() => {
+    if (student && isExitDialogOpen) {
+      const net = (student.advanceAmount || 0) - financialStats.totalDue
+      if (net > 0) {
+        setExitSettlement(prev => ({ ...prev, refundAmount: net.toString(), collectAmount: "0" }))
+      } else {
+        setExitSettlement(prev => ({ ...prev, collectAmount: Math.abs(net).toString(), refundAmount: "0" }))
+      }
+    }
+  }, [student, isExitDialogOpen, financialStats.totalDue])
 
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
@@ -236,41 +265,104 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
     }
   }
 
-  const handleDeactivate = async () => {
+  const handleConfirmExit = async () => {
     if (!student || !studentRef) return
-    setIsUpdating(true)
-    try {
-      await updateDoc(studentRef, { isActive: false, leftAt: serverTimestamp(), updatedAt: serverTimestamp() })
-      toast({ title: "Resident Deactivated", description: "Marked as left." })
-      setIsUpdating(false)
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-      setIsUpdating(false)
+    if (!exitSettlement.staffName) {
+      toast({ variant: "destructive", title: "Error", description: "Please select who processed this exit." })
+      return
     }
-  }
 
-  const handleLogMealSubmit = async () => {
-    if (!student || !studentRef || !mealLogData.count) return
     setIsUpdating(true)
-    const count = Number(mealLogData.count)
-    const totalCost = count * currentMealRate
-
     try {
-      await updateDoc(studentRef, {
-        mealsHistory: arrayUnion({
-          month: `${mealLogData.month} ${mealLogData.year}`,
-          totalMeals: count,
-          perMealCost: currentMealRate,
-          totalCost: totalCost,
-          date: new Date().toISOString()
-        }),
-        updatedAt: serverTimestamp()
+      const refund = Number(exitSettlement.refundAmount) || 0
+      const collect = Number(exitSettlement.collectAmount) || 0
+
+      // 1. Create Transaction if needed
+      if (refund > 0) {
+        const expId = doc(collection(db, "expenses")).id
+        await setDoc(doc(db, "expenses", expId), {
+          id: expId,
+          amount: refund,
+          category: "others",
+          buildingId: student.buildingId,
+          buildingName: student.buildingName,
+          expensePartyName: student.name,
+          receiver: student.name,
+          method: exitSettlement.method,
+          expenseDate: new Date().toISOString().split('T')[0],
+          description: `Security/Advance Refund on Exit. Processed by ${exitSettlement.staffName}. ${exitSettlement.description}`,
+          branch: student.branch,
+          createdAt: serverTimestamp()
+        })
+      }
+
+      if (collect > 0) {
+        const pId = doc(collection(db, "payments")).id
+        await setDoc(doc(db, "payments", pId), {
+          id: pId,
+          amount: collect,
+          studentId: student.id,
+          studentName: student.name,
+          buildingId: student.buildingId,
+          buildingName: student.buildingName,
+          roomNumber: student.roomNumber,
+          type: "income",
+          method: exitSettlement.method,
+          receiver: exitSettlement.staffName,
+          description: `Outstanding Dues Collection on Exit. ${exitSettlement.description}`,
+          date: serverTimestamp(),
+          branch: student.branch,
+          createdAt: serverTimestamp()
+        })
+      }
+
+      // 2. Update Building Seat Status
+      const bRef = doc(db, "buildings", student.buildingId)
+      const bSnap = await getDoc(bRef)
+      if (bSnap.exists()) {
+        const bData = bSnap.data()
+        const updatedApts = bData.apartmentsDetail.map((apt: any) => {
+          if (apt.name === student.apartmentName) {
+            return {
+              ...apt,
+              rooms: apt.rooms.map((room: any) => {
+                if (room.roomNo === student.roomNumber) {
+                  return {
+                    ...room,
+                    seats: room.seats.map((seat: any) => 
+                      seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat
+                    )
+                  }
+                }
+                return room
+              })
+            }
+          }
+          return apt
+        })
+        await updateDoc(bRef, { 
+          apartmentsDetail: updatedApts,
+          occupiedSeats: increment(-1),
+          emptySeats: increment(1),
+          updatedAt: serverTimestamp()
+        })
+      }
+
+      // 3. Deactivate Student
+      await updateDoc(studentRef, { 
+        isActive: false, 
+        leftAt: serverTimestamp(), 
+        advanceAmount: 0, // Advance is consumed/refunded
+        duesBreakdown: {}, // Dues are cleared/collected
+        updatedAt: serverTimestamp() 
       })
-      toast({ title: "Meals Logged", description: `Recorded ${count} meals for ${mealLogData.month}.` })
-      setIsLogMealDialogOpen(false)
-      setIsUpdating(false)
+
+      toast({ title: "Settlement Complete", description: `${student.name} has officially left. Records updated.` })
+      setIsExitDialogOpen(false)
+      router.push("/students")
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
       setIsUpdating(false)
     }
   }
@@ -290,23 +382,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         </div>
         <div className="flex items-center gap-1">
           {student.isActive && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-destructive">
-                  <UserMinus size={20} />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                  <AlertDialogDescription>This will deactivate the resident and vacate the seat.</AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeactivate} className="bg-destructive">Confirm Exit</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setIsExitDialogOpen(true)}>
+              <UserMinus size={20} />
+            </Button>
           )}
         </div>
       </div>
@@ -325,19 +403,9 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
         </div>
         <div className="flex gap-2 items-center">
           {student.isActive && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild><Button variant="destructive" className="flex gap-2" disabled={isUpdating}><UserMinus size={18} /> Mark as Left</Button></AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                  <AlertDialogDescription>This will deactivate the resident and vacate the seat.</AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeactivate} className="bg-destructive">Confirm Exit</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <Button variant="destructive" className="flex gap-2" onClick={() => setIsExitDialogOpen(true)} disabled={isUpdating}>
+              <UserMinus size={18} /> Mark as Left
+            </Button>
           )}
           <Button variant="ghost" onClick={() => router.push("/students")}>Back</Button>
         </div>
@@ -710,6 +778,108 @@ export default function StudentDetailsPage({ params: paramsPromise }: { params: 
           <DialogFooter>
             <Button onClick={handleLogMealSubmit} className="w-full bg-orange-500 hover:bg-orange-600 font-bold" disabled={isUpdating || !mealLogData.count}>
               {isUpdating ? <Loader2 className="animate-spin" /> : "Save Meal Entry"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Exit & Settlement Dialog */}
+      <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><UserMinus className="text-destructive" /> Resident Exit & Settlement</DialogTitle>
+            <DialogDescription>Calculate final dues and advance refund before student leaves.</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Card className="bg-destructive/5 border-destructive/10 p-3">
+                <Label className="text-[10px] uppercase font-bold text-destructive">Total Dues</Label>
+                <p className="text-xl font-black text-destructive">৳{financialStats.totalDue.toLocaleString()}</p>
+              </Card>
+              <Card className="bg-primary/5 border-primary/10 p-3">
+                <Label className="text-[10px] uppercase font-bold text-primary">Advance Pool</p>
+                <p className="text-xl font-black text-primary">৳{(student.advanceAmount || 0).toLocaleString()}</p>
+              </Card>
+            </div>
+
+            <Separator />
+
+            <div className="bg-secondary/30 p-4 rounded-2xl border space-y-4">
+              <h4 className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Calculator size={14} /> Settlement Summary</h4>
+              
+              {((student.advanceAmount || 0) - financialStats.totalDue) > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-success/20">
+                    <span className="text-xs font-bold text-slate-600">Hostel Owes Student:</span>
+                    <span className="text-lg font-black text-success">৳{((student.advanceAmount || 0) - financialStats.totalDue).toLocaleString()}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Actual Refund Paid (৳)</Label>
+                    <div className="relative">
+                      <Wallet className="absolute left-3 top-3 h-4 w-4 text-success" />
+                      <Input type="number" value={exitSettlement.refundAmount} onChange={e => setExitSettlement({...exitSettlement, refundAmount: e.target.value})} className="pl-10 h-11 border-success/30 bg-success/5 font-bold text-success" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-destructive/20">
+                    <span className="text-xs font-bold text-slate-600">Student Owes Hostel:</span>
+                    <span className="text-lg font-black text-destructive">৳{Math.abs((student.advanceAmount || 0) - financialStats.totalDue).toLocaleString()}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Actual Amount Collected (৳)</Label>
+                    <div className="relative">
+                      <ArrowUpRight className="absolute left-3 top-3 h-4 w-4 text-primary" />
+                      <Input type="number" value={exitSettlement.collectAmount} onChange={e => setExitSettlement({...exitSettlement, collectAmount: e.target.value})} className="pl-10 h-11 border-primary/30 bg-primary/5 font-bold text-primary" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase">Method</Label>
+                  <Select value={exitSettlement.method} onValueChange={val => setExitSettlement({...exitSettlement, method: val})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bkash">Bkash</SelectItem>
+                      <SelectItem value="nagad">Nagad</SelectItem>
+                      <SelectItem value="bank">Bank</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase">Processed By</Label>
+                  <Select value={exitSettlement.staffName} onValueChange={val => setExitSettlement({...exitSettlement, staffName: val})}>
+                    <SelectTrigger><SelectValue placeholder="Staff Name" /></SelectTrigger>
+                    <SelectContent>
+                      {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase">Notes / Reason</Label>
+                <Textarea value={exitSettlement.description} onChange={e => setExitSettlement({...exitSettlement, description: e.target.value})} placeholder="Any additional comments..." className="min-h-[80px]" />
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[10px] text-amber-700 flex gap-2">
+              <Info className="shrink-0" size={14} />
+              <p>Confirming this will vacate <b>Room {student.roomNumber} Seat {student.seatNumber}</b> and record any financial transaction in your accounting history.</p>
+            </div>
+          </div>
+
+          <DialogFooter className="grid grid-cols-2 gap-4">
+            <Button variant="outline" onClick={() => setIsExitDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleConfirmExit} disabled={isUpdating} className="bg-destructive hover:bg-destructive/90 font-bold">
+              {isUpdating ? <Loader2 className="animate-spin" /> : <><ShieldCheck size={16} className="mr-2"/> Confirm Exit</>}
             </Button>
           </DialogFooter>
         </DialogContent>
