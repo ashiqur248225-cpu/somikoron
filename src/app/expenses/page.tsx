@@ -59,6 +59,7 @@ export default function ExpenseHistoryPage() {
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
+  const [canRequestExpense, setCanRequestExpense] = useState(false)
 
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
@@ -83,6 +84,7 @@ export default function ExpenseHistoryPage() {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
+    setCanRequestExpense(localStorage.getItem("can_request_expense") === "true")
     
     if (localStorage.getItem("user_role") === 'Building Manager' && localStorage.getItem("assigned_building_id") !== 'none') {
       setBuildingFilter(localStorage.getItem("assigned_building_id") || "all")
@@ -91,8 +93,11 @@ export default function ExpenseHistoryPage() {
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
+    }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const staffQuery = useMemoFirebase(() => {
@@ -103,8 +108,12 @@ export default function ExpenseHistoryPage() {
 
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "expenses"), where("branch", "==", userBranch), limit(500))
-  }, [db, userBranch])
+    let q = query(collection(db, "expenses"), where("branch", "==", userBranch), limit(500))
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      q = query(collection(db, "expenses"), where("buildingId", "==", assignedBuildingId), limit(500))
+    }
+    return q
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: rawExpenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
   const expenses = useMemo(() => {
@@ -142,19 +151,37 @@ export default function ExpenseHistoryPage() {
 
     setIsSubmitting(true)
     try {
-      const expenseId = doc(collection(db, "expenses")).id
       const selectedBuilding = buildings?.find(b => b.id === formData.buildingId)
       
-      await setDoc(doc(db, "expenses", expenseId), {
-        ...formData,
-        id: expenseId,
-        amount: Number(formData.amount),
-        branch: userBranch,
-        buildingName: selectedBuilding?.name || "General",
-        createdAt: serverTimestamp()
-      })
+      if (userRole === 'Building Manager') {
+        // Send Approval Request
+        const reqId = doc(collection(db, "managerRequests")).id
+        await setDoc(doc(db, "managerRequests", reqId), {
+          ...formData,
+          id: reqId,
+          requestType: "expense",
+          amount: Number(formData.amount),
+          branch: userBranch,
+          buildingName: selectedBuilding?.name || "General",
+          requestedBy: localStorage.getItem("somikoron_auth_id"),
+          requestedByName: userName,
+          createdAt: serverTimestamp()
+        })
+        toast({ title: "Request Sent", description: "Expense is waiting for approval." })
+      } else {
+        // Direct Entry
+        const expenseId = doc(collection(db, "expenses")).id
+        await setDoc(doc(db, "expenses", expenseId), {
+          ...formData,
+          id: expenseId,
+          amount: Number(formData.amount),
+          branch: userBranch,
+          buildingName: selectedBuilding?.name || "General",
+          createdAt: serverTimestamp()
+        })
+        toast({ title: "Expense Recorded", description: `Amount ৳${formData.amount} saved.` })
+      }
 
-      toast({ title: "Expense Recorded", description: `Amount ৳${formData.amount} saved.` })
       setIsEntryOpen(false)
       setFormData({
         category: "others",
@@ -346,16 +373,20 @@ export default function ExpenseHistoryPage() {
       )}
 
       {/* FAB */}
-      <div className="fixed bottom-8 right-8 z-50 print:hidden">
-        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-expense hover:scale-105 transition-transform">
-          <Plus size={32} className="text-white" />
-        </Button>
-      </div>
+      {(userRole !== 'Building Manager' || canRequestExpense) && (
+        <div className="fixed bottom-8 right-8 z-50 print:hidden">
+          <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-expense hover:scale-105 transition-transform">
+            <Plus size={32} className="text-white" />
+          </Button>
+        </div>
+      )}
 
       {/* NEW EXPENSE DIALOG */}
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Record New Expense</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{userRole === 'Building Manager' ? 'Send Expense Request' : 'Record New Expense'}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Category</Label>
@@ -417,7 +448,7 @@ export default function ExpenseHistoryPage() {
           </div>
           <DialogFooter>
             <Button onClick={handleCreateExpense} disabled={isSubmitting} className="w-full h-12 text-lg font-bold bg-expense hover:bg-expense/90">
-              {isSubmitting ? <Loader2 className="animate-spin" /> : "Save Expense Record"}
+              {isSubmitting ? <Loader2 className="animate-spin" /> : (userRole === 'Building Manager' ? "Send Approval Request" : "Save Expense Record")}
             </Button>
           </DialogFooter>
         </DialogContent>

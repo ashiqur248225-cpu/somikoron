@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { UserCog, Search, Plus, Phone, Loader2, Trash2, Shield, Building2, MapPin, CheckCircle2, XCircle, Wallet, UserCircle, Briefcase, Eye } from "lucide-react"
+import { UserCog, Search, Plus, Phone, Loader2, Trash2, Shield, Building2, MapPin, CheckCircle2, XCircle, Wallet, UserCircle, Briefcase, Eye, ShieldCheck, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { 
   Dialog, 
@@ -23,7 +23,8 @@ import {
   DialogHeader, 
   DialogTitle, 
   DialogTrigger, 
-  DialogFooter 
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -69,26 +70,25 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
     monthlySalary: "0",
     branch: "",
     assignedBuildingId: "none",
-    canRequestIncome: true,
-    canRequestExpense: true
+    canRequestIncome: false,
+    canRequestExpense: false
   })
 
-  useEffect(() => {
-    if (userBranch) {
-      setFormData(prev => ({ ...prev, branch: userBranch }))
-    }
-  }, [userBranch])
+  // Queries
+  const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
+  const { data: branches } = useCollection(branchesQuery)
 
   const staffQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    // Admins see all staff in branch, Managers see their branch
     return query(collection(db, "staff"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: staff, isLoading } = useCollection(staffQuery)
 
   const buildingsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    if (!formData.branch) return null
+    return query(collection(db, "buildings"), where("branch", "==", formData.branch))
+  }, [db, formData.branch])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const filteredStaff = useMemo(() => {
@@ -101,23 +101,39 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
   }, [staff, searchTerm, currentTab])
 
   const handleCreate = async () => {
-    if (!formData.name || !formData.phone || !formData.branch) {
+    if (!formData.name || !formData.phone || (formData.role !== 'Admin' && !formData.branch)) {
       toast({ variant: "destructive", title: "Error", description: "Required fields are missing." })
       return
     }
+    
     setIsSubmitting(true)
     try {
       const staffId = doc(collection(db, "staff")).id
       await setDoc(doc(db, "staff", staffId), {
         ...formData,
         id: staffId,
-        staffType: formData.staffType,
         monthlySalary: Number(formData.monthlySalary),
         createdAt: serverTimestamp(),
-        salaryHistory: []
+        salaryHistory: [],
+        // Ensure switches are correctly set
+        canRequestIncome: formData.role === 'Building Manager' ? formData.canRequestIncome : true,
+        canRequestExpense: formData.role === 'Building Manager' ? formData.canRequestExpense : true,
       })
       toast({ title: "Success", description: "Staff member added." })
       setIsAddOpen(false)
+      setFormData({
+        name: "",
+        phone: "",
+        address: "",
+        password: "",
+        role: "Branch Manager",
+        staffType: "management",
+        monthlySalary: "0",
+        branch: userBranch,
+        assignedBuildingId: "none",
+        canRequestIncome: false,
+        canRequestExpense: false
+      })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -133,7 +149,7 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Staff Directory</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Managing staff for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Managing personnel for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -163,14 +179,14 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
           <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
         ) : (
           <>
-            {/* Table for Desktop */}
             <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
               <CardContent className="p-0">
                 <Table>
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
                       <TableHead>Employee</TableHead>
-                      <TableHead>Role</TableHead>
+                      <TableHead>Role / Designation</TableHead>
+                      <TableHead>Branch / Building</TableHead>
                       <TableHead>Salary</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -178,10 +194,21 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                   <TableBody>
                     {filteredStaff.map((s) => (
                       <TableRow key={s.id} className="cursor-pointer hover:bg-slate-50/50" onClick={() => router.push(`/staff/${s.id}`)}>
-                        <TableCell className="font-bold text-slate-800">{s.name}</TableCell>
-                        <TableCell><Badge variant="secondary" className="uppercase text-[9px]">{s.role}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">{s.name.substring(0, 2).toUpperCase()}</div>
+                            <span className="font-bold text-slate-800">{s.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell><Badge variant="secondary" className="uppercase text-[9px]">{s.role || (s.staffType === 'working' ? 'General Worker' : 'N/A')}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-600">{s.branch}</span>
+                            {s.assignedBuildingId !== 'none' && <span className="text-[10px] text-muted-foreground">Building: {buildings?.find(b => b.id === s.assignedBuildingId)?.name || 'Loading...'}</span>}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-black text-slate-700">৳{s.monthlySalary?.toLocaleString()}</TableCell>
-                        <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); router.push(`/staff/${s.id}`); }}><Eye size={16} /></Button></TableCell>
+                        <TableCell className="text-right"><Button variant="ghost" size="icon"><Eye size={16} /></Button></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -189,7 +216,7 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
               </CardContent>
             </Card>
 
-            {/* Cards for Mobile */}
+            {/* Mobile View */}
             <div className="md:hidden space-y-4">
               {filteredStaff.map((s) => (
                 <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/staff/${s.id}`)}>
@@ -202,7 +229,7 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                           <p className="text-xs font-bold text-slate-400 mt-0.5">{s.phone}</p>
                         </div>
                       </div>
-                      <Badge className="text-[8px] font-bold uppercase bg-primary">{s.role}</Badge>
+                      <Badge className="text-[8px] font-bold uppercase bg-primary">{s.role || 'Worker'}</Badge>
                     </div>
                     
                     <div className="bg-secondary/30 p-3 rounded-xl border border-secondary flex justify-between items-center">
@@ -213,7 +240,10 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                       <span className="text-lg font-black text-slate-800">৳{s.monthlySalary?.toLocaleString()}</span>
                     </div>
 
-                    <div className="flex justify-end pt-1">
+                    <div className="flex justify-between items-center pt-1">
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-bold uppercase">
+                        <MapPin size={10} /> {s.branch}
+                      </div>
                       <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold uppercase gap-1">
                         Profile <Eye size={12} />
                       </Button>
@@ -228,43 +258,130 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
       </Tabs>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Enroll New Staff</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2"><Label>Full Name</Label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Phone</Label><Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
-              <div className="space-y-2"><Label>System Password</Label><Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} /></div>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Enroll New Staff</DialogTitle>
+            <DialogDescription>Setup profile, roles, and administrative permissions.</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Basic Info */}
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><UserCircle size={14}/> Basic Information</h3>
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Full Name" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Phone Number</Label>
+                  <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="01XXXXXXXXX" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">System Password <Lock size={10}/></Label>
+                  <Input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="••••••••" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Address</Label>
+                <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Current Address" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Staff Category</Label>
-              <Select value={formData.staffType} onValueChange={val => setFormData({...formData, staffType: val})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="management">Management (App Access)</SelectItem>
-                  <SelectItem value="working">Workers (Utility/Market)</SelectItem>
-                </SelectContent>
-              </Select>
+
+            <Separator />
+
+            {/* Role & Model */}
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><ShieldCheck size={14}/> Role & Assignment</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Staff Category</Label>
+                  <Select value={formData.staffType} onValueChange={val => setFormData({...formData, staffType: val, role: val === 'management' ? 'Branch Manager' : 'General Staff'})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="management">Management (App Access)</SelectItem>
+                      <SelectItem value="working">Working Staff (General)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {formData.staffType === 'management' && (
+                  <div className="space-y-2">
+                    <Label>Responsibility Role</Label>
+                    <Select value={formData.role} onValueChange={val => setFormData({...formData, role: val, branch: val === 'Admin' ? 'all' : formData.branch})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Admin">Super Admin (All Branches)</SelectItem>
+                        <SelectItem value="Branch Manager">Branch Manager</SelectItem>
+                        <SelectItem value="Building Manager">Building Manager</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {/* Conditional Location Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {formData.role !== 'Admin' && (
+                  <div className="space-y-2">
+                    <Label>Assigned Branch</Label>
+                    <Select value={formData.branch} onValueChange={val => setFormData({...formData, branch: val, assignedBuildingId: 'none'})}>
+                      <SelectTrigger><SelectValue placeholder="Select Branch" /></SelectTrigger>
+                      <SelectContent>
+                        {branches?.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {formData.role === 'Building Manager' && (
+                  <div className="space-y-2">
+                    <Label>Assigned Building</Label>
+                    <Select disabled={!formData.branch} value={formData.assignedBuildingId} onValueChange={val => setFormData({...formData, assignedBuildingId: val})}>
+                      <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
+                      <SelectContent>
+                        {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                        {!buildings?.length && <SelectItem disabled value="none">No buildings in branch</SelectItem>}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Monthly Salary (৳)</Label>
+                <Input type="number" value={formData.monthlySalary} onChange={e => setFormData({...formData, monthlySalary: e.target.value})} placeholder="0.00" />
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Designation/Role</Label><Input value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} /></div>
-              <div className="space-y-2"><Label>Monthly Salary</Label><Input type="number" value={formData.monthlySalary} onChange={e => setFormData({...formData, monthlySalary: e.target.value})} /></div>
-            </div>
-            <div className="space-y-2">
-              <Label>Restricted to Building</Label>
-              <Select value={formData.assignedBuildingId} onValueChange={val => setFormData({...formData, assignedBuildingId: val})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (Full Branch Access)</SelectItem>
-                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2"><Label>Address</Label><Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
+
+            {/* Special Permissions for Building Manager */}
+            {formData.role === 'Building Manager' && (
+              <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-4 animate-in fade-in slide-in-from-top-2">
+                <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">Approval Workflow Access</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm">Can Request Income</Label>
+                      <p className="text-[10px] text-muted-foreground">Allows sending collection requests for approval.</p>
+                    </div>
+                    <Switch checked={formData.canRequestIncome} onCheckedChange={val => setFormData({...formData, canRequestIncome: val})} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm">Can Request Expense</Label>
+                      <p className="text-[10px] text-muted-foreground">Allows sending spending requests for approval.</p>
+                    </div>
+                    <Switch checked={formData.canRequestExpense} onCheckedChange={val => setFormData({...formData, canRequestExpense: val})} />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
+
           <DialogFooter>
-            <Button onClick={handleCreate} className="w-full h-12" disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="animate-spin" /> : "Save Employee"}
+            <Button onClick={handleCreate} className="w-full h-12 text-lg font-bold shadow-lg" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirm Enrollment"}
             </Button>
           </DialogFooter>
         </DialogContent>

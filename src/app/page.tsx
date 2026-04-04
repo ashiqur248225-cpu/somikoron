@@ -67,6 +67,9 @@ export default function DashboardPage() {
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [timeRange, setTimeRange] = useState("this_month")
 
+  // Permissions
+  const [canRequestIncome, setCanRequestIncome] = useState(false)
+
   // Income Entry Dialog State
   const [isIncomeDialogOpen, setIsIncomeDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -90,9 +93,10 @@ export default function DashboardPage() {
     setUserName(localStorage.getItem("user_name") || "User")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
+    setCanRequestIncome(localStorage.getItem("can_request_income") === "true")
   }, [])
 
-  // 1. Fetch Buildings
+  // 1. Fetch Buildings - Role-based filtering
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -102,11 +106,15 @@ export default function DashboardPage() {
   }, [db, userRole, userBranch, assignedBuildingId])
   const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
 
-  // 2. Fetch Students
+  // 2. Fetch Students - Role-based filtering
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    let q = query(collection(db, "students"), where("branch", "==", userBranch))
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      q = query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
+    }
+    return q
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
   const staffQuery = useMemoFirebase(() => {
@@ -122,15 +130,23 @@ export default function DashboardPage() {
   // 3. Fetch All Payments
   const allPaymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "payments"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    let q = query(collection(db, "payments"), where("branch", "==", userBranch))
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      q = query(collection(db, "payments"), where("buildingId", "==", assignedBuildingId))
+    }
+    return q
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: allPayments, isLoading: paymentsLoading } = useCollection(allPaymentsQuery)
 
   // 4. Fetch All Expenses
   const allExpensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "expenses"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    let q = query(collection(db, "expenses"), where("branch", "==", userBranch))
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      q = query(collection(db, "expenses"), where("buildingId", "==", assignedBuildingId))
+    }
+    return q
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: allExpenses, isLoading: expensesLoading } = useCollection(allExpensesQuery)
 
   // 5. Fetch All Transfers
@@ -322,51 +338,78 @@ export default function DashboardPage() {
 
     setIsSubmitting(true)
     try {
-      const pId = doc(collection(db, "payments")).id
-      const pRecord = {
-        id: pId,
-        amount: totalCashAmount,
-        seatAmount: seatPaid,
-        foodAmount: foodPaid,
-        advanceAmount: addAdvance,
-        buildingId: selectedStudent.buildingId,
-        buildingName: selectedStudent.buildingName,
-        studentName: selectedStudent.name,
-        studentId: selectedStudent.id,
-        roomNumber: selectedStudent.roomNumber,
-        branch: userBranch,
-        type: "income",
-        month: formData.month,
-        year: formData.year,
-        method: formData.method,
-        receiver: formData.receiver,
-        description: formData.description || `Collection for ${formData.month} ${formData.year}`,
-        date: serverTimestamp(),
-        createdAt: serverTimestamp()
+      if (userRole === 'Building Manager') {
+        // Create Approval Request instead of direct entry
+        const reqId = doc(collection(db, "managerRequests")).id
+        await setDoc(doc(db, "managerRequests", reqId), {
+          id: reqId,
+          requestType: "income",
+          amount: totalCashAmount,
+          seatAmount: seatPaid,
+          foodAmount: foodPaid,
+          advanceAmount: addAdvance,
+          buildingId: selectedStudent.buildingId,
+          buildingName: selectedStudent.buildingName,
+          studentName: selectedStudent.name,
+          studentId: selectedStudent.id,
+          roomNumber: selectedStudent.roomNumber,
+          branch: userBranch,
+          month: formData.month,
+          year: formData.year,
+          method: formData.method,
+          receiver: formData.receiver,
+          description: formData.description || `Income Request: ${selectedStudent.name}`,
+          requestedBy: localStorage.getItem("somikoron_auth_id"),
+          requestedByName: userName,
+          createdAt: serverTimestamp()
+        })
+        toast({ title: "Request Sent", description: "Your entry is waiting for admin approval." })
+      } else {
+        // Direct Entry for Admin/Manager
+        const pId = doc(collection(db, "payments")).id
+        const pRecord = {
+          id: pId,
+          amount: totalCashAmount,
+          seatAmount: seatPaid,
+          foodAmount: foodPaid,
+          advanceAmount: addAdvance,
+          buildingId: selectedStudent.buildingId,
+          buildingName: selectedStudent.buildingName,
+          studentName: selectedStudent.name,
+          studentId: selectedStudent.id,
+          roomNumber: selectedStudent.roomNumber,
+          branch: userBranch,
+          type: "income",
+          month: formData.month,
+          year: formData.year,
+          method: formData.method,
+          receiver: formData.receiver,
+          description: formData.description || `Collection for ${formData.month} ${formData.year}`,
+          date: serverTimestamp(),
+          createdAt: serverTimestamp()
+        }
+
+        await setDoc(doc(db, "payments", pId), pRecord)
+
+        const studentRef = doc(db, "students", selectedStudent.id)
+        const mKey = `${formData.month} ${formData.year}`
+        const currentMap = selectedStudent.duesBreakdown || {}
+        
+        if (seatPaid > 0 && currentMap[mKey] !== undefined) {
+          currentMap[mKey] = Math.max(0, currentMap[mKey] - seatPaid)
+          if (currentMap[mKey] === 0) delete currentMap[mKey]
+        }
+
+        await updateDoc(studentRef, {
+          paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }),
+          advanceAmount: increment(addAdvance),
+          duesBreakdown: currentMap,
+          updatedAt: serverTimestamp()
+        })
+        toast({ title: "Payment Recorded", description: `Amount ৳${totalCashAmount} collected.` })
       }
 
-      await setDoc(doc(db, "payments", pId), pRecord)
-
-      const studentRef = doc(db, "students", selectedStudent.id)
-      const mKey = `${formData.month} ${formData.year}`
-      const currentMap = selectedStudent.duesBreakdown || {}
-      
-      if (seatPaid > 0 && currentMap[mKey] !== undefined) {
-        currentMap[mKey] = Math.max(0, currentMap[mKey] - seatPaid)
-        if (currentMap[mKey] === 0) delete currentMap[mKey]
-      }
-
-      await updateDoc(studentRef, {
-        paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }),
-        advanceAmount: increment(addAdvance),
-        duesBreakdown: currentMap,
-        updatedAt: serverTimestamp()
-      })
-
-      toast({ title: "Payment Recorded", description: `Amount ৳${totalCashAmount} collected from ${selectedStudent.name}.` })
       setIsIncomeDialogOpen(false)
-      setEntryBuildingFilter("all")
-      setEntryRoomFilter("all")
       setFormData({
         studentId: "",
         month: MONTHS[new Date().getMonth()],
@@ -393,7 +436,7 @@ export default function DashboardPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground font-medium animate-pulse">Syncing Financial Records...</p>
+        <p className="text-sm font-medium text-muted-foreground animate-pulse">Syncing Financial Records...</p>
       </div>
     )
   }
@@ -570,19 +613,23 @@ export default function DashboardPage() {
 
       {/* Quick Action FAB */}
       <div className="fixed bottom-8 right-8 flex flex-col gap-4 items-end">
-        <Button 
-          size="icon" 
-          onClick={() => setIsIncomeDialogOpen(true)}
-          className="h-14 w-14 rounded-full shadow-2xl bg-primary hover:scale-110 transition-transform border-4 border-white"
-        >
-          <Plus size={32} />
-        </Button>
+        {(userRole !== 'Building Manager' || canRequestIncome) && (
+          <Button 
+            size="icon" 
+            onClick={() => setIsIncomeDialogOpen(true)}
+            className="h-14 w-14 rounded-full shadow-2xl bg-primary hover:scale-110 transition-transform border-4 border-white"
+          >
+            <Plus size={32} />
+          </Button>
+        )}
       </div>
 
       {/* NEW INCOME ENTRY DIALOG */}
       <Dialog open={isIncomeDialogOpen} onOpenChange={setIsIncomeDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>New Income Entry</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{userRole === 'Building Manager' ? 'Send Income Request' : 'New Income Entry'}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Filtering Controls */}
             <div className="grid grid-cols-2 gap-2 p-3 bg-secondary/30 rounded-xl border">
@@ -719,7 +766,7 @@ export default function DashboardPage() {
           </div>
           <DialogFooter>
             <Button onClick={handleCreatePayment} disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
-              {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}
+              {isSubmitting ? <Loader2 className="animate-spin" /> : (userRole === 'Building Manager' ? "Send Approval Request" : "Confirm & Save Receipt")}
             </Button>
           </DialogFooter>
         </DialogContent>
