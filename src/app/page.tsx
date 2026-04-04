@@ -59,7 +59,7 @@ export default function DashboardPage() {
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
 
-  // 1. Fetch Buildings for this branch
+  // 1. Fetch Buildings
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -69,7 +69,7 @@ export default function DashboardPage() {
   }, [db, userRole, userBranch, assignedBuildingId])
   const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
 
-  // 2. Fetch Students for this branch
+  // 2. Fetch Students
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -79,34 +79,35 @@ export default function DashboardPage() {
   }, [db, userRole, userBranch, assignedBuildingId])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
-  // 3. Fetch All Payments for this branch
+  // 3. Fetch All Payments
   const allPaymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "payments"), where("buildingId", "==", assignedBuildingId))
-    }
     return query(collection(db, "payments"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userBranch])
   const { data: allPayments, isLoading: paymentsLoading } = useCollection(allPaymentsQuery)
 
-  // 4. Fetch All Expenses for this branch
+  // 4. Fetch All Expenses
   const allExpensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "expenses"), where("buildingId", "==", assignedBuildingId))
-    }
     return query(collection(db, "expenses"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userBranch])
   const { data: allExpenses, isLoading: expensesLoading } = useCollection(allExpensesQuery)
 
-  // 5. Pending Manager Requests
+  // 5. Fetch All Transfers (Critical for Fund status)
+  const allTransfersQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "transfers"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: allTransfers, isLoading: transfersLoading } = useCollection(allTransfersQuery)
+
+  // 6. Pending Manager Requests
   const managerRequestsQuery = useMemoFirebase(() => {
     if (!userBranch || userRole === 'Building Manager') return null
     return query(collection(db, "managerRequests"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole])
   const { data: pendingMgrRequests } = useCollection(managerRequestsQuery)
 
-  // 6. Opening Balances Config
+  // 7. Opening Balances Config
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances } = useDoc(balancesRef)
 
@@ -150,14 +151,13 @@ export default function DashboardPage() {
     const totalIncome = filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
     const totalExpense = filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
 
-    // Dues Calculation (Always shows total outstanding for active residents)
+    // Dues Calculation
     const totalDues = (students || []).filter(s => s.isActive).reduce((sAcc, s) => {
       const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
       const endDate = now
       
       const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
       const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (s.monthlyRent || 0)
-      
       const historicalRentDue = s.duesBreakdown ? Object.values(s.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
       
       const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => {
@@ -181,7 +181,7 @@ export default function DashboardPage() {
       return sAcc + rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
     }, 0)
 
-    // Fund status based on ALL history for THIS branch
+    // Fund status (Opening Balances + Income - Expenses + Transfers In - Transfers Out)
     const fund = { 
       cash: Number(openingBalances?.cash || 0), 
       bank: Number(openingBalances?.bank || 0), 
@@ -189,11 +189,26 @@ export default function DashboardPage() {
       nagad: Number(openingBalances?.nagad || 0) 
     };
 
+    // Add Income
     (allPayments || []).forEach(p => { 
       if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) 
     });
+    
+    // Subtract Expenses
     (allExpenses || []).forEach(e => { 
       if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) 
+    });
+
+    // Apply Inter-Account Transfers
+    (allTransfers || []).forEach(t => {
+      // Subtract from source
+      if (fund[t.fromAccount as keyof typeof fund] !== undefined) {
+        fund[t.fromAccount as keyof typeof fund] -= (t.amount || 0)
+      }
+      // Add to destination
+      if (fund[t.toAccount as keyof typeof fund] !== undefined) {
+        fund[t.toAccount as keyof typeof fund] += (t.amount || 0)
+      }
     });
 
     return { 
@@ -203,17 +218,17 @@ export default function DashboardPage() {
       fund,
       activeResidents: (students || []).filter(s => s.isActive).length
     }
-  }, [allPayments, allExpenses, students, openingBalances, timeRange])
+  }, [allPayments, allExpenses, allTransfers, students, openingBalances, timeRange])
 
   const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
 
-  const isLoading = buildingsLoading || studentsLoading || paymentsLoading || expensesLoading
+  const isLoading = buildingsLoading || studentsLoading || paymentsLoading || expensesLoading || transfersLoading
 
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground font-medium animate-pulse">Syncing Branch Data...</p>
+        <p className="text-muted-foreground font-medium animate-pulse">Syncing Financial Records...</p>
       </div>
     )
   }
@@ -232,38 +247,20 @@ export default function DashboardPage() {
         </div>
         
         <div className="ml-auto flex items-center gap-3">
-          {/* Desktop Filter */}
-          <div className="hidden md:block">
-            <Select value={timeRange} onValueChange={setTimeRange}>
-              <SelectTrigger className="w-[160px] bg-white border-slate-200 font-bold text-slate-600 h-10 px-4 rounded-xl shadow-sm">
-                <div className="flex items-center gap-2">
-                  <CalendarIcon size={14} className="text-primary" />
-                  <SelectValue placeholder="Select period" />
-                </div>
-              </SelectTrigger>
-              <SelectContent className="rounded-xl border-slate-100">
-                <SelectItem value="today" className="font-medium">This Day</SelectItem>
-                <SelectItem value="this_week" className="font-medium">This Week</SelectItem>
-                <SelectItem value="this_month" className="font-medium">This Month</SelectItem>
-                <SelectItem value="this_year" className="font-medium">This Year</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Mobile Filter Icon */}
-          <div className="md:hidden">
-            <Select value={timeRange} onValueChange={setTimeRange}>
-              <SelectTrigger className="h-10 w-10 p-0 border-none bg-secondary/50 rounded-full flex items-center justify-center shadow-none focus:ring-0">
-                <CalendarIcon size={20} className="text-primary" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="this_week">This Week</SelectItem>
-                <SelectItem value="this_month">This Month</SelectItem>
-                <SelectItem value="this_year">This Year</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-[140px] md:w-[160px] bg-white border-slate-200 font-bold text-slate-600 h-10 px-4 rounded-xl shadow-sm">
+              <div className="flex items-center gap-2">
+                <CalendarIcon size={14} className="text-primary" />
+                <SelectValue placeholder="Period" />
+              </div>
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-slate-100">
+              <SelectItem value="today" className="font-medium">Today</SelectItem>
+              <SelectItem value="this_week" className="font-medium">This Week</SelectItem>
+              <SelectItem value="this_month" className="font-medium">This Month</SelectItem>
+              <SelectItem value="this_year" className="font-medium">This Year</SelectItem>
+            </SelectContent>
+          </Select>
 
           {userRole !== 'Building Manager' && pendingMgrRequests && pendingMgrRequests.length > 0 && (
             <Link href="/manager-requests" className="hidden sm:block">
@@ -283,7 +280,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Top Cards Grid */}
+      {/* Top Summary Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -292,7 +289,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">৳{stats.income.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1 capitalize">For {timeRange.replace('_', ' ')}</p>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1 capitalize">{timeRange.replace('_', ' ')} summary</p>
           </CardContent>
         </Card>
 
@@ -303,7 +300,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">৳{stats.expense.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1 capitalize">For {timeRange.replace('_', ' ')}</p>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1 capitalize">{timeRange.replace('_', ' ')} summary</p>
           </CardContent>
         </Card>
 
@@ -325,17 +322,18 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">{stats.activeResidents}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Active in {buildings?.length || 0} buildings</p>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">Active in {buildings?.length || 0} properties</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-5">
+        {/* Fund Status with Transfer logic applied */}
         <Card className="lg:col-span-3 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg font-bold text-slate-800">Branch Fund Status</CardTitle>
-              <p className="text-xs text-muted-foreground font-medium mt-1">Opening + Transactions (including transfers).</p>
+              <p className="text-xs text-muted-foreground font-medium mt-1">Reflects Opening Balances + Income - Expenses + Internal Transfers.</p>
             </div>
             <div className="bg-primary/5 p-3 rounded-2xl text-primary border border-primary/10"><CircleDollarSign size={24} /></div>
           </CardHeader>
@@ -366,10 +364,11 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Occupancy Card */}
         <Card className="lg:col-span-2 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-bold text-white bg-primary px-4 py-1 rounded-lg">Property Occupancy</CardTitle>
+              <CardTitle className="text-lg font-bold text-primary px-4 py-1 bg-primary/5 rounded-lg border border-primary/10">Property Occupancy</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="p-8">
@@ -400,7 +399,7 @@ export default function DashboardPage() {
               {(!buildings || buildings.length === 0) && (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground opacity-30">
                   <Building2 size={64} strokeWidth={1} />
-                  <p className="mt-4 font-bold text-sm">No Properties Found</p>
+                  <p className="mt-4 font-bold text-sm">No properties registered.</p>
                 </div>
               )}
             </div>
@@ -408,7 +407,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* FAB - Quick Actions */}
+      {/* Quick Action FAB */}
       <div className="fixed bottom-8 right-8 flex flex-col gap-4 items-end">
         <Link href="/income">
           <Button size="icon" className="h-14 w-14 rounded-full shadow-2xl bg-primary hover:scale-110 transition-transform border-4 border-white">

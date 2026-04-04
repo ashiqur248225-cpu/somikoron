@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Table, 
@@ -26,11 +26,10 @@ import {
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, query, orderBy, limit, where } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection, serverTimestamp, doc, setDoc, query, where, limit } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
@@ -69,9 +68,18 @@ export default function TransfersPage() {
 
   const transfersQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "transfers"), where("branch", "==", userBranch), limit(100))
+    return query(collection(db, "transfers"), where("branch", "==", userBranch), limit(200))
   }, [db, userBranch])
-  const { data: transfers, isLoading } = useCollection(transfersQuery)
+  const { data: rawTransfers, isLoading } = useCollection(transfersQuery)
+
+  const sortedTransfers = useMemo(() => {
+    if (!rawTransfers) return []
+    return [...rawTransfers].sort((a, b) => {
+      const dateA = a.date?.toDate ? a.date.toDate() : (a.date ? new Date(a.date) : new Date(0))
+      const dateB = b.date?.toDate ? b.date.toDate() : (b.date ? new Date(b.date) : new Date(0))
+      return dateB.getTime() - dateA.getTime()
+    })
+  }, [rawTransfers])
 
   const handleCreate = async () => {
     if (!formData.amount || !formData.senderId || !formData.receiverId) {
@@ -79,14 +87,19 @@ export default function TransfersPage() {
       return
     }
 
+    if (formData.fromAccount === formData.toAccount) {
+      toast({ variant: "destructive", title: "Invalid Transfer", description: "Source and destination accounts must be different." })
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const sender = staff?.find(s => s.id === formData.senderId)
       const receiver = staff?.find(s => s.id === formData.receiverId)
-      const transferId = doc(collection(db, "transfers")).id
+      const transferRef = doc(collection(db, "transfers"))
       
       const transferData = {
-        id: transferId,
+        id: transferRef.id,
         branch: userBranch,
         amount: Number(formData.amount),
         fromAccount: formData.fromAccount,
@@ -95,11 +108,13 @@ export default function TransfersPage() {
         senderName: sender?.name || "Unknown",
         receiverId: formData.receiverId,
         receiverName: receiver?.name || "Unknown",
-        description: formData.description,
-        date: serverTimestamp()
+        description: formData.description || "",
+        date: serverTimestamp(),
+        createdAt: serverTimestamp()
       }
 
-      setDocumentNonBlocking(doc(db, "transfers", transferId), transferData, { merge: true })
+      await setDoc(transferRef, transferData)
+      
       toast({ title: "Success", description: "Transfer recorded successfully." })
       setFormData({ amount: "", fromAccount: "cash", toAccount: "bank", senderId: "", receiverId: "", description: "" })
       setIsAddOpen(false)
@@ -128,17 +143,55 @@ export default function TransfersPage() {
             <DialogTrigger asChild>
               <Button size="sm" className="gap-2"><Plus size={18} /> <span className="hidden sm:inline">New Transfer</span></Button>
             </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Record Transfer</DialogTitle></DialogHeader>
+            <DialogContent className="max-w-md">
+              <DialogHeader><DialogTitle>Record Fund Movement</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
-                <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="Amount (৳)" />
-                <div className="grid grid-cols-2 gap-4">
-                  <Select value={formData.fromAccount} onValueChange={val => setFormData({...formData, fromAccount: val})}><SelectTrigger><SelectValue placeholder="From" /></SelectTrigger><SelectContent>{ACCOUNTS.map(a => <SelectItem key={a.id} value={a.id}>{a.label}</SelectItem>)}</SelectContent></Select>
-                  <Select value={formData.toAccount} onValueChange={val => setFormData({...formData, toAccount: val})}><SelectTrigger><SelectValue placeholder="To" /></SelectTrigger><SelectContent>{ACCOUNTS.map(a => <SelectItem key={a.id} value={a.id}>{a.label}</SelectItem>)}</SelectContent></Select>
+                <div className="space-y-2">
+                  <Label>Amount (৳)</Label>
+                  <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" className="text-lg font-bold" />
                 </div>
-                <Select value={formData.senderId} onValueChange={val => setFormData({...formData, senderId: val})}><SelectTrigger><SelectValue placeholder="Sender Staff" /></SelectTrigger><SelectContent>{staff?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select>
-                <Select value={formData.receiverId} onValueChange={val => setFormData({...formData, receiverId: val})}><SelectTrigger><SelectValue placeholder="Receiver Staff" /></SelectTrigger><SelectContent>{staff?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select>
-                <Button onClick={handleCreate} disabled={isSubmitting} className="w-full h-12 font-bold">Confirm Transfer</Button>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>From Account</Label>
+                    <Select value={formData.fromAccount} onValueChange={val => setFormData({...formData, fromAccount: val})}>
+                      <SelectTrigger><SelectValue placeholder="From" /></SelectTrigger>
+                      <SelectContent>{ACCOUNTS.map(a => <SelectItem key={a.id} value={a.id}>{a.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>To Account</Label>
+                    <Select value={formData.toAccount} onValueChange={val => setFormData({...formData, toAccount: val})}>
+                      <SelectTrigger><SelectValue placeholder="To" /></SelectTrigger>
+                      <SelectContent>{ACCOUNTS.map(a => <SelectItem key={a.id} value={a.id}>{a.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Sender Staff</Label>
+                  <Select value={formData.senderId} onValueChange={val => setFormData({...formData, senderId: val})}>
+                    <SelectTrigger><SelectValue placeholder="Who is sending?" /></SelectTrigger>
+                    <SelectContent>{staff?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Receiver Staff</Label>
+                  <Select value={formData.receiverId} onValueChange={val => setFormData({...formData, receiverId: val})}>
+                    <SelectTrigger><SelectValue placeholder="Who is receiving?" /></SelectTrigger>
+                    <SelectContent>{staff?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Note / Purpose</Label>
+                  <Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Reason for transfer..." />
+                </div>
+
+                <Button onClick={handleCreate} disabled={isSubmitting} className="w-full h-12 font-bold text-lg">
+                  {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Confirm & Save Transfer"}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -154,7 +207,7 @@ export default function TransfersPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
       ) : (
         <>
           {/* Table for Desktop */}
@@ -164,24 +217,30 @@ export default function TransfersPage() {
                 <TableHeader className="bg-secondary/30">
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead>Route</TableHead>
-                    <TableHead>Involved Staff</TableHead>
+                    <TableHead>Movement Route</TableHead>
+                    <TableHead>Personnel</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transfers?.map((t) => (
+                  {sortedTransfers?.map((t) => (
                     <TableRow key={t.id}>
-                      <TableCell className="text-xs">{t.date?.toDate?.() ? t.date.toDate().toLocaleDateString() : 'Processing'}</TableCell>
+                      <TableCell className="text-xs font-bold text-slate-500">
+                        {t.date?.toDate ? t.date.toDate().toLocaleDateString() : 'Processing'}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="capitalize bg-slate-50">{t.fromAccount}</Badge>
+                          <Badge variant="outline" className="capitalize bg-slate-50 font-bold">{t.fromAccount}</Badge>
                           <ArrowRight size={14} className="text-muted-foreground" />
-                          <Badge variant="outline" className="capitalize bg-primary/5 text-primary border-primary/20">{t.toAccount}</Badge>
+                          <Badge variant="outline" className="capitalize bg-primary/5 text-primary border-primary/20 font-bold">{t.toAccount}</Badge>
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs font-medium">{t.senderName} &rarr; {t.receiverName}</TableCell>
-                      <TableCell className="text-right font-black text-slate-800">৳{t.amount?.toLocaleString()}</TableCell>
+                      <TableCell className="text-xs font-medium text-slate-600">
+                        {t.senderName} <span className="text-slate-300 mx-1">&rarr;</span> {t.receiverName}
+                      </TableCell>
+                      <TableCell className="text-right font-black text-slate-800 text-lg">
+                        ৳{t.amount?.toLocaleString()}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -191,7 +250,7 @@ export default function TransfersPage() {
 
           {/* Cards for Mobile */}
           <div className="md:hidden space-y-4">
-            {transfers?.map((t) => (
+            {sortedTransfers?.map((t) => (
               <Card key={t.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start">
@@ -199,23 +258,25 @@ export default function TransfersPage() {
                       <div className="bg-primary/10 p-2 rounded-lg text-primary"><ArrowLeftRight size={18} /></div>
                       <div>
                         <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest leading-none">Internal Transfer</p>
-                        <p className="text-xs font-bold text-slate-400 mt-1">{t.date?.toDate?.() ? t.date.toDate().toLocaleDateString() : 'Processing'}</p>
+                        <p className="text-xs font-bold text-slate-400 mt-1">
+                          {t.date?.toDate ? t.date.toDate().toLocaleDateString() : 'Processing'}
+                        </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-black text-primary leading-none">৳{t.amount?.toLocaleString()}</p>
+                      <p className="text-xl font-black text-primary leading-none">৳{t.amount?.toLocaleString()}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between bg-secondary/30 p-3 rounded-xl border border-secondary">
                     <div className="text-center flex-1">
                       <p className="text-[8px] font-bold text-muted-foreground uppercase mb-1">From</p>
-                      <Badge variant="secondary" className="capitalize text-[10px]">{t.fromAccount}</Badge>
+                      <Badge variant="secondary" className="capitalize text-[10px] font-bold">{t.fromAccount}</Badge>
                     </div>
                     <ArrowRight size={14} className="text-muted-foreground mx-2" />
                     <div className="text-center flex-1">
                       <p className="text-[8px] font-bold text-muted-foreground uppercase mb-1">To</p>
-                      <Badge className="capitalize text-[10px] bg-primary">{t.toAccount}</Badge>
+                      <Badge className="capitalize text-[10px] bg-primary font-bold">{t.toAccount}</Badge>
                     </div>
                   </div>
 
@@ -226,7 +287,7 @@ export default function TransfersPage() {
                 </CardContent>
               </Card>
             ))}
-            {transfers?.length === 0 && (
+            {sortedTransfers?.length === 0 && (
               <div className="text-center py-12 text-muted-foreground italic">No transfers found.</div>
             )}
           </div>
