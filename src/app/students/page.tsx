@@ -44,6 +44,8 @@ export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
+  const [roomFilter, setRoomFilter] = useState("")
+  const [planFilter, setPlanFilter] = useState("all")
   
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
@@ -80,9 +82,12 @@ export default function StudentsPage() {
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
-      return matchesSearch && matchesBuilding && matchesStatus
+      const matchesRoom = !roomFilter || s.roomNumber?.toLowerCase().includes(roomFilter.toLowerCase())
+      const matchesPlan = planFilter === "all" || s.paymentSystem === planFilter
+      
+      return matchesSearch && matchesBuilding && matchesStatus && matchesRoom && matchesPlan
     })
-  }, [students, searchTerm, buildingFilter, statusFilter])
+  }, [students, searchTerm, buildingFilter, statusFilter, roomFilter, planFilter])
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
@@ -105,10 +110,63 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      <div className="bg-secondary/20 p-4 rounded-xl border grid grid-cols-1 md:grid-cols-4 gap-4 items-end print:hidden">
-        <div className="flex-1 space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label><Input placeholder="Name or phone..." className="bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-        <div className="w-full md:w-48 space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-        <Button variant="ghost" className="h-10 font-bold uppercase text-xs" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); }}><XCircle size={14} className="mr-1" /> Reset</Button>
+      <div className="bg-secondary/20 p-4 rounded-xl border space-y-4 print:hidden">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Search size={10}/> Name or Phone</Label>
+            <Input placeholder="Search..." className="bg-white h-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Building2 size={10}/> Building</Label>
+            <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+              <SelectTrigger className="bg-white h-10"><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Buildings</SelectItem>
+                {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><DoorOpen size={10}/> Room No.</Label>
+            <Input placeholder="e.g. 301" className="bg-white h-10" value={roomFilter} onChange={e => setRoomFilter(e.target.value)} />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Payment Plan</Label>
+            <Select value={planFilter} onValueChange={setPlanFilter}>
+              <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Plans</SelectItem>
+                <SelectItem value="package">Package Plan</SelectItem>
+                <SelectItem value="non-package">Non-Package</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Resident Status</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Records</SelectItem>
+                <SelectItem value="active">Active Residents</SelectItem>
+                <SelectItem value="left">Left Residents</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="md:col-span-2 flex justify-end">
+            <Button variant="ghost" className="h-10 font-bold uppercase text-xs" onClick={() => { 
+              setSearchTerm(""); 
+              setBuildingFilter("all"); 
+              setRoomFilter(""); 
+              setPlanFilter("all"); 
+              setStatusFilter("active"); 
+            }}>
+              <XCircle size={14} className="mr-1" /> Reset Filters
+            </Button>
+          </div>
+        </div>
       </div>
 
       {isLoading ? (
@@ -130,10 +188,33 @@ export default function StudentsPage() {
                 <TableBody>
                   {filteredStudents.map((s: any) => (
                     <TableRow key={s.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(`/students/${s.id}`)}>
-                      <TableCell><div className="flex items-center gap-3"><div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold">{s.name.substring(0, 2)}</div><div className="flex flex-col"><span className="font-bold">{s.name}</span><span className="text-[10px] text-muted-foreground">{s.phone}</span></div></div></TableCell>
-                      <TableCell><div className="flex flex-col"><span className="text-sm font-medium">{s.buildingName}</span><span className="text-[10px] text-muted-foreground">Room {s.roomNumber}</span></div></TableCell>
-                      <TableCell><Badge variant={s.isActive ? "default" : "secondary"} className={cn("text-[9px] uppercase", s.isActive && "bg-success")}>{s.isActive ? "Active" : "Left"}</Badge></TableCell>
-                      <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); router.push(`/students/${s.id}`); }}><Eye size={16} /></Button></TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold">
+                            {s.name.substring(0, 2)}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-bold">{s.name}</span>
+                            <span className="text-[10px] text-muted-foreground">{s.phone}</span>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">{s.buildingName}</span>
+                          <span className="text-[10px] text-muted-foreground">Room {s.roomNumber}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={s.isActive ? "default" : "secondary"} className={cn("text-[9px] uppercase", s.isActive && "bg-success")}>
+                          {s.isActive ? "Active" : "Left"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); router.push(`/students/${s.id}`); }}>
+                          <Eye size={16} />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

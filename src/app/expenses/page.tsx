@@ -61,14 +61,27 @@ export default function ExpenseHistoryPage() {
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
   const [categoryFilter, setCategoryFilter] = useState("all")
+  const [buildingFilter, setBuildingFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
+    
+    if (localStorage.getItem("user_role") === 'Building Manager' && localStorage.getItem("assigned_building_id") !== 'none') {
+      setBuildingFilter(localStorage.getItem("assigned_building_id") || "all")
+    }
   }, [])
+
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: buildings } = useCollection(buildingsQuery)
 
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -88,10 +101,16 @@ export default function ExpenseHistoryPage() {
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
       const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
+      const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
       const matchesSearch = (e.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) || (e.description || "").toLowerCase().includes(searchTerm.toLowerCase())
-      return matchesCategory && matchesSearch
+      
+      const eDate = new Date(e.expenseDate)
+      const matchesStartDate = !startDate || eDate >= new Date(startDate)
+      const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
+      
+      return matchesCategory && matchesBuilding && matchesSearch && matchesStartDate && matchesEndDate
     })
-  }, [expenses, categoryFilter, searchTerm])
+  }, [expenses, categoryFilter, buildingFilter, searchTerm, startDate, endDate])
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
@@ -114,10 +133,47 @@ export default function ExpenseHistoryPage() {
         </div>
       </div>
 
-      <div className="bg-secondary/20 p-4 rounded-xl border grid grid-cols-1 md:grid-cols-4 gap-4 items-end print:hidden">
-        <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Categories</SelectItem>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1 md:col-span-2"><Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label><Input placeholder="Description or party..." className="bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-        <Button variant="ghost" className="h-10 font-bold uppercase text-xs" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); }}><XCircle size={14} className="mr-1" /> Reset</Button>
+      <div className="bg-secondary/20 p-4 rounded-xl border space-y-4 print:hidden">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Category</Label>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
+            <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+              <SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Properties</SelectItem>
+                {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label>
+            <Input placeholder="Description or party..." className="bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Calendar size={10}/> Date From</Label>
+            <Input type="date" className="bg-white h-10" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Calendar size={10}/> Date To</Label>
+            <Input type="date" className="bg-white h-10" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          </div>
+          <Button variant="ghost" className="h-10 font-bold uppercase text-xs" onClick={() => { setSearchTerm(""); setCategoryFilter("all"); setBuildingFilter("all"); setStartDate(""); setEndDate(""); }}>
+            <XCircle size={14} className="mr-1" /> Reset Filters
+          </Button>
+        </div>
       </div>
 
       {expensesLoading ? (

@@ -47,9 +47,6 @@ export default function IncomeHistoryPage() {
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [methodFilter, setMethodFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
-  const [roomFilter, setRoomFilter] = useState("")
-  const [planFilter, setPlanFilter] = useState("all")
-  const [residentStatusFilter, setResidentStatusFilter] = useState("all")
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("")
 
@@ -132,17 +129,10 @@ export default function IncomeHistoryPage() {
       const matchesBuilding = buildingFilter === "all" || p.buildingId === buildingFilter
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
       const matchesSearch = p.studentName?.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesRoom = !roomFilter || (p.roomNumber || "").toLowerCase().includes(roomFilter.toLowerCase())
       
-      const student = students?.find(s => s.id === p.studentId)
-      const matchesPlan = planFilter === "all" || (student?.paymentSystem === planFilter)
-      const matchesResidentStatus = residentStatusFilter === "all" 
-        ? true 
-        : (residentStatusFilter === "active" ? student?.isActive : !student?.isActive)
-
-      return matchesStartDate && matchesEndDate && matchesBuilding && matchesMethod && matchesSearch && matchesRoom && matchesPlan && matchesResidentStatus
+      return matchesStartDate && matchesEndDate && matchesBuilding && matchesMethod && matchesSearch
     })
-  }, [payments, students, startDate, endDate, buildingFilter, methodFilter, searchTerm, roomFilter, planFilter, residentStatusFilter])
+  }, [payments, startDate, endDate, buildingFilter, methodFilter, searchTerm])
 
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver) {
@@ -253,10 +243,10 @@ export default function IncomeHistoryPage() {
         </div>
       </div>
 
-      {/* Advanced Filter Panel */}
+      {/* Date & Search Filter Panel */}
       <div className="bg-secondary/20 p-4 rounded-xl border space-y-4 print:hidden">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          <div className="space-y-1">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="space-y-1 md:col-span-2">
             <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Search size={10}/> Student Name</Label>
             <Input placeholder="Search..." className="bg-white h-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
@@ -267,35 +257,6 @@ export default function IncomeHistoryPage() {
               <SelectContent>
                 <SelectItem value="all">All Buildings</SelectItem>
                 {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><DoorOpen size={10}/> Room No.</Label>
-            <Input placeholder="e.g. 301" className="bg-white h-10" value={roomFilter} onChange={e => setRoomFilter(e.target.value)} />
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Payment Plan</Label>
-            <Select value={planFilter} onValueChange={setPlanFilter}>
-              <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Plans</SelectItem>
-                <SelectItem value="package">Package Plan</SelectItem>
-                <SelectItem value="non-package">Non-Package</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Resident Status</Label>
-            <Select value={residentStatusFilter} onValueChange={setResidentStatusFilter}>
-              <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Records</SelectItem>
-                <SelectItem value="active">Active Residents</SelectItem>
-                <SelectItem value="left">Left Residents</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -312,15 +273,25 @@ export default function IncomeHistoryPage() {
               </SelectContent>
             </Select>
           </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Calendar size={10}/> Date From</Label>
+            <Input type="date" className="bg-white h-10" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1"><Calendar size={10}/> Date To</Label>
+            <Input type="date" className="bg-white h-10" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          </div>
           <Button variant="ghost" className="h-10 font-bold uppercase text-xs" onClick={() => { 
             setSearchTerm(""); 
             setBuildingFilter("all"); 
             setMethodFilter("all"); 
-            setRoomFilter(""); 
-            setPlanFilter("all"); 
-            setResidentStatusFilter("all");
+            setStartDate(""); 
+            setEndDate(""); 
           }}>
-            <XCircle size={14} className="mr-1" /> Reset
+            <XCircle size={14} className="mr-1" /> Reset Date Filter
           </Button>
         </div>
       </div>
