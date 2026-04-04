@@ -56,6 +56,7 @@ export default function IncomeHistoryPage() {
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [methodFilter, setMethodFilter] = useState("all")
   const [receiverFilter, setReceiverFilter] = useState("all")
+  const [categoryFilter, setCategoryFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("")
@@ -90,7 +91,7 @@ export default function IncomeHistoryPage() {
       return query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
     }
     return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userRole, userBranch, assignedBuildingId])
   const { data: students } = useCollection(studentsQuery)
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
@@ -150,9 +151,16 @@ export default function IncomeHistoryPage() {
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
       const matchesReceiver = receiverFilter === "all" || p.receiver === receiverFilter
       const matchesSearch = p.studentName?.toLowerCase().includes(searchTerm.toLowerCase())
-      return matchesStartDate && matchesEndDate && matchesBuilding && matchesMethod && matchesReceiver && matchesSearch
+      
+      const matchesCategory = categoryFilter === "all" || 
+        (categoryFilter === "rent" && (p.seatAmount || 0) > 0) ||
+        (categoryFilter === "food" && (p.foodAmount || 0) > 0) ||
+        (categoryFilter === "advance" && (p.advanceAmount || 0) > 0) ||
+        (categoryFilter === "service" && (p.serviceCharge || 0) > 0)
+
+      return matchesStartDate && matchesEndDate && matchesBuilding && matchesMethod && matchesReceiver && matchesSearch && matchesCategory
     })
-  }, [payments, startDate, endDate, buildingFilter, methodFilter, receiverFilter, searchTerm])
+  }, [payments, startDate, endDate, buildingFilter, methodFilter, receiverFilter, categoryFilter, searchTerm])
 
   const totalFilteredIncome = useMemo(() => filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0), [filteredPayments])
 
@@ -226,7 +234,7 @@ export default function IncomeHistoryPage() {
   }
 
   const handleResetFilters = () => {
-    setSearchTerm(""); setStartDate(""); setEndDate(""); setBuildingFilter("all"); setMethodFilter("all"); setReceiverFilter("all")
+    setSearchTerm(""); setStartDate(""); setEndDate(""); setBuildingFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setCategoryFilter("all");
   }
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
@@ -256,13 +264,13 @@ export default function IncomeHistoryPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 print:hidden">
         <Card className="bg-income/5 border-none shadow-sm border-l-4 border-l-income">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-income flex items-center justify-between">
-              <span className="flex items-center gap-2"><HandCoins size={16} /> Total Collections (Filtered)</span>
-              <Badge variant="outline" className="bg-income/10 text-income border-income/20 px-3 py-1">
-                {filteredPayments.length} Receipts
-              </Badge>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm font-medium text-income flex items-center gap-2">
+              <HandCoins size={16} /> Total Collections (Filtered)
             </CardTitle>
+            <Badge variant="outline" className="bg-income/10 text-income border-income/20 px-3 py-1">
+              {filteredPayments.length} Receipts
+            </Badge>
           </CardHeader>
           <CardContent>
             <div className="flex justify-between items-end">
@@ -273,13 +281,50 @@ export default function IncomeHistoryPage() {
       </div>
 
       {userRole !== 'Building Manager' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4 bg-secondary/20 p-4 rounded-xl border items-end print:hidden">
-           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">Search</Label><Input placeholder="Student name..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">From Date</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
-           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">To Date</Label><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
-           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Methods</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
-           <Button variant="ghost" type="button" className="h-10" onClick={handleResetFilters}><XCircle size={14} className="mr-1" /> Reset</Button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4 bg-secondary/20 p-4 rounded-xl border items-end print:hidden">
+           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">Search</Label><Input placeholder="Name..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">From</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
+           <div className="space-y-1"><Label className="text-[10px] text-muted-foreground uppercase font-bold">To</Label><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
+           <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Building</Label>
+              <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+              </Select>
+           </div>
+           <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Method</Label>
+              <Select value={methodFilter} onValueChange={setMethodFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All Methods</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
+              </Select>
+           </div>
+           <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Receiver</Label>
+              <Select value={receiverFilter} onValueChange={setReceiverFilter}>
+                <SelectTrigger><SelectValue placeholder="All Staff" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Staff</SelectItem>
+                  {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+           </div>
+           <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground uppercase font-bold">Purpose</Label>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Purposes</SelectItem>
+                  <SelectItem value="rent">Seat Rent</SelectItem>
+                  <SelectItem value="food">Food Credit</SelectItem>
+                  <SelectItem value="advance">Advance</SelectItem>
+                  <SelectItem value="service">Service Charge</SelectItem>
+                </SelectContent>
+              </Select>
+           </div>
+           <div className="xl:col-span-2">
+             <Button variant="ghost" type="button" className="h-10 w-full" onClick={handleResetFilters}><XCircle size={14} className="mr-1" /> Reset</Button>
+           </div>
         </div>
       )}
 
@@ -291,24 +336,26 @@ export default function IncomeHistoryPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Student</TableHead>
                 <TableHead>Details</TableHead>
+                <TableHead>Receiver</TableHead>
                 <TableHead>Method</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paymentsLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
               ) : filteredPayments.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="text-xs">{p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A')}</TableCell>
                   <TableCell className="font-medium">{p.studentName}</TableCell>
                   <TableCell><span className="text-[10px] text-muted-foreground">{p.description}</span></TableCell>
+                  <TableCell className="text-xs font-medium">{p.receiver || 'N/A'}</TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
                   <TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
               {filteredPayments.length === 0 && !paymentsLoading && (
-                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No income records found for this building/branch.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No income records found for these criteria.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
