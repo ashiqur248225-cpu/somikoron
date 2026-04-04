@@ -33,7 +33,7 @@ import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const YEARS = ["2023", "2024", "2025", "2026"];
+const YEARS = ["2024", "2025", "2026"];
 
 export default function RegistrationsPage() {
   const { toast } = useToast()
@@ -82,7 +82,7 @@ export default function RegistrationsPage() {
     monthlyRent: "",
     serviceCharge: "0",
     advanceAmount: "0",
-    foodDueAmount: "0", 
+    foodDueAmount: "0", // For old students balance
     initialRentPayment: "0", 
     initialFoodPayment: "0", 
     paymentSystem: "package",
@@ -94,6 +94,7 @@ export default function RegistrationsPage() {
     seatNumber: ""
   })
 
+  // State for Month-wise dues for Old Students
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
   const addDueRow = () => {
@@ -118,6 +119,14 @@ export default function RegistrationsPage() {
         roomNumber: selectedReg.roomNumber || "",
         seatNumber: selectedReg.seatNumber || "",
         paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
+        monthlyRent: "",
+        serviceCharge: "0",
+        advanceAmount: "0",
+        initialRentPayment: "0",
+        initialFoodPayment: "0",
+        foodDueAmount: "0",
+        receiver: "",
+        method: "cash"
       }))
       setHistoricalDues([])
     }
@@ -136,7 +145,12 @@ export default function RegistrationsPage() {
 
   const handleApprove = async () => {
     if (!approvalForm.monthlyRent || !approvalForm.buildingId || !approvalForm.roomNumber || !approvalForm.seatNumber) {
-      toast({ variant: "destructive", title: "Error", description: "Rent and Location are required." })
+      toast({ variant: "destructive", title: "Error", description: "Monthly Rent and Location (Building/Room/Seat) are required." })
+      return
+    }
+
+    if (selectedReg.type === 'new' && !approvalForm.receiver) {
+      toast({ variant: "destructive", title: "Error", description: "Please select who received the initial payment." })
       return
     }
 
@@ -153,6 +167,7 @@ export default function RegistrationsPage() {
       const svcCharge = Number(approvalForm.serviceCharge)
       const advAmount = Number(approvalForm.advanceAmount)
       
+      // Calculate Historical Dues for Old Students
       const duesBreakdown: Record<string, number> = {}
       let totalHistDue = 0
       historicalDues.forEach(d => {
@@ -163,14 +178,14 @@ export default function RegistrationsPage() {
         }
       })
 
-      const histFoodDue = -Number(approvalForm.foodDueAmount || 0)
+      // NEW STUDENT INCOME LOGIC: Collect all initial payments into income
       const rentPaid = Number(approvalForm.initialRentPayment)
       const foodPaid = Number(approvalForm.initialFoodPayment)
       const totalNewReceived = rentPaid + advAmount + svcCharge + foodPaid
 
       if (!isOld && totalNewReceived > 0) {
         const pId = doc(collection(db, "payments")).id
-        await setDoc(doc(db, "payments", pId), {
+        const pRecord = {
           id: pId,
           amount: totalNewReceived,
           seatAmount: rentPaid,
@@ -188,12 +203,14 @@ export default function RegistrationsPage() {
           year: new Date().getFullYear().toString(),
           method: approvalForm.method,
           receiver: approvalForm.receiver,
-          description: "Initial registration payment",
+          description: "Admission initial payment (Rent + Adv + Svc + Food)",
           date: serverTimestamp(),
           createdAt: serverTimestamp()
-        })
+        }
+        await setDoc(doc(db, "payments", pId), pRecord)
       }
 
+      // Create Student Document
       await setDoc(doc(db, "students", studentId), {
         id: studentId,
         name: selectedReg.name,
@@ -209,22 +226,24 @@ export default function RegistrationsPage() {
         monthlyRent: monthlyRent,
         serviceCharge: svcCharge,
         advanceAmount: advAmount,
-        dueAmount: isOld ? totalHistDue : (rentPaid >= monthlyRent ? 0 : monthlyRent),
+        // Dues Logic: New student starts clean or with current month unpaid if rentPaid < monthlyRent
+        // Old student gets the historical dues map
         duesBreakdown: isOld ? duesBreakdown : {},
-        foodDueAmount: isOld ? histFoodDue : 0,
+        // Food Balance: Old student can have historical balance (positive or negative)
+        foodDueAmount: isOld ? -Number(approvalForm.foodDueAmount || 0) : 0, 
         billingStartDate: approvalForm.billingStartDate,
         paymentSystem: approvalForm.paymentSystem,
         isActive: true,
         branch: userBranch,
         paymentsHistory: !isOld && totalNewReceived > 0 ? [{
-          id: 'initial',
+          id: 'admission-initial',
           amount: totalNewReceived,
           seatAmount: rentPaid,
           advanceAmount: advAmount,
           serviceCharge: svcCharge,
           foodAmount: foodPaid,
           method: approvalForm.method,
-          description: "Initial payment at registration",
+          description: "Payment at admission",
           date: new Date().toISOString(),
           month: new Date().toLocaleString('default', { month: 'long' }),
           year: new Date().getFullYear().toString()
@@ -234,6 +253,7 @@ export default function RegistrationsPage() {
         updatedAt: serverTimestamp()
       })
 
+      // Update Building Seats
       const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
         if (apt.name === aptName) {
           return {
@@ -259,7 +279,9 @@ export default function RegistrationsPage() {
         updatedAt: serverTimestamp()
       })
 
+      // Remove from Pending Requests
       await deleteDoc(doc(db, "registrations", selectedReg.id))
+      
       toast({ title: "Approved!", description: `${selectedReg.name} is now an active resident.` })
       setIsDetailOpen(false)
       setSelectedReg(null)
@@ -337,7 +359,7 @@ export default function RegistrationsPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Button variant="outline" size="sm" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}>
-                          <Eye size={14} className="mr-1" /> View
+                          <Eye size={14} className="mr-1" /> Review
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -398,59 +420,69 @@ export default function RegistrationsPage() {
           {selectedReg && (
             <div className="space-y-6 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Information Column */}
+                {/* Column 1: Info & Location */}
                 <div className="space-y-4">
                   <div className="p-4 bg-secondary/20 rounded-xl border space-y-3">
-                    <h3 className="font-bold flex items-center gap-2 text-primary"><Info size={16}/> Applicant Info</h3>
-                    <div className="text-sm grid grid-cols-2 gap-y-2">
+                    <h3 className="font-bold flex items-center gap-2 text-primary uppercase text-[10px] tracking-widest"><Info size={14}/> Applicant Info</h3>
+                    <div className="text-xs grid grid-cols-2 gap-y-2">
                       <span className="text-muted-foreground">Type:</span> 
-                      <Badge variant="secondary" className="w-fit h-5 text-[10px] capitalize">{selectedReg.type} Resident</Badge>
+                      <Badge variant="secondary" className="w-fit h-5 text-[9px] capitalize">{selectedReg.type} Resident</Badge>
+                      <span className="text-muted-foreground">Occupation:</span> <span className="capitalize">{selectedReg.occupation?.replace('_', ' ')}</span>
                       <span className="text-muted-foreground">Phone:</span> <span>{selectedReg.phone}</span>
-                      <span className="text-muted-foreground">Guardian:</span> <span>{selectedReg.parentPhone}</span>
                       <span className="text-muted-foreground">District:</span> <span>{selectedReg.district}</span>
                     </div>
                   </div>
 
                   <div className="p-4 border rounded-xl space-y-4">
-                    <h3 className="font-bold flex items-center gap-2 text-primary"><Building2 size={16}/> Room Allocation</h3>
+                    <h3 className="font-bold flex items-center gap-2 text-primary uppercase text-[10px] tracking-widest"><Building2 size={14}/> Room Allocation</h3>
                     <div className="grid grid-cols-1 gap-4">
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold">Building</Label>
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
                         <Select value={approvalForm.buildingId} onValueChange={val => setApprovalForm({...approvalForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
-                          <SelectTrigger><SelectValue placeholder="Select Building" /></SelectTrigger>
+                          <SelectTrigger className="h-9"><SelectValue placeholder="Select Building" /></SelectTrigger>
                           <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <Label className="text-[10px] uppercase font-bold">Room</Label>
+                          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room</Label>
                           <Select disabled={!approvalForm.buildingId} value={approvalForm.roomNumber} onValueChange={val => setApprovalForm({...approvalForm, roomNumber: val, seatNumber: ""})}>
-                            <SelectTrigger><SelectValue placeholder="Room" /></SelectTrigger>
-                            <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`${selectedReg.id}-${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
+                            <SelectTrigger className="h-9"><SelectValue placeholder="Room" /></SelectTrigger>
+                            <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`room-${idx}`} value={r.roomNo}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-[10px] uppercase font-bold">Seat</Label>
+                          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Seat</Label>
                           <Select disabled={!approvalForm.roomNumber} value={approvalForm.seatNumber} onValueChange={val => setApprovalForm({...approvalForm, seatNumber: val})}>
-                            <SelectTrigger><SelectValue placeholder="Seat" /></SelectTrigger>
-                            <SelectContent>{emptySeats.map((s: any) => <SelectItem key={`${selectedReg.id}-${s.seatNo}`} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
+                            <SelectTrigger className="h-9"><SelectValue placeholder="Seat" /></SelectTrigger>
+                            <SelectContent>{emptySeats.map((s: any) => <SelectItem key={`seat-${s.seatNo}`} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                       </div>
                     </div>
                   </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Billing Starts From</Label>
+                    <Input type="date" value={approvalForm.billingStartDate} onChange={e => setApprovalForm({...approvalForm, billingStartDate: e.target.value})} className="h-10" />
+                    <p className="text-[9px] text-muted-foreground mt-1">ভাড়ার হিসাব এই তারিখ থেকে স্বয়ংক্রিয়ভাবে গণনা করা হবে।</p>
+                  </div>
                 </div>
 
-                {/* Financial Column */}
+                {/* Column 2: Financial Setup */}
                 <div className="space-y-4">
                   <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
-                    <h3 className="font-bold text-primary flex items-center gap-2"><Calculator size={18}/> Financial Setup</h3>
+                    <h3 className="font-bold text-primary flex items-center gap-2 uppercase text-[10px] tracking-widest"><Calculator size={14}/> Financial Parameters</h3>
+                    
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold">Payment Plan</Label>
                         <Select value={approvalForm.paymentSystem} onValueChange={val => setApprovalForm({...approvalForm, paymentSystem: val})}>
                           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="package">Package</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent>
+                          <SelectContent>
+                            <SelectItem value="package">Package (Standard)</SelectItem>
+                            <SelectItem value="non-package">Non-Package (Meals Extra)</SelectItem>
+                          </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-1">
@@ -459,25 +491,92 @@ export default function RegistrationsPage() {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold">Advance (৳)</Label>
+                        <Input type="number" className="h-9" value={approvalForm.advanceAmount} onChange={e => setApprovalForm({...approvalForm, advanceAmount: e.target.value})} placeholder="0.00" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold">Svc. Charge (৳)</Label>
+                        <Input type="number" className="h-9" value={approvalForm.serviceCharge} onChange={e => setApprovalForm({...approvalForm, serviceCharge: e.target.value})} placeholder="0.00" />
+                      </div>
+                    </div>
+
                     {selectedReg.type === 'old' ? (
-                      <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20 space-y-2">
-                        <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Dues</Label>
-                        <Button variant="outline" size="sm" className="h-6 text-[9px] w-full" onClick={addDueRow}>+ Add Dues Record</Button>
-                        <div className="space-y-2 max-h-[100px] overflow-y-auto">
-                          {historicalDues.map((due, idx) => (
-                            <div key={idx} className="flex gap-1 items-center">
-                              <Input type="number" className="h-7 text-[10px] flex-1" value={due.amount} onChange={e => updateDueRow(idx, "amount", e.target.value)} placeholder="Amount"/>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeDueRow(idx)}><Minus size={12}/></Button>
-                            </div>
-                          ))}
+                      <div className="space-y-4">
+                        <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20 space-y-3">
+                          <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Rent Dues</Label>
+                          <Button variant="outline" size="sm" className="h-7 text-[9px] w-full gap-1" onClick={addDueRow}><Plus size={10}/> Add Month-wise Due</Button>
+                          
+                          <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                            {historicalDues.map((due, idx) => (
+                              <div key={idx} className="flex gap-1 items-end bg-white p-2 rounded border border-destructive/10 shadow-sm animate-in fade-in slide-in-from-top-1">
+                                <div className="flex-1 space-y-1">
+                                  <Select value={due.month} onValueChange={val => updateDueRow(idx, "month", val)}>
+                                    <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m} className="text-[10px]">{m}</SelectItem>)}</SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="w-[60px] space-y-1">
+                                  <Select value={due.year} onValueChange={val => updateDueRow(idx, "year", val)}>
+                                    <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y} className="text-[10px]">{y}</SelectItem>)}</SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="w-[80px] space-y-1">
+                                  <Input type="number" className="h-7 text-[10px]" value={due.amount} onChange={e => updateDueRow(idx, "amount", e.target.value)} placeholder="৳" />
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeDueRow(idx)}><Minus size={12}/></Button>
+                              </div>
+                            ))}
+                            {historicalDues.length === 0 && <p className="text-[10px] text-center text-muted-foreground italic py-2">No historical dues added.</p>}
+                          </div>
                         </div>
+
+                        {approvalForm.paymentSystem === 'non-package' && (
+                          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2">
+                            <Label className="text-[10px] uppercase font-bold text-blue-700 flex items-center gap-1"><Utensils size={10}/> Existing Food Balance</Label>
+                            <Input type="number" className="h-9" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="+/- Balance" />
+                            <p className="text-[9px] text-blue-600">বাকি থাকলে মাইনাস (-) দিয়ে এন্ট্রি দিন।</p>
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <div className="p-3 bg-success/5 rounded-lg border border-success/20 space-y-3">
-                        <Label className="text-[10px] uppercase font-bold text-success">Initial Payment</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input type="number" className="h-8 text-xs" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} placeholder="Rent" />
-                          <Input type="number" className="h-8 text-xs" value={approvalForm.advanceAmount} onChange={e => setApprovalForm({...approvalForm, advanceAmount: e.target.value})} placeholder="Advance" />
+                      <div className="space-y-4">
+                        <div className="p-3 bg-success/5 rounded-lg border border-success/20 space-y-3">
+                          <Label className="text-[10px] uppercase font-bold text-success flex items-center gap-1"><History size={10}/> Current Collection (Income)</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-[9px]">Admission Rent (৳)</Label>
+                              <Input type="number" className="h-8 text-xs" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} placeholder="Running Month" />
+                            </div>
+                            {approvalForm.paymentSystem === 'non-package' && (
+                              <div className="space-y-1">
+                                <Label className="text-[9px]">Food Deposit (৳)</Label>
+                                <Input type="number" className="h-8 text-xs" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} placeholder="Food Fund" />
+                              </div>
+                            )}
+                          </div>
+                          <Separator className="opacity-50" />
+                          <div className="space-y-2">
+                            <Label className="text-[9px]">Received By (Staff)</Label>
+                            <Select value={approvalForm.receiver} onValueChange={val => setApprovalForm({...approvalForm, receiver: val})}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Who received cash?" /></SelectTrigger>
+                              <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-[9px]">Payment Method</Label>
+                            <Select value={approvalForm.method} onValueChange={val => setApprovalForm({...approvalForm, method: val})}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="cash">Cash</SelectItem>
+                                <SelectItem value="bkash">Bkash</SelectItem>
+                                <SelectItem value="nagad">Nagad</SelectItem>
+                                <SelectItem value="bank">Bank</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -486,9 +585,9 @@ export default function RegistrationsPage() {
               </div>
             </div>
           )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" className="text-destructive border-destructive/20" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setUserName(null); setIsDetailOpen(false); }}>Reject</Button>
-            <Button className="bg-success hover:bg-success/90" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : "Confirm Admission"}</Button>
+          <DialogFooter className="grid grid-cols-2 gap-4">
+            <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/5" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject & Delete</Button>
+            <Button className="bg-success hover:bg-success/90 h-12" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : "Approve & Admit"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
