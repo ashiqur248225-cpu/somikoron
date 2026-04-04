@@ -389,10 +389,11 @@ export default function ExpenseHistoryPage() {
           <thead>
             <tr>
               <th>Date</th>
-              <th>Expenser/Party</th>
               <th>Category</th>
+              <th>Details</th>
+              <th>Building/Room</th>
               <th>Method</th>
-              <th>Location</th>
+              <th>Expenser</th>
               <th className="text-right">Amount</th>
             </tr>
           </thead>
@@ -400,17 +401,18 @@ export default function ExpenseHistoryPage() {
             {filteredExpenses.map((e, i) => (
               <tr key={i}>
                 <td>{new Date(e.expenseDate).toLocaleDateString()}</td>
-                <td className="font-medium">{e.expensePartyName}</td>
                 <td className="capitalize">{e.category}</td>
+                <td>{e.description || "-"}</td>
+                <td>{e.buildingName} {e.apartmentName !== 'none' ? '| ' + e.apartmentName : ''} {e.roomNumber ? '| R: ' + e.roomNumber : ''}</td>
                 <td className="uppercase">{e.method}</td>
-                <td>{e.buildingName} {e.apartmentName !== 'none' ? '| ' + e.apartmentName : ''}</td>
+                <td className="font-medium">{e.expensePartyName}</td>
                 <td className="text-right font-bold">৳{e.amount?.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="bg-gray-50">
-              <td colSpan={5} className="text-right font-bold py-4">TOTAL EXPENSES ({filteredExpenses.length} Records):</td>
+              <td colSpan={6} className="text-right font-bold py-4">TOTAL EXPENSES ({filteredExpenses.length} Records):</td>
               <td className="text-right font-bold text-lg text-destructive py-4">৳{totalFilteredExpense.toLocaleString()}</td>
             </tr>
           </tfoot>

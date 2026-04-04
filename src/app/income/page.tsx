@@ -410,8 +410,8 @@ export default function IncomeHistoryPage() {
           <thead>
             <tr>
               <th>Date</th>
-              <th>Resident</th>
-              <th>Purpose/Details</th>
+              <th>Student</th>
+              <th>Building & Room</th>
               <th>Method</th>
               <th>Receiver</th>
               <th className="text-right">Amount</th>
@@ -422,7 +422,7 @@ export default function IncomeHistoryPage() {
               <tr key={i}>
                 <td>{p.date?.toDate ? p.date.toDate().toLocaleDateString() : (p.date ? new Date(p.date).toLocaleDateString() : 'N/A')}</td>
                 <td className="font-medium">{p.studentName}</td>
-                <td>{p.description || "-"}</td>
+                <td>{p.buildingName} - {p.roomNumber || "-"}</td>
                 <td className="uppercase">{p.method}</td>
                 <td>{p.receiver}</td>
                 <td className="text-right font-bold">৳{p.amount?.toLocaleString()}</td>
