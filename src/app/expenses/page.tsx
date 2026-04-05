@@ -35,7 +35,9 @@ import {
   FileSpreadsheet, 
   Printer, 
   ArrowDownCircle, 
-  Info
+  Info,
+  Eye,
+  UserCheck
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -53,6 +55,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
@@ -271,11 +274,12 @@ export default function ExpenseHistoryPage() {
         </div>
         <div className="ml-auto flex items-center gap-3">
           <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
-          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
+      {/* Official Ledger Print Format (Hidden on Screen) */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
@@ -362,30 +366,65 @@ export default function ExpenseHistoryPage() {
         </div>
       </div>
 
-      <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-secondary/30">
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Spent By</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredExpenses.map((e: any) => (
-                <TableRow key={e.id} className="cursor-pointer" onClick={() => router.push(`/expenses/${e.id}`)}>
-                  <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(e.expenseDate)}</TableCell>
-                  <TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell>
-                  <TableCell className="font-bold text-slate-700">{e.expensePartyName}</TableCell>
-                  <TableCell className="text-right font-black text-expense">৳{e.amount?.toLocaleString()}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {expensesLoading ? (
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+      ) : (
+        <>
+          {/* Desktop Table View */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-secondary/30">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Spent By</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredExpenses.map((e: any) => (
+                    <TableRow key={e.id} className="cursor-pointer" onClick={() => router.push(`/expenses/${e.id}`)}>
+                      <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(e.expenseDate)}</TableCell>
+                      <TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell>
+                      <TableCell className="font-bold text-slate-700">{e.expensePartyName}</TableCell>
+                      <TableCell className="text-right font-black text-expense">৳{e.amount?.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-4 print:hidden">
+            {filteredExpenses.map((e: any) => (
+              <Card key={e.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/expenses/${e.id}`)}>
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(e.expenseDate)}</p>
+                      <Badge variant="secondary" className="capitalize text-[10px] font-bold mt-1">{e.category}</Badge>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-black text-expense">৳{e.amount?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-slate-700">{e.expensePartyName}</p>
+                    {e.description && <p className="text-xs text-muted-foreground line-clamp-1 italic">{e.description}</p>}
+                  </div>
+                  <div className="pt-2 border-t flex justify-between items-center text-[10px] text-muted-foreground font-bold uppercase">
+                    <span className="flex items-center gap-1"><Building2 size={10}/> {e.buildingName}</span>
+                    <Badge variant="outline" className="text-[8px] h-4 uppercase font-bold">{e.method}</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {filteredExpenses.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No expense records found.</div>}
+          </div>
+        </>
+      )}
 
       <div className="fixed bottom-8 right-8 z-50 print:hidden">
         <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-expense"><Plus size={32} className="text-white" /></Button>

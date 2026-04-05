@@ -219,12 +219,12 @@ export default function IncomeHistoryPage() {
         </div>
         <div className="ml-auto flex items-center gap-3">
           <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
-          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
-      {/* Professional Multi-page PDF Structure */}
+      {/* Official Ledger Print Format (Hidden on Screen) */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
@@ -335,32 +335,67 @@ export default function IncomeHistoryPage() {
       {paymentsLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
-        <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-secondary/30">
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPayments.map((p: any) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(p.date)}</TableCell>
-                    <TableCell className="font-black text-slate-800">{p.studentName}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{p.buildingName} • R-{p.roomNumber}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell>
-                    <TableCell className="text-right font-black text-income">৳{p.amount?.toLocaleString()}</TableCell>
+        <>
+          {/* Desktop Table View */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-secondary/30">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {filteredPayments.map((p: any) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(p.date)}</TableCell>
+                      <TableCell className="font-black text-slate-800">{p.studentName}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{p.buildingName} • R-{p.roomNumber}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell>
+                      <TableCell className="text-right font-black text-income">৳{p.amount?.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-4 print:hidden">
+            {filteredPayments.map((p: any) => (
+              <Card key={p.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(p.date)}</p>
+                      <h3 className="font-black text-slate-800 text-lg mt-1">{p.studentName}</h3>
+                    </div>
+                    <Badge variant="outline" className="uppercase font-bold text-[9px]">{p.method}</Badge>
+                  </div>
+                  <div className="bg-secondary/30 p-3 rounded-xl border border-secondary flex justify-between items-center">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Location</p>
+                      <p className="text-xs font-bold text-slate-700">{p.buildingName} • R-{p.roomNumber}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Collected</p>
+                      <p className="text-xl font-black text-income">৳{p.amount?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground italic flex items-center gap-1.5">
+                    <UserCheck size={12} className="text-primary"/>
+                    <span>Received by <b>{p.receiver}</b></span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {filteredPayments.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No income entries found.</div>}
+          </div>
+        </>
       )}
 
       <div className="fixed bottom-8 right-8 z-50 print:hidden">

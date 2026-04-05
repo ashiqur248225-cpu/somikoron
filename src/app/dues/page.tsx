@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -7,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Building2, DoorOpen, Loader2, Eye, CircleAlert, XCircle, Printer, TrendingUp, UserCheck, UserMinus, FileSpreadsheet } from "lucide-react"
+import { Users, Search, Building2, DoorOpen, Loader2, Eye, CircleAlert, XCircle, Printer, TrendingUp, UserCheck, UserMinus, FileSpreadsheet, Phone } from "lucide-center"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -118,11 +119,12 @@ export default function DuesPage() {
         </div>
         <div className="ml-auto flex items-center gap-3">
           <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
-          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
+      {/* Official Ledger Print Format (Hidden on Screen) */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
@@ -216,30 +218,72 @@ export default function DuesPage() {
       {studentsLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
-        <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-secondary/30">
-                <TableRow>
-                  <TableHead>Resident</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead className="text-right">Total Due</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {processedData.map((s: any) => (
-                  <TableRow key={s.id}>
-                    <TableCell><div className="flex flex-col"><span className="font-bold">{s.name}</span><span className="text-[10px] text-muted-foreground">{s.phone}</span></div></TableCell>
-                    <TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell>
-                    <TableCell className="text-right font-black text-destructive text-lg">৳{s.totalDue.toLocaleString()}</TableCell>
-                    <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button></TableCell>
+        <>
+          {/* Desktop Table View */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-secondary/30">
+                  <TableRow>
+                    <TableHead>Resident</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead className="text-right">Total Due</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {processedData.map((s: any) => (
+                    <TableRow key={s.id}>
+                      <TableCell><div className="flex flex-col"><span className="font-bold">{s.name}</span><span className="text-[10px] text-muted-foreground">{s.phone}</span></div></TableCell>
+                      <TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell>
+                      <TableCell className="text-right font-black text-destructive text-lg">৳{s.totalDue.toLocaleString()}</TableCell>
+                      <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-4 print:hidden">
+            {processedData.map((s: any) => (
+              <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3>
+                      <p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p>
+                    </div>
+                    <Badge variant={s.isActive ? "default" : "destructive"} className={cn("text-[10px]", s.isActive ? "bg-success" : "")}>
+                      {s.isActive ? "Active" : "Ex-Resident"}
+                    </Badge>
+                  </div>
+                  <div className="bg-secondary/30 p-3 rounded-xl border border-secondary">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Property</span>
+                      <span className="text-xs font-bold text-slate-700">{s.buildingName} • R-{s.roomNumber}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-white/50">
+                      <span className="text-[10px] font-bold text-destructive uppercase">Total Outstanding</span>
+                      <span className="text-xl font-black text-destructive">৳{s.totalDue.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-medium text-slate-500">
+                    <p>Rent Due: ৳{s.rentDue.toLocaleString()}</p>
+                    <p className={cn("text-right", s.foodBalance < 0 ? "text-destructive font-bold" : "")}>
+                      Food Bal: ৳{s.foodBalance.toLocaleString()}
+                    </p>
+                  </div>
+                  <Button variant="outline" className="w-full h-10 rounded-xl font-bold gap-2 text-xs" onClick={() => router.push(`/students/${s.id}`)}>
+                    <Eye size={14} /> View Full Profile
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+            {processedData.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No accounts found.</div>}
+          </div>
+        </>
       )}
     </div>
   )

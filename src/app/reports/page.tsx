@@ -121,12 +121,12 @@ export default function ReportsPage() {
           <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Reports</h1></div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print / PDF</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
-      {/* Official Ledger Print Format */}
+      {/* Official Ledger Print Format (Hidden on Screen) */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
@@ -162,26 +162,26 @@ export default function ReportsPage() {
         </div>
 
         <h3 className="font-black uppercase text-xs mb-2">Detailed Financial Trend</h3>
-        <Table className="w-full border-collapse">
-          <TableHeader>
+        <table>
+          <thead>
             <TableRow>
-              <TableHead className="border px-4 py-2 bg-slate-50">Date</TableHead>
-              <TableHead className="border px-4 py-2 bg-slate-50 text-right">Daily Income</TableHead>
-              <TableHead className="border px-4 py-2 bg-slate-50 text-right">Daily Expense</TableHead>
-              <TableHead className="border px-4 py-2 bg-slate-50 text-right">Net Change</TableHead>
+              <TableHead className="w-[25%]">Date</TableHead>
+              <TableHead className="w-[25%] text-right">Daily Income</TableHead>
+              <TableHead className="w-[25%] text-right">Daily Expense</TableHead>
+              <TableHead className="w-[25%] text-right">Net Change</TableHead>
             </TableRow>
-          </TableHeader>
+          </thead>
           <TableBody>
             {stats.trendData.slice().reverse().map((t: any) => (
               <TableRow key={t.name}>
-                <TableCell className="border px-4 py-2">{t.name}</TableCell>
-                <TableCell className="border px-4 py-2 text-right text-success">৳{(t.income || 0).toLocaleString()}</TableCell>
-                <TableCell className="border px-4 py-2 text-right text-destructive">৳{(t.expense || 0).toLocaleString()}</TableCell>
-                <TableCell className="border px-4 py-2 text-right font-bold">৳{((t.income || 0) - (t.expense || 0)).toLocaleString()}</TableCell>
+                <TableCell>{t.name}</TableCell>
+                <TableCell className="text-right text-success">৳{(t.income || 0).toLocaleString()}</TableCell>
+                <TableCell className="text-right text-destructive">৳{(t.expense || 0).toLocaleString()}</TableCell>
+                <TableCell className="text-right font-bold">৳{((t.income || 0) - (t.expense || 0)).toLocaleString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </table>
 
         <div className="print-footer mt-10">
           <div className="signature-box">Accountant Signature</div>

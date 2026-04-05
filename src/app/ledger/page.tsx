@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -60,10 +61,11 @@ export default function LedgerPage() {
     })
 
     let runningBalance = 0
-    return sorted.map(tx => {
+    const calculated = sorted.map(tx => {
       runningBalance += (tx.credit - tx.debit)
       return { ...tx, balance: runningBalance }
-    }).reverse() // Return descending for UI, but calculations done ascending
+    })
+    return calculated.reverse()
   }, [payments, expenses])
 
   const filteredData = useMemo(() => {
@@ -110,11 +112,12 @@ export default function LedgerPage() {
         </div>
         <div className="ml-auto flex items-center gap-3">
           <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
-          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
+      {/* Official Ledger Print Format (Hidden on Screen) */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
@@ -145,7 +148,7 @@ export default function LedgerPage() {
             </TableRow>
           </thead>
           <TableBody>
-            {ledgerData.reverse().map((tx: any) => (
+            {ledgerData.slice().reverse().map((tx: any) => (
               <TableRow key={tx.id}>
                 <TableCell>{formatCompactDate(tx.date)}</TableCell>
                 <TableCell className="capitalize text-[7pt]">{tx.txType}</TableCell>
@@ -201,32 +204,71 @@ export default function LedgerPage() {
       {(pLoading || eLoading) ? (
         <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : (
-        <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-slate-50/50">
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Source / Category</TableHead>
-                  <TableHead className="text-right">Credit</TableHead>
-                  <TableHead className="text-right">Debit</TableHead>
-                  <TableHead className="text-right">Running Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredData.map((tx: any) => (
-                  <TableRow key={tx.id}>
-                    <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(tx.date)}</TableCell>
-                    <TableCell className="font-bold">{tx.studentName || tx.category}</TableCell>
-                    <TableCell className="text-right text-success">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()}` : '-'}</TableCell>
-                    <TableCell className="text-right text-destructive">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()}` : '-'}</TableCell>
-                    <TableCell className="text-right font-black">৳{tx.balance.toLocaleString()}</TableCell>
+        <>
+          {/* Desktop Table View */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50/50">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Source / Category</TableHead>
+                    <TableHead className="text-right">Credit</TableHead>
+                    <TableHead className="text-right">Debit</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {filteredData.map((tx: any) => (
+                    <TableRow key={tx.id}>
+                      <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(tx.date)}</TableCell>
+                      <TableCell className="font-bold">{tx.studentName || tx.category}</TableCell>
+                      <TableCell className="text-right text-success">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()}` : '-'}</TableCell>
+                      <TableCell className="text-right text-destructive">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()}` : '-'}</TableCell>
+                      <TableCell className="text-right font-black">৳{tx.balance.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-4 print:hidden">
+            {filteredData.map((tx: any) => (
+              <Card key={tx.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(tx.date)}</p>
+                      <h3 className="font-bold text-slate-800 mt-1">{tx.studentName || tx.category}</h3>
+                    </div>
+                    <Badge className={cn("text-[8px] uppercase font-bold", tx.txType === 'income' ? "bg-success" : "bg-destructive")}>
+                      {tx.txType}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-2.5 rounded-xl bg-secondary/30 border border-secondary">
+                      <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Transaction</p>
+                      <p className={cn("text-xs font-black", tx.txType === 'income' ? "text-success" : "text-destructive")}>
+                        {tx.txType === 'income' ? "+" : "-"} ৳{(tx.credit || tx.debit).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10">
+                      <p className="text-[9px] font-bold text-primary uppercase mb-1">Running Balance</p>
+                      <p className="text-xs font-black text-primary">৳{tx.balance?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] text-muted-foreground font-bold uppercase">
+                    <span className="flex items-center gap-1"><Wallet size={10} /> {tx.method}</span>
+                    <span>{tx.buildingName}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {filteredData.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No ledger entries found.</div>}
+          </div>
+        </>
       )}
     </div>
   )

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -14,6 +15,7 @@ import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useToast } from "@/hooks/use-toast"
@@ -91,11 +93,12 @@ export default function StudentsPage() {
         </div>
         <div className="ml-auto flex items-center gap-3">
           <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
-          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
+      {/* Official Ledger Print Format (Hidden on Screen) */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
@@ -164,30 +167,70 @@ export default function StudentsPage() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
-        <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-secondary/30">
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Monthly Rent</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredStudents.map((s: any) => (
-                  <TableRow key={s.id} className="cursor-pointer" onClick={() => router.push(`/students/${s.id}`)}>
-                    <TableCell><div className="font-bold">{s.name}</div><div className="text-[10px] text-muted-foreground">{s.phone}</div></TableCell>
-                    <TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell>
-                    <TableCell className="font-black text-slate-700">৳{s.monthlyRent}</TableCell>
-                    <TableCell className="text-right"><Button variant="ghost" size="icon"><Eye size={16}/></Button></TableCell>
+        <>
+          {/* Desktop Table View */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-secondary/30">
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Monthly Rent</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {filteredStudents.map((s: any) => (
+                    <TableRow key={s.id} className="cursor-pointer" onClick={() => router.push(`/students/${s.id}`)}>
+                      <TableCell><div className="font-bold">{s.name}</div><div className="text-[10px] text-muted-foreground">{s.phone}</div></TableCell>
+                      <TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell>
+                      <TableCell className="font-black text-slate-700">৳{s.monthlyRent}</TableCell>
+                      <TableCell className="text-right"><Button variant="ghost" size="icon"><Eye size={16}/></Button></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-4 print:hidden">
+            {filteredStudents.map((s: any) => (
+              <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-lg leading-tight">{s.name}</h3>
+                      <p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p>
+                    </div>
+                    <Badge variant={s.isActive ? "default" : "destructive"} className={cn("text-[10px]", s.isActive ? "bg-success" : "")}>
+                      {s.isActive ? "Active" : "Left"}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-secondary/30 p-2.5 rounded-xl border border-secondary">
+                      <p className="text-[9px] uppercase font-bold text-muted-foreground mb-1">Location</p>
+                      <p className="text-xs font-bold text-slate-700">{s.buildingName} • R-{s.roomNumber}</p>
+                    </div>
+                    <div className="bg-primary/5 p-2.5 rounded-xl border border-primary/10">
+                      <p className="text-[9px] uppercase font-bold text-primary mb-1">Monthly Rent</p>
+                      <p className="text-xs font-black text-primary">৳{s.monthlyRent?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Badge variant="outline" className="text-[8px] h-4 uppercase font-bold">Plan: {s.paymentSystem}</Badge>
+                    <Badge variant="outline" className="text-[8px] h-4 uppercase font-bold">Seat: {s.seatNumber}</Badge>
+                  </div>
+                  <Button variant="outline" className="w-full h-10 rounded-xl font-bold gap-2 text-xs" onClick={() => router.push(`/students/${s.id}`)}>
+                    <Eye size={14} /> View Full Profile
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+            {filteredStudents.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No residents found.</div>}
+          </div>
+        </>
       )}
     </div>
   )
