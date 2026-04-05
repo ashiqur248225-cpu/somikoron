@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { History, Search, Filter, Download, Loader2, FileSpreadsheet, Printer, ArrowUpCircle, ArrowDownCircle, Wallet, XCircle } from "lucide-react"
@@ -20,6 +21,7 @@ import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const formatCompactDate = (date: any) => {
+  if (!date) return 'N/A'
   const d = date?.toDate ? date.toDate() : new Date(date)
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
@@ -138,54 +140,150 @@ export default function LedgerPage() {
             <div className="text-right"><p><b>Date Range:</b> {startDate || 'Start'} to {endDate || 'Today'}</p><p><b>Generated At:</b> {new Date().toLocaleString()}</p></div>
           </div>
         </div>
-        <table>
-          <thead>
-            <TableRow><TableHead className="w-[12%]">Date</TableHead><TableHead className="w-[10%]">Type</TableHead><TableHead className="w-[20%]">Source / Category</TableHead><TableHead className="w-[18%]">Location</TableHead><TableHead className="w-[10%]">Method</TableHead><TableHead className="w-[10%] text-right">Debit</TableHead><TableHead className="w-[10%] text-right">Credit</TableHead><TableHead className="w-[10%] text-right">Balance</TableHead></TableRow>
-          </thead>
+        <Table className="border">
+          <TableHeader>
+            <TableRow className="bg-slate-50">
+              <TableHead className="w-[12%] font-bold text-slate-900 border">Date</TableHead>
+              <TableHead className="w-[10%] font-bold text-slate-900 border">Type</TableHead>
+              <TableHead className="w-[20%] font-bold text-slate-900 border">Source / Category</TableHead>
+              <TableHead className="w-[18%] font-bold text-slate-900 border">Location</TableHead>
+              <TableHead className="w-[10%] font-bold text-slate-900 border text-right">Debit</TableHead>
+              <TableHead className="w-[10%] font-bold text-slate-900 border text-right">Credit</TableHead>
+              <TableHead className="w-[10%] font-bold text-slate-900 border text-right">Balance</TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
             {filteredData.slice().reverse().map((tx: any) => (
               <TableRow key={tx.id}>
-                <TableCell>{formatCompactDate(tx.date)}</TableCell><TableCell className="capitalize text-[7pt]">{tx.txType}</TableCell><TableCell className="font-bold">{tx.studentName || tx.category}</TableCell><TableCell className="text-[7pt]">{tx.buildingName} {tx.roomNumber ? `- R${tx.roomNumber}` : ''}</TableCell><TableCell className="uppercase">{tx.method}</TableCell><TableCell className="text-right">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()}` : '-'}</TableCell><TableCell className="text-right">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()}` : '-'}</TableCell><TableCell className="text-right font-bold">৳{tx.balance.toLocaleString()}</TableCell>
+                <TableCell className="border">{formatCompactDate(tx.date)}</TableCell>
+                <TableCell className="capitalize text-[7pt] border">{tx.txType}</TableCell>
+                <TableCell className="font-bold border">{tx.studentName || tx.category}</TableCell>
+                <TableCell className="text-[7pt] border">{tx.buildingName} {tx.roomNumber ? `- R${tx.roomNumber}` : ''}</TableCell>
+                <TableCell className="text-right border">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()}` : '-'}</TableCell>
+                <TableCell className="text-right border">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()}` : '-'}</TableCell>
+                <TableCell className="text-right font-bold border">৳{tx.balance.toLocaleString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>
-        </table>
-        <div className="summary-section"><div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-3 gap-4"><div><p className="text-[8pt] uppercase font-bold text-success">Total Credit</p><p className="text-lg font-bold">৳{stats.income.toLocaleString()}</p></div><div><p className="text-[8pt] uppercase font-bold text-destructive">Total Debit</p><p className="text-lg font-bold">৳{stats.expense.toLocaleString()}</p></div><div className="text-right"><p className="text-[8pt] uppercase font-bold text-primary">Closing Balance</p><p className="text-2xl font-black text-primary">৳{stats.balance.toLocaleString()}</p></div></div><div className="print-footer mt-10"><div className="signature-box">Accountant Signature</div><div className="text-center self-end print-page-number"></div><div className="signature-box">Manager Signature</div></div></div>
+        </Table>
+        <div className="summary-section">
+          <div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-3 gap-4">
+            <div><p className="text-[8pt] uppercase font-bold text-success">Total Credit</p><p className="text-lg font-bold">৳{stats.income.toLocaleString()}</p></div>
+            <div><p className="text-[8pt] uppercase font-bold text-destructive">Total Debit</p><p className="text-lg font-bold">৳{stats.expense.toLocaleString()}</p></div>
+            <div className="text-right"><p className="text-[8pt] uppercase font-bold text-primary">Closing Balance</p><p className="text-2xl font-black text-primary">৳{stats.balance.toLocaleString()}</p></div>
+          </div>
+          <div className="print-footer mt-10">
+            <div className="signature-box">Accountant Signature</div>
+            <div className="text-center self-end print-page-number"></div>
+            <div className="signature-box">Manager Signature</div>
+          </div>
+        </div>
       </div>
 
       {/* GLOBAL FILTER BAR (Desktop) */}
       <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
-        <div className="flex-1 space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Search Entries</Label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input placeholder="Student, category, source..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div></div>
-        <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Tx Type</Label><Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Both</SelectItem><SelectItem value="income">Income Only</SelectItem><SelectItem value="expense">Expense Only</SelectItem></SelectContent></Select></div>
-        <div className="w-[280px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 bg-white" /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" /></div></div>
+        <div className="flex-1 space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Search Entries</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Student, category, source..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          </div>
+        </div>
+        <div className="w-[150px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Tx Type</Label>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Both</SelectItem>
+              <SelectItem value="income">Income Only</SelectItem>
+              <SelectItem value="expense">Expense Only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-[280px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label>
+          <div className="flex gap-2">
+            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 bg-white" />
+            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" />
+          </div>
+        </div>
         <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setSearchTerm(""); setTypeFilter("all"); setStartDate(""); setEndDate(""); }}>Reset</Button>
       </div>
 
       {/* MOBILE FILTER PANEL */}
       <div className="md:hidden space-y-4 print:hidden">
         <div className="flex items-center gap-3">
-          <div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." className="pl-9 h-9 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search..." className="pl-9 h-9 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          </div>
           <Dialog open={isMobileFilterOpen} onOpenChange={setIsMobileFilterOpen}>
-            <DialogTrigger asChild><Button variant="outline" size="sm" className="h-9 gap-2"><Filter size={14} /> Filter</Button></DialogTrigger>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-2"><Filter size={14} /> Filter</Button>
+            </DialogTrigger>
             <DialogContent className="max-w-[90vw] rounded-2xl">
               <DialogHeader><DialogTitle>Ledger Filters</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2"><Label>Transaction Type</Label><Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Both</SelectItem><SelectItem value="income">Income Only</SelectItem><SelectItem value="expense">Expense Only</SelectItem></SelectContent></Select></div>
-                <div className="space-y-2"><Label>Date Range</Label><div className="grid grid-cols-2 gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
+                <div className="space-y-2">
+                  <Label>Transaction Type</Label>
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Both</SelectItem>
+                      <SelectItem value="income">Income Only</SelectItem>
+                      <SelectItem value="expense">Expense Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Date Range</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                    <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                  </div>
+                </div>
               </div>
-              <DialogFooter className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => { setSearchTerm(""); setTypeFilter("all"); setStartDate(""); setEndDate(""); setIsMobileFilterOpen(false); }}>Reset</Button><Button onClick={() => setIsMobileFilterOpen(false)}>Apply</Button></DialogFooter>
+              <DialogFooter className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={() => { setSearchTerm(""); setTypeFilter("all"); setStartDate(""); setEndDate(""); setIsMobileFilterOpen(false); }}>Reset</Button>
+                <Button onClick={() => setIsMobileFilterOpen(false)}>Apply</Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
-        {activeFilterChips.length > 0 && (activeFilterChips.map((chip, idx) => (
-          <Badge key={idx} variant="secondary" className="px-2 py-1 gap-1 text-[10px] font-bold uppercase bg-primary/10 text-primary border-none">{chip.label}<XCircle size={12} className="cursor-pointer" onClick={() => { if (chip.id === 'type') setTypeFilter("all"); if (chip.id === 'date') { setStartDate(""); setEndDate(""); } }} /></Badge>
-        )))}
+        {activeFilterChips.length > 0 && (
+          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
+            {activeFilterChips.map((chip, idx) => (
+              <Badge key={idx} variant="secondary" className="px-2 py-1 gap-1 text-[10px] font-bold uppercase bg-primary/10 text-primary border-none">
+                {chip.label}
+                <XCircle size={12} className="cursor-pointer" onClick={() => { if (chip.id === 'type') setTypeFilter("all"); if (chip.id === 'date') { setStartDate(""); setEndDate(""); } }} />
+              </Badge>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:hidden">
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-success">Total Income</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-2xl font-bold text-slate-900">৳{stats.income.toLocaleString()}</div></CardContent></Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-destructive">Total Expense</CardTitle><ArrowDownCircle className="h-4 w-4 text-destructive" /></CardHeader><CardContent><div className="text-2xl font-bold text-slate-900">৳{stats.expense.toLocaleString()}</div></CardContent></Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-primary rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-primary">Closing Balance</CardTitle><Wallet className="h-4 w-4 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold text-primary">৳{stats.balance.toLocaleString()}</div></CardContent></Card>
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-bold uppercase text-success">Total Income</CardTitle>
+            <ArrowUpCircle className="h-4 w-4 text-success" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold text-slate-900">৳{stats.income.toLocaleString()}</div></CardContent>
+        </Card>
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-bold uppercase text-destructive">Total Expense</CardTitle>
+            <ArrowDownCircle className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold text-slate-900">৳{stats.expense.toLocaleString()}</div></CardContent>
+        </Card>
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-primary rounded-2xl overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-bold uppercase text-primary">Closing Balance</CardTitle>
+            <Wallet className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold text-primary">৳{stats.balance.toLocaleString()}</div></CardContent>
+        </Card>
       </div>
 
       {(pLoading || eLoading) ? (
@@ -196,8 +294,26 @@ export default function LedgerPage() {
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
             <CardContent className="p-0">
               <Table>
-                <TableHeader className="bg-slate-50/50"><TableRow><TableHead>Date</TableHead><TableHead>Source / Category</TableHead><TableHead className="text-right">Credit</TableHead><TableHead className="text-right">Debit</TableHead><TableHead className="text-right">Balance</TableHead></TableRow></TableHeader>
-                <TableBody>{filteredData.map((tx: any) => (<TableRow key={tx.id}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(tx.date)}</TableCell><TableCell className="font-bold">{tx.studentName || tx.category}</TableCell><TableCell className="text-right text-success">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()}` : '-'}</TableCell><TableCell className="text-right text-destructive">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()}` : '-'}</TableCell><TableCell className="text-right font-black">৳{tx.balance.toLocaleString()}</TableCell></TableRow>))}</TableBody>
+                <TableHeader className="bg-slate-50/50">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Source / Category</TableHead>
+                    <TableHead className="text-right">Credit</TableHead>
+                    <TableHead className="text-right">Debit</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredData.map((tx: any) => (
+                    <TableRow key={tx.id}>
+                      <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(tx.date)}</TableCell>
+                      <TableCell className="font-bold">{tx.studentName || tx.category}</TableCell>
+                      <TableCell className="text-right text-success">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()}` : '-'}</TableCell>
+                      <TableCell className="text-right text-destructive">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()}` : '-'}</TableCell>
+                      <TableCell className="text-right font-black">৳{tx.balance.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
               </Table>
             </CardContent>
           </Card>
@@ -207,9 +323,31 @@ export default function LedgerPage() {
             {filteredData.map((tx: any) => (
               <Card key={tx.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
                 <CardContent className="p-4 space-y-4">
-                  <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(tx.date)}</p><h3 className="font-bold text-slate-800 mt-1">{tx.studentName || tx.category}</h3></div><Badge className={cn("text-[8px] uppercase font-bold", tx.txType === 'income' ? "bg-success" : "bg-destructive")}>{tx.txType}</Badge></div>
-                  <div className="grid grid-cols-2 gap-3"><div className="p-2.5 rounded-xl bg-secondary/30 border border-secondary"><p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Transaction</p><p className={cn("text-xs font-black", tx.txType === 'income' ? "text-success" : "text-destructive")}>{tx.txType === 'income' ? "+" : "-"} ৳{(tx.credit || tx.debit).toLocaleString()}</p></div><div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10"><p className="text-[9px] font-bold text-primary uppercase mb-1">Running Balance</p><p className="text-xs font-black text-primary">৳{tx.balance?.toLocaleString()}</p></div></div>
-                  <div className="flex justify-between items-center text-[10px] text-muted-foreground font-bold uppercase"><span className="flex items-center gap-1"><Wallet size={10} /> {tx.method}</span><span>{tx.buildingName}</span></div>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(tx.date)}</p>
+                      <h3 className="font-bold text-slate-800 mt-1">{tx.studentName || tx.category}</h3>
+                    </div>
+                    <Badge className={cn("text-[8px] uppercase font-bold", tx.txType === 'income' ? "bg-success" : "bg-destructive")}>
+                      {tx.txType}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-2.5 rounded-xl bg-secondary/30 border border-secondary">
+                      <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Transaction</p>
+                      <p className={cn("text-xs font-black", tx.txType === 'income' ? "text-success" : "text-destructive")}>
+                        {tx.txType === 'income' ? "+" : "-"} ৳{(tx.credit || tx.debit).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10">
+                      <p className="text-[9px] font-bold text-primary uppercase mb-1">Running Balance</p>
+                      <p className="text-xs font-black text-primary">৳{tx.balance?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] text-muted-foreground font-bold uppercase">
+                    <span className="flex items-center gap-1"><Wallet size={10} /> {tx.method}</span>
+                    <span>{tx.buildingName}</span>
+                  </div>
                 </CardContent>
               </Card>
             ))}

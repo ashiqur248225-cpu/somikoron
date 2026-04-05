@@ -122,12 +122,61 @@ export default function ReportsPage() {
         <div className="ml-auto flex items-center gap-3"><Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button><Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link></div>
       </div>
 
+      {/* Official Ledger Print Format */}
       <div className="print-only print-report-container">
-        <div className="report-header text-center"><h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1><p className="text-sm font-bold">{userBranch} Branch • Business Analytics Report</p><div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[10pt]"><div><p><b>Period:</b> {startDate} to {endDate}</p><p><b>Scope:</b> {buildingFilter === 'all' ? 'Entire Branch' : buildings?.find(b => b.id === buildingFilter)?.name}</p></div><div className="text-right"><p><b>Health Score:</b> {stats.healthScore}%</p><p><b>Occupancy:</b> {stats.occupancyRate.toFixed(1)}%</p></div></div></div>
-        <div className="summary-section grid grid-cols-2 gap-6 mb-10"><div className="bg-slate-50 p-4 border rounded-2xl"><h3 className="font-bold uppercase text-xs mb-3">Profit & Loss Summary</h3><div className="space-y-2 text-sm"><div className="flex justify-between"><span>Total Revenue:</span><span className="font-bold">৳{stats.totalIncome.toLocaleString()}</span></div><div className="flex justify-between"><span>Total Operational Cost:</span><span className="font-bold text-destructive">৳{stats.totalExpense.toLocaleString()}</span></div><div className="flex justify-between border-t pt-2"><span>Net Profit/Surplus:</span><span className="font-black text-primary">৳{stats.netProfit.toLocaleString()}</span></div></div></div><div className="bg-slate-50 p-4 border rounded-2xl"><h3 className="font-bold uppercase text-xs mb-3">Receivables Analysis</h3><div className="space-y-2 text-sm"><div className="flex justify-between"><span>Uncollected Rent:</span><span className="font-bold">৳{stats.totalDues.toLocaleString()}</span></div><div className="flex justify-between"><span>Recovery Efficiency:</span><span className="font-bold">{Math.round((stats.totalIncome / (stats.totalIncome + stats.totalDues)) * 100) || 0}%</span></div></div></div></div>
+        <div className="report-header text-center">
+          <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
+          <p className="text-sm font-bold">{userBranch} Branch • Business Analytics Report</p>
+          <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[10pt]">
+            <div><p><b>Period:</b> {startDate} to {endDate}</p><p><b>Scope:</b> {buildingFilter === 'all' ? 'Entire Branch' : buildings?.find(b => b.id === buildingFilter)?.name}</p></div>
+            <div className="text-right"><p><b>Health Score:</b> {stats.healthScore}%</p><p><b>Occupancy:</b> {stats.occupancyRate.toFixed(1)}%</p></div>
+          </div>
+        </div>
+        
+        <div className="summary-section grid grid-cols-2 gap-6 mb-10">
+          <div className="bg-slate-50 p-4 border rounded-2xl">
+            <h3 className="font-bold uppercase text-xs mb-3">Profit & Loss Summary</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span>Total Revenue:</span><span className="font-bold">৳{stats.totalIncome.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span>Total Operational Cost:</span><span className="font-bold text-destructive">৳{stats.totalExpense.toLocaleString()}</span></div>
+              <div className="flex justify-between border-t pt-2"><span>Net Profit/Surplus:</span><span className="font-black text-primary">৳{stats.netProfit.toLocaleString()}</span></div>
+            </div>
+          </div>
+          <div className="bg-slate-50 p-4 border rounded-2xl">
+            <h3 className="font-bold uppercase text-xs mb-3">Receivables Analysis</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span>Uncollected Rent:</span><span className="font-bold">৳{stats.totalDues.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span>Recovery Efficiency:</span><span className="font-bold">{Math.round((stats.totalIncome / (stats.totalIncome + stats.totalDues)) * 100) || 0}%</span></div>
+            </div>
+          </div>
+        </div>
+
         <h3 className="font-black uppercase text-xs mb-2">Detailed Financial Trend</h3>
-        <Table className="border"><TableHeader><TableRow className="bg-slate-50"><TableHead className="w-[25%] font-bold text-slate-900 border">Date</TableHead><TableHead className="w-[25%] text-right font-bold text-slate-900 border">Daily Income</TableHead><TableHead className="w-[25%] text-right font-bold text-slate-900 border">Daily Expense</TableHead><TableHead className="w-[25%] text-right font-bold text-slate-900 border">Net Change</TableHead></TableRow></TableHeader><TableBody>{stats.trendData.slice().reverse().map((t: any) => (<TableRow key={t.name}><TableCell className="border">{t.name}</TableCell><TableCell className="text-right text-success border">৳{(t.income || 0).toLocaleString()}</TableCell><TableCell className="text-right text-destructive border">৳{(t.expense || 0).toLocaleString()}</TableCell><TableCell className="text-right font-bold border">৳{((t.income || 0) - (t.expense || 0)).toLocaleString()}</TableCell></TableRow>))}</TableBody></Table>
-        <div className="print-footer mt-10"><div className="signature-box">Accountant Signature</div><div className="text-center self-end print-page-number"></div><div className="signature-box">Manager Signature</div></div>
+        <Table className="border">
+          <TableHeader>
+            <TableRow className="bg-slate-50">
+              <TableHead className="w-[25%] font-bold text-slate-900 border">Date</TableHead>
+              <TableHead className="w-[25%] text-right font-bold text-slate-900 border">Daily Income</TableHead>
+              <TableHead className="w-[25%] text-right font-bold text-slate-900 border">Daily Expense</TableHead>
+              <TableHead className="w-[25%] text-right font-bold text-slate-900 border">Net Change</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {stats.trendData.slice().reverse().map((t: any) => (
+              <TableRow key={t.name}>
+                <TableCell className="border">{t.name}</TableCell>
+                <TableCell className="text-right text-success border">৳{(t.income || 0).toLocaleString()}</TableCell>
+                <TableCell className="text-right text-destructive border">৳{(t.expense || 0).toLocaleString()}</TableCell>
+                <TableCell className="text-right font-bold border">৳{((t.income || 0) - (t.expense || 0)).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <div className="print-footer mt-10">
+          <div className="signature-box">Accountant Signature</div>
+          <div className="text-center self-end print-page-number"></div>
+          <div className="signature-box">Manager Signature</div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-secondary/20 p-6 rounded-2xl border print:hidden">
@@ -138,15 +187,46 @@ export default function ReportsPage() {
       </div>
 
       <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:hidden">
-        <Card className="border-l-[6px] border-l-success rounded-2xl overflow-hidden shadow-sm"><CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-success">Total Income</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">৳{stats.totalIncome.toLocaleString()}</div></CardContent></Card>
-        <Card className="border-l-[6px] border-l-destructive rounded-2xl overflow-hidden shadow-sm"><CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Expenses</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">৳{stats.totalExpense.toLocaleString()}</div></CardContent></Card>
-        <Card className="border-l-[6px] border-l-rose-400 rounded-2xl overflow-hidden shadow-sm"><CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-rose-500">Total Dues</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">৳{stats.totalDues.toLocaleString()}</div></CardContent></Card>
-        <Card className={cn("border-l-[6px] rounded-2xl overflow-hidden shadow-sm", stats.netProfit >= 0 ? "border-l-primary" : "border-l-destructive")}><CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase">Net Profit</CardTitle></CardHeader><CardContent><div className={cn("text-2xl font-bold", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>৳{Math.abs(stats.netProfit).toLocaleString()}</div></CardContent></Card>
+        <Card className="border-l-[6px] border-l-success rounded-2xl overflow-hidden shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-success">Total Income</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold">৳{stats.totalIncome.toLocaleString()}</div></CardContent>
+        </Card>
+        <Card className="border-l-[6px] border-l-destructive rounded-2xl overflow-hidden shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Expenses</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold">৳{stats.totalExpense.toLocaleString()}</div></CardContent>
+        </Card>
+        <Card className="border-l-[6px] border-l-rose-400 rounded-2xl overflow-hidden shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-rose-500">Total Dues</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold">৳{stats.totalDues.toLocaleString()}</div></CardContent>
+        </Card>
+        <Card className={cn("border-l-[6px] rounded-2xl overflow-hidden shadow-sm", stats.netProfit >= 0 ? "border-l-primary" : "border-l-destructive")}>
+          <CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase">Net Profit</CardTitle></CardHeader>
+          <CardContent><div className={cn("text-2xl font-bold", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>৳{Math.abs(stats.netProfit).toLocaleString()}</div></CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 print:hidden">
-        <Card className="rounded-3xl overflow-hidden shadow-sm"><CardHeader><CardTitle className="text-lg font-bold">Hostel Health</CardTitle></CardHeader><CardContent className="flex flex-col items-center pt-6"><div className="text-4xl font-black">{stats.healthScore}%</div><p className="text-xs text-muted-foreground uppercase font-bold mt-2">Overall Score</p></CardContent></Card>
-        <Card className="lg:col-span-2 rounded-3xl overflow-hidden shadow-sm"><CardHeader><CardTitle className="text-lg font-bold">Financial Trends</CardTitle></CardHeader><CardContent className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={stats.trendData}><XAxis dataKey="name" /><YAxis /><RechartTooltip /><Area type="monotone" dataKey="income" stroke="#296EB3" fill="#296EB3" fillOpacity={0.1}/><Area type="monotone" dataKey="expense" stroke="#F06A6A" fill="#F06A6A" fillOpacity={0.1}/></AreaChart></ResponsiveContainer></CardContent></Card>
+        <Card className="rounded-3xl overflow-hidden shadow-sm">
+          <CardHeader><CardTitle className="text-lg font-bold">Hostel Health</CardTitle></CardHeader>
+          <CardContent className="flex flex-col items-center pt-6">
+            <div className="text-4xl font-black">{stats.healthScore}%</div>
+            <p className="text-xs text-muted-foreground uppercase font-bold mt-2">Overall Score</p>
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-2 rounded-3xl overflow-hidden shadow-sm">
+          <CardHeader><CardTitle className="text-lg font-bold">Financial Trends</CardTitle></CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={stats.trendData}>
+                <XAxis dataKey="name" />
+                <YAxis />
+                <RechartTooltip />
+                <Area type="monotone" dataKey="income" stroke="#296EB3" fill="#296EB3" fillOpacity={0.1}/>
+                <Area type="monotone" dataKey="expense" stroke="#F06A6A" fill="#F06A6A" fillOpacity={0.1}/>
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
