@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Building2, DoorOpen, Loader2, Eye, XCircle, Printer, FileSpreadsheet } from "lucide-react"
+import { Users, Search, Building2, DoorOpen, Loader2, Eye, XCircle, Printer, FileSpreadsheet, Filter, CheckCircle2, UserMinus, UserCheck, LayoutGrid, Bed } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
@@ -15,12 +15,14 @@ import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useToast } from "@/hooks/use-toast"
 
 const formatCompactDate = (date: any) => {
+  if (!date) return 'N/A'
   const d = date?.toDate ? date.toDate() : new Date(date)
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
@@ -29,9 +31,13 @@ export default function StudentsPage() {
   const { toast } = useToast()
   const router = useRouter()
   const db = useFirestore()
+  
+  // States
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
+  const [planFilter, setPlanFilter] = useState("all")
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
@@ -56,32 +62,51 @@ export default function StudentsPage() {
   const filteredStudents = useMemo(() => {
     if (!students) return []
     return students.filter(s => {
-      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
+      const search = searchTerm.toLowerCase()
+      const matchesSearch = 
+        s.name.toLowerCase().includes(search) || 
+        (s.phone || "").includes(search) || 
+        (s.buildingName || "").toLowerCase().includes(search) ||
+        (s.roomNumber || "").includes(search)
+      
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
-      return matchesSearch && matchesBuilding && matchesStatus
+      const matchesPlan = planFilter === "all" || s.paymentSystem === planFilter
+      
+      return matchesSearch && matchesBuilding && matchesStatus && matchesPlan
     }).sort((a, b) => a.name.localeCompare(b.name))
-  }, [students, searchTerm, buildingFilter, statusFilter])
+  }, [students, searchTerm, buildingFilter, statusFilter, planFilter])
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
 
   const handleExportCSV = () => {
     try {
-      const headers = ["Name", "Phone", "Building", "Room", "Seat", "Monthly Rent", "Plan"];
-      const rows = filteredStudents.map(s => [s.name, s.phone, s.buildingName, s.roomNumber, s.seatNumber, s.monthlyRent, s.paymentSystem]);
+      const headers = ["Name", "Phone", "Building", "Room", "Seat", "Monthly Rent", "Plan", "Status"];
+      const rows = filteredStudents.map(s => [
+        s.name, s.phone, s.buildingName, s.roomNumber, s.seatNumber, s.monthlyRent, s.paymentSystem, s.isActive ? 'Active' : 'Left'
+      ]);
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.setAttribute("download", `residents_list_${new Date().getTime()}.csv`);
+      link.setAttribute("download", `residents_report_${new Date().getTime()}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (e) { toast({ variant: "destructive", title: "Export Failed" }) }
   }
 
+  const activeFilterChips = useMemo(() => {
+    const chips = []
+    if (buildingFilter !== "all") chips.push({ id: "building", label: buildings?.find(b => b.id === buildingFilter)?.name })
+    if (statusFilter !== "active") chips.push({ id: "status", label: statusFilter === "all" ? "All Status" : "Ex-Residents" })
+    if (planFilter !== "all") chips.push({ id: "plan", label: planFilter.toUpperCase() })
+    return chips
+  }, [buildingFilter, statusFilter, planFilter, buildings])
+
   return (
     <div className="space-y-8 pb-20 print:p-0">
+      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -106,11 +131,11 @@ export default function StudentsPage() {
           <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[10pt]">
             <div>
               <p><b>Filter:</b> {buildingFilter === 'all' ? 'All Buildings' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
-              <p><b>Status:</b> {statusFilter.toUpperCase()}</p>
+              <p><b>Plan:</b> {planFilter.toUpperCase()}</p>
             </div>
             <div className="text-right">
+              <p><b>Resident Status:</b> {statusFilter.toUpperCase()}</p>
               <p><b>Total Count:</b> {filteredStudents.length} Residents</p>
-              <p><b>Generated:</b> {new Date().toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -146,8 +171,12 @@ export default function StudentsPage() {
           <div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-2">
             <div>
               <h3 className="font-bold uppercase text-primary text-xs mb-2">Resident Summary</h3>
-              <p className="text-sm">Total Active Residents: <b>{filteredStudents.filter(s => s.isActive).length}</b></p>
-              <p className="text-sm">Monthly Potential Income: <b>৳{filteredStudents.filter(s => s.isActive).reduce((a, b) => a + b.monthlyRent, 0).toLocaleString()}</b></p>
+              <p className="text-sm">Total Filtered Residents: <b>{filteredStudents.length}</b></p>
+              <p className="text-sm">Active Residents: <b>{filteredStudents.filter(s => s.isActive).length}</b></p>
+            </div>
+            <div className="text-right">
+              <p className="text-[8pt] uppercase font-bold text-muted-foreground">Generated On</p>
+              <p className="text-sm font-bold">{new Date().toLocaleString()}</p>
             </div>
           </div>
           <div className="print-footer mt-10">
@@ -158,17 +187,127 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      <div className="bg-secondary/20 p-4 rounded-xl border flex flex-col md:flex-row gap-4 items-center print:hidden">
-        <div className="relative flex-1 w-full"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input placeholder="Search name or phone..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-        <Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="w-full md:w-[160px] bg-white"><SelectValue placeholder="Building" /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-full md:w-[160px] bg-white"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="left">Left</SelectItem><SelectItem value="all">All</SelectItem></SelectContent></Select>
+      {/* GLOBAL FILTER BAR (Desktop) */}
+      <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
+        <div className="flex-1 space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Search Resident</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Name, phone, room..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          </div>
+        </div>
+        <div className="w-[180px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label>
+          <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+            <SelectTrigger className="bg-white h-10"><SelectValue placeholder="All" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Buildings</SelectItem>
+              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-[150px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Plan</Label>
+          <Select value={planFilter} onValueChange={setPlanFilter}>
+            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Plans</SelectItem>
+              <SelectItem value="package">Package</SelectItem>
+              <SelectItem value="non-package">Non-Package</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-[150px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Status</Label>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Staying</SelectItem>
+              <SelectItem value="left">Left Hostel</SelectItem>
+              <SelectItem value="all">All Records</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setStatusFilter("active"); setPlanFilter("all"); }}>
+          Reset
+        </Button>
+      </div>
+
+      {/* MOBILE FILTER PANEL */}
+      <div className="md:hidden space-y-4 print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search..." className="pl-9 h-9 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          </div>
+          <Dialog open={isMobileFilterOpen} onOpenChange={setIsMobileFilterOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-2"><Filter size={14} /> Filter</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-[90vw] rounded-2xl">
+              <DialogHeader><DialogTitle>Filter Residents</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Building</Label>
+                  <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                    <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Buildings</SelectItem>
+                      {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Plan</Label>
+                  <Select value={planFilter} onValueChange={setPlanFilter}>
+                    <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Plans</SelectItem>
+                      <SelectItem value="package">Package</SelectItem>
+                      <SelectItem value="non-package">Non-Package</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Resident Status</Label>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Currently Staying</SelectItem>
+                      <SelectItem value="left">Left Hostel</SelectItem>
+                      <SelectItem value="all">All Records</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setStatusFilter("active"); setPlanFilter("all"); setIsMobileFilterOpen(false); }}>Reset</Button>
+                <Button onClick={() => setIsMobileFilterOpen(false)}>Apply Filter</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+        {activeFilterChips.length > 0 && (
+          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
+            {activeFilterChips.map((chip, idx) => (
+              <Badge key={idx} variant="secondary" className="px-2 py-1 gap-1 text-[10px] font-bold uppercase bg-primary/10 text-primary border-none">
+                {chip.label}
+                <XCircle size={12} className="cursor-pointer" onClick={() => {
+                  if (chip.id === 'building') setBuildingFilter("all")
+                  if (chip.id === 'status') setStatusFilter("active")
+                  if (chip.id === 'plan') setPlanFilter("all")
+                }} />
+              </Badge>
+            ))}
+          </div>
+        )}
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
         <>
-          {/* Desktop Table View */}
+          {/* DESKTOP TABLE VIEW */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
             <CardContent className="p-0">
               <Table>
@@ -177,15 +316,24 @@ export default function StudentsPage() {
                     <TableHead>Student</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Monthly Rent</TableHead>
+                    <TableHead>Plan & Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredStudents.map((s: any) => (
-                    <TableRow key={s.id} className="cursor-pointer" onClick={() => router.push(`/students/${s.id}`)}>
+                    <TableRow key={s.id} className="cursor-pointer hover:bg-slate-50/50" onClick={() => router.push(`/students/${s.id}`)}>
                       <TableCell><div className="font-bold">{s.name}</div><div className="text-[10px] text-muted-foreground">{s.phone}</div></TableCell>
                       <TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell>
-                      <TableCell className="font-black text-slate-700">৳{s.monthlyRent}</TableCell>
+                      <TableCell className="font-black text-slate-700">৳{s.monthlyRent?.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="outline" className="text-[8px] uppercase w-fit">{s.paymentSystem}</Badge>
+                          <Badge variant={s.isActive ? "default" : "destructive"} className={cn("text-[8px] uppercase w-fit", s.isActive ? "bg-success" : "")}>
+                            {s.isActive ? "Staying" : "Left"}
+                          </Badge>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right"><Button variant="ghost" size="icon"><Eye size={16}/></Button></TableCell>
                     </TableRow>
                   ))}
@@ -194,10 +342,10 @@ export default function StudentsPage() {
             </CardContent>
           </Card>
 
-          {/* Mobile Card View */}
+          {/* MOBILE CARD VIEW */}
           <div className="md:hidden space-y-4 print:hidden">
             {filteredStudents.map((s: any) => (
-              <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+              <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/students/${s.id}`)}>
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start">
                     <div>
@@ -205,13 +353,13 @@ export default function StudentsPage() {
                       <p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p>
                     </div>
                     <Badge variant={s.isActive ? "default" : "destructive"} className={cn("text-[10px]", s.isActive ? "bg-success" : "")}>
-                      {s.isActive ? "Active" : "Left"}
+                      {s.isActive ? "Staying" : "Left"}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-secondary/30 p-2.5 rounded-xl border border-secondary">
                       <p className="text-[9px] uppercase font-bold text-muted-foreground mb-1">Location</p>
-                      <p className="text-xs font-bold text-slate-700">{s.buildingName} • R-{s.roomNumber}</p>
+                      <p className="text-xs font-bold text-slate-700 truncate">{s.buildingName} • R-{s.roomNumber}</p>
                     </div>
                     <div className="bg-primary/5 p-2.5 rounded-xl border border-primary/10">
                       <p className="text-[9px] uppercase font-bold text-primary mb-1">Monthly Rent</p>

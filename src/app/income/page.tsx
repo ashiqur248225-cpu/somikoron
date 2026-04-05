@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, limit, where } from "firebase/firestore"
 import { cn } from "@/lib/utils"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
@@ -30,6 +30,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 const formatCompactDate = (date: any) => {
+  if (!date) return 'N/A'
   const d = date?.toDate ? date.toDate() : new Date(date)
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
@@ -37,24 +38,34 @@ const formatCompactDate = (date: any) => {
 export default function IncomeHistoryPage() {
   const { toast } = useToast()
   const db = useFirestore()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isEntryOpen, setIsEntryOpen] = useState(false)
   
+  // App Context
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
+  const [userRole, setUserRole] = useState("")
 
+  // Filtering States
+  const [searchTerm, setSearchTerm] = useState("")
+  const [buildingFilter, setBuildingFilter] = useState("all")
+  const [roomFilter, setRoomFilter] = useState("all")
+  const [methodFilter, setMethodFilter] = useState("all")
+  const [receiverFilter, setReceiverFilter] = useState("all")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
-  const [buildingFilter, setBuildingFilter] = useState("all")
-  const [methodFilter, setMethodFilter] = useState("all")
-  const [searchTerm, setSearchTerm] = useState("")
+  
+  // UI States
+  const [isEntryOpen, setIsEntryOpen] = useState(false)
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Entry Form Specific Filters
   const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
   const [entryRoomFilter, setEntryRoomFilter] = useState("all")
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
+    setUserRole(localStorage.getItem("user_role") || "Manager")
   }, [])
 
   const [formData, setFormData] = useState({
@@ -70,6 +81,7 @@ export default function IncomeHistoryPage() {
     description: ""
   })
 
+  // Queries
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
@@ -82,7 +94,10 @@ export default function IncomeHistoryPage() {
   }, [db, userBranch])
   const { data: students } = useCollection(studentsQuery)
 
-  const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
+  const staffQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "staff"), where("branch", "==", userBranch))
+  }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
 
   const incomeQuery = useMemoFirebase(() => {
@@ -91,53 +106,50 @@ export default function IncomeHistoryPage() {
   }, [db, userBranch])
   const { data: rawPayments, isLoading: paymentsLoading } = useCollection(incomeQuery)
 
+  // Advanced Filtering Logic
   const filteredPayments = useMemo(() => {
     if (!rawPayments) return []
     return rawPayments.filter(p => {
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
       const matchesStartDate = !startDate || pDate >= new Date(startDate)
       const matchesEndDate = !endDate || pDate <= new Date(new Date(endDate).setHours(23, 59, 59))
+      
       const matchesBuilding = buildingFilter === "all" || p.buildingId === buildingFilter
+      const matchesRoom = roomFilter === "all" || p.roomNumber === roomFilter
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
-      const matchesSearch = p.studentName?.toLowerCase().includes(searchTerm.toLowerCase())
-      return matchesStartDate && matchesEndDate && matchesBuilding && matchesMethod && matchesSearch
+      const matchesReceiver = receiverFilter === "all" || p.receiver === receiverFilter
+      const matchesSearch = (p.studentName || "").toLowerCase().includes(searchTerm.toLowerCase())
+      
+      return matchesStartDate && matchesEndDate && matchesBuilding && matchesRoom && matchesMethod && matchesReceiver && matchesSearch
     }).sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date)
       const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date)
       return dateB.getTime() - dateA.getTime()
     })
-  }, [rawPayments, startDate, endDate, buildingFilter, methodFilter, searchTerm])
+  }, [rawPayments, startDate, endDate, buildingFilter, roomFilter, methodFilter, receiverFilter, searchTerm])
 
   const stats = useMemo(() => {
     const total = filteredPayments.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     return { total, count: filteredPayments.length }
   }, [filteredPayments])
 
-  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+  const availableRoomsForFilter = useMemo(() => {
+    if (!buildings) return []
+    let rooms: string[] = []
+    buildings.forEach(b => {
+      if (buildingFilter === "all" || b.id === buildingFilter) {
+        b.apartmentsDetail?.forEach((apt: any) => {
+          apt.rooms?.forEach((room: any) => {
+            if (room.roomNo && !rooms.includes(room.roomNo)) rooms.push(room.roomNo)
+          })
+        })
+      }
+    })
+    return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }, [buildings, buildingFilter])
 
-  const handleExportCSV = () => {
-    try {
-      const headers = ["Date", "Student Name", "Building & Room", "Method", "Received By", "Amount"];
-      const rows = filteredPayments.map(p => [
-        formatCompactDate(p.date),
-        p.studentName,
-        `${p.buildingName} - R${p.roomNumber}`,
-        p.method,
-        p.receiver,
-        p.amount
-      ]);
-      const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute("download", `income_report_${new Date().getTime()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e) { toast({ variant: "destructive", title: "Export Failed" }) }
-  }
-
-  const availableRooms = useMemo(() => {
+  // Entry Modal Logic
+  const availableRoomsForEntry = useMemo(() => {
     if (!buildings) return []
     let rooms: string[] = []
     buildings.forEach(b => {
@@ -186,28 +198,67 @@ export default function IncomeHistoryPage() {
     try {
       const pId = doc(collection(db, "payments")).id
       const totalAmt = (selectedStudent.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount) + Number(formData.foodAmount)) + Number(formData.addAdvanceAmount)
+      
       const pRecord = {
-        id: pId, amount: totalAmt, seatAmount: Number(formData.seatAmount || (selectedStudent.paymentSystem === 'package' ? formData.amount : 0)),
+        id: pId, amount: totalAmt, 
+        seatAmount: Number(formData.seatAmount || (selectedStudent.paymentSystem === 'package' ? formData.amount : 0)),
         foodAmount: Number(formData.foodAmount || 0), advanceAmount: Number(formData.addAdvanceAmount),
         studentName: selectedStudent.name, studentId: selectedStudent.id, buildingId: selectedStudent.buildingId,
         buildingName: selectedStudent.buildingName, roomNumber: selectedStudent.roomNumber, branch: userBranch,
         type: "income", month: formData.month, year: formData.year, method: formData.method, receiver: formData.receiver,
         description: formData.description, date: serverTimestamp(), createdAt: serverTimestamp()
       }
-      await setDoc(doc(db, "payments", pId), pRecord)
-      await updateDoc(doc(db, "students", selectedStudent.id), {
-        paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }),
-        advanceAmount: increment(Number(formData.addAdvanceAmount)),
-        updatedAt: serverTimestamp()
-      })
-      toast({ title: "Success", description: "Payment recorded." })
+
+      if (userRole === 'Building Manager') {
+        const reqId = doc(collection(db, "managerRequests")).id
+        await setDoc(doc(db, "managerRequests", reqId), { ...pRecord, id: reqId, requestType: "income", requestedBy: localStorage.getItem("somikoron_auth_id"), requestedByName: userName, createdAt: serverTimestamp() })
+        toast({ title: "Request Sent", description: "Payment is waiting for approval." })
+      } else {
+        await setDoc(doc(db, "payments", pId), pRecord)
+        await updateDoc(doc(db, "students", selectedStudent.id), {
+          paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }),
+          advanceAmount: increment(Number(formData.addAdvanceAmount)),
+          updatedAt: serverTimestamp()
+        })
+        toast({ title: "Success", description: "Payment recorded." })
+      }
       setIsEntryOpen(false)
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
     finally { setIsSubmitting(false) }
   }
 
+  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+
+  const handleExportCSV = () => {
+    try {
+      const headers = ["Date", "Student Name", "Building & Room", "Method", "Received By", "Amount"];
+      const rows = filteredPayments.map(p => [
+        formatCompactDate(p.date), p.studentName, `${p.buildingName} - R${p.roomNumber}`, p.method, p.receiver, p.amount
+      ]);
+      const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", `income_report_${new Date().getTime()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) { toast({ variant: "destructive", title: "Export Failed" }) }
+  }
+
+  const activeFilterChips = useMemo(() => {
+    const chips = []
+    if (buildingFilter !== "all") chips.push({ id: "building", label: buildings?.find(b => b.id === buildingFilter)?.name })
+    if (roomFilter !== "all") chips.push({ id: "room", label: `Room ${roomFilter}` })
+    if (methodFilter !== "all") chips.push({ id: "method", label: methodFilter.toUpperCase() })
+    if (receiverFilter !== "all") chips.push({ id: "receiver", label: receiverFilter })
+    if (startDate || endDate) chips.push({ id: "date", label: "Date Applied" })
+    return chips
+  }, [buildingFilter, roomFilter, methodFilter, receiverFilter, startDate, endDate, buildings])
+
   return (
     <div className="space-y-8 pb-20 print:p-0">
+      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -231,11 +282,11 @@ export default function IncomeHistoryPage() {
           <p className="text-sm font-bold">{userBranch} Branch • Official Income Ledger</p>
           <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[10pt]">
             <div>
-              <p><b>Report Type:</b> Income / Collection</p>
-              <p><b>Property:</b> {buildingFilter === 'all' ? 'All Buildings' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+              <p><b>Filter:</b> {buildingFilter === 'all' ? 'All Buildings' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+              <p><b>Period:</b> {startDate || 'N/A'} to {endDate || 'N/A'}</p>
             </div>
             <div className="text-right">
-              <p><b>Period:</b> {startDate || 'N/A'} to {endDate || 'N/A'}</p>
+              <p><b>Total Collections:</b> ৳{stats.total.toLocaleString()}</p>
               <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
             </div>
           </div>
@@ -267,14 +318,14 @@ export default function IncomeHistoryPage() {
         </table>
 
         <div className="summary-section">
-          <div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-2 gap-4">
+          <div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-2">
             <div>
               <h3 className="font-bold uppercase text-primary text-xs mb-2">Final Summary</h3>
-              <p className="text-sm">Total Collections: <b>৳{stats.total.toLocaleString()}</b></p>
               <p className="text-sm">Total Receipts: <b>{stats.count} Entries</b></p>
             </div>
-            <div className="text-right flex flex-col justify-end">
-              <p className="text-xs uppercase font-bold text-muted-foreground">End of Report</p>
+            <div className="text-right">
+              <p className="text-xs uppercase font-bold text-muted-foreground">Grand Total Collection</p>
+              <p className="text-2xl font-black text-income">৳{stats.total.toLocaleString()}</p>
             </div>
           </div>
           <div className="print-footer mt-10">
@@ -285,69 +336,105 @@ export default function IncomeHistoryPage() {
         </div>
       </div>
 
-      <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden print:hidden">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-xs font-bold uppercase text-success">Total Filtered Income</CardTitle>
-          <ArrowUpCircle className="h-4 w-4 text-success" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div>
-          <p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">Found {stats.count} matching records</p>
-        </CardContent>
-      </Card>
-
-      <div className="bg-secondary/20 p-4 rounded-xl border space-y-4 print:hidden">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div className="space-y-1 md:col-span-2">
-            <Label className="text-[10px] uppercase font-bold text-muted-foreground"><Search className="inline h-3 w-3 mr-1"/> Student Name</Label>
-            <Input placeholder="Search..." className="bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
-            <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-              <SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Buildings</SelectItem>
-                {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Method</Label>
-            <Select value={methodFilter} onValueChange={setMethodFilter}>
-              <SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Methods</SelectItem>
-                <SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem>
-              </SelectContent>
-            </Select>
+      {/* GLOBAL FILTER BAR (Desktop) */}
+      <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
+        <div className="flex-1 space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Student Search</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search name..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Date From</Label><Input type="date" className="bg-white" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Date To</Label><Input type="date" className="bg-white" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
-          <Button variant="ghost" className="h-10 font-bold uppercase text-xs" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setMethodFilter("all"); setStartDate(""); setEndDate(""); }}>
-            <XCircle size={14} className="mr-1" /> Reset Date Filter
-          </Button>
+        <div className="w-[150px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label>
+          <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}>
+            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
+        <div className="w-[120px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Room</Label>
+          <Select value={roomFilter} onValueChange={setRoomFilter}>
+            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {availableRoomsForFilter.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-[150px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Method</Label>
+          <Select value={methodFilter} onValueChange={setMethodFilter}>
+            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-[280px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label>
+          <div className="flex gap-2">
+            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 bg-white" />
+            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" />
+          </div>
+        </div>
+        <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setStartDate(""); setEndDate(""); }}>Reset</Button>
       </div>
+
+      {/* MOBILE FILTER PANEL */}
+      <div className="md:hidden space-y-4 print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search name..." className="pl-9 h-9 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          </div>
+          <Dialog open={isMobileFilterOpen} onOpenChange={setIsMobileFilterOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-2"><Filter size={14} /> Filter</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-[90vw] rounded-2xl">
+              <DialogHeader><DialogTitle>Income Filters</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2"><Label>Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label>Room</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForFilter.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label>Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label>Date Range</Label><div className="grid grid-cols-2 gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
+              </div>
+              <DialogFooter className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setStartDate(""); setEndDate(""); setIsMobileFilterOpen(false); }}>Reset</Button><Button onClick={() => setIsMobileFilterOpen(false)}>Apply</Button></DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+        {activeFilterChips.length > 0 && (
+          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
+            {activeFilterChips.map((chip, idx) => (
+              <Badge key={idx} variant="secondary" className="px-2 py-1 gap-1 text-[10px] font-bold uppercase bg-success/10 text-success border-none">
+                {chip.label}
+                <XCircle size={12} className="cursor-pointer" onClick={() => { if (chip.id === 'building') setBuildingFilter("all"); if (chip.id === 'room') setRoomFilter("all"); if (chip.id === 'method') setMethodFilter("all"); if (chip.id === 'date') { setStartDate(""); setEndDate(""); } }} />
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden print:hidden">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-xs font-bold uppercase text-success">Total Filtered Income</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader>
+        <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div><p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">Found {stats.count} matching records</p></CardContent>
+      </Card>
 
       {paymentsLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
         <>
-          {/* Desktop Table View */}
+          {/* DESKTOP TABLE VIEW */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
             <CardContent className="p-0">
               <Table>
                 <TableHeader className="bg-secondary/30">
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                  </TableRow>
+                  <TableRow><TableHead>Date</TableHead><TableHead>Student</TableHead><TableHead>Location</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Amount</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredPayments.map((p: any) => (
@@ -364,102 +451,55 @@ export default function IncomeHistoryPage() {
             </CardContent>
           </Card>
 
-          {/* Mobile Card View */}
+          {/* MOBILE CARD VIEW */}
           <div className="md:hidden space-y-4 print:hidden">
             {filteredPayments.map((p: any) => (
               <Card key={p.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(p.date)}</p>
-                      <h3 className="font-black text-slate-800 text-lg mt-1">{p.studentName}</h3>
-                    </div>
+                    <div><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(p.date)}</p><h3 className="font-black text-slate-800 text-lg mt-1">{p.studentName}</h3></div>
                     <Badge variant="outline" className="uppercase font-bold text-[9px]">{p.method}</Badge>
                   </div>
                   <div className="bg-secondary/30 p-3 rounded-xl border border-secondary flex justify-between items-center">
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Location</p>
-                      <p className="text-xs font-bold text-slate-700">{p.buildingName} • R-{p.roomNumber}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Collected</p>
-                      <p className="text-xl font-black text-income">৳{p.amount?.toLocaleString()}</p>
-                    </div>
+                    <div className="space-y-1"><p className="text-[10px] font-bold text-muted-foreground uppercase">Location</p><p className="text-xs font-bold text-slate-700">{p.buildingName} • R-{p.roomNumber}</p></div>
+                    <div className="text-right"><p className="text-[10px] font-bold text-muted-foreground uppercase">Collected</p><p className="text-xl font-black text-income">৳{p.amount?.toLocaleString()}</p></div>
                   </div>
-                  <div className="text-[10px] text-muted-foreground italic flex items-center gap-1.5">
-                    <UserCheck size={12} className="text-primary"/>
-                    <span>Received by <b>{p.receiver}</b></span>
-                  </div>
+                  <div className="text-[10px] text-muted-foreground italic flex items-center gap-1.5"><UserCheck size={12} className="text-primary"/><span>Received by <b>{p.receiver}</b></span></div>
                 </CardContent>
               </Card>
             ))}
-            {filteredPayments.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No income entries found.</div>}
+            {filteredPayments.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No entries found.</div>}
           </div>
         </>
       )}
 
+      {/* FIXED ACTION BUTTON */}
       <div className="fixed bottom-8 right-8 z-50 print:hidden">
         <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-income"><Plus size={32} className="text-white" /></Button>
       </div>
 
+      {/* NEW INCOME DIALOG */}
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>New Income Entry</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2 p-3 bg-secondary/30 rounded-xl border">
-              <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase">Building</Label>
-                <Select value={entryBuildingFilter} onValueChange={val => { setEntryBuildingFilter(val); setEntryRoomFilter("all"); }}>
-                  <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Buildings</SelectItem>
-                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase">Room No.</Label>
-                <Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}>
-                  <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Rooms</SelectItem>
-                    {availableRooms.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-1"><Label className="text-[10px] font-bold">Building</Label><Select value={entryBuildingFilter} onValueChange={val => { setEntryBuildingFilter(val); setEntryRoomFilter("all"); }}><SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1"><Label className="text-[10px] font-bold">Room</Label><Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}><SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForEntry.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
             </div>
-
-            <div className="space-y-2">
-              <Label>Select Resident</Label>
-              <Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}>
-                <SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger>
-                <SelectContent>
-                  {filteredStudentsForEntry.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
+            <div className="space-y-2"><Label>Select Resident</Label><Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}><SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger><SelectContent>{filteredStudentsForEntry.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}</SelectContent></Select></div>
             {selectedStudent && (
               <div className="bg-primary/5 p-4 rounded-xl space-y-3 border border-primary/10">
-                <h4 className="text-[10px] font-bold uppercase text-primary flex items-center gap-1.5"><Calculator size={12}/> Resident Ledger Stats</h4>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-white p-2 rounded border shadow-sm">
-                    <p className="text-[8px] uppercase font-bold text-muted-foreground">Monthly Rent</p>
-                    <p className="text-sm font-bold">৳{selectedStudent.monthlyRent}</p>
-                  </div>
-                  <div className="bg-white p-2 rounded border shadow-sm">
-                    <p className="text-[8px] uppercase font-bold text-destructive">Overall Due</p>
-                    <p className="text-sm font-bold text-destructive">৳{financialStats.totalDue.toLocaleString()}</p>
-                  </div>
+                  <div className="bg-white p-2 rounded border shadow-sm"><p className="text-[8px] uppercase font-bold">Monthly Rent</p><p className="text-sm font-bold">৳{selectedStudent.monthlyRent}</p></div>
+                  <div className="bg-white p-2 rounded border shadow-sm"><p className="text-[8px] uppercase font-bold text-destructive">Overall Due</p><p className="text-sm font-bold text-destructive">৳{financialStats.totalDue.toLocaleString()}</p></div>
                 </div>
               </div>
             )}
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{"2024,2025,2026".split(',').map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
             </div>
-
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
               {selectedStudent?.paymentSystem === 'package' ? (
                 <div className="space-y-2"><Label className="text-xs">Amount Received (৳)</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} /></div>
@@ -471,7 +511,6 @@ export default function IncomeHistoryPage() {
               )}
               <div className="space-y-2"><Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} /></div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={v => setFormData({...formData, method: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label>Receiver</Label><Select value={formData.receiver} onValueChange={v => setFormData({...formData, receiver: v})}><SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
