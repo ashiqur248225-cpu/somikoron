@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -29,7 +31,7 @@ const EXPENSE_LABELS: Record<string, string> = {
 }
 
 const formatCompactDate = (date: any) => {
-  const d = new Date(date)
+  const d = date?.toDate ? date.toDate() : new Date(date)
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
@@ -89,11 +91,16 @@ export default function ReportsPage() {
     const netProfit = totalIncome - totalExpense
     
     const activeStudents = (students || []).filter(s => s.isActive && (buildingFilter === "all" || s.buildingId === buildingFilter))
-    const totalDues = activeStudents.reduce((acc, s) => acc + (s.duesBreakdown ? Object.values(s.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0), 0)
+    const totalDues = activeStudents.reduce((acc, s) => {
+      const dues = s.duesBreakdown ? Object.values(s.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
+      return acc + dues
+    }, 0)
     
     const totalSeats = (buildings || []).filter(b => buildingFilter === "all" || b.id === buildingFilter).reduce((acc, b) => acc + (b.totalSeats || 0), 0)
     const occupiedSeats = (buildings || []).filter(b => buildingFilter === "all" || b.id === buildingFilter).reduce((acc, b) => acc + (b.occupiedSeats || 0), 0)
     const occupancyRate = totalSeats > 0 ? (occupiedSeats / totalSeats) * 100 : 0
+    
+    // Growth calculation
     const healthScore = Math.round((occupancyRate * 0.4) + (totalIncome > 0 ? 40 : 0) + (netProfit > 0 ? 20 : 0))
 
     const trendMap: Record<string, any> = {}
@@ -140,7 +147,7 @@ export default function ReportsPage() {
           <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[10pt]">
             <div>
               <p><b>Period:</b> {startDate} to {endDate}</p>
-              <p><b>Scope:</b> {buildingFilter === 'all' ? 'Entire Branch' : 'Specific Property'}</p>
+              <p><b>Scope:</b> {buildingFilter === 'all' ? 'Entire Branch' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
             </div>
             <div className="text-right">
               <p><b>Health Score:</b> {stats.healthScore}%</p>
@@ -168,22 +175,22 @@ export default function ReportsPage() {
         </div>
 
         <h3 className="font-black uppercase text-xs mb-2">Detailed Financial Trend</h3>
-        <table>
+        <table className="w-full border-collapse">
           <thead>
             <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead className="text-right">Daily Income</TableHead>
-              <TableHead className="text-right">Daily Expense</TableHead>
-              <TableHead className="text-right">Net Change</TableHead>
+              <TableHead className="border px-4 py-2 bg-slate-50">Date</TableHead>
+              <TableHead className="border px-4 py-2 bg-slate-50 text-right">Daily Income</TableHead>
+              <TableHead className="border px-4 py-2 bg-slate-50 text-right">Daily Expense</TableHead>
+              <TableHead className="border px-4 py-2 bg-slate-50 text-right">Net Change</TableHead>
             </TableRow>
           </thead>
           <TableBody>
             {stats.trendData.reverse().map((t: any) => (
               <TableRow key={t.name}>
-                <TableCell>{t.name}</TableCell>
-                <TableCell className="text-right text-success">৳{(t.income || 0).toLocaleString()}</TableCell>
-                <TableCell className="text-right text-destructive">৳{(t.expense || 0).toLocaleString()}</TableCell>
-                <TableCell className="text-right font-bold">৳{((t.income || 0) - (t.expense || 0)).toLocaleString()}</TableCell>
+                <TableCell className="border px-4 py-2">{t.name}</TableCell>
+                <TableCell className="border px-4 py-2 text-right text-success">৳{(t.income || 0).toLocaleString()}</TableCell>
+                <TableCell className="border px-4 py-2 text-right text-destructive">৳{(t.expense || 0).toLocaleString()}</TableCell>
+                <TableCell className="border px-4 py-2 text-right font-bold">৳{((t.income || 0) - (t.expense || 0)).toLocaleString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -199,7 +206,7 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-secondary/20 p-6 rounded-2xl border print:hidden">
         <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Start Date</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-white" /></div>
         <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">End Date</Label><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-white" /></div>
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
         <Button variant="ghost" onClick={() => { setBuildingFilter("all"); setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]); setEndDate(new Date().toISOString().split('T')[0]) }}>Reset</Button>
       </div>
 
@@ -225,8 +232,8 @@ export default function ReportsPage() {
 
       {/* Visual Charts - Screen Only */}
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 print:hidden">
-        <Card className="rounded-3xl overflow-hidden"><CardHeader><CardTitle className="text-lg font-bold">Hostel Health</CardTitle></CardHeader><CardContent className="flex flex-col items-center pt-6"><div className="text-4xl font-black">{stats.healthScore}%</div><p className="text-xs text-muted-foreground uppercase font-bold mt-2">Overall Score</p></CardContent></Card>
-        <Card className="lg:col-span-2 rounded-3xl overflow-hidden"><CardHeader><CardTitle className="text-lg font-bold">Financial Trends</CardTitle></CardHeader><CardContent className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={stats.trendData}><XAxis dataKey="name" /><YAxis /><RechartTooltip /><Area type="monotone" dataKey="income" stroke="#296EB3" fill="#296EB3" fillOpacity={0.1}/><Area type="monotone" dataKey="expense" stroke="#F06A6A" fill="#F06A6A" fillOpacity={0.1}/></AreaChart></ResponsiveContainer></CardContent></Card>
+        <Card className="rounded-3xl overflow-hidden"><CardHeader><CardTitle className="text-lg font-bold">Hostel Health</CardTitle></CardHeader><CardContent className="flex flex-col items-center pt-6"><div className="text-4xl font-black">{stats.healthScore}%</div><p className="text-xs text-muted-foreground uppercase font-bold mt-2">Overall Score</p></CardContent>
+        <Card className="lg:col-span-2 rounded-3xl overflow-hidden"><CardHeader><CardTitle className="text-lg font-bold">Financial Trends</CardTitle></CardHeader><CardContent className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={stats.trendData}><XAxis dataKey="name" /><YAxis /><RechartTooltip /><Area type="monotone" dataKey="income" stroke="#296EB3" fill="#296EB3" fillOpacity={0.1}/><Area type="monotone" dataKey="expense" stroke="#F06A6A" fill="#F06A6A" fillOpacity={0.1}/></AreaChart></ResponsiveContainer></CardContent>
       </div>
     </div>
   )
