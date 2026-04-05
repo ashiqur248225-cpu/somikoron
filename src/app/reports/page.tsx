@@ -194,37 +194,37 @@ export default function ReportsPage() {
         <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Start Date</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-white" /></div>
         <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">End Date</Label><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-white" /></div>
         <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-        <Button variant="ghost" onClick={() => { setBuildingFilter("all"); setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]); setEndDate(new Date().toISOString().split('T')[0]) }}>Reset</Button>
+        <Button variant="ghost" className="h-10 font-bold uppercase text-xs" onClick={() => { setBuildingFilter("all"); setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]); setEndDate(new Date().toISOString().split('T')[0]) }}>Reset</Button>
       </div>
 
       <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:hidden">
-        <Card className="border-l-[6px] border-l-success rounded-2xl overflow-hidden">
+        <Card className="border-l-[6px] border-l-success rounded-2xl overflow-hidden shadow-sm">
           <CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-success">Total Income</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">৳{stats.totalIncome.toLocaleString()}</div></CardContent>
         </Card>
-        <Card className="border-l-[6px] border-l-destructive rounded-2xl overflow-hidden">
+        <Card className="border-l-[6px] border-l-destructive rounded-2xl overflow-hidden shadow-sm">
           <CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Expenses</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">৳{stats.totalExpense.toLocaleString()}</div></CardContent>
         </Card>
-        <Card className="border-l-[6px] border-l-rose-400 rounded-2xl overflow-hidden">
+        <Card className="border-l-[6px] border-l-rose-400 rounded-2xl overflow-hidden shadow-sm">
           <CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-rose-500">Total Dues</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">৳{stats.totalDues.toLocaleString()}</div></CardContent>
         </Card>
-        <Card className={cn("border-l-[6px] rounded-2xl overflow-hidden", stats.netProfit >= 0 ? "border-l-primary" : "border-l-destructive")}>
+        <Card className={cn("border-l-[6px] rounded-2xl overflow-hidden shadow-sm", stats.netProfit >= 0 ? "border-l-primary" : "border-l-destructive")}>
           <CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase">Net Profit</CardTitle></CardHeader>
           <CardContent><div className={cn("text-2xl font-bold", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>৳{Math.abs(stats.netProfit).toLocaleString()}</div></CardContent>
         </Card>
       </div>
 
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 print:hidden">
-        <Card className="rounded-3xl overflow-hidden">
+        <Card className="rounded-3xl overflow-hidden shadow-sm">
           <CardHeader><CardTitle className="text-lg font-bold">Hostel Health</CardTitle></CardHeader>
           <CardContent className="flex flex-col items-center pt-6">
             <div className="text-4xl font-black">{stats.healthScore}%</div>
             <p className="text-xs text-muted-foreground uppercase font-bold mt-2">Overall Score</p>
           </CardContent>
         </Card>
-        <Card className="lg:col-span-2 rounded-3xl overflow-hidden">
+        <Card className="lg:col-span-2 rounded-3xl overflow-hidden shadow-sm">
           <CardHeader><CardTitle className="text-lg font-bold">Financial Trends</CardTitle></CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
