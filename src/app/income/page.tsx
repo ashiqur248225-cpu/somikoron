@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -136,7 +137,6 @@ export default function IncomeHistoryPage() {
     } catch (e) { toast({ variant: "destructive", title: "Export Failed" }) }
   }
 
-  // Same logic as dashboard for entry filtering
   const availableRooms = useMemo(() => {
     if (!buildings) return []
     let rooms: string[] = []
@@ -224,17 +224,18 @@ export default function IncomeHistoryPage() {
         </div>
       </div>
 
+      {/* Professional Multi-page PDF Structure */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
-          <p className="text-sm font-bold">{userBranch} Branch • Official Ledger</p>
+          <p className="text-sm font-bold">{userBranch} Branch • Official Income Ledger</p>
           <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[10pt]">
             <div>
               <p><b>Report Type:</b> Income / Collection</p>
-              <p><b>Building:</b> {buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+              <p><b>Property:</b> {buildingFilter === 'all' ? 'All Buildings' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
             </div>
             <div className="text-right">
-              <p><b>Date Range:</b> {startDate || 'N/A'} to {endDate || 'N/A'}</p>
+              <p><b>Period:</b> {startDate || 'N/A'} to {endDate || 'N/A'}</p>
               <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
             </div>
           </div>
@@ -269,14 +270,13 @@ export default function IncomeHistoryPage() {
           <div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-2 gap-4">
             <div>
               <h3 className="font-bold uppercase text-primary text-xs mb-2">Final Summary</h3>
+              <p className="text-sm">Total Collections: <b>৳{stats.total.toLocaleString()}</b></p>
               <p className="text-sm">Total Receipts: <b>{stats.count} Entries</b></p>
             </div>
-            <div className="text-right">
-              <p className="text-xs uppercase font-bold text-muted-foreground">Total Collections</p>
-              <p className="text-2xl font-black text-primary">৳{stats.total.toLocaleString()}</p>
+            <div className="text-right flex flex-col justify-end">
+              <p className="text-xs uppercase font-bold text-muted-foreground">End of Report</p>
             </div>
           </div>
-          
           <div className="print-footer mt-10">
             <div className="signature-box">Accountant Signature</div>
             <div className="text-center self-end print-page-number"></div>
@@ -285,7 +285,6 @@ export default function IncomeHistoryPage() {
         </div>
       </div>
 
-      {/* Screen Summary Card */}
       <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden print:hidden">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-xs font-bold uppercase text-success">Total Filtered Income</CardTitle>
@@ -364,7 +363,6 @@ export default function IncomeHistoryPage() {
         </Card>
       )}
 
-      {/* Entry Dialog Snippet */}
       <div className="fixed bottom-8 right-8 z-50 print:hidden">
         <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-income"><Plus size={32} className="text-white" /></Button>
       </div>

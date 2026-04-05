@@ -4,11 +4,10 @@
 import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip, Legend, ResponsiveContainer, 
-  PieChart, Pie, Cell
+  AreaChart, Area, XAxis, YAxis, Tooltip as RechartTooltip, ResponsiveContainer
 } from 'recharts';
 import { Badge } from "@/components/ui/badge"
-import { Activity, Calendar, Building2, TrendingUp, TrendingDown, Wallet, FileSpreadsheet, XCircle, Printer, Scale, Info, Loader2 } from "lucide-react"
+import { Printer, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,13 +21,6 @@ import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-
-const CHART_COLORS = ['#296EB3', '#F06A6A', '#4CAF50', '#FF9800', '#9C27B0', '#00BCD4', '#607D8B', '#E91E63'];
-
-const EXPENSE_LABELS: Record<string, string> = {
-  rent: "Building Rent", electricity: "Electricity", water: "Water/Gas", maintenance: "Repair",
-  market: "Market/Food", internet: "Internet", salary: "Salary", others: "Others"
-}
 
 const formatCompactDate = (date: any) => {
   const d = date?.toDate ? date.toDate() : new Date(date)
@@ -100,7 +92,6 @@ export default function ReportsPage() {
     const occupiedSeats = (buildings || []).filter(b => buildingFilter === "all" || b.id === buildingFilter).reduce((acc, b) => acc + (b.occupiedSeats || 0), 0)
     const occupancyRate = totalSeats > 0 ? (occupiedSeats / totalSeats) * 100 : 0
     
-    // Growth calculation
     const healthScore = Math.round((occupancyRate * 0.4) + (totalIncome > 0 ? 40 : 0) + (netProfit > 0 ? 20 : 0))
 
     const trendMap: Record<string, any> = {}
@@ -114,12 +105,7 @@ export default function ReportsPage() {
     })
     const trendData = Object.values(trendMap).sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime())
 
-    const expensePieData = Object.entries(filteredData.expense.reduce((acc: any, e) => {
-      acc[e.category] = (acc[e.category] || 0) + e.amount
-      return acc
-    }, {})).map(([name, value]) => ({ name: EXPENSE_LABELS[name] || name, value }))
-
-    return { totalIncome, totalExpense, totalDues, netProfit, occupancyRate, healthScore, trendData, expensePieData }
+    return { totalIncome, totalExpense, totalDues, netProfit, occupancyRate, healthScore, trendData }
   }, [filteredData, students, buildings, buildingFilter])
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
@@ -140,6 +126,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {/* Official Ledger Print Format */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
@@ -175,17 +162,17 @@ export default function ReportsPage() {
         </div>
 
         <h3 className="font-black uppercase text-xs mb-2">Detailed Financial Trend</h3>
-        <table className="w-full border-collapse">
-          <thead>
+        <Table className="w-full border-collapse">
+          <TableHeader>
             <TableRow>
               <TableHead className="border px-4 py-2 bg-slate-50">Date</TableHead>
               <TableHead className="border px-4 py-2 bg-slate-50 text-right">Daily Income</TableHead>
               <TableHead className="border px-4 py-2 bg-slate-50 text-right">Daily Expense</TableHead>
               <TableHead className="border px-4 py-2 bg-slate-50 text-right">Net Change</TableHead>
             </TableRow>
-          </thead>
+          </TableHeader>
           <TableBody>
-            {stats.trendData.reverse().map((t: any) => (
+            {stats.trendData.slice().reverse().map((t: any) => (
               <TableRow key={t.name}>
                 <TableCell className="border px-4 py-2">{t.name}</TableCell>
                 <TableCell className="border px-4 py-2 text-right text-success">৳{(t.income || 0).toLocaleString()}</TableCell>
@@ -194,7 +181,7 @@ export default function ReportsPage() {
               </TableRow>
             ))}
           </TableBody>
-        </table>
+        </Table>
 
         <div className="print-footer mt-10">
           <div className="signature-box">Accountant Signature</div>
@@ -210,7 +197,6 @@ export default function ReportsPage() {
         <Button variant="ghost" onClick={() => { setBuildingFilter("all"); setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]); setEndDate(new Date().toISOString().split('T')[0]) }}>Reset</Button>
       </div>
 
-      {/* Analytics Cards */}
       <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:hidden">
         <Card className="border-l-[6px] border-l-success rounded-2xl overflow-hidden">
           <CardHeader className="pb-2"><CardTitle className="text-[10px] font-bold uppercase text-success">Total Income</CardTitle></CardHeader>
@@ -230,10 +216,28 @@ export default function ReportsPage() {
         </Card>
       </div>
 
-      {/* Visual Charts - Screen Only */}
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 print:hidden">
-        <Card className="rounded-3xl overflow-hidden"><CardHeader><CardTitle className="text-lg font-bold">Hostel Health</CardTitle></CardHeader><CardContent className="flex flex-col items-center pt-6"><div className="text-4xl font-black">{stats.healthScore}%</div><p className="text-xs text-muted-foreground uppercase font-bold mt-2">Overall Score</p></CardContent>
-        <Card className="lg:col-span-2 rounded-3xl overflow-hidden"><CardHeader><CardTitle className="text-lg font-bold">Financial Trends</CardTitle></CardHeader><CardContent className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={stats.trendData}><XAxis dataKey="name" /><YAxis /><RechartTooltip /><Area type="monotone" dataKey="income" stroke="#296EB3" fill="#296EB3" fillOpacity={0.1}/><Area type="monotone" dataKey="expense" stroke="#F06A6A" fill="#F06A6A" fillOpacity={0.1}/></AreaChart></ResponsiveContainer></CardContent>
+        <Card className="rounded-3xl overflow-hidden">
+          <CardHeader><CardTitle className="text-lg font-bold">Hostel Health</CardTitle></CardHeader>
+          <CardContent className="flex flex-col items-center pt-6">
+            <div className="text-4xl font-black">{stats.healthScore}%</div>
+            <p className="text-xs text-muted-foreground uppercase font-bold mt-2">Overall Score</p>
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-2 rounded-3xl overflow-hidden">
+          <CardHeader><CardTitle className="text-lg font-bold">Financial Trends</CardTitle></CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={stats.trendData}>
+                <XAxis dataKey="name" />
+                <YAxis />
+                <RechartTooltip />
+                <Area type="monotone" dataKey="income" stroke="#296EB3" fill="#296EB3" fillOpacity={0.1}/>
+                <Area type="monotone" dataKey="expense" stroke="#F06A6A" fill="#F06A6A" fillOpacity={0.1}/>
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
