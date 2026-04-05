@@ -93,68 +93,118 @@
   background-color: hsl(var(--destructive));
 }
 
+/* Professional Print Styles */
 @media print {
-  html, body {
-    height: auto !important;
-    overflow: visible !important;
-    background-color: white !important;
-    color: black !important;
-    font-size: 12pt;
+  @page {
+    size: A4;
+    margin: 10mm 10mm 20mm 10mm;
   }
 
+  body {
+    background-color: white !important;
+    color: black !important;
+    font-size: 9pt !important;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Hide UI elements */
   [data-sidebar="sidebar"],
-  [data-sidebar="header"],
   .sidebar-trigger,
   button,
   .print-hidden,
-  header,
+  .no-print,
   nav,
-  .no-print {
+  header {
     display: none !important;
   }
-  
+
+  /* Force report container to top */
+  .print-report-container {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    visibility: visible !important;
+  }
+
   .sidebar-inset, 
   main {
     padding: 0 !important;
     margin: 0 !important;
     display: block !important;
     width: 100% !important;
-    position: static !important;
-  }
-
-  .card {
-    border: 1px solid #ddd !important;
-    box-shadow: none !important;
-    margin-bottom: 1rem !important;
-    break-inside: avoid;
-  }
-
-  .print-only {
-    display: block !important;
   }
 
   table {
     width: 100% !important;
     border-collapse: collapse !important;
-    margin-top: 10px;
+    margin-top: 5px;
+    table-layout: fixed;
+  }
+
+  thead {
+    display: table-header-group;
   }
 
   th, td {
-    border: 1px solid #ddd !important;
-    padding: 6px 8px !important;
-    text-align: left;
+    border: 0.5pt solid #ccc !important;
+    padding: 4px 6px !important;
+    overflow: hidden;
+    word-wrap: break-word;
   }
 
   th {
-    background-color: #f8f9fa !important;
-    -webkit-print-color-adjust: exact;
+    background-color: #f1f5f9 !important;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 8pt;
   }
 
+  /* Fixed Footer on Every Page */
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    display: flex !important;
+    justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+    font-size: 8pt;
+    color: #666;
+  }
+
+  .print-page-number:after {
+    content: "Page " counter(page);
+  }
+
+  .signature-box {
+    width: 150px;
+    border-top: 1px solid black;
+    text-align: center;
+    margin-top: 30px;
+    padding-top: 5px;
+    font-weight: bold;
+  }
+
+  /* First page only header */
+  .report-header {
+    margin-bottom: 20px;
+  }
+
+  /* Multi-page break handling */
   tr {
     page-break-inside: avoid !important;
   }
 
-  .text-primary { color: #296EB3 !important; }
-  .text-success { color: #4CAF50 !important; }
-  .text-destructive { color: #F06A6A !important; }
+  .summary-section {
+    margin-top: 30px;
+    page-break-inside: avoid;
+  }
+}
+
+/* Hidden in screen, visible in print */
+.print-only {
+  display: none;
 }
