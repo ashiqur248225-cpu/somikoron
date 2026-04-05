@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -23,6 +22,7 @@ import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const formatCompactDate = (date: any) => {
+  if (!date) return 'N/A'
   const d = date?.toDate ? date.toDate() : new Date(date)
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
@@ -110,7 +110,7 @@ export default function ReportsPage() {
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
 
-  if (pLoading || eLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
+  if (pLoading || eLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
@@ -126,7 +126,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Official Ledger Print Format (Hidden on Screen) */}
+      {/* Official Ledger Print Format */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
@@ -162,26 +162,26 @@ export default function ReportsPage() {
         </div>
 
         <h3 className="font-black uppercase text-xs mb-2">Detailed Financial Trend</h3>
-        <table>
-          <thead>
-            <TableRow>
-              <TableHead className="w-[25%]">Date</TableHead>
-              <TableHead className="w-[25%] text-right">Daily Income</TableHead>
-              <TableHead className="w-[25%] text-right">Daily Expense</TableHead>
-              <TableHead className="w-[25%] text-right">Net Change</TableHead>
+        <Table className="border">
+          <TableHeader>
+            <TableRow className="bg-slate-50">
+              <TableHead className="w-[25%] font-bold text-slate-900 border">Date</TableHead>
+              <TableHead className="w-[25%] text-right font-bold text-slate-900 border">Daily Income</TableHead>
+              <TableHead className="w-[25%] text-right font-bold text-slate-900 border">Daily Expense</TableHead>
+              <TableHead className="w-[25%] text-right font-bold text-slate-900 border">Net Change</TableHead>
             </TableRow>
-          </thead>
+          </TableHeader>
           <TableBody>
             {stats.trendData.slice().reverse().map((t: any) => (
               <TableRow key={t.name}>
-                <TableCell>{t.name}</TableCell>
-                <TableCell className="text-right text-success">৳{(t.income || 0).toLocaleString()}</TableCell>
-                <TableCell className="text-right text-destructive">৳{(t.expense || 0).toLocaleString()}</TableCell>
-                <TableCell className="text-right font-bold">৳{((t.income || 0) - (t.expense || 0)).toLocaleString()}</TableCell>
+                <TableCell className="border">{t.name}</TableCell>
+                <TableCell className="text-right text-success border">৳{(t.income || 0).toLocaleString()}</TableCell>
+                <TableCell className="text-right text-destructive border">৳{(t.expense || 0).toLocaleString()}</TableCell>
+                <TableCell className="text-right font-bold border">৳{((t.income || 0) - (t.expense || 0)).toLocaleString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>
-        </table>
+        </Table>
 
         <div className="print-footer mt-10">
           <div className="signature-box">Accountant Signature</div>
