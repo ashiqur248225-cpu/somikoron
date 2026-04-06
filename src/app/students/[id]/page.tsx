@@ -30,7 +30,12 @@ import {
   Landmark,
   ShieldCheck,
   CheckCircle2,
-  HandCoins
+  HandCoins,
+  MapPin,
+  GraduationCap,
+  Briefcase,
+  Users,
+  Home
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -124,7 +129,18 @@ export default function StudentDetailsPage({
     name: "",
     phone: "",
     parentPhone: "",
+    guardianPhone: "",
+    fatherName: "",
+    motherName: "",
     address: "",
+    village: "",
+    postOffice: "",
+    upazila: "",
+    district: "",
+    dob: "",
+    bloodGroup: "",
+    collegeUniversity: "",
+    department: "",
     monthlyRent: "",
     paymentSystem: "package",
     billingStartDate: "",
@@ -162,7 +178,18 @@ export default function StudentDetailsPage({
         name: student.name || "",
         phone: student.phone || "",
         parentPhone: student.parentPhone || "",
+        guardianPhone: student.guardianPhone || "",
+        fatherName: student.fatherName || "",
+        motherName: student.motherName || "",
         address: student.address || "",
+        village: student.village || "",
+        postOffice: student.postOffice || "",
+        upazila: student.upazila || "",
+        district: student.district || "",
+        dob: student.dob || "",
+        bloodGroup: student.bloodGroup || "",
+        collegeUniversity: student.collegeUniversity || "",
+        department: student.department || "",
         monthlyRent: (student.monthlyRent || 0).toString(),
         paymentSystem: student.paymentSystem || "package",
         billingStartDate: student.billingStartDate || "",
@@ -608,6 +635,7 @@ export default function StudentDetailsPage({
             <div className="flex gap-2 items-center mt-1">
               <Badge variant={student.isActive ? "default" : "destructive"} className={student.isActive ? "bg-success" : ""}>{student.isActive ? "Active Resident" : "Ex-Resident"}</Badge>
               <Badge variant="outline" className="capitalize">{student.paymentSystem} Plan</Badge>
+              {student.bloodGroup && <Badge variant="destructive" className="bg-destructive/10 text-destructive border-destructive/20 font-black">{student.bloodGroup}</Badge>}
             </div>
           </div>
         </div>
@@ -645,243 +673,230 @@ export default function StudentDetailsPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="border-none shadow-sm h-fit">
-          <CardHeader><CardTitle className="text-lg">Contact & Location</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-3 text-sm"><Phone className="text-primary" size={16} /><span className="font-bold">{student.phone}</span></div>
-            <div className="flex items-center gap-3 text-sm"><Building2 className="text-primary" size={16} /><span className="font-semibold">{student.buildingName}</span></div>
-            <div className="flex items-center gap-3 text-sm"><BedDouble className="text-primary" size={16} /><span>Room {student.roomNumber} | Seat {student.seatNumber}</span></div>
-            <div className="flex items-center gap-3 text-sm"><Calendar className="text-primary" size={16} /><span>Billing Start: {student.billingStartDate || 'N/A'}</span></div>
-            
-            <div className="md:hidden flex flex-wrap gap-2 pt-2 border-t mt-2">
-              <Badge variant={student.isActive ? "default" : "destructive"} className={student.isActive ? "bg-success text-[10px]" : "text-[10px]"}>{student.isActive ? "Active Resident" : "Ex-Resident"}</Badge>
-              <Badge variant="outline" className="capitalize text-[10px]">{student.paymentSystem} Plan</Badge>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="border-none shadow-sm">
-          <CardHeader><CardTitle className="text-lg">Financial Overview</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-              <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                <p className="text-[10px] uppercase text-orange-600 font-bold">Monthly Rent</p>
-                <p className="text-lg font-bold text-orange-600">৳{student.monthlyRent}</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="md:col-span-1 space-y-6">
+          <Card className="border-none shadow-sm h-fit">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-bold uppercase text-muted-foreground">Quick Contact</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-primary">Student Phone</Label>
+                <div className="flex items-center gap-3 text-sm font-bold text-slate-800"><Phone size={14} className="text-slate-400" />{student.phone}</div>
               </div>
-              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                <p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p>
-                <p className="text-lg font-bold">৳{student.advanceAmount || 0}</p>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-primary">Parent Phone</Label>
+                <div className="flex items-center gap-3 text-sm font-bold text-slate-800"><Phone size={14} className="text-slate-400" />{student.parentPhone}</div>
               </div>
-              
-              {/* Total Received Card */}
-              <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 md:col-span-2">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-[10px] uppercase text-indigo-600 font-bold flex items-center gap-1"><HandCoins size={10}/> Total Received</p>
-                    <p className="text-xl font-black text-indigo-700">৳{financialStats.totalLifetimeReceived.toLocaleString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[8px] text-muted-foreground uppercase font-bold">System: ৳{financialStats.totalSystemPayments.toLocaleString()}</p>
-                    {student.historicalTotalReceived > 0 && (
-                      <p className="text-[8px] text-indigo-400 uppercase font-bold">Migrated: ৳{student.historicalTotalReceived.toLocaleString()}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-lg bg-secondary/50 border border-secondary">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p>
-                <p className="text-lg font-bold">৳{student.serviceCharge || 0}</p>
-              </div>
-              
-              <div className={cn("p-3 rounded-lg border", financialStats.rentDue > 0 ? "bg-destructive/10 border-destructive/20" : "bg-success/10 border-success/20")}>
-                <p className={cn("text-[10px] uppercase font-bold", financialStats.rentDue > 0 ? "text-destructive" : "text-success")}>Total Rent Due</p>
-                <p className="text-lg font-bold">৳{financialStats.rentDue.toLocaleString()}</p>
-              </div>
-              
-              {student.paymentSystem === 'non-package' && (
-                <div className={cn("p-3 rounded-lg border md:col-span-2", financialStats.foodBalance >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20")}>
-                  <p className={cn("text-[10px] uppercase font-bold", financialStats.foodBalance >= 0 ? "text-success" : "text-destructive")}>Food Balance</p>
-                  <p className="text-lg font-bold">৳{financialStats.foodBalance.toLocaleString()}</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="payments" className="w-full">
-        <TabsList className="bg-secondary/50 p-1 mb-4 flex w-full md:w-auto">
-          <TabsTrigger value="payments" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><CreditCard size={14} /> Payments</TabsTrigger>
-          <TabsTrigger value="dues" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><Clock size={14} /> Dues</TabsTrigger>
-          {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><Utensils size={14} /> Meals</TabsTrigger>}
-        </TabsList>
-        
-        <TabsContent value="payments">
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardContent className="p-0">
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Period</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead>Purpose</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {student.paymentsHistory?.map((p: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell>
-                        <TableCell className="font-medium">{p.month} {p.year}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
-                        <TableCell><span className="text-[10px] text-muted-foreground truncate max-w-[200px] block">{p.description}</span></TableCell>
-                        <TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                    {(!student.paymentsHistory || student.paymentsHistory.length === 0) && <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No records.</TableCell></TableRow>}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="md:hidden space-y-3 p-4">
-                {student.paymentsHistory?.map((p: any, idx: number) => (
-                  <div key={idx} className="bg-secondary/20 p-3 rounded-xl border border-secondary flex justify-between items-center">
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p>
-                      <p className="text-sm font-black text-slate-800">{p.month} {p.year}</p>
-                      <Badge variant="outline" className="text-[8px] h-4 uppercase">{p.method}</Badge>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-black text-income">৳{p.amount?.toLocaleString()}</p>
-                      <p className="text-[8px] text-muted-foreground italic truncate max-w-[100px]">{p.description}</p>
-                    </div>
-                  </div>
-                ))}
-                {(!student.paymentsHistory || student.paymentsHistory.length === 0) && <p className="text-center py-12 text-muted-foreground italic text-sm">No records found.</p>}
+              <Separator />
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-primary">Allocation</Label>
+                <div className="flex items-center gap-3 text-sm"><Building2 className="text-slate-400" size={14} /><span className="font-semibold">{student.buildingName}</span></div>
+                <div className="flex items-center gap-3 text-sm"><BedDouble className="text-slate-400" size={14} /><span>Room {student.roomNumber} | Seat {student.seatNumber}</span></div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="dues">
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="p-4 md:p-6">
-              <CardTitle className="text-sm">Monthly Rent Status</CardTitle>
-              <CardDescription className="text-xs">Real-time calculation based on payments and dues map.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Month & Year</TableHead>
-                      <TableHead>Rent Amount</TableHead>
-                      <TableHead>Amount Covered</TableHead>
-                      <TableHead className="text-right">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {financialStats.monthsList.map((m: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-medium">{m.month} {m.year} {m.isHistorical && <Badge variant="secondary" className="text-[8px] h-4">Historical</Badge>}</TableCell>
-                        <TableCell>৳{m.charge}</TableCell>
-                        <TableCell>৳{m.paid}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge className={cn(
-                            m.status === 'Paid' ? "bg-success text-white" : m.status === 'Partial' ? "bg-orange-500 text-white" : "bg-destructive text-white"
-                          )}>{m.status}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="md:hidden space-y-3 p-4">
-                {financialStats.monthsList.map((m: any, idx: number) => (
-                  <div key={idx} className="bg-white p-3 rounded-xl border flex justify-between items-center shadow-sm">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-slate-800">{m.month} {m.year}</p>
-                        {m.isHistorical && <Badge variant="secondary" className="text-[7px] h-3.5 px-1 uppercase">Hist</Badge>}
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium">
-                        <span>Charge: ৳{m.charge}</span>
-                        <span>•</span>
-                        <span className="text-income">Paid: ৳{m.paid}</span>
-                      </div>
-                    </div>
-                    <Badge className={cn(
-                      "text-[8px] h-5 px-1.5 font-bold uppercase",
-                      m.status === 'Paid' ? "bg-success" : m.status === 'Partial' ? "bg-orange-500" : "bg-destructive"
-                    )}>{m.status}</Badge>
-                  </div>
-                ))}
+          <Card className="border-none shadow-sm h-fit">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-bold uppercase text-muted-foreground">Financial Stats</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 grid-cols-1">
+                <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                  <p className="text-[10px] uppercase text-orange-600 font-bold">Monthly Rent</p>
+                  <p className="text-lg font-bold text-orange-600">৳{student.monthlyRent}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                  <p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p>
+                  <p className="text-lg font-bold text-primary">৳{student.advanceAmount || 0}</p>
+                </div>
+                <div className={cn("p-3 rounded-lg border", financialStats.rentDue > 0 ? "bg-destructive/10 border-destructive/20" : "bg-success/10 border-success/20")}>
+                  <p className={cn("text-[10px] uppercase font-bold", financialStats.rentDue > 0 ? "text-destructive" : "text-success")}>Current Rent Due</p>
+                  <p className="text-lg font-bold">৳{financialStats.rentDue.toLocaleString()}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
 
-        {student.paymentSystem === 'non-package' && (
-          <TabsContent value="meals">
-            <Card className="border-none shadow-sm overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between p-4 md:p-6">
-                <div>
-                  <CardTitle className="text-sm">Meals History</CardTitle>
-                  <CardDescription className="text-[10px] md:text-xs">৳{currentMealRate}/meal</CardDescription>
-                </div>
-                <Button onClick={() => setIsLogMealDialogOpen(true)} variant="outline" size="sm" className="h-8 gap-1 text-[10px] md:text-sm">
-                  <UtensilsCrossed size={12} /> Log Meals
-                </Button>
+        <div className="md:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Family & Guardian Information */}
+            <Card className="border-none shadow-sm">
+              <CardHeader className="bg-slate-50/50 border-b py-3 px-4">
+                <CardTitle className="text-sm font-bold flex items-center gap-2"><Users size={16} className="text-primary"/> Family Information</CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
-                <div className="hidden md:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Month</TableHead>
-                        <TableHead>Total Meals</TableHead>
-                        <TableHead>Rate</TableHead>
-                        <TableHead className="text-right">Total Cost</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {student.mealsHistory?.map((m: any, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-medium">{m.month}</TableCell>
-                          <TableCell className="font-bold">{m.totalMeals}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">৳{m.perMealCost}</TableCell>
-                          <TableCell className="text-right font-bold text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell>
-                        </TableRow>
-                      ))}
-                      {(!student.mealsHistory || student.mealsHistory.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No meal records found.</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
+              <CardContent className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Father's Name</Label>
+                    <p className="text-sm font-bold text-slate-700">{student.fatherName || "N/A"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Mother's Name</Label>
+                    <p className="text-sm font-bold text-slate-700">{student.motherName || "N/A"}</p>
+                  </div>
                 </div>
-
-                <div className="md:hidden space-y-3 p-4">
-                  {student.mealsHistory?.map((m: any, idx: number) => (
-                    <div key={idx} className="bg-orange-50/50 p-3 rounded-xl border border-orange-100 flex justify-between items-center shadow-sm">
-                      <div className="space-y-1">
-                        <p className="text-sm font-bold text-slate-800">{m.month}</p>
-                        <p className="text-[10px] text-muted-foreground font-medium">{m.totalMeals} Meals × ৳{m.perMealCost}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-black text-destructive">৳{m.totalCost?.toLocaleString()}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {(!student.mealsHistory || student.mealsHistory.length === 0) && <p className="text-center py-12 text-muted-foreground italic text-sm">No meal entries found.</p>}
+                <div className="p-3 bg-destructive/5 rounded-xl border border-destructive/10">
+                  <Label className="text-[10px] uppercase font-bold text-destructive">Emergency Contact (Guardian)</Label>
+                  <p className="text-lg font-black text-destructive flex items-center gap-2 mt-1">
+                    <Phone size={16} /> {student.guardianPhone || student.parentPhone || "N/A"}
+                  </p>
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-        )}
-      </Tabs>
+
+            {/* Education & Personal Information */}
+            <Card className="border-none shadow-sm">
+              <CardHeader className="bg-slate-50/50 border-b py-3 px-4">
+                <CardTitle className="text-sm font-bold flex items-center gap-2"><GraduationCap size={16} className="text-primary"/> Personal & Education</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Birth Date</Label>
+                    <p className="text-sm font-bold flex items-center gap-1.5"><Calendar size={12}/> {student.dob || "N/A"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Blood Group</Label>
+                    <Badge variant="destructive" className="h-5 text-[10px] font-black">{student.bloodGroup || "Unknown"}</Badge>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">College / University</Label>
+                  <p className="text-sm font-bold text-slate-700 flex items-center gap-1.5"><Home size={12}/> {student.collegeUniversity || "N/A"}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Department / Group</Label>
+                  <p className="text-sm font-bold text-primary flex items-center gap-1.5"><Briefcase size={12}/> {student.department || "N/A"}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Address Information */}
+          <Card className="border-none shadow-sm">
+            <CardHeader className="bg-slate-50/50 border-b py-3 px-4">
+              <CardTitle className="text-sm font-bold flex items-center gap-2"><MapPin size={16} className="text-primary"/> Permanent Address</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Village / Area</Label>
+                  <p className="text-xs font-bold text-slate-700">{student.village || "N/A"}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Post Office</Label>
+                  <p className="text-xs font-bold text-slate-700">{student.postOffice || "N/A"}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Upazila / Thana</Label>
+                  <p className="text-xs font-bold text-slate-700">{student.upazila || "N/A"}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">District</Label>
+                  <p className="text-xs font-bold text-slate-700">{student.district || "N/A"}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Detailed Ledger Tabs */}
+          <Tabs defaultValue="payments" className="w-full">
+            <TabsList className="bg-secondary/50 p-1 mb-4 flex w-full md:w-auto">
+              <TabsTrigger value="payments" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><CreditCard size={14} /> Payments</TabsTrigger>
+              <TabsTrigger value="dues" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><Clock size={14} /> Dues</TabsTrigger>
+              {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><Utensils size={14} /> Meals</TabsTrigger>}
+            </TabsList>
+            
+            <TabsContent value="payments">
+              <Card className="border-none shadow-sm overflow-hidden bg-white">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50">
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {student.paymentsHistory?.map((p: any, idx: number) => (
+                        <TableRow key={idx}>
+                          <TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell>
+                          <TableCell className="font-medium">{p.month} {p.year}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
+                          <TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                      {(!student.paymentsHistory || student.paymentsHistory.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No records.</TableCell></TableRow>}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="dues">
+              <Card className="border-none shadow-sm overflow-hidden bg-white">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50">
+                      <TableRow>
+                        <TableHead>Month & Year</TableHead>
+                        <TableHead>Charge</TableHead>
+                        <TableHead>Paid</TableHead>
+                        <TableHead className="text-right">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {financialStats.monthsList.map((m: any, idx: number) => (
+                        <TableRow key={idx}>
+                          <TableCell className="font-medium">{m.month} {m.year} {m.isHistorical && <Badge variant="secondary" className="text-[8px] h-4">Historical</Badge>}</TableCell>
+                          <TableCell>৳{m.charge}</TableCell>
+                          <TableCell>৳{m.paid}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge className={cn(
+                              m.status === 'Paid' ? "bg-success text-white" : m.status === 'Partial' ? "bg-orange-500 text-white" : "bg-destructive text-white"
+                            )}>{m.status}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {student.paymentSystem === 'non-package' && (
+              <TabsContent value="meals">
+                <Card className="border-none shadow-sm overflow-hidden bg-white">
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader className="bg-slate-50/50">
+                        <TableRow>
+                          <TableHead>Month</TableHead>
+                          <TableHead>Total Meals</TableHead>
+                          <TableHead>Rate</TableHead>
+                          <TableHead className="text-right">Total Cost</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {student.mealsHistory?.map((m: any, idx: number) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-medium">{m.month}</TableCell>
+                            <TableCell className="font-bold">{m.totalMeals}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">৳{m.perMealCost}</TableCell>
+                            <TableCell className="text-right font-bold text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                        {(!student.mealsHistory || student.mealsHistory.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No meal records found.</TableCell></TableRow>}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
+          </Tabs>
+        </div>
+      </div>
 
       <div className="fixed bottom-8 right-8 z-50 flex flex-col gap-2">
         {student.paymentSystem === 'non-package' && (
@@ -986,27 +1001,86 @@ export default function StudentDetailsPage({
 
       {/* Edit Student Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Student Profile</DialogTitle>
             <DialogDescription>Update information and relocate student room.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Full Name</Label>
-              <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-6 py-4">
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Basic Information</h3>
               <div className="space-y-2">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Personal Phone</Label>
-                <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Full Name</Label>
+                <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
               </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Parent Phone</Label>
-                <Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} />
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Personal Phone</Label>
+                  <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Parent Phone</Label>
+                  <Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Guardian Phone</Label>
+                  <Input value={editForm.guardianPhone} onChange={e => setEditForm({...editForm, guardianPhone: e.target.value})} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Father's Name</Label>
+                  <Input value={editForm.fatherName} onChange={e => setEditForm({...editForm, fatherName: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Mother's Name</Label>
+                  <Input value={editForm.motherName} onChange={e => setEditForm({...editForm, motherName: e.target.value})} />
+                </div>
               </div>
             </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Address & Personal</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Village</Label>
+                  <Input value={editForm.village} onChange={e => setEditForm({...editForm, village: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Post Office</Label>
+                  <Input value={editForm.postOffice} onChange={e => setEditForm({...editForm, postOffice: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Upazila</Label>
+                  <Input value={editForm.upazila} onChange={e => setEditForm({...editForm, upazila: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">District</Label>
+                  <Input value={editForm.district} onChange={e => setEditForm({...editForm, district: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Date of Birth</Label>
+                  <Input type="date" value={editForm.dob} onChange={e => setEditForm({...editForm, dob: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Blood Group</Label>
+                  <Select value={editForm.bloodGroup} onValueChange={val => setEditForm({...editForm, bloodGroup: val})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
 
             <div className="p-4 border rounded-xl space-y-4 bg-primary/5 border-primary/10">
               <h3 className="font-bold flex items-center gap-2 text-primary uppercase text-[10px] tracking-widest"><Building2 size={14}/> Room Allocation Update</h3>
@@ -1056,9 +1130,6 @@ export default function StudentDetailsPage({
                   </div>
                 </div>
               </div>
-              <p className="text-[9px] text-primary font-bold italic flex items-center gap-1">
-                <CheckCircle2 size={10} /> রুম পরিবর্তন করলে ভাড়ার হার স্বয়ংক্রিয়ভাবে আপডেট হবে।
-              </p>
             </div>
 
             <Separator />
@@ -1078,10 +1149,6 @@ export default function StudentDetailsPage({
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Billing Start Date</Label>
-              <Input type="date" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} />
             </div>
           </div>
           <DialogFooter>
@@ -1228,7 +1295,7 @@ export default function StudentDetailsPage({
           </div>
 
           <DialogFooter className="grid grid-cols-2 gap-4">
-            <Button variant="outline" onClick={() => setIsExitDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setIsExitDialogOpen(false); }}>Cancel</Button>
             <Button onClick={handleConfirmExit} disabled={isUpdating} className="bg-destructive hover:bg-destructive/90 font-bold">
               {isUpdating ? <Loader2 className="animate-spin" /> : <><ShieldCheck size={16} className="mr-2"/> Confirm Exit</>}
             </Button>

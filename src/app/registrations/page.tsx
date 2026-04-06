@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -240,14 +241,25 @@ export default function RegistrationsPage() {
         }
       }
 
+      // Store all expanded fields from the registration form
       await setDoc(doc(db, "students", studentId), {
         id: studentId,
         name: selectedReg.name,
-        occupation: selectedReg.occupation || "student",
+        fatherName: selectedReg.fatherName || "",
+        motherName: selectedReg.motherName || "",
         phone: selectedReg.phone,
-        parentPhone: selectedReg.parentPhone,
+        parentPhone: selectedReg.parentPhone || "",
+        guardianPhone: selectedReg.guardianPhone || "",
         dob: selectedReg.dob || "",
+        bloodGroup: selectedReg.bloodGroup || "",
+        village: selectedReg.village || "",
+        postOffice: selectedReg.postOffice || "",
+        upazila: selectedReg.upazila || "",
+        district: selectedReg.district || "",
         address: `${selectedReg.village}, ${selectedReg.postOffice}, ${selectedReg.upazila}, ${selectedReg.district}`,
+        collegeUniversity: selectedReg.collegeUniversity || "",
+        department: selectedReg.department || "",
+        occupation: selectedReg.occupation || "student",
         buildingId: bId,
         buildingName: selectedBuilding?.name || "Unknown",
         roomNumber: rNum,

@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -60,12 +61,13 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
     bloodGroup: "O+",
     phone: "",
     parentPhone: "",
+    guardianPhone: "",
     district: "",
     upazila: "",
     postOffice: "",
     village: "",
-    institute: "",
-    group: "Science",
+    collegeUniversity: "",
+    department: "Science",
     buildingId: "",
     roomNumber: "",
     seatNumber: ""
@@ -87,7 +89,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
   const selectedRoom = roomsInBuilding.find((r: any) => r.roomNo === formData.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
-  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>, field: 'phone' | 'parentPhone') => {
+  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>, field: 'phone' | 'parentPhone' | 'guardianPhone') => {
     const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 11)
     setFormData({ ...formData, [field]: val })
   }
@@ -109,7 +111,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
     const requiredFields = [
       'name', 'fatherName', 'motherName', 'dob', 'bloodGroup', 'phone', 
       'parentPhone', 'district', 'upazila', 'postOffice', 'village', 
-      'institute', 'group', 'occupation'
+      'collegeUniversity', 'department', 'occupation'
     ]
 
     for (const field of requiredFields) {
@@ -268,14 +270,18 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label>Personal Phone (নিজস্ব মোবাইল)</Label>
-                      <Input required type="tel" value={formData.phone} onChange={e => handlePhoneInput(e, 'phone')} placeholder="01XXXXXXXXX (১১ ডিজিট)" className="border-2 border-slate-200 h-11" />
+                      <Label>Personal Phone</Label>
+                      <Input required type="tel" value={formData.phone} onChange={e => handlePhoneInput(e, 'phone')} placeholder="01XXXXXXXXX" className="border-2 border-slate-200 h-11" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Guardian's Phone (অভিভাগকের মোবাইল)</Label>
-                      <Input required type="tel" value={formData.parentPhone} onChange={e => handlePhoneInput(e, 'parentPhone')} placeholder="১১ ডিজিটের সঠিক নাম্বার দিন" className="border-2 border-slate-200 h-11" />
+                      <Label>Parent Phone</Label>
+                      <Input required type="tel" value={formData.parentPhone} onChange={e => handlePhoneInput(e, 'parentPhone')} placeholder="01XXXXXXXXX" className="border-2 border-slate-200 h-11" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Guardian Phone (Emergency)</Label>
+                      <Input required type="tel" value={formData.guardianPhone} onChange={e => handlePhoneInput(e, 'guardianPhone')} placeholder="01XXXXXXXXX" className="border-2 border-slate-200 h-11" />
                     </div>
                   </div>
                 </CardContent>
@@ -317,18 +323,18 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{formData.occupation === 'student' ? 'Institute Name (প্রতিষ্ঠানের নাম)' : 'Company Name (প্রতিষ্ঠানের নাম)'}</Label>
-                    <Input required value={formData.institute} onChange={e => setFormData({...formData, institute: e.target.value})} placeholder="প্রতিষ্ঠানের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                    <Label>{formData.occupation === 'student' ? 'College/University Name' : 'Company Name'}</Label>
+                    <Input required value={formData.collegeUniversity} onChange={e => setFormData({...formData, collegeUniversity: e.target.value})} placeholder="প্রতিষ্ঠানের নাম লিখুন" className="border-2 border-slate-200 h-11" />
                   </div>
                   <div className="space-y-2">
-                    <Label>{formData.occupation === 'student' ? 'Group/Department (বিভাগ)' : 'Designation (পদবী)'}</Label>
+                    <Label>{formData.occupation === 'student' ? 'Department/Group' : 'Designation'}</Label>
                     {formData.occupation === 'student' ? (
-                      <Select value={formData.group} onValueChange={val => setFormData({...formData, group: val})}>
+                      <Select value={formData.department} onValueChange={val => setFormData({...formData, department: val})}>
                         <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue placeholder="বিভাগ সিলেক্ট করুন" /></SelectTrigger>
                         <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                       </Select>
                     ) : (
-                      <Input required value={formData.group} onChange={e => setFormData({...formData, group: e.target.value})} placeholder="আপনার পদবী লিখুন" className="border-2 border-slate-200 h-11" />
+                      <Input required value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="আপনার পদবী লিখুন" className="border-2 border-slate-200 h-11" />
                     )}
                   </div>
                 </CardContent>
