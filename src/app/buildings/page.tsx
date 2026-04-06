@@ -25,7 +25,8 @@ import {
   Filter, 
   Bed,
   CircleDot,
-  MapPin as MapIcon
+  MapPin as MapIcon,
+  Banknote
 } from "lucide-react"
 import {
   Dialog,
@@ -63,6 +64,7 @@ interface RoomDetail {
   roomNo: string;
   seatCount: string;
   seats: SeatDetail[];
+  rentPerSeat: string;
 }
 
 interface ApartmentDetail {
@@ -99,11 +101,12 @@ export default function BuildingsPage() {
   const [newBuilding, setNewBuilding] = useState({ 
     name: "", 
     address: "",
-    branch: ""
+    branch: "",
+    buildingRentCost: "0"
   })
   
   const [apartments, setApartments] = useState<ApartmentDetail[]>([
-    { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [] }] }
+    { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "" }] }
   ])
 
   // Branch Selection Logic
@@ -171,7 +174,7 @@ export default function BuildingsPage() {
 
   // Create Building Logic
   const addApartment = () => {
-    setApartments([...apartments, { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [] }] }])
+    setApartments([...apartments, { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "" }] }])
   }
 
   const removeApartment = (idx: number) => {
@@ -180,7 +183,7 @@ export default function BuildingsPage() {
 
   const addRoomToApartment = (aptIdx: number) => {
     const updated = [...apartments]
-    updated[aptIdx].rooms.push({ roomNo: "", seatCount: "", seats: [] })
+    updated[aptIdx].rooms.push({ roomNo: "", seatCount: "", seats: [], rentPerSeat: "" })
     setApartments(updated)
   }
 
@@ -250,6 +253,7 @@ export default function BuildingsPage() {
 
     addDocumentNonBlocking(collection(db, "buildings"), {
       ...newBuilding,
+      buildingRentCost: Number(newBuilding.buildingRentCost || 0),
       apartmentsCount: validApts.length,
       apartmentsDetail: validApts.map(apt => ({
         id: Math.random().toString(36).substr(2, 9),
@@ -258,7 +262,8 @@ export default function BuildingsPage() {
         rooms: apt.rooms.filter(r => r.roomNo).map(r => ({
           roomNo: r.roomNo,
           totalSeats: r.seats.length,
-          seats: r.seats
+          seats: r.seats,
+          rentPerSeat: Number(r.rentPerSeat || 0)
         }))
       })),
       totalSeats: stats.total,
@@ -269,8 +274,8 @@ export default function BuildingsPage() {
     })
 
     setOpen(false)
-    setNewBuilding({ name: "", address: "", branch: "" })
-    setApartments([{ name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [] }] }])
+    setNewBuilding({ name: "", address: "", branch: "", buildingRentCost: "0" })
+    setApartments([{ name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "" }] }])
     toast({ title: "Building Created", description: `Hierarchy saved under branch: ${newBuilding.branch}` })
   }
 
@@ -313,11 +318,17 @@ export default function BuildingsPage() {
                   </div>
                 </div>
 
-                <div className="p-3 bg-secondary/30 rounded-lg border flex items-center justify-between">
-                  <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
-                    <MapIcon size={12} /> Target Branch: <span className="text-primary">{userBranch}</span>
-                  </p>
-                  <Badge variant="outline" className="text-[10px] bg-white">Auto-assigned</Badge>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 bg-secondary/30 rounded-lg border flex items-center justify-between">
+                    <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
+                      <MapIcon size={12} /> Target Branch: <span className="text-primary">{userBranch}</span>
+                    </p>
+                    <Badge variant="outline" className="text-[10px] bg-white">Auto-assigned</Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2 text-[10px] uppercase font-bold text-muted-foreground"><Banknote size={12}/> Building Monthly Rent Cost (৳)</Label>
+                    <Input type="number" value={newBuilding.buildingRentCost} onChange={e => setNewBuilding({...newBuilding, buildingRentCost: e.target.value})} placeholder="Maintenance/Rent cost" />
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -347,16 +358,20 @@ export default function BuildingsPage() {
                           <div className="ml-4 space-y-4 pl-4 border-l-2 border-primary/20">
                             {apt.rooms.map((room, roomIdx) => (
                               <div key={roomIdx} className="space-y-3 bg-background p-3 rounded-lg border">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
                                   <div className="space-y-1">
-                                    <Label className="text-[10px] font-bold">Room No.</Label>
+                                    <Label className="text-[9px] font-bold uppercase">Room No.</Label>
                                     <Input value={room.roomNo} placeholder="301" onChange={e => updateRoomField(aptIdx, roomIdx, "roomNo", e.target.value)} />
                                   </div>
                                   <div className="space-y-1">
-                                    <Label className="text-[10px] font-bold">Seat Count</Label>
+                                    <Label className="text-[9px] font-bold uppercase">Seats</Label>
                                     <Input type="number" value={room.seatCount} placeholder="Seats" onChange={e => updateRoomField(aptIdx, roomIdx, "seatCount", e.target.value)} />
                                   </div>
-                                  <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(aptIdx, roomIdx)} className="text-destructive">
+                                  <div className="space-y-1">
+                                    <Label className="text-[9px] font-bold uppercase">Rent/Seat (৳)</Label>
+                                    <Input type="number" value={room.rentPerSeat} placeholder="Price" onChange={e => updateRoomField(aptIdx, roomIdx, "rentPerSeat", e.target.value)} />
+                                  </div>
+                                  <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(aptIdx, roomIdx)} className="text-destructive h-10 w-10">
                                     <XCircle size={16} />
                                   </Button>
                                 </div>
@@ -590,7 +605,7 @@ export default function BuildingsPage() {
                     <span className="text-success">Empty: {building.emptySeats}</span>
                     <span className="text-muted-foreground">Total: {building.totalSeats}</span>
                   </div>
-                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden shadow-inner">
                     <div 
                       className="h-full bg-success transition-all duration-500" 
                       style={{ width: `${(building.occupiedSeats / (building.totalSeats || 1)) * 100}%` }} 
