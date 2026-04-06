@@ -123,6 +123,23 @@
         "requestedByName": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "FoodCostBreakdown": {
+      "title": "Food Cost Breakdown",
+      "type": "object",
+      "description": "Daily food cost and meal count tracking.",
+      "properties": {
+        "id": { "type": "string" },
+        "expenseId": { "type": "string" },
+        "branch": { "type": "string" },
+        "branchName": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "amount": { "type": "number" },
+        "totalMeals": { "type": "number" },
+        "createdBy": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -138,6 +155,7 @@
     "/transfers/{transferId}": { "schema": "object", "description": "Inter-account transfers" },
     "/managerRequests/{requestId}": { "schema": "ManagerRequest", "description": "Pending approval requests" },
     "/registrations/{regId}": { "schema": "object", "description": "Public admission forms" },
-    "/configs/{configId}": { "schema": "object", "description": "Global settings" }
+    "/configs/{configId}": { "schema": "object", "description": "Global settings" },
+    "/foodCostBreakdown/{id}": { "schema": "FoodCostBreakdown", "description": "Daily food cost analysis" }
   }
 }

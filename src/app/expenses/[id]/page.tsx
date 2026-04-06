@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { 
   Receipt, Calendar, UserCheck, Building2, 
   MapPin, Wallet, Trash2, Edit, Loader2, 
-  ArrowLeft, LayoutGrid, Info, Zap, UserCircle, DoorOpen, Utensils
+  ArrowLeft, LayoutGrid, Info, Zap, UserCircle, DoorOpen, Utensils, Apple
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -52,7 +52,8 @@ const EXPENSE_CATEGORIES = [
   { id: "electricity", label: "Electricity Bill" },
   { id: "water", label: "Water & Gas Bill" },
   { id: "maintenance", label: "Maintenance/Repair" },
-  { id: "market", label: "Market/Food" },
+  { id: "food", label: "Food / Meal Cost" },
+  { id: "market", label: "General Market" },
   { id: "internet", label: "Internet Bill" },
   { id: "salary", label: "Staff Salary" },
   { id: "others", label: "Others" },
@@ -94,6 +95,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
         roomNumber: expense.roomNumber || "",
         meterNo: expense.meterNo || "",
         amount: expense.amount.toString(),
+        totalMeals: expense.totalMeals?.toString() || "",
         method: expense.method,
         expensePartyName: expense.expensePartyName,
         receiver: expense.receiver || "",
@@ -119,6 +121,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
       await updateDoc(expenseRef, {
         ...editForm,
         amount: Number(editForm.amount),
+        totalMeals: editForm.category === 'food' ? Number(editForm.totalMeals || 0) : 0,
         buildingName: building?.name || "General",
         updatedAt: serverTimestamp()
       })
@@ -196,6 +199,11 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
             <div>
               <Badge variant="secondary" className="capitalize mb-2">{expense.category}</Badge>
               <CardTitle className="text-3xl font-bold text-destructive">৳{expense.amount?.toLocaleString()}</CardTitle>
+              {expense.category === 'food' && expense.totalMeals > 0 && (
+                <p className="text-xs font-bold text-muted-foreground mt-1 flex items-center gap-1">
+                  <Utensils size={12}/> {expense.totalMeals} Meals Running
+                </p>
+              )}
             </div>
             <div className="bg-destructive/10 p-3 rounded-xl text-destructive"><Receipt size={32} /></div>
           </div>
@@ -210,7 +218,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCheck size={10}/> Spent By (Staff)</Label>
               <p className="font-semibold">{expense.expensePartyName}</p>
             </div>
-            {(expense.category === 'salary' || expense.category === 'market') && (
+            {(expense.category === 'salary' || expense.category === 'market' || expense.category === 'food') && (
               <div className="space-y-1">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1.5"><UserCircle size={10}/> {expense.category === 'salary' ? 'Paid To' : 'Received By'}</Label>
                 <p className="font-semibold text-primary">{expense.receiver || "N/A"}</p>
@@ -322,13 +330,19 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                   </div>
                 )}
 
-                {editForm.category === 'market' && (
+                {(editForm.category === 'market' || editForm.category === 'food') && (
                   <div className="space-y-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
-                    <Label className="text-xs font-bold uppercase text-orange-700">Market Info</Label>
+                    <Label className="text-xs font-bold uppercase text-orange-700">{editForm.category === 'food' ? 'Food Cost Details' : 'Market Info'}</Label>
                     <Select value={editForm.receiver} onValueChange={val => setEditForm({...editForm, receiver: val})}>
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Receiver Staff" /></SelectTrigger>
                       <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                     </Select>
+                    {editForm.category === 'food' && (
+                      <div className="space-y-2">
+                        <Label className="text-xs">Total Meals Running Today (Optional)</Label>
+                        <Input type="number" placeholder="e.g. 120" value={editForm.totalMeals} onChange={e => setEditForm({...editForm, totalMeals: e.target.value})} className="bg-white" />
+                      </div>
+                    )}
                   </div>
                 )}
 

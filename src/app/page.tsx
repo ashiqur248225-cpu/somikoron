@@ -34,7 +34,8 @@ import {
   Wifi,
   UserCircle,
   Zap,
-  LayoutGrid
+  LayoutGrid,
+  Apple
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -81,7 +82,8 @@ const EXPENSE_CATEGORIES = [
   { id: "electricity", label: "Electricity Bill", icon: Lightbulb },
   { id: "water", label: "Water & Gas Bill", icon: Receipt },
   { id: "maintenance", label: "Maintenance/Repair", icon: Wrench },
-  { id: "market", label: "Market/Food", icon: Utensils },
+  { id: "food", label: "Food / Meal Cost", icon: Utensils },
+  { id: "market", label: "General Market", icon: Apple },
   { id: "internet", label: "Internet Bill", icon: Wifi },
   { id: "salary", label: "Staff Salary", icon: UserCircle },
   { id: "others", label: "Others", icon: Wallet },
@@ -130,6 +132,7 @@ export default function DashboardPage() {
     roomNumber: "",
     meterNo: "",
     amount: "",
+    totalMeals: "",
     method: "cash",
     expensePartyName: "",
     receiver: "",
@@ -499,9 +502,11 @@ export default function DashboardPage() {
     setIsSubmitting(true)
     try {
       const selectedBuildingData = buildings?.find(b => b.id === expenseFormData.buildingId)
+      const expenseId = doc(collection(db, "expenses")).id
       const expenseData = {
         ...expenseFormData,
         amount: Number(expenseFormData.amount),
+        totalMeals: expenseFormData.category === 'food' ? Number(expenseFormData.totalMeals || 0) : 0,
         branch: userBranch,
         buildingName: selectedBuildingData?.name || "General",
         updatedAt: serverTimestamp()
@@ -519,12 +524,29 @@ export default function DashboardPage() {
         })
         toast({ title: "Request Sent", description: "Expense is waiting for approval." })
       } else {
-        const expenseId = doc(collection(db, "expenses")).id
         await setDoc(doc(db, "expenses", expenseId), {
           ...expenseData,
           id: expenseId,
           createdAt: serverTimestamp()
         })
+
+        // If Category is FOOD, also log to Breakdown collection
+        if (expenseFormData.category === 'food') {
+          const breakdownId = doc(collection(db, "foodCostBreakdown")).id
+          await setDoc(doc(db, "foodCostBreakdown", breakdownId), {
+            id: breakdownId,
+            expenseId: expenseId,
+            branch: userBranch,
+            branchName: userBranch,
+            date: expenseFormData.expenseDate,
+            amount: Number(expenseFormData.amount),
+            totalMeals: Number(expenseFormData.totalMeals || 0),
+            createdBy: localStorage.getItem("somikoron_auth_id"),
+            createdByName: userName,
+            createdAt: serverTimestamp()
+          })
+        }
+
         toast({ title: "Expense Recorded", description: `Amount ৳${expenseFormData.amount} saved.` })
       }
 
@@ -536,6 +558,7 @@ export default function DashboardPage() {
         roomNumber: "",
         meterNo: "",
         amount: "",
+        totalMeals: "",
         method: "cash",
         expensePartyName: "",
         receiver: "",
@@ -929,11 +952,11 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* NEW EXPENSE ENTRY DIALOG (Dynamic) */}
+      {/* RECORD NEW EXPENSE DIALOG (Dynamic) */}
       <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{userRole === 'Building Manager' ? 'Send Expense Request' : 'Record New Expense'}</DialogTitle>
+            <DialogTitle>Record New Expense</DialogTitle>
             <DialogDescription>Setup expense details based on selected category.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
@@ -941,7 +964,7 @@ export default function DashboardPage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase text-muted-foreground">Expense Category</Label>
-                <Select value={expenseFormData.category} onValueChange={val => setExpenseFormData({...expenseFormData, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: '', month: MONTHS[new Date().getMonth()]})}>
+                <Select value={expenseFormData.category} onValueChange={val => setExpenseFormData({...expenseFormData, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: '', totalMeals: '', month: MONTHS[new Date().getMonth()]})}>
                   <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}
@@ -1012,7 +1035,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Category: Market / Food */}
+              {/* Category: Market */}
               {expenseFormData.category === 'market' && (
                 <div className="space-y-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
                   <div className="space-y-2">
@@ -1025,6 +1048,21 @@ export default function DashboardPage() {
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase text-orange-700">Market Description / Items</Label>
                     <Textarea value={expenseFormData.description} onChange={e => setExpenseFormData({...expenseFormData, description: e.target.value})} placeholder="e.g. Rice, Oil, Vegetables..." className="bg-white" />
+                  </div>
+                </div>
+              )}
+
+              {/* Category: Food (Daily Cost Tracking) */}
+              {expenseFormData.category === 'food' && (
+                <div className="space-y-4 p-4 bg-orange-50 rounded-xl border border-orange-200">
+                  <h4 className="text-xs font-bold uppercase text-orange-700">Daily Food Cost Details</h4>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold">Food Cost Amount (৳)</Label>
+                    <Input type="number" placeholder="Enter amount" value={expenseFormData.amount} onChange={e => setExpenseFormData({...expenseFormData, amount: e.target.value})} className="bg-white h-11 text-lg font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Total Meals Running Today (Optional)</Label>
+                    <Input type="number" placeholder="e.g. 120" value={expenseFormData.totalMeals} onChange={e => setExpenseFormData({...expenseFormData, totalMeals: e.target.value})} className="bg-white" />
                   </div>
                 </div>
               )}
@@ -1067,12 +1105,14 @@ export default function DashboardPage() {
             {/* Common Fields - Part 2 */}
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase text-muted-foreground">Amount (৳)</Label>
-                  <Input type="number" value={expenseFormData.amount} onChange={e => setExpenseFormData({...expenseFormData, amount: e.target.value})} placeholder="0.00" className="h-11 text-lg font-bold" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase text-muted-foreground">Method</Label>
+                {expenseFormData.category !== 'food' && (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-muted-foreground">Amount (৳)</Label>
+                    <Input type="number" value={expenseFormData.amount} onChange={e => setExpenseFormData({...expenseFormData, amount: e.target.value})} placeholder="0.00" className="h-11 text-lg font-bold" />
+                  </div>
+                )}
+                <div className={cn("space-y-2", expenseFormData.category === 'food' ? "col-span-2" : "")}>
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Payment Method</Label>
                   <Select value={expenseFormData.method} onValueChange={val => setExpenseFormData({...expenseFormData, method: val})}>
                     <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                     <SelectContent>

@@ -38,7 +38,8 @@ import {
   Info,
   Eye,
   UserCheck,
-  Filter
+  Filter,
+  Apple
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -65,7 +66,8 @@ const EXPENSE_CATEGORIES = [
   { id: "electricity", label: "Electricity Bill", icon: Lightbulb },
   { id: "water", label: "Water & Gas Bill", icon: Receipt },
   { id: "maintenance", label: "Maintenance/Repair", icon: Wrench },
-  { id: "market", label: "Market/Food", icon: Utensils },
+  { id: "food", label: "Food / Meal Cost", icon: Utensils },
+  { id: "market", label: "General Market", icon: Apple },
   { id: "internet", label: "Internet Bill", icon: Wifi },
   { id: "salary", label: "Staff Salary", icon: UserCircle },
   { id: "others", label: "Others", icon: Wallet },
@@ -108,6 +110,7 @@ export default function ExpenseHistoryPage() {
     roomNumber: "",
     meterNo: "",
     amount: "",
+    totalMeals: "", // New optional field for Food category
     method: "cash",
     expensePartyName: "",
     receiver: "",
@@ -187,17 +190,59 @@ export default function ExpenseHistoryPage() {
     setIsSubmitting(true)
     try {
       const selectedB = buildings?.find(b => b.id === formData.buildingId)
-      const expenseData = { ...formData, amount: Number(formData.amount), branch: userBranch, buildingName: selectedB?.name || "General", updatedAt: serverTimestamp() }
+      const expenseId = doc(collection(db, "expenses")).id
+      const expenseData = { 
+        ...formData, 
+        amount: Number(formData.amount), 
+        totalMeals: formData.category === 'food' ? Number(formData.totalMeals || 0) : 0,
+        branch: userBranch, 
+        buildingName: selectedB?.name || "General", 
+        updatedAt: serverTimestamp() 
+      }
+
       if (userRole === 'Building Manager') {
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), { ...expenseData, id: reqId, requestType: "expense", requestedBy: localStorage.getItem("somikoron_auth_id"), requestedByName: userName, createdAt: serverTimestamp() })
         toast({ title: "Request Sent" })
       } else {
-        const expenseId = doc(collection(db, "expenses")).id
         await setDoc(doc(db, "expenses", expenseId), { ...expenseData, id: expenseId, createdAt: serverTimestamp() })
+        
+        // If Category is FOOD, also log to Breakdown collection
+        if (formData.category === 'food') {
+          const breakdownId = doc(collection(db, "foodCostBreakdown")).id
+          await setDoc(doc(db, "foodCostBreakdown", breakdownId), {
+            id: breakdownId,
+            expenseId: expenseId,
+            branch: userBranch,
+            branchName: userBranch,
+            date: formData.expenseDate,
+            amount: Number(formData.amount),
+            totalMeals: Number(formData.totalMeals || 0),
+            createdBy: localStorage.getItem("somikoron_auth_id"),
+            createdByName: userName,
+            createdAt: serverTimestamp()
+          })
+        }
+        
         toast({ title: "Success" })
       }
       setIsEntryOpen(false)
+      setFormData({
+        category: "others",
+        buildingId: "none",
+        apartmentName: "",
+        roomNumber: "",
+        meterNo: "",
+        amount: "",
+        totalMeals: "",
+        method: "cash",
+        expensePartyName: "",
+        receiver: "",
+        month: MONTHS[new Date().getMonth()],
+        year: new Date().getFullYear().toString(),
+        description: "",
+        expenseDate: new Date().toISOString().split('T')[0]
+      })
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
     finally { setIsSubmitting(false) }
   }
@@ -274,7 +319,7 @@ export default function ExpenseHistoryPage() {
       <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
         <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent></Select></div>
         <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Spent By</Label><Select value={spentByFilter} onValueChange={setSpentByFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Spent By</Label><Select value={spentByFilter} onValueChange={setSpentByFilter}><SelectTrigger className="bg-white h-10"><SelectValue placeholder="All Staff" /></SelectTrigger><SelectContent><SelectItem value="all">All Staff</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="w-[280px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 bg-white" /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" /></div></div>
         <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setSpentByFilter("all"); setSearchTerm(""); setStartDate(""); setEndDate(""); }}>Reset</Button>
       </div>
@@ -290,7 +335,7 @@ export default function ExpenseHistoryPage() {
               <div className="space-y-4 py-4">
                 <div className="space-y-2"><Label>Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-2"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Spent By</Label><Select value={spentByFilter} onValueChange={setSpentByFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label>Spent By</Label><Select value={spentByFilter} onValueChange={setSpentByFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All Staff" /></SelectTrigger><SelectContent><SelectItem value="all">All Staff</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-2"><Label>Date Range</Label><div className="grid grid-cols-2 gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
               </div>
               <DialogFooter className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setSpentByFilter("all"); setStartDate(""); setEndDate(""); setIsMobileFilterOpen(false); }}>Reset</Button><Button onClick={() => setIsMobileFilterOpen(false)}>Apply</Button></DialogFooter>
@@ -357,10 +402,10 @@ export default function ExpenseHistoryPage() {
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>New Expense Entry</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Record New Expense</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
             <div className="space-y-4">
-              <div className="space-y-2"><Label>Category</Label><Select value={formData.category} onValueChange={val => setFormData({...formData, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: '', month: MONTHS[new Date().getMonth()]})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Category</Label><Select value={formData.category} onValueChange={val => setFormData({...formData, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: '', totalMeals: '', month: MONTHS[new Date().getMonth()]})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label>Spent By</Label><Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}><SelectTrigger><SelectValue placeholder="Who spent?" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <Separator />
@@ -374,6 +419,17 @@ export default function ExpenseHistoryPage() {
                 </div>
               )}
               {formData.category === 'market' && <div className="p-4 bg-orange-50 rounded-xl space-y-4"><Label>Market Received By</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Receiver" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>}
+              
+              {formData.category === 'food' && (
+                <div className="p-4 bg-orange-50 rounded-xl space-y-4 border border-orange-200">
+                  <h4 className="text-xs font-bold uppercase text-orange-700">Food Tracking Details</h4>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Total Meals Running Today (Optional)</Label>
+                    <Input type="number" placeholder="e.g. 120" value={formData.totalMeals} onChange={e => setFormData({...formData, totalMeals: e.target.value})} className="bg-white" />
+                  </div>
+                </div>
+              )}
+
               {formData.category === 'salary' && <div className="p-4 bg-primary/5 rounded-xl space-y-4"><Label>Staff Salary</Label><Select value={formData.receiver} onValueChange={val => { const s = staffList?.find(st => st.name === val); setFormData({...formData, receiver: val, amount: s?.monthlySalary?.toString() || ""}); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>}
             </div>
             <Separator />

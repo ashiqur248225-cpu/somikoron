@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useRef } from "react"
@@ -8,11 +9,11 @@ import { Button } from "@/components/ui/button"
 import { 
   Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, 
   Link as LinkIcon, Copy, ExternalLink, ScrollText,
-  Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered
+  Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered, History, TrendingUp, Search
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
-import { doc, setDoc, serverTimestamp } from "firebase/firestore"
+import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
+import { doc, setDoc, serverTimestamp, collection, query, where, orderBy, limit } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -24,6 +25,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 
 export default function SettingsPage() {
   const { toast } = useToast()
@@ -33,6 +44,7 @@ export default function SettingsPage() {
   const [rules, setRules] = useState("")
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
+  const [isFoodHistoryOpen, setIsFoodHistoryOpen] = useState(false)
   const editorRef = useRef<HTMLDivElement>(null)
   
   useEffect(() => {
@@ -56,6 +68,18 @@ export default function SettingsPage() {
 
   const rulesRef = useMemoFirebase(() => doc(db, "configs", "hostelRules"), [db])
   const { data: rulesData, isLoading: isRulesLoading } = useDoc(rulesRef)
+
+  // Food Cost History Query
+  const foodHistoryQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(
+      collection(db, "foodCostBreakdown"), 
+      where("branch", "==", userBranch),
+      orderBy("date", "desc"),
+      limit(100)
+    )
+  }, [db, userBranch])
+  const { data: foodHistory, isLoading: isFoodHistoryLoading } = useCollection(foodHistoryQuery)
 
   useEffect(() => {
     if (config) {
@@ -120,7 +144,6 @@ export default function SettingsPage() {
 
   const handleSaveRules = async () => {
     setIsUpdating(true)
-    // Pull final HTML from editor ref if possible, or use rules state
     const finalHtml = editorRef.current?.innerHTML || rules;
     try {
       await setDoc(rulesRef, {
@@ -183,6 +206,84 @@ export default function SettingsPage() {
           </Link>
         </div>
       </div>
+
+      {/* Meal Configuration Section */}
+      <Card className="border-none shadow-sm overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-primary">
+              <Utensils size={20} />
+              <CardTitle>Meal Configuration</CardTitle>
+            </div>
+            <CardDescription>Set the monthly standard meal rate for all non-package students.</CardDescription>
+          </div>
+          <Dialog open={isFoodHistoryOpen} onOpenChange={setIsFoodHistoryOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg">
+                <History size={14} /> <span className="hidden sm:inline">Daily Food History</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2"><TrendingUp className="text-primary"/> Daily Food Cost History</DialogTitle>
+                <DialogDescription>Track daily spending and meal counts for {userBranch}.</DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                <div className="rounded-xl border overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Total Meals</TableHead>
+                        <TableHead>Cost (৳)</TableHead>
+                        <TableHead className="text-right">Per Meal</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {foodHistory?.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
+                          <TableCell>
+                            {item.totalMeals > 0 ? (
+                              <Badge variant="secondary" className="bg-orange-50 text-orange-700 hover:bg-orange-100 border-none">{item.totalMeals} Meals</Badge>
+                            ) : <span className="text-muted-foreground italic text-xs">Not set</span>}
+                          </TableCell>
+                          <TableCell className="font-bold text-destructive">৳{item.amount.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-xs">
+                            {item.totalMeals > 0 ? `৳${(item.amount / item.totalMeals).toFixed(2)}` : 'N/A'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {(!foodHistory || foodHistory.length === 0) && (
+                        <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No food cost records found.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="mealRate">Standard Meal Rate (৳)</Label>
+            <div className="flex gap-4">
+              <Input 
+                id="mealRate" 
+                type="number" 
+                placeholder="e.g. 40" 
+                value={rate} 
+                onChange={e => setRate(e.target.value)}
+                className="max-w-[200px]"
+              />
+              <Button onClick={handleSaveRate} disabled={isUpdating} className="gap-2">
+                {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+                Save Rate
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Registration Links Section */}
       <Card className="border-none shadow-sm border-l-4 border-l-primary bg-primary/5">
@@ -300,36 +401,6 @@ export default function SettingsPage() {
             {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={20} />}
             Save & Publish Final Rules
           </Button>
-        </CardContent>
-      </Card>
-
-      {/* Meal Configuration Section */}
-      <Card className="border-none shadow-sm">
-        <CardHeader>
-          <div className="flex items-center gap-2 text-primary">
-            <Utensils size={20} />
-            <CardTitle>Meal Configuration</CardTitle>
-          </div>
-          <CardDescription>Set the monthly standard meal rate for all non-package students.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="mealRate">Standard Meal Rate (৳)</Label>
-            <div className="flex gap-4">
-              <Input 
-                id="mealRate" 
-                type="number" 
-                placeholder="e.g. 40" 
-                value={rate} 
-                onChange={e => setRate(e.target.value)}
-                className="max-w-[200px]"
-              />
-              <Button onClick={handleSaveRate} disabled={isUpdating} className="gap-2">
-                {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />}
-                Save Rate
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
