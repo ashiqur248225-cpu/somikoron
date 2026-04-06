@@ -69,13 +69,14 @@ export default function SettingsPage() {
   const rulesRef = useMemoFirebase(() => doc(db, "configs", "hostelRules"), [db])
   const { data: rulesData, isLoading: isRulesLoading } = useDoc(rulesRef)
 
-  // Food Cost History Query
+  // Food Cost History Query - Fetched directly from expenses now
   const foodHistoryQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(
-      collection(db, "foodCostBreakdown"), 
+      collection(db, "expenses"), 
       where("branch", "==", userBranch),
-      orderBy("date", "desc"),
+      where("category", "==", "food"),
+      orderBy("expenseDate", "desc"),
       limit(100)
     )
   }, [db, userBranch])
@@ -226,7 +227,7 @@ export default function SettingsPage() {
             <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2"><TrendingUp className="text-primary"/> Daily Food Cost History</DialogTitle>
-                <DialogDescription>Track daily spending and meal counts for {userBranch}.</DialogDescription>
+                <DialogDescription>Detailed food cost analysis for {userBranch} fetched from expenses.</DialogDescription>
               </DialogHeader>
               <div className="py-4">
                 <div className="rounded-xl border overflow-hidden">
@@ -235,27 +236,33 @@ export default function SettingsPage() {
                       <TableRow>
                         <TableHead>Date</TableHead>
                         <TableHead>Total Meals</TableHead>
-                        <TableHead>Cost (৳)</TableHead>
-                        <TableHead className="text-right">Per Meal</TableHead>
+                        <TableHead>Total Cost (৳)</TableHead>
+                        <TableHead className="text-right">Per Meal Price</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {foodHistory?.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-medium">{new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
-                          <TableCell>
-                            {item.totalMeals > 0 ? (
-                              <Badge variant="secondary" className="bg-orange-50 text-orange-700 hover:bg-orange-100 border-none">{item.totalMeals} Meals</Badge>
-                            ) : <span className="text-muted-foreground italic text-xs">Not set</span>}
-                          </TableCell>
-                          <TableCell className="font-bold text-destructive">৳{item.amount.toLocaleString()}</TableCell>
-                          <TableCell className="text-right font-mono text-xs">
-                            {item.totalMeals > 0 ? `৳${(item.amount / item.totalMeals).toFixed(2)}` : 'N/A'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {foodHistory?.map((item) => {
+                        const totalMeals = Number(item.totalMeals || 0)
+                        const amount = Number(item.amount || 0)
+                        const perMealPrice = totalMeals > 0 ? (amount / totalMeals).toFixed(2) : "N/A"
+                        
+                        return (
+                          <TableRow key={item.id}>
+                            <TableCell className="font-medium">{new Date(item.expenseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
+                            <TableCell>
+                              {totalMeals > 0 ? (
+                                <Badge variant="secondary" className="bg-orange-50 text-orange-700 hover:bg-orange-100 border-none">{totalMeals} Meals</Badge>
+                              ) : <span className="text-muted-foreground italic text-xs">Not set</span>}
+                            </TableCell>
+                            <TableCell className="font-bold text-destructive">৳{amount.toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-black text-primary">
+                              {perMealPrice !== "N/A" ? `৳${perMealPrice}` : perMealPrice}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
                       {(!foodHistory || foodHistory.length === 0) && (
-                        <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No food cost records found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No food expense records found.</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
