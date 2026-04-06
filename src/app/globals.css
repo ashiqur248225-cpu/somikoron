@@ -108,10 +108,14 @@
 @media print {
   @page {
     size: A4;
-    margin: 10mm;
+    margin: 0mm; /* Minimal margin to handle manually in layout */
   }
 
-  body {
+  html, body {
+    height: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden;
     background-color: white !important;
     color: black !important;
     font-size: 10pt !important;
@@ -128,22 +132,25 @@
     display: none !important;
   }
 
-  /* Receipt Specific Print Style (Half A4) */
-  #receipt-print-area {
-    display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    border: 1px solid #eee !important;
-    padding: 20px !important;
-    margin: 0 auto !important;
-  }
-
   .sidebar-inset, 
   main {
     padding: 0 !important;
     margin: 0 !important;
     display: block !important;
     width: 100% !important;
+  }
+
+  #receipt-print-area {
+    display: block !important;
+    width: 100% !important;
+    max-width: 210mm !important; /* A4 width */
+    height: auto !important;
+    max-height: 297mm !important; /* A4 height */
+    padding: 10mm !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    border: none !important;
+    break-inside: avoid;
   }
 
   table {
@@ -153,7 +160,7 @@
 
   th, td {
     border: 0.5pt solid #ccc !important;
-    padding: 6px !important;
+    padding: 4px !important;
   }
 }
 
