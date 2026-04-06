@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { 
   Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, 
   Link as LinkIcon, Copy, ExternalLink, ScrollText,
-  Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered, History, TrendingUp, Search, Printer, Calendar as CalendarIcon, XCircle, ArrowUpRight, ArrowDownRight, Calculator, UserCheck, Info
+  Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered, History, TrendingUp, Search, Printer, Calendar as CalendarIcon, XCircle, ArrowUpRight, ArrowDownRight, Calculator, UserCheck, Info, RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
