@@ -98,23 +98,23 @@ export default function RegistrationsPage() {
 
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
-  // CRITICAL: ROBUST AUTO-FILL LOGIC FOR OLD STUDENTS
+  // ROBUST AUTO-FILL LOGIC: Always priorities data from registration record
   useEffect(() => {
     if (isDetailOpen && selectedReg && buildings && selectedReg.id !== initializedId) {
-      // 1. Find Building from Database based on provided ID or Name
-      let targetBuilding = null;
-      if (selectedReg.buildingId) {
-        targetBuilding = buildings.find(b => b.id === selectedReg.buildingId);
-      }
-      if (!targetBuilding && selectedReg.buildingName) {
-        targetBuilding = buildings.find(b => b.name === selectedReg.buildingName);
-      }
+      // 1. Resolve Building: ID is preferred, then Name
+      const regBId = selectedReg.buildingId || "";
+      const regBName = selectedReg.buildingName || "";
+      
+      const targetBuilding = buildings.find(b => 
+        (regBId && b.id === regBId) || 
+        (regBName && b.name === regBName)
+      );
 
-      // 2. Identify Room and Seat from registration data
+      // 2. Identify Room and Seat
       const rNum = selectedReg.roomNumber || "";
       const sNum = selectedReg.seatNumber || "";
 
-      // 3. Find Room Rent from Building Data
+      // 3. Find Room Rent from Building hierarchy
       let autoRent = "";
       if (targetBuilding && rNum) {
         targetBuilding.apartmentsDetail?.forEach((apt: any) => {
@@ -126,7 +126,7 @@ export default function RegistrationsPage() {
         });
       }
 
-      // 4. Update the form with registration data
+      // 4. Set state
       setApprovalForm({
         buildingId: targetBuilding?.id || (userRole === 'Building Manager' ? assignedBuildingId : ""),
         roomNumber: rNum,
@@ -449,7 +449,9 @@ export default function RegistrationsPage() {
                         <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
                         <Select value={approvalForm.buildingId} onValueChange={val => setApprovalForm({...approvalForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
                           <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Select Building" /></SelectTrigger>
-                          <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                          <SelectContent>
+                            {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                          </SelectContent>
                         </Select>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
@@ -466,15 +468,15 @@ export default function RegistrationsPage() {
                             <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Seat" /></SelectTrigger>
                             <SelectContent>
                               {emptySeats.map((s: any) => <SelectItem key={`seat-${s.seatNo}`} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}
-                              {selectedReg.type === 'old' && approvalForm.seatNumber && !emptySeats.find(s => s.seatNo === approvalForm.seatNumber) && (
-                                <SelectItem value={approvalForm.seatNumber}>Seat {approvalForm.seatNumber} (Current)</SelectItem>
+                              {approvalForm.seatNumber && !emptySeats.find(s => s.seatNo === approvalForm.seatNumber) && (
+                                <SelectItem value={approvalForm.seatNumber}>Seat {approvalForm.seatNumber} (Form Choice)</SelectItem>
                               )}
                             </SelectContent>
                           </Select>
                         </div>
                       </div>
                     </div>
-                    {selectedReg.type === 'old' && (
+                    {(selectedReg.buildingName || selectedReg.roomNumber) && (
                       <p className="text-[9px] text-primary font-bold italic flex items-center gap-1">
                         <CheckCircle2 size={10} /> স্টুডেন্টের দেওয়া লোকেশন ও সিট ডাটাবেজ থেকে অটো-ফিল করা হয়েছে।
                       </p>
@@ -604,7 +606,9 @@ export default function RegistrationsPage() {
           )}
           <DialogFooter className="grid grid-cols-2 gap-4">
             <Button variant="outline" className="border-destructive text-destructive" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject & Delete</Button>
-            <Button className="bg-success hover:bg-success/90 h-12 font-bold" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : "Approve & Admit"}</Button>
+            <Button className="bg-success hover:bg-success/90 h-12 font-bold" onClick={handleApprove} disabled={isProcessing}>
+              {isProcessing ? <Loader2 className="animate-spin" /> : "Approve & Admit"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
