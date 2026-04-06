@@ -16,7 +16,7 @@ import {
   UserMinus, Trash2, Edit, Loader2, Plus, CheckCircle2, 
   XCircle, Zap, LayoutGrid, Calculator, TrendingUp, TrendingDown,
   ArrowUpRight, ArrowDownRight, Banknote, Calendar, BarChart3,
-  CircleDollarSign, Percent
+  CircleDollarSign, Percent, Wind, Construction, Bath
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -44,6 +44,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface SeatDetail {
   seatNo: string;
@@ -55,6 +56,7 @@ interface RoomDetail {
   totalSeats: number;
   seats: SeatDetail[];
   rentPerSeat?: number;
+  facilities?: string[];
 }
 
 interface ApartmentDetail {
@@ -227,6 +229,19 @@ export default function BuildingDetailsPage({
   if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
   if (!building) return <div className="text-center p-20">Building not found.</div>
 
+  const toggleFacility = (aptIdx: number, roomIdx: number, facility: string) => {
+    const updated = [...editApts]
+    const currentRoom = updated[aptIdx].rooms[roomIdx]
+    if (!currentRoom.facilities) currentRoom.facilities = []
+    
+    if (currentRoom.facilities.includes(facility)) {
+      currentRoom.facilities = currentRoom.facilities.filter(f => f !== facility)
+    } else {
+      currentRoom.facilities.push(facility)
+    }
+    setEditApts(updated)
+  }
+
   return (
     <div className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -288,8 +303,8 @@ export default function BuildingDetailsPage({
                           </div>
                           <div className="ml-4 pl-4 border-l-2 border-primary/20 space-y-4">
                              {apt.rooms.map((room, rIdx) => (
-                               <div key={`${room.roomNo}-${rIdx}`} className="p-3 bg-background border rounded-lg">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+                               <div key={`${room.roomNo}-${rIdx}`} className="p-3 bg-background border rounded-lg space-y-3">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                      <div className="flex items-center gap-2">
                                         <span className="text-xs font-bold uppercase">Room {room.roomNo}</span>
                                         <Badge variant="secondary">{room.totalSeats} Seats</Badge>
@@ -303,6 +318,23 @@ export default function BuildingDetailsPage({
                                         }} />
                                      </div>
                                   </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Room Facilities</Label>
+                                    <div className="flex flex-wrap gap-4">
+                                      {['AC', 'Balcony', 'Attached Washroom'].map((fac) => (
+                                        <div key={fac} className="flex items-center gap-1.5">
+                                          <Checkbox 
+                                            id={`edit-fac-${aIdx}-${rIdx}-${fac}`}
+                                            checked={room.facilities?.includes(fac)}
+                                            onCheckedChange={() => toggleFacility(aIdx, rIdx, fac)}
+                                          />
+                                          <Label htmlFor={`edit-fac-${aIdx}-${rIdx}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+
                                   <div className="flex flex-wrap gap-1.5 pt-2 border-t mt-2">
                                     {room.seats.map((seat, sIdx) => (
                                       <button
@@ -597,6 +629,13 @@ export default function BuildingDetailsPage({
                         <div>
                           <CardTitle className="text-lg">Room {room.roomNo}</CardTitle>
                           <Badge variant="secondary" className="w-fit text-[9px] uppercase mt-1">৳{room.rentPerSeat}/seat</Badge>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {room.facilities?.map((f: string) => (
+                              <Badge key={f} variant="outline" className="text-[7px] py-0 px-1 border-primary/30 text-primary uppercase font-bold">
+                                {f}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
                         <Badge variant="outline" className="font-bold text-muted-foreground">{room.totalSeats} Seats</Badge>
                       </div>

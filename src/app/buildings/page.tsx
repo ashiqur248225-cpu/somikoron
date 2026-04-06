@@ -26,7 +26,10 @@ import {
   Bed,
   CircleDot,
   MapPin as MapIcon,
-  Banknote
+  Banknote,
+  Wind,
+  Construction,
+  Bath
 } from "lucide-react"
 import {
   Dialog,
@@ -52,6 +55,7 @@ import { cn } from "@/lib/utils"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
@@ -65,6 +69,7 @@ interface RoomDetail {
   seatCount: string;
   seats: SeatDetail[];
   rentPerSeat: string;
+  facilities: string[];
 }
 
 interface ApartmentDetail {
@@ -106,7 +111,7 @@ export default function BuildingsPage() {
   })
   
   const [apartments, setApartments] = useState<ApartmentDetail[]>([
-    { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "" }] }
+    { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] }
   ])
 
   // Branch Selection Logic
@@ -119,7 +124,7 @@ export default function BuildingsPage() {
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
   }, [db, userBranch])
   
-  const { data: buildings, isLoading } = useCollection(buildingsQuery)
+  const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
 
   // Initialize building branch based on context when opening dialog
   useEffect(() => {
@@ -174,7 +179,7 @@ export default function BuildingsPage() {
 
   // Create Building Logic
   const addApartment = () => {
-    setApartments([...apartments, { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "" }] }])
+    setApartments([...apartments, { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] }])
   }
 
   const removeApartment = (idx: number) => {
@@ -183,7 +188,7 @@ export default function BuildingsPage() {
 
   const addRoomToApartment = (aptIdx: number) => {
     const updated = [...apartments]
-    updated[aptIdx].rooms.push({ roomNo: "", seatCount: "", seats: [], rentPerSeat: "" })
+    updated[aptIdx].rooms.push({ roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] })
     setApartments(updated)
   }
 
@@ -201,19 +206,32 @@ export default function BuildingsPage() {
     setApartments(updated)
   }
 
-  const updateRoomField = (aptIdx: number, roomIdx: number, field: keyof RoomDetail, value: string) => {
+  const updateRoomField = (aptIdx: number, roomIdx: number, field: keyof RoomDetail, value: string | string[]) => {
     const updated = [...apartments]
     const room = updated[aptIdx].rooms[roomIdx]
     
     if (field === "seatCount") {
-      const count = parseInt(value) || 0
+      const count = parseInt(value as string) || 0
       room.seats = Array.from({ length: count }, (_, i) => ({
         seatNo: (i + 1).toString(),
         status: 'empty'
       }))
-      room.seatCount = value
+      room.seatCount = value as string
     } else {
       (room as any)[field] = value
+    }
+    setApartments(updated)
+  }
+
+  const toggleFacility = (aptIdx: number, roomIdx: number, facility: string) => {
+    const updated = [...apartments]
+    const room = updated[aptIdx].rooms[roomIdx]
+    if (!room.facilities) room.facilities = []
+    
+    if (room.facilities.includes(facility)) {
+      room.facilities = room.facilities.filter(f => f !== facility)
+    } else {
+      room.facilities.push(facility)
     }
     setApartments(updated)
   }
@@ -263,7 +281,8 @@ export default function BuildingsPage() {
           roomNo: r.roomNo,
           totalSeats: r.seats.length,
           seats: r.seats,
-          rentPerSeat: Number(r.rentPerSeat || 0)
+          rentPerSeat: Number(r.rentPerSeat || 0),
+          facilities: r.facilities || []
         }))
       })),
       totalSeats: stats.total,
@@ -275,7 +294,7 @@ export default function BuildingsPage() {
 
     setOpen(false)
     setNewBuilding({ name: "", address: "", branch: "", buildingRentCost: "0" })
-    setApartments([{ name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "" }] }])
+    setApartments([{ name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] }])
     toast({ title: "Building Created", description: `Hierarchy saved under branch: ${newBuilding.branch}` })
   }
 
@@ -376,7 +395,23 @@ export default function BuildingsPage() {
                                   </Button>
                                 </div>
 
-                                <div className="flex flex-wrap gap-1.5">
+                                <div className="space-y-2">
+                                  <Label className="text-[9px] uppercase font-bold text-muted-foreground">Room Facilities</Label>
+                                  <div className="flex flex-wrap gap-4">
+                                    {['AC', 'Balcony', 'Attached Washroom'].map((fac) => (
+                                      <div key={fac} className="flex items-center gap-1.5">
+                                        <Checkbox 
+                                          id={`fac-${aptIdx}-${roomIdx}-${fac}`}
+                                          checked={room.facilities?.includes(fac)}
+                                          onCheckedChange={() => toggleFacility(aptIdx, roomIdx, fac)}
+                                        />
+                                        <Label htmlFor={`fac-${aptIdx}-${roomIdx}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1.5 pt-2 border-t">
                                   {room.seats.map((seat, sIdx) => (
                                     <button
                                       key={sIdx}
@@ -517,6 +552,13 @@ export default function BuildingsPage() {
                       <p className="text-[10px] font-medium text-muted-foreground flex items-center gap-1 mt-0.5">
                         <Building2 size={10} /> {room.buildingName} • {room.aptName}
                       </p>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {room.facilities?.map((f: string) => (
+                          <Badge key={f} variant="outline" className="text-[7px] py-0 px-1 border-primary/30 text-primary uppercase font-bold">
+                            {f}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
                     {room.emptyCount > 0 ? (
                       <Badge variant="outline" className="bg-success/10 text-success border-success/20">
