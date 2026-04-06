@@ -150,15 +150,46 @@ export default function StudentDetailsPage({
       const totalAmt = seatPaid + foodPaid + Number(paymentData.addAdvanceAmount)
       
       const pId = doc(collection(db, "payments")).id
-      const pRecord = { id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, studentId: student.id, studentName: student.name, branch: student.branch, method: paymentData.method, receiver: paymentData.receiver, date: serverTimestamp(), createdAt: serverTimestamp() }
+      const pRecord = { 
+        id: pId, 
+        amount: totalAmt, 
+        seatAmount: seatPaid, 
+        foodAmount: foodPaid, 
+        studentId: student.id, 
+        studentName: student.name, 
+        branch: student.branch, 
+        method: paymentData.method, 
+        receiver: paymentData.receiver, 
+        date: serverTimestamp(), 
+        createdAt: serverTimestamp() 
+      }
+      
       await setDoc(doc(db, "payments", pId), pRecord)
-      await updateDoc(studentRef, { paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }), advanceAmount: increment(Number(paymentData.addAdvanceAmount)), updatedAt: serverTimestamp() })
+      
+      // CRITICAL FIX: Use Date string instead of serverTimestamp inside arrayUnion
+      await updateDoc(studentRef, { 
+        paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }), 
+        advanceAmount: increment(Number(paymentData.addAdvanceAmount)), 
+        updatedAt: serverTimestamp() 
+      })
       
       if (apiConfig?.apikey && templatesData?.templates) {
         const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
         if (paymentTemplate) {
-          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, paymentTemplate.text.replaceAll('[নাম]', student.name).replaceAll('[পরিমাণ]', totalAmt.toString()))
-          await logSMSToDatabase(student.phone, paymentTemplate.text, result.error === 0 ? 'Success' : 'Failed')
+          const hostelDisplayName = templatesData.hostelName || student.branch;
+          let msg = paymentTemplate.text
+            .replaceAll('[নাম]', student.name)
+            .replaceAll('[পরিমাণ]', totalAmt.toString())
+            .replaceAll('[Hostel Name]', hostelDisplayName);
+            
+          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
+          await logSMSToDatabase(student.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
+          
+          if (result.error === 0) {
+            toast({ title: "SMS Sent", description: `মেসেজ: ${msg.substring(0, 50)}...` })
+          } else if (result.error === 417) {
+            toast({ variant: "destructive", title: "ব্যালেন্স নেই", description: "আপনার পর্যাপ্ত ব্যালেন্স নেই, দয়া করে রিচার্জ করুন।" })
+          }
         }
       }
       setIsPaymentDialogOpen(false)
@@ -175,8 +206,10 @@ export default function StudentDetailsPage({
       if (apiConfig?.apikey && templatesData?.templates) {
         const exitTemplate = templatesData.templates.find((t: any) => t.id === 'exit')
         if (exitTemplate) {
-          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, exitTemplate.text.replaceAll('[নাম]', student.name))
-          await logSMSToDatabase(student.phone, exitTemplate.text, result.error === 0 ? 'Success' : 'Failed')
+          const hostelDisplayName = templatesData.hostelName || student.branch;
+          const msg = exitTemplate.text.replaceAll('[নাম]', student.name).replaceAll('[Hostel Name]', hostelDisplayName)
+          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
+          await logSMSToDatabase(student.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
         }
       }
       toast({ title: "Exit Confirmed" })

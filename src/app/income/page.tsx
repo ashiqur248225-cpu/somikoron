@@ -248,6 +248,7 @@ export default function IncomeHistoryPage() {
         
         const totalPayableAfter = rentDueAfter + Math.max(0, -foodBalanceAfter)
 
+        // CRITICAL FIX: Use Date string instead of serverTimestamp inside arrayUnion
         await updateDoc(doc(db, "students", selectedStudent.id), {
           paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }),
           advanceAmount: increment(Number(formData.addAdvanceAmount)),
@@ -273,8 +274,12 @@ export default function IncomeHistoryPage() {
             const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
             await logSMSToDatabase(selectedStudent.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
             
-            if (result.error !== 0 && result.error === 417) {
+            if (result.error === 0) {
+              toast({ title: "SMS Sent", description: `মেসেজ: ${msg.substring(0, 50)}...` })
+            } else if (result.error === 417) {
               toast({ variant: "destructive", title: "ব্যালেন্স নেই", description: "আপনার পর্যাপ্ত ব্যালেন্স নেই, দয়া করে রিচার্জ করুন।" })
+            } else {
+              toast({ variant: "destructive", title: "SMS Failed", description: result.msg })
             }
           }
         }
