@@ -206,9 +206,10 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
                 </div>
               </AccordionTrigger>
               <AccordionContent className="bg-white mt-2 p-6 rounded-2xl shadow-sm">
-                <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-600 font-medium leading-relaxed">
-                  {rulesData?.rulesText || "No rules defined by admin."}
-                </div>
+                <div 
+                  className="prose prose-sm max-w-none text-slate-600 font-medium leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: rulesData?.rulesText || "No rules defined by admin." }}
+                />
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -403,9 +404,10 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
                 <CardDescription className="text-[10px] font-bold uppercase tracking-widest">ভর্তি সম্পন্ন করার আগে অনুগ্রহ করে সব নিয়ম পড়ুন</CardDescription>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-primary/20">
-                <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-600 font-medium leading-relaxed">
-                  {rulesData?.rulesText || "No rules defined by admin."}
-                </div>
+                <div 
+                  className="prose prose-sm max-w-none text-slate-600 font-medium leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: rulesData?.rulesText || "No rules defined by admin." }}
+                />
               </CardContent>
               <div className="p-4 bg-primary/5 border-t">
                 <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase text-center justify-center">

@@ -1,18 +1,23 @@
 
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, Link as LinkIcon, Copy, CheckCircle2, ExternalLink, ScrollText } from "lucide-react"
+import { 
+  Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, 
+  Link as LinkIcon, Copy, CheckCircle2, ExternalLink, ScrollText,
+  Bold, Heading1, Heading2, List, Palette, Eye, Edit3
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc, setDoc, serverTimestamp } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
@@ -24,6 +29,7 @@ export default function SettingsPage() {
   const [rules, setRules] = useState("")
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -124,6 +130,24 @@ export default function SettingsPage() {
     }
   }
 
+  const insertTag = (tagOpen: string, tagClose: string) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = textarea.value
+    const before = text.substring(0, start)
+    const after = text.substring(end, text.length)
+    const selected = text.substring(start, end)
+    const newText = before + tagOpen + selected + tagClose + after
+    setRules(newText)
+    
+    setTimeout(() => {
+      textarea.focus()
+      textarea.setSelectionRange(start + tagOpen.length, end + tagOpen.length)
+    }, 0)
+  }
+
   const copyToClipboard = (text: string) => {
     const baseUrl = window.location.origin
     const fullUrl = `${baseUrl}${text}`
@@ -193,27 +217,51 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-none shadow-sm">
+      <Card className="border-none shadow-sm overflow-hidden">
         <CardHeader>
           <div className="flex items-center gap-2 text-primary">
             <ScrollText size={20} />
             <CardTitle>Rules & Regulations Setup</CardTitle>
           </div>
-          <CardDescription>Enter hostel rules that students must agree to before admission.</CardDescription>
+          <CardDescription>Enter hostel rules with formatting (Bold, Headings, Lists, Colors).</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Hostel Rules (Line by line)</Label>
-            <Textarea 
-              placeholder="- Rule 1&#10;- Rule 2" 
-              className="min-h-[200px]" 
-              value={rules} 
-              onChange={e => setRules(e.target.value)}
-            />
-          </div>
-          <Button onClick={handleSaveRules} disabled={isUpdating} className="w-full gap-2">
-            {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />}
-            Save Rules
+          <Tabs defaultValue="edit" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="edit" className="gap-2"><Edit3 size={14} /> Editor</TabsTrigger>
+              <TabsTrigger value="preview" className="gap-2"><Eye size={14} /> Live Preview</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="edit" className="space-y-4">
+              <div className="flex flex-wrap gap-2 p-2 bg-secondary/30 rounded-t-lg border-x border-t">
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Bold" onClick={() => insertTag('<b>', '</b>')}><Bold size={14} /></Button>
+                <Button variant="outline" size="sm" className="h-8 px-2 text-xs" title="H1" onClick={() => insertTag('<h1>', '</h1>')}><Heading1 size={14} /></Button>
+                <Button variant="outline" size="sm" className="h-8 px-2 text-xs" title="H2" onClick={() => insertTag('<h2>', '</h2>')}><Heading2 size={14} /></Button>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="List Item" onClick={() => insertTag('<li>', '</li>')}><List size={14} /></Button>
+                <Button variant="outline" size="sm" className="h-8 px-2 text-xs gap-1 text-destructive" title="Red Color" onClick={() => insertTag('<span style="color: red">', '</span>')}><Palette size={14} /> Red</Button>
+              </div>
+              <Textarea 
+                ref={textareaRef}
+                id="hostelRulesInput"
+                placeholder="Enter rules here using toolbar..." 
+                className="min-h-[250px] rounded-t-none border-t-0 font-mono text-sm" 
+                value={rules} 
+                onChange={e => setRules(e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground italic">* আপনি টুলবার ব্যবহার করে টেক্সট ফরমেট করতে পারেন অথবা সরাসরি HTML ট্যাগ ব্যবহার করতে পারেন।</p>
+            </TabsContent>
+
+            <TabsContent value="preview" className="border rounded-lg p-6 bg-white min-h-[300px]">
+              <div 
+                className="prose prose-sm max-w-none text-slate-600 font-medium leading-relaxed whitespace-pre-wrap"
+                dangerouslySetInnerHTML={{ __html: rules || "<i>No rules written yet. Switch to Editor to start.</i>" }}
+              />
+            </TabsContent>
+          </Tabs>
+
+          <Button onClick={handleSaveRules} disabled={isUpdating} className="w-full gap-2 h-12 text-lg font-bold">
+            {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+            Save & Update Rules
           </Button>
         </CardContent>
       </Card>
