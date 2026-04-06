@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, Link as LinkIcon, Copy, CheckCircle2, ExternalLink } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, Link as LinkIcon, Copy, CheckCircle2, ExternalLink, ScrollText } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc, setDoc, serverTimestamp } from "firebase/firestore"
@@ -20,6 +21,7 @@ export default function SettingsPage() {
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
   const [rate, setRate] = useState("")
+  const [rules, setRules] = useState("")
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
   
@@ -42,6 +44,9 @@ export default function SettingsPage() {
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances, isLoading: isBalancesLoading } = useDoc(balancesRef)
 
+  const rulesRef = useMemoFirebase(() => doc(db, "configs", "hostelRules"), [db])
+  const { data: rulesData, isLoading: isRulesLoading } = useDoc(rulesRef)
+
   useEffect(() => {
     if (config) {
       setRate(config.rate?.toString() || "")
@@ -58,6 +63,12 @@ export default function SettingsPage() {
       })
     }
   }, [openingBalances])
+
+  useEffect(() => {
+    if (rulesData) {
+      setRules(rulesData.rulesText || "")
+    }
+  }, [rulesData])
 
   const handleSaveRate = async () => {
     if (!rate || isNaN(Number(rate))) {
@@ -97,6 +108,22 @@ export default function SettingsPage() {
     }
   }
 
+  const handleSaveRules = async () => {
+    setIsUpdating(true)
+    try {
+      await setDoc(rulesRef, {
+        rulesText: rules,
+        updatedAt: serverTimestamp(),
+        updatedBy: localStorage.getItem("somikoron_auth_id")
+      })
+      toast({ title: "Rules Updated", description: "Hostel rules and regulations have been saved." })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const copyToClipboard = (text: string) => {
     const baseUrl = window.location.origin
     const fullUrl = `${baseUrl}${text}`
@@ -109,7 +136,7 @@ export default function SettingsPage() {
     { label: "Existing Resident (Data Import)", type: "old", icon: LinkIcon }
   ]
 
-  if (isConfigLoading || isBalancesLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
+  if (isConfigLoading || isBalancesLoading || isRulesLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-20">
@@ -163,6 +190,31 @@ export default function SettingsPage() {
             </div>
           ))}
           <p className="text-[10px] text-muted-foreground italic mt-2">* এই লিঙ্কগুলো ব্যবহার করে স্টুডেন্টরা আবেদন করলে সেগুলো সরাসরি আপনার "Pending Requests" সেকশনে জমা হবে।</p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-none shadow-sm">
+        <CardHeader>
+          <div className="flex items-center gap-2 text-primary">
+            <ScrollText size={20} />
+            <CardTitle>Rules & Regulations Setup</CardTitle>
+          </div>
+          <CardDescription>Enter hostel rules that students must agree to before admission.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Hostel Rules (Line by line)</Label>
+            <Textarea 
+              placeholder="- Rule 1&#10;- Rule 2" 
+              className="min-h-[200px]" 
+              value={rules} 
+              onChange={e => setRules(e.target.value)}
+            />
+          </div>
+          <Button onClick={handleSaveRules} disabled={isUpdating} className="w-full gap-2">
+            {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+            Save Rules
+          </Button>
         </CardContent>
       </Card>
 
