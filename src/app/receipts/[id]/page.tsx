@@ -35,7 +35,7 @@ export default function ReceiptPage() {
   const dateStr = payment.date?.toDate ? payment.date.toDate().toLocaleString() : (payment.date ? new Date(payment.date).toLocaleString() : 'N/A')
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-20 pt-4 px-4">
+    <div className="max-w-3xl mx-auto space-y-6 pb-20 pt-4 px-4 print:p-0">
       <div className="flex items-center justify-between print:hidden">
         <Button variant="ghost" className="gap-2 hover:bg-primary/5 text-muted-foreground" onClick={() => router.back()}>
           <ChevronLeft size={16} /> Back to Dashboard
@@ -47,9 +47,9 @@ export default function ReceiptPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 print:shadow-none print:border-none">
+      <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 print:shadow-none print:border-none print:rounded-none">
         <div className="h-2 bg-primary w-full print:hidden" />
-        <div id="receipt-print-area" className="p-8 md:p-12 space-y-8">
+        <div id="receipt-print-area" className="p-8 md:p-12 space-y-8 print:p-4 print:space-y-6">
           {/* Receipt Header */}
           <div className="text-center space-y-1">
             <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">SOMIKORON HOSTEL</h1>
@@ -57,7 +57,7 @@ export default function ReceiptPage() {
               {payment.branch} Branch • Official Records
             </p>
             <div className="pt-6 flex flex-col items-center">
-              <div className="bg-primary text-white px-8 py-2 rounded-full text-lg font-black uppercase tracking-tighter shadow-lg shadow-primary/20">
+              <div className="bg-primary text-white px-8 py-2 rounded-full text-lg font-black uppercase tracking-tighter shadow-lg shadow-primary/20 print:shadow-none">
                 Money Receipt
               </div>
               <div className="flex gap-12 text-[10px] font-bold text-muted-foreground mt-6 uppercase tracking-widest">
@@ -68,7 +68,7 @@ export default function ReceiptPage() {
           </div>
 
           {/* Student Info Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 rounded-3xl border-2 border-slate-50 bg-slate-50/30">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 rounded-3xl border-2 border-slate-50 bg-slate-50/30 print:p-4 print:gap-4 print:rounded-2xl">
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <div className="h-10 w-10 rounded-xl bg-white border flex items-center justify-center text-primary shadow-sm"><User size={20}/></div>
@@ -92,7 +92,7 @@ export default function ReceiptPage() {
           </div>
 
           {/* Payment Details Table */}
-          <div className="border rounded-2xl overflow-hidden shadow-sm">
+          <div className="border rounded-2xl overflow-hidden shadow-sm print:rounded-xl">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b">
@@ -140,11 +140,11 @@ export default function ReceiptPage() {
           </div>
 
           {/* Summary & Signatures */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-4">
-            <div className="space-y-6">
-              <div className="p-6 bg-primary/5 rounded-2xl border border-primary/10">
+          <div className="space-y-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+              <div className="p-6 bg-primary/5 rounded-2xl border border-primary/10 print:p-4">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase">Received By:</span>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase">Collected By:</span>
                   <span className="text-sm font-black text-primary">{payment.receiver}</span>
                 </div>
                 <Separator className="bg-primary/10 my-3" />
@@ -152,20 +152,13 @@ export default function ReceiptPage() {
                   <b>Note:</b> {payment.description || 'Verified payment record.'}
                 </p>
               </div>
-              <div className="pt-12 text-center">
-                <div className="border-t border-slate-900 pt-2 w-48 mx-auto">
-                  <p className="text-[10px] font-black uppercase">Resident Signature</p>
-                </div>
-              </div>
-            </div>
 
-            <div className="space-y-6">
               <div className="space-y-3">
                 <div className="flex justify-between items-center px-2">
                   <span className="text-sm font-bold text-slate-500 uppercase">Total Received</span>
                   <span className="text-3xl font-black text-slate-900">৳{payment.amount.toLocaleString()}</span>
                 </div>
-                <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-200 flex justify-between items-center">
+                <div className="bg-slate-900 text-white p-6 rounded-2xl flex justify-between items-center print:p-4 print:bg-slate-800">
                   <div className="space-y-1">
                     <p className="text-[10px] font-bold text-white/60 uppercase">System Status</p>
                     <p className="text-md font-bold">Payment Verified</p>
@@ -173,16 +166,27 @@ export default function ReceiptPage() {
                   <CheckCircle2 className="text-success h-10 w-10" />
                 </div>
               </div>
-              <div className="pt-12 text-center">
-                <div className="border-t border-slate-900 pt-2 w-48 mx-auto">
-                  <p className="text-[10px] font-black uppercase">Manager Signature</p>
+            </div>
+
+            {/* Signature Area - Single Page Layout */}
+            <div className="grid grid-cols-2 gap-12 pt-8">
+              <div className="text-center space-y-2">
+                <div className="border-t border-slate-900 pt-2 w-48 mx-auto print:w-40">
+                  <p className="text-[10px] font-black uppercase">Resident Signature</p>
+                </div>
+              </div>
+
+              <div className="text-center space-y-2">
+                <div className="border-t border-slate-900 pt-2 w-48 mx-auto print:w-40">
+                  <p className="text-[10px] font-black uppercase">Authorized Signature</p>
+                  <p className="text-[8px] text-muted-foreground italic">({payment.receiver})</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="pt-12 text-center space-y-2 border-t border-slate-50">
+          <div className="pt-8 text-center space-y-2 border-t border-slate-50 print:pt-4">
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Thank you for staying with us at Somikoron</p>
             <div className="flex justify-center gap-6 text-[8px] text-slate-400 font-bold">
               <span>SYSTEM GENERATED</span>
