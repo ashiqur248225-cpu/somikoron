@@ -32,11 +32,12 @@ import {
   Info,
   Plus,
   Trash2,
-  Building
+  Building,
+  RotateCcw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, doc, setDoc, query, where, serverTimestamp } from "firebase/firestore"
+import { collection, doc, setDoc, query, where, serverTimestamp, deleteDoc, limit, orderBy } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
@@ -68,7 +69,8 @@ const DEFAULT_TEMPLATES = [
   { id: "due_reminder", label: "Due Reminder", text: "প্রিয় [নাম], [মাস] মাসের ভাড়া/খাবার বাবদ আপনার ৳[total_payable] বকেয়া রয়েছে। অনুগ্রহ করে দ্রুত পরিশোধ করুন। [Hostel Name]" },
   { id: "low_food", label: "Low Food Balance", text: "প্রিয় [নাম], আপনার খাবার ব্যালেন্স কমে ৳[food_balance] হয়েছে। অনুগ্রহ করে দ্রুত রিচার্জ করুন। [Hostel Name]" },
   { id: "meal_summary", label: "Monthly Meal Summary", text: "প্রিয় [নাম], [মাস] মাসে আপনার মোট meal: [meal_count] টি। বিল: ৳[meal_bill]। খাবার ঋণ: ৳[food_due]। সর্বমোট বকেয়া: ৳[total_payable]। [Hostel Name]" },
-  { id: "birthday", label: "Birthday Wishes", text: "শুভ জন্মদিন [নাম]। আপনার দিনটি সুন্দর ও আনন্দময় হোক। [Hostel Name]-এর পক্ষ থেকে অনেক শুভকামনা।" }
+  { id: "birthday", label: "Birthday Wishes", text: "শুভ জন্মদিন [নাম]। আপনার দিনটি সুন্দর ও আনন্দময় হোক। [Hostel Name]-এর পক্ষ থেকে অনেক শুভকামনা।" },
+  { id: "exit", label: "Exit Message", text: "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।" }
 ]
 
 const SMART_TAGS = [
@@ -166,6 +168,13 @@ export default function SMSPanelPage() {
   }, [db, userBranch])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
+  // Logs Query
+  const logsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "smsLogs"), where("branch", "==", userBranch), orderBy("createdAt", "desc"), limit(100))
+  }, [db, userBranch])
+  const { data: smsLogs, isLoading: logsLoading } = useCollection(logsQuery)
+
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
@@ -238,6 +247,24 @@ export default function SMSPanelPage() {
     toast({ title: "Removed", description: "Template removed from list." })
   }
 
+  const logSMSToDatabase = async (to: string, msg: string, status: 'Success' | 'Failed', errorMsg?: string) => {
+    try {
+      const logId = doc(collection(db, "smsLogs")).id
+      await setDoc(doc(db, "smsLogs", logId), {
+        id: logId,
+        to,
+        message: msg,
+        status,
+        error: errorMsg || null,
+        branch: userBranch,
+        sentBy: userName,
+        createdAt: serverTimestamp()
+      })
+    } catch (e) {
+      console.error("Failed to log SMS", e)
+    }
+  }
+
   const handleBroadcast = async () => {
     if (selectedStudents.length === 0 || !customMessage) {
       toast({ variant: "destructive", title: "Error", description: "Please select students and type a message." })
@@ -261,11 +288,18 @@ export default function SMSPanelPage() {
           description: `Message successfully queued for ${selectedPhones.length} recipients.`,
           action: <CheckCircle2 className="text-success" />
         })
+        await logSMSToDatabase(toNumbers, customMessage, 'Success')
         setSelectedStudents([])
         setCustomMessage("")
         fetchBalance()
       } else {
-        toast({ variant: "destructive", title: "Gateway Error", description: result.msg })
+        const isBalanceError = result.error === 417
+        toast({ 
+          variant: "destructive", 
+          title: isBalanceError ? "ব্যালেন্স নেই" : "Gateway Error", 
+          description: isBalanceError ? "আপনার পর্যাপ্ত ব্যালেন্স নেই, দয়া করে রিচার্জ করুন।" : result.msg 
+        })
+        await logSMSToDatabase(toNumbers, customMessage, 'Failed', result.msg)
       }
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -311,16 +345,44 @@ export default function SMSPanelPage() {
       
       for (const s of birthdayStudents) {
         const msg = bTemplate.replace('[নাম]', s.name).replace('[Hostel Name]', hostelNameForSms)
-        await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg)
+        const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg)
+        await logSMSToDatabase(s.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
       }
 
-      toast({ title: "Wishes Sent!", description: `Successfully sent birthday SMS to ${birthdayStudents.length} students.` })
+      toast({ title: "Wishes Sent!", description: `Process complete. Check logs for delivery status.` })
       setBirthdayStudents([])
       fetchBalance()
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleResend = async (log: any) => {
+    if (!apiConfig.apikey) return
+    setIsSubmitting(true)
+    try {
+      const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, log.to, log.message)
+      if (result.error === 0) {
+        toast({ title: "Resent Successfully" })
+        await logSMSToDatabase(log.to, log.message, 'Success')
+      } else {
+        toast({ variant: "destructive", title: "Resend Failed", description: result.msg })
+      }
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDeleteLog = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "smsLogs", id))
+      toast({ title: "Log Deleted" })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
     }
   }
 
@@ -648,7 +710,6 @@ export default function SMSPanelPage() {
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-8">
-              {/* Hostel Name Box */}
               <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 space-y-4">
                 <div className="flex items-center gap-2 text-primary font-bold uppercase text-[10px] tracking-widest">
                   <Building size={14} /> Hostel Brand Name
@@ -782,14 +843,71 @@ export default function SMSPanelPage() {
         </TabsContent>
 
         <TabsContent value="logs">
-          <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[400px] flex items-center justify-center">
-            <div className="text-center space-y-4 opacity-30">
-              <History size={64} className="mx-auto" />
-              <div>
-                <h3 className="text-lg font-bold">No History Found</h3>
-                <p className="text-xs">Once you start sending SMS via API, logs will appear here.</p>
-              </div>
-            </div>
+          <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
+            <CardHeader className="border-b bg-slate-50/50">
+              <CardTitle className="text-lg">Sending History</CardTitle>
+              <CardDescription>Track all messages sent from the system.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {logsLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-2">
+                  <Loader2 className="animate-spin text-primary" />
+                  <p className="text-xs font-bold text-muted-foreground">Loading history...</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[600px]">
+                  <Table>
+                    <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                      <TableRow>
+                        <TableHead>Date & Time</TableHead>
+                        <TableHead>Recipient</TableHead>
+                        <TableHead>Message</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {smsLogs?.map((log) => (
+                        <TableRow key={log.id} className="group">
+                          <TableCell className="text-[10px] font-medium text-slate-500 whitespace-nowrap">
+                            {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'N/A'}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs font-bold text-slate-700">{log.to}</TableCell>
+                          <TableCell className="max-w-xs"><p className="text-xs line-clamp-2">{log.message}</p></TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn(
+                              "text-[8px] uppercase font-bold",
+                              log.status === 'Success' ? "bg-success/5 text-success border-success/20" : "bg-destructive/5 text-destructive border-destructive/20"
+                            )}>
+                              {log.status}
+                            </Badge>
+                            {log.error && <p className="text-[8px] text-destructive mt-1 italic">{log.error}</p>}
+                          </TableCell>
+                          <TableCell className="text-right space-x-1 whitespace-nowrap">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Resend" onClick={() => handleResend(log)} disabled={isSubmitting}>
+                              <RotateCcw size={14} />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Delete" onClick={() => handleDeleteLog(log.id)}>
+                              <Trash2 size={14} />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {smsLogs?.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-24">
+                            <div className="opacity-20 space-y-2">
+                              <History size={48} className="mx-auto" />
+                              <p className="text-sm font-bold">No history records found.</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              )}
+            </CardContent>
           </Card>
         </TabsContent>
       </Tabs>

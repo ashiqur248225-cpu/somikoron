@@ -120,6 +120,22 @@ export default function IncomeHistoryPage() {
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
 
+  const logSMSToDatabase = async (to: string, msg: string, status: 'Success' | 'Failed', errorMsg?: string) => {
+    try {
+      const logId = doc(collection(db, "smsLogs")).id
+      await setDoc(doc(db, "smsLogs", logId), {
+        id: logId,
+        to,
+        message: msg,
+        status,
+        error: errorMsg || null,
+        branch: userBranch,
+        sentBy: userName,
+        createdAt: serverTimestamp()
+      })
+    } catch (e) {}
+  }
+
   // Advanced Filtering Logic
   const filteredPayments = useMemo(() => {
     if (!rawPayments) return []
@@ -254,15 +270,20 @@ export default function IncomeHistoryPage() {
               .replaceAll('[খাত]', selectedStudent.paymentSystem === 'package' ? 'প্যাকেজ ভাড়া' : 'ভাড়া/খাবার')
               .replaceAll('[Hostel Name]', hostelDisplayName);
             
-            await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
+            const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
+            await logSMSToDatabase(selectedStudent.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
+            
+            if (result.error !== 0 && result.error === 417) {
+              toast({ variant: "destructive", title: "ব্যালেন্স নেই", description: "আপনার পর্যাপ্ত ব্যালেন্স নেই, দয়া করে রিচার্জ করুন।" })
+            }
           }
         }
         
-        toast({ title: "Success", description: "Payment recorded and SMS sent." })
+        toast({ title: "Success", description: "Payment recorded." })
         
         // Trigger Receipt
-        setLastPayment(pRecord)
-        setTargetStudent(selectedStudent)
+        setLastPayment({ ...pRecord, date: new Date() })
+        setTargetStudent({ ...selectedStudent, totalDue: totalPayableAfter })
         setIsReceiptOpen(true)
       }
       setIsEntryOpen(false)

@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { sendSMS } from "@/app/actions/sms"
+import { ReceiptDialog } from "@/components/receipt-dialog"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026"];
@@ -45,6 +46,11 @@ export default function RegistrationsPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [initializedId, setInitializedId] = useState<string | null>(null)
   
+  // Receipt Modal Logic
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false)
+  const [lastPayment, setLastPayment] = useState<any>(null)
+  const [targetStudent, setTargetStudent] = useState<any>(null)
+
   const [userRole, setUserRole] = useState("Manager")
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
@@ -81,13 +87,27 @@ export default function RegistrationsPage() {
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
-  // API Config Logic for SMS
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
-  // SMS Template Logic
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
+
+  const logSMSToDatabase = async (to: string, msg: string, status: 'Success' | 'Failed', errorMsg?: string) => {
+    try {
+      const logId = doc(collection(db, "smsLogs")).id
+      await setDoc(doc(db, "smsLogs", logId), {
+        id: logId,
+        to,
+        message: msg,
+        status,
+        error: errorMsg || null,
+        branch: userBranch,
+        sentBy: userName,
+        createdAt: serverTimestamp()
+      })
+    } catch (e) {}
+  }
 
   const [approvalForm, setApprovalForm] = useState({
     monthlyRent: "",
@@ -208,6 +228,7 @@ export default function RegistrationsPage() {
         }
       })
 
+      let finalPRecord = null;
       if (!isOld) {
         const rentPaid = Number(approvalForm.initialRentPayment)
         const foodPaid = Number(approvalForm.initialFoodPayment)
@@ -233,21 +254,22 @@ export default function RegistrationsPage() {
             year: new Date().getFullYear().toString(),
             method: approvalForm.method,
             receiver: approvalForm.receiver,
-            description: "Admission initial payment (Rent + Adv + Svc + Food)",
+            description: "Admission initial payment",
             date: serverTimestamp(),
             createdAt: serverTimestamp()
           }
           await setDoc(doc(db, "payments", pId), pRecord)
+          finalPRecord = { ...pRecord, date: new Date() }
         }
       }
 
       await setDoc(doc(db, "students", studentId), {
         id: studentId,
         name: selectedReg.name,
-        fatherName: selectedReg.fatherName || "",
-        motherName: selectedReg.motherName || "",
         phone: selectedReg.phone,
         parentPhone: selectedReg.parentPhone || "",
+        fatherName: selectedReg.fatherName || "",
+        motherName: selectedReg.motherName || "",
         guardianPhone: selectedReg.guardianPhone || "",
         dob: selectedReg.dob || "",
         bloodGroup: selectedReg.bloodGroup || "",
@@ -307,7 +329,7 @@ export default function RegistrationsPage() {
         })
       }
 
-      // Dynamic Mapping for Admission SMS
+      // Dynamic Admission SMS
       if (apiConfig?.apikey && templatesData?.templates) {
         const admissionTemplate = templatesData.templates.find((t: any) => t.id === 'admission')
         if (admissionTemplate) {
@@ -319,16 +341,30 @@ export default function RegistrationsPage() {
             .replaceAll('[সিট]', sNum)
             .replaceAll('[তারিখ]', approvalForm.billingStartDate);
           
-          await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
+          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
+          await logSMSToDatabase(selectedReg.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
+          
+          if (result.error !== 0 && result.error === 417) {
+            toast({ variant: "destructive", title: "ব্যালেন্স নেই", description: "আপনার পর্যাপ্ত ব্যালেন্স নেই, দয়া করে রিচার্জ করুন।" })
+          }
         }
       }
 
       await deleteDoc(doc(db, "registrations", selectedReg.id))
       
-      toast({ title: "Approved & SMS Sent", description: `${selectedReg.name} is now an active resident.` })
+      toast({ title: "Approved Successfully" })
+      
+      if (finalPRecord) {
+        setLastPayment(finalPRecord)
+        setTargetStudent({ 
+          name: selectedReg.name, phone: selectedReg.phone, buildingName: selectedBuilding?.name, 
+          roomNumber: rNum, paymentSystem: approvalForm.paymentSystem, branch: userBranch 
+        })
+        setIsReceiptOpen(true)
+      }
+
       setIsDetailOpen(false)
       setSelectedReg(null)
-      setInitializedId(null)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -359,6 +395,13 @@ export default function RegistrationsPage() {
           </Link>
         </div>
       </div>
+
+      <ReceiptDialog 
+        isOpen={isReceiptOpen} 
+        onClose={() => setIsReceiptOpen(false)} 
+        payment={lastPayment} 
+        student={targetStudent}
+      />
 
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
@@ -519,17 +562,11 @@ export default function RegistrationsPage() {
                         </div>
                       </div>
                     </div>
-                    {(selectedReg.buildingName || selectedReg.roomNumber) && (
-                      <p className="text-[9px] text-primary font-bold italic flex items-center gap-1">
-                        <CheckCircle2 size={10} /> স্টুডেন্টের দেওয়া লোকেশন ও সিট ডাটাবেজ থেকে অটো-ফিল করা হয়েছে।
-                      </p>
-                    )}
                   </div>
 
                   <div className="space-y-1">
                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">Billing Starts From</Label>
                     <Input type="date" value={approvalForm.billingStartDate} onChange={e => setApprovalForm({...approvalForm, billingStartDate: e.target.value})} className="h-10" />
-                    <p className="text-[8px] text-muted-foreground italic mt-1">ভাড়ার হিসাব এই তারিখ থেকে স্বয়ংক্রিয়ভাবে গণনা করা হবে।</p>
                   </div>
                 </div>
 
@@ -565,50 +602,7 @@ export default function RegistrationsPage() {
                       </div>
                     </div>
 
-                    {selectedReg.type === 'old' ? (
-                      <div className="space-y-4">
-                        {/* Historical Total Received - Migration Only */}
-                        <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200 space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-indigo-700 flex items-center gap-1"><HandCoins size={10}/> Total Received (Historical)</Label>
-                          <Input type="number" className="h-9 bg-white font-bold text-indigo-700" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} placeholder="0.00" />
-                          <p className="text-[8px] text-muted-foreground leading-tight italic">* এটি শুধুমাত্র প্রোফাইলে ট্র্যাকিংয়ের জন্য। ইনকাম লেজার বা ব্যালেন্সে যোগ হবে না।</p>
-                        </div>
-
-                        <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20 space-y-3">
-                          <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Arrears (বকেয়া মাসসমূহ)</Label>
-                          <Button variant="outline" type="button" size="sm" className="h-7 text-[9px] w-full gap-1" onClick={addDueRow}><Plus size={10}/> Add Arrear Month</Button>
-                          <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
-                            {historicalDues.map((due, idx) => (
-                              <div key={idx} className="flex gap-1 items-end bg-white p-2 rounded border border-destructive/10 shadow-sm">
-                                <div className="flex-1">
-                                  <Select value={due.month} onValueChange={val => updateDueRow(idx, "month", val)}>
-                                    <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
-                                    <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m} className="text-[10px]">{m}</SelectItem>)}</SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="w-[60px]">
-                                  <Select value={due.year} onValueChange={val => updateDueRow(idx, "year", val)}>
-                                    <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
-                                    <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y} className="text-[10px]">{y}</SelectItem>)}</SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="w-[80px]">
-                                  <Input type="number" className="h-7 text-[10px]" value={due.amount} onChange={e => updateDueRow(idx, "amount", e.target.value)} placeholder="৳" />
-                                </div>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeDueRow(idx)}><Minus size={12}/></Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {approvalForm.paymentSystem === 'non-package' && (
-                          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2">
-                            <Label className="text-[10px] uppercase font-bold text-blue-700 flex items-center gap-1"><Utensils size={10}/> Prev. Food Balance</Label>
-                            <Input type="number" className="h-9 bg-white" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="+/- Balance" />
-                          </div>
-                        )}
-                      </div>
-                    ) : (
+                    {!isOld ? (
                       <div className="space-y-4">
                         <div className="p-3 bg-success/5 rounded-lg border border-success/20 space-y-3">
                           <Label className="text-[10px] uppercase font-bold text-success flex items-center gap-1"><Wallet size={10}/> Admission Payment (Income)</Label>
@@ -628,7 +622,7 @@ export default function RegistrationsPage() {
                             <Label className="text-[9px]">Received By (Staff)</Label>
                             <Select value={approvalForm.receiver} onValueChange={val => setApprovalForm({...approvalForm, receiver: val})}>
                               <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="Staff" /></SelectTrigger>
-                              <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                              <SelectContent>{staffList?.map(s => <SelectItem key={`${selectedReg.id}-${s.name}`} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
                           <div className="space-y-2">
@@ -641,6 +635,11 @@ export default function RegistrationsPage() {
                             </Select>
                           </div>
                         </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200 space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-indigo-700 flex items-center gap-1"><HandCoins size={10}/> Total Received (Historical)</Label>
+                        <Input type="number" className="h-9 bg-white font-bold text-indigo-700" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} placeholder="0.00" />
                       </div>
                     )}
                   </div>

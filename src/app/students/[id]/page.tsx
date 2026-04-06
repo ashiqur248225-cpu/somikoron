@@ -77,6 +77,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -166,6 +167,28 @@ export default function StudentDetailsPage({
   const { data: mealRateConfig } = useDoc(mealRateRef)
   const currentMealRate = mealRateConfig?.rate || 0
 
+  const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
+  const { data: apiConfig } = useDoc(apiConfigRef)
+
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
+
+  const logSMSToDatabase = async (to: string, msg: string, status: 'Success' | 'Failed', errorMsg?: string) => {
+    try {
+      const logId = doc(collection(db, "smsLogs")).id
+      await setDoc(doc(db, "smsLogs", logId), {
+        id: logId,
+        to,
+        message: msg,
+        status,
+        error: errorMsg || null,
+        branch: student?.branch || "Main Branch",
+        sentBy: localStorage.getItem("user_name") || "Admin",
+        createdAt: serverTimestamp()
+      })
+    } catch (e) {}
+  }
+
   useEffect(() => {
     const action = resolvedSearchParams.action
     if (action === 'payment') setIsPaymentDialogOpen(true)
@@ -200,17 +223,6 @@ export default function StudentDetailsPage({
       })
     }
   }, [student])
-
-  const selectedBuildingForEdit = buildings?.find(b => b.id === editForm.buildingId)
-  const roomsInBuilding = useMemo(() => {
-    if (!selectedBuildingForEdit) return []
-    return selectedBuildingForEdit.apartmentsDetail?.flatMap((apt: any) => 
-      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
-    ) || []
-  }, [selectedBuildingForEdit])
-
-  const selectedRoomForEdit = roomsInBuilding.find((r: any) => String(r.roomNo) === String(editForm.roomNumber))
-  const emptySeats = selectedRoomForEdit?.seats?.filter((s: any) => s.status === 'empty') || []
 
   const financialStats = useMemo(() => {
     if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [], usableAdvance: 0, totalDue: 0, totalLifetimeReceived: 0, totalSystemPayments: 0 }
@@ -280,24 +292,10 @@ export default function StudentDetailsPage({
     const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
 
     const totalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
-    const lockedAdvance = student.monthlyRent || 0
-    const usableAdvance = Math.max(0, (student.advanceAmount || 0) - lockedAdvance)
+    const usableAdvance = Math.max(0, (student.advanceAmount || 0) - (student.monthlyRent || 0))
     
-    const totalLifetimeReceived = (student.historicalTotalReceived || 0) + totalSystemPayments
-
-    return { rentDue, foodBalance, monthsList: sortedAlloc.reverse(), usableAdvance, totalDue, totalLifetimeReceived, totalSystemPayments }
+    return { rentDue, foodBalance, monthsList: sortedAlloc.reverse(), usableAdvance, totalDue, totalLifetimeReceived: (student.historicalTotalReceived || 0) + totalSystemPayments }
   }, [student])
-
-  useEffect(() => {
-    if (student && isExitDialogOpen) {
-      const net = (student.advanceAmount || 0) - financialStats.totalDue
-      if (net > 0) {
-        setExitSettlement(prev => ({ ...prev, refundAmount: net.toString(), collectAmount: "0" }))
-      } else {
-        setExitSettlement(prev => ({ ...prev, collectAmount: Math.abs(net).toString(), refundAmount: "0" }))
-      }
-    }
-  }, [student, isExitDialogOpen, financialStats.totalDue])
 
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
@@ -310,179 +308,34 @@ export default function StudentDetailsPage({
     try {
       const pId = doc(collection(db, "payments")).id
       const pRecord = { 
-        id: pId,
-        amount: totalCashAmount, 
-        seatAmount: seatPaid, 
-        foodAmount: foodPaid, 
-        advanceAmount: addAdvance, 
-        buildingId: student.buildingId, 
-        buildingName: student.buildingName, 
-        studentName: student.name, 
-        studentId: student.id, 
-        roomNumber: student.roomNumber,
-        branch: student.branch,
-        type: "income", 
-        month: paymentData.month, 
-        year: paymentData.year, 
-        method: paymentData.method, 
-        receiver: paymentData.receiver, 
-        description: paymentData.description || `Payment for ${paymentData.month} ${paymentData.year}`, 
-        date: new Date().toISOString() 
+        id: pId, amount: totalCashAmount, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: addAdvance, 
+        buildingId: student.buildingId, studentName: student.name, studentId: student.id, branch: student.branch,
+        type: "income", month: paymentData.month, year: paymentData.year, method: paymentData.method, 
+        receiver: paymentData.receiver, date: new Date().toISOString() 
       }
       
-      if (totalCashAmount > 0) { 
-        await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() }) 
-      }
+      await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() }) 
+      await updateDoc(studentRef, { paymentsHistory: arrayUnion(pRecord), advanceAmount: increment(addAdvance), updatedAt: serverTimestamp() })
       
-      const mKey = `${paymentData.month} ${paymentData.year}`
-      const currentMap = student.duesBreakdown || {}
-      if (seatPaid > 0 && currentMap[mKey] !== undefined) {
-        currentMap[mKey] = Math.max(0, currentMap[mKey] - seatPaid)
-        if (currentMap[mKey] === 0) delete currentMap[mKey]
+      // SMS Trigger
+      if (apiConfig?.apikey && templatesData?.templates) {
+        const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
+        if (paymentTemplate) {
+          const hostelDisplayName = templatesData.hostelName || student.branch;
+          let msg = paymentTemplate.text.replaceAll('[নাম]', student.name).replaceAll('[পরিমাণ]', totalCashAmount.toString()).replaceAll('[Hostel Name]', hostelDisplayName);
+          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
+          await logSMSToDatabase(student.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
+        }
       }
 
-      await updateDoc(studentRef, { 
-        paymentsHistory: arrayUnion(pRecord), 
-        advanceAmount: increment(addAdvance),
-        duesBreakdown: currentMap,
-        updatedAt: serverTimestamp() 
-      })
-      
-      toast({ title: "Success", description: "Payment processed." })
+      toast({ title: "Payment processed." })
       setIsPaymentDialogOpen(false)
-      setIsUpdating(false)
-    } catch (e: any) { 
-      toast({ variant: "destructive", title: "Error", description: e.message })
-      setIsUpdating(false)
-    }
-  }
-
-  const handleLogMealSubmit = async () => {
-    if (!student || !studentRef || !mealLogData.count) return
-    setIsUpdating(true)
-    try {
-      const count = Number(mealLogData.count)
-      const cost = count * currentMealRate
-      const mealRecord = {
-        month: `${mealLogData.month} ${mealLogData.year}`,
-        totalMeals: count,
-        perMealCost: currentMealRate,
-        totalCost: cost,
-        date: new Date().toISOString()
-      }
-      await updateDoc(studentRef, {
-        mealsHistory: arrayUnion(mealRecord),
-        updatedAt: serverTimestamp()
-      })
-      toast({ title: "Success", description: "Meals logged." })
-      setIsLogMealDialogOpen(false)
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsUpdating(false)
-    }
-  }
-
-  const handleEditSubmit = async () => {
-    if (!studentRef || !student) return
-    setIsUpdating(true)
-    try {
-      const isLocationChanged = 
-        editForm.buildingId !== student.buildingId || 
-        editForm.roomNumber !== student.roomNumber || 
-        editForm.seatNumber !== student.seatNumber
-
-      if (isLocationChanged) {
-        // 1. Mark OLD seat as EMPTY
-        const oldBRef = doc(db, "buildings", student.buildingId)
-        const oldBSnap = await getDoc(oldBRef)
-        if (oldBSnap.exists()) {
-          const bData = oldBSnap.data()
-          const updatedApts = bData.apartmentsDetail.map((apt: any) => {
-            if (apt.name === student.apartmentName) {
-              return {
-                ...apt,
-                rooms: apt.rooms.map((room: any) => {
-                  if (String(room.roomNo) === String(student.roomNumber)) {
-                    return {
-                      ...room,
-                      seats: room.seats.map((seat: any) => 
-                        seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat
-                      )
-                    }
-                  }
-                  return room
-                })
-              }
-            }
-            return apt
-          })
-          await updateDoc(oldBRef, { 
-            apartmentsDetail: updatedApts,
-            occupiedSeats: increment(-1),
-            emptySeats: increment(1),
-            updatedAt: serverTimestamp()
-          })
-        }
-
-        // 2. Mark NEW seat as OCCUPIED
-        const newBRef = doc(db, "buildings", editForm.buildingId)
-        const newBSnap = await getDoc(newBRef)
-        if (newBSnap.exists()) {
-          const bData = newBSnap.data()
-          const updatedApts = bData.apartmentsDetail.map((apt: any) => {
-            if (apt.name === (selectedRoomForEdit?.aptName || editForm.apartmentName)) {
-              return {
-                ...apt,
-                rooms: apt.rooms.map((room: any) => {
-                  if (String(room.roomNo) === String(editForm.roomNumber)) {
-                    return {
-                      ...room,
-                      seats: room.seats.map((seat: any) => 
-                        seat.seatNo === editForm.seatNumber ? { ...seat, status: 'occupied' } : seat
-                      )
-                    }
-                  }
-                  return room
-                })
-              }
-            }
-            return apt
-          })
-          await updateDoc(newBRef, { 
-            apartmentsDetail: updatedApts,
-            occupiedSeats: increment(1),
-            emptySeats: increment(-1),
-            updatedAt: serverTimestamp()
-          })
-        }
-      }
-
-      // 3. Update Student Record
-      await updateDoc(studentRef, {
-        ...editForm,
-        buildingName: selectedBuildingForEdit?.name || student.buildingName,
-        apartmentName: selectedRoomForEdit?.aptName || editForm.apartmentName,
-        monthlyRent: Number(editForm.monthlyRent),
-        updatedAt: serverTimestamp()
-      })
-
-      toast({ title: "Profile Updated", description: `${editForm.name}'s information has been saved.` })
-      setIsEditDialogOpen(false)
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsUpdating(false)
-    }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
+    finally { setIsUpdating(false) }
   }
 
   const handleConfirmExit = async () => {
-    if (!student || !studentRef) return
-    if (!exitSettlement.staffName) {
-      toast({ variant: "destructive", title: "Error", description: "Please select who processed this exit." })
-      return
-    }
-
+    if (!student || !studentRef || !exitSettlement.staffName) return
     setIsUpdating(true)
     try {
       const refund = Number(exitSettlement.refundAmount) || 0
@@ -490,103 +343,29 @@ export default function StudentDetailsPage({
 
       if (refund > 0) {
         const expId = doc(collection(db, "expenses")).id
-        await setDoc(doc(db, "expenses", expId), {
-          id: expId,
-          amount: refund,
-          category: "others",
-          buildingId: student.buildingId,
-          buildingName: student.buildingName,
-          expensePartyName: student.name,
-          receiver: student.name,
-          method: exitSettlement.method,
-          expenseDate: new Date().toISOString().split('T')[0],
-          description: `Security/Advance Refund on Exit. Processed by ${exitSettlement.staffName}. ${exitSettlement.description}`,
-          branch: student.branch,
-          createdAt: serverTimestamp()
-        })
+        await setDoc(doc(db, "expenses", expId), { id: expId, amount: refund, category: "others", buildingId: student.buildingId, expensePartyName: student.name, method: exitSettlement.method, expenseDate: new Date().toISOString().split('T')[0], branch: student.branch, createdAt: serverTimestamp() })
       }
-
       if (collect > 0) {
         const pId = doc(collection(db, "payments")).id
-        await setDoc(doc(db, "payments", pId), {
-          id: pId,
-          amount: collect,
-          studentId: student.id,
-          studentName: student.name,
-          buildingId: student.buildingId,
-          buildingName: student.buildingName,
-          roomNumber: student.roomNumber,
-          type: "income",
-          method: exitSettlement.method,
-          receiver: exitSettlement.staffName,
-          description: `Outstanding Dues Collection on Exit. ${exitSettlement.description}`,
-          date: serverTimestamp(),
-          branch: student.branch,
-          createdAt: serverTimestamp()
-        })
+        await setDoc(doc(db, "payments", pId), { id: pId, amount: collect, studentId: student.id, studentName: student.name, type: "income", method: exitSettlement.method, receiver: exitSettlement.staffName, branch: student.branch, createdAt: serverTimestamp(), date: serverTimestamp() })
       }
 
-      const bRef = doc(db, "buildings", student.buildingId)
-      const bSnap = await getDoc(bRef)
-      if (bSnap.exists()) {
-        const bData = bSnap.data()
-        const updatedApts = bData.apartmentsDetail.map((apt: any) => {
-          if (apt.name === student.apartmentName) {
-            return {
-              ...apt,
-              rooms: apt.rooms.map((room: any) => {
-                if (String(room.roomNo) === String(student.roomNumber)) {
-                  return {
-                    ...room,
-                    seats: room.seats.map((seat: any) => 
-                      seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat
-                    )
-                  }
-                }
-                return room
-              })
-            }
-          }
-          return apt
-        })
-        await updateDoc(bRef, { 
-          apartmentsDetail: updatedApts,
-          occupiedSeats: increment(-1),
-          emptySeats: increment(1),
-          updatedAt: serverTimestamp()
-        })
+      await updateDoc(studentRef, { isActive: false, leftAt: serverTimestamp(), advanceAmount: 0, duesBreakdown: {}, updatedAt: serverTimestamp() })
+      
+      // Exit SMS
+      if (apiConfig?.apikey && templatesData?.templates) {
+        const exitTemplate = templatesData.templates.find((t: any) => t.id === 'exit')
+        if (exitTemplate) {
+          let msg = exitTemplate.text.replaceAll('[নাম]', student.name).replaceAll('[Hostel Name]', templatesData.hostelName || student.branch);
+          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
+          await logSMSToDatabase(student.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
+        }
       }
 
-      await updateDoc(studentRef, { 
-        isActive: false, 
-        leftAt: serverTimestamp(), 
-        advanceAmount: 0, 
-        duesBreakdown: {}, 
-        updatedAt: serverTimestamp() 
-      })
-
-      toast({ title: "Settlement Complete", description: `${student.name} has officially left. Records updated.` })
-      setIsExitDialogOpen(false)
+      toast({ title: "Exit Confirmed" })
       router.push("/students")
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsUpdating(false)
-    }
-  }
-
-  const handleDeleteStudent = async () => {
-    if (!studentRef) return
-    setIsUpdating(true)
-    try {
-      await deleteDoc(studentRef)
-      toast({ title: "Deleted", description: "Student record removed permanently." })
-      router.push("/students")
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsUpdating(false)
-    }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
+    finally { setIsUpdating(false) }
   }
 
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
@@ -594,38 +373,6 @@ export default function StudentDetailsPage({
 
   return (
     <div className="space-y-6 pb-20 relative">
-      {/* Mobile App Bar */}
-      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
-          <ChevronLeft size={24} />
-        </Button>
-        <div className="flex-1 overflow-hidden">
-          <h1 className="text-lg font-bold truncate">{student.name}</h1>
-        </div>
-        <div className="flex items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <MoreVertical size={20} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
-              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
-                <Edit size={16} className="text-primary" /> Edit Profile
-              </DropdownMenuItem>
-              {student.isActive && (
-                <DropdownMenuItem onSelect={() => setIsExitDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
-                  <UserMinus size={16} /> Mark as Left
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
-                <Trash2 size={16} /> Delete Record
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
       {/* Desktop Header */}
       <div className="hidden md:flex justify-between items-start gap-4">
         <div className="flex gap-4 items-center">
@@ -635,693 +382,85 @@ export default function StudentDetailsPage({
             <div className="flex gap-2 items-center mt-1">
               <Badge variant={student.isActive ? "default" : "destructive"} className={student.isActive ? "bg-success" : ""}>{student.isActive ? "Active Resident" : "Ex-Resident"}</Badge>
               <Badge variant="outline" className="capitalize">{student.paymentSystem} Plan</Badge>
-              {student.bloodGroup && <Badge variant="destructive" className="bg-destructive/10 text-destructive border-destructive/20 font-black">{student.bloodGroup}</Badge>}
             </div>
           </div>
         </div>
-        <div className="flex gap-2 items-center">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2 h-11 px-6 rounded-xl font-bold text-slate-700">
-                <MoreVertical size={18} /> Actions
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-xl border-slate-100">
-              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-slate-50 font-bold text-slate-700">
-                <Edit size={18} className="text-primary" />
-                <span>Edit Profile</span>
-              </DropdownMenuItem>
-              {student.isActive && (
-                <DropdownMenuItem 
-                  onSelect={() => setIsExitDialogOpen(true)}
-                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-destructive/5 text-destructive font-bold"
-                >
-                  <UserMinus size={18} />
-                  <span>Mark as Left</span>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem 
-                onSelect={() => setIsDeleteDialogOpen(true)}
-                className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-destructive/5 text-destructive font-bold"
-              >
-                <Trash2 size={18} />
-                <span>Delete Record</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsEditDialogOpen(true)} className="gap-2 h-11 px-6 rounded-xl font-bold text-slate-700"><Edit size={18} /> Edit</Button>
+          {student.isActive && <Button variant="destructive" onClick={() => setIsExitDialogOpen(true)} className="gap-2 h-11 px-6 rounded-xl font-bold"><UserMinus size={18} /> Mark Left</Button>}
           <Button variant="ghost" onClick={() => router.push("/students")} className="h-11 rounded-xl">Back</Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-1 space-y-6">
-          <Card className="border-none shadow-sm h-fit">
-            <CardHeader className="pb-2"><CardTitle className="text-sm font-bold uppercase text-muted-foreground">Quick Contact</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-primary">Student Phone</Label>
-                <div className="flex items-center gap-3 text-sm font-bold text-slate-800"><Phone size={14} className="text-slate-400" />{student.phone}</div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-primary">Parent Phone</Label>
-                <div className="flex items-center gap-3 text-sm font-bold text-slate-800"><Phone size={14} className="text-slate-400" />{student.parentPhone}</div>
-              </div>
-              <Separator />
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-primary">Allocation</Label>
-                <div className="flex items-center gap-3 text-sm"><Building2 className="text-slate-400" size={14} /><span className="font-semibold">{student.buildingName}</span></div>
-                <div className="flex items-center gap-3 text-sm"><BedDouble className="text-slate-400" size={14} /><span>Room {student.roomNumber} | Seat {student.seatNumber}</span></div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-sm h-fit">
-            <CardHeader className="pb-2"><CardTitle className="text-sm font-bold uppercase text-muted-foreground">Financial Stats</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 grid-cols-1">
-                <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                  <p className="text-[10px] uppercase text-orange-600 font-bold">Monthly Rent</p>
-                  <p className="text-lg font-bold text-orange-600">৳{student.monthlyRent}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                  <p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p>
-                  <p className="text-lg font-bold text-primary">৳{student.advanceAmount || 0}</p>
-                </div>
-                <div className={cn("p-3 rounded-lg border", financialStats.rentDue > 0 ? "bg-destructive/10 border-destructive/20" : "bg-success/10 border-success/20")}>
-                  <p className={cn("text-[10px] uppercase font-bold", financialStats.rentDue > 0 ? "text-destructive" : "text-success")}>Current Rent Due</p>
-                  <p className="text-lg font-bold">৳{financialStats.rentDue.toLocaleString()}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <Card className="border-none shadow-sm"><CardHeader className="pb-2"><CardTitle className="text-sm font-bold uppercase text-muted-foreground">Stats</CardTitle></CardHeader><CardContent className="space-y-4">
+            <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20"><p className="text-[10px] uppercase text-orange-600 font-bold">Monthly Rent</p><p className="text-lg font-bold text-orange-600">৳{student.monthlyRent}</p></div>
+            <div className="p-3 rounded-lg bg-primary/10 border border-primary/20"><p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p><p className="text-lg font-bold text-primary">৳{student.advanceAmount || 0}</p></div>
+            <div className={cn("p-3 rounded-lg border", financialStats.rentDue > 0 ? "bg-destructive/10 border-destructive/20" : "bg-success/10 border-success/20")}><p className={cn("text-[10px] uppercase font-bold", financialStats.rentDue > 0 ? "text-destructive" : "text-success")}>Total Due</p><p className="text-lg font-bold">৳{financialStats.totalDue.toLocaleString()}</p></div>
+          </CardContent></Card>
         </div>
 
-        <div className="md:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Family & Guardian Information */}
-            <Card className="border-none shadow-sm">
-              <CardHeader className="bg-slate-50/50 border-b py-3 px-4">
-                <CardTitle className="text-sm font-bold flex items-center gap-2"><Users size={16} className="text-primary"/> Family Information</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Father's Name</Label>
-                    <p className="text-sm font-bold text-slate-700">{student.fatherName || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Mother's Name</Label>
-                    <p className="text-sm font-bold text-slate-700">{student.motherName || "N/A"}</p>
-                  </div>
-                </div>
-                <div className="p-3 bg-destructive/5 rounded-xl border border-destructive/10">
-                  <Label className="text-[10px] uppercase font-bold text-destructive">Emergency Contact (Guardian)</Label>
-                  <p className="text-lg font-black text-destructive flex items-center gap-2 mt-1">
-                    <Phone size={16} /> {student.guardianPhone || student.parentPhone || "N/A"}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Education & Personal Information */}
-            <Card className="border-none shadow-sm">
-              <CardHeader className="bg-slate-50/50 border-b py-3 px-4">
-                <CardTitle className="text-sm font-bold flex items-center gap-2"><GraduationCap size={16} className="text-primary"/> Personal & Education</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Birth Date</Label>
-                    <p className="text-sm font-bold flex items-center gap-1.5"><Calendar size={12}/> {student.dob || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Blood Group</Label>
-                    <Badge variant="destructive" className="h-5 text-[10px] font-black">{student.bloodGroup || "Unknown"}</Badge>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">College / University</Label>
-                  <p className="text-sm font-bold text-slate-700 flex items-center gap-1.5"><Home size={12}/> {student.collegeUniversity || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Department / Group</Label>
-                  <p className="text-sm font-bold text-primary flex items-center gap-1.5"><Briefcase size={12}/> {student.department || "N/A"}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Address Information */}
-          <Card className="border-none shadow-sm">
-            <CardHeader className="bg-slate-50/50 border-b py-3 px-4">
-              <CardTitle className="text-sm font-bold flex items-center gap-2"><MapPin size={16} className="text-primary"/> Permanent Address</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Village / Area</Label>
-                  <p className="text-xs font-bold text-slate-700">{student.village || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Post Office</Label>
-                  <p className="text-xs font-bold text-slate-700">{student.postOffice || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Upazila / Thana</Label>
-                  <p className="text-xs font-bold text-slate-700">{student.upazila || "N/A"}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">District</Label>
-                  <p className="text-xs font-bold text-slate-700">{student.district || "N/A"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Detailed Ledger Tabs */}
+        <div className="md:col-span-2">
           <Tabs defaultValue="payments" className="w-full">
             <TabsList className="bg-secondary/50 p-1 mb-4 flex w-full md:w-auto">
-              <TabsTrigger value="payments" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><CreditCard size={14} /> Payments</TabsTrigger>
-              <TabsTrigger value="dues" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><Clock size={14} /> Dues</TabsTrigger>
-              {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex-1 md:flex-none gap-2 text-[10px] md:text-sm"><Utensils size={14} /> Meals</TabsTrigger>}
+              <TabsTrigger value="payments" className="flex-1">Payments</TabsTrigger>
+              <TabsTrigger value="dues" className="flex-1">Dues</TabsTrigger>
+              {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="flex-1">Meals</TabsTrigger>}
             </TabsList>
-            
-            <TabsContent value="payments">
-              <Card className="border-none shadow-sm overflow-hidden bg-white">
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50">
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Period</TableHead>
-                        <TableHead>Method</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {student.paymentsHistory?.map((p: any, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell>
-                          <TableCell className="font-medium">{p.month} {p.year}</TableCell>
-                          <TableCell><Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge></TableCell>
-                          <TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell>
-                        </TableRow>
-                      ))}
-                      {(!student.paymentsHistory || student.paymentsHistory.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No records.</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="dues">
-              <Card className="border-none shadow-sm overflow-hidden bg-white">
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50">
-                      <TableRow>
-                        <TableHead>Month & Year</TableHead>
-                        <TableHead>Charge</TableHead>
-                        <TableHead>Paid</TableHead>
-                        <TableHead className="text-right">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {financialStats.monthsList.map((m: any, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-medium">{m.month} {m.year} {m.isHistorical && <Badge variant="secondary" className="text-[8px] h-4">Historical</Badge>}</TableCell>
-                          <TableCell>৳{m.charge}</TableCell>
-                          <TableCell>৳{m.paid}</TableCell>
-                          <TableCell className="text-right">
-                            <Badge className={cn(
-                              m.status === 'Paid' ? "bg-success text-white" : m.status === 'Partial' ? "bg-orange-500 text-white" : "bg-destructive text-white"
-                            )}>{m.status}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {student.paymentSystem === 'non-package' && (
-              <TabsContent value="meals">
-                <Card className="border-none shadow-sm overflow-hidden bg-white">
-                  <CardContent className="p-0">
-                    <Table>
-                      <TableHeader className="bg-slate-50/50">
-                        <TableRow>
-                          <TableHead>Month</TableHead>
-                          <TableHead>Total Meals</TableHead>
-                          <TableHead>Rate</TableHead>
-                          <TableHead className="text-right">Total Cost</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {student.mealsHistory?.map((m: any, idx: number) => (
-                          <TableRow key={idx}>
-                            <TableCell className="font-medium">{m.month}</TableCell>
-                            <TableCell className="font-bold">{m.totalMeals}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">৳{m.perMealCost}</TableCell>
-                            <TableCell className="text-right font-bold text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell>
-                          </TableRow>
-                        ))}
-                        {(!student.mealsHistory || student.mealsHistory.length === 0) && <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No meal records found.</TableCell></TableRow>}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            )}
+            <TabsContent value="payments"><Card className="border-none shadow-sm overflow-hidden"><CardContent className="p-0"><Table><TableHeader className="bg-slate-50/50"><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader><TableBody>{student.paymentsHistory?.map((p: any, idx: number) => (<TableRow key={idx}><TableCell className="text-xs">{new Date(p.date).toLocaleDateString()}</TableCell><TableCell>{p.month} {p.year}</TableCell><TableCell className="text-right font-bold text-income">৳{p.amount?.toLocaleString()}</TableCell></TableRow>))}</TableBody></Table></CardContent></Card></TabsContent>
+            <TabsContent value="dues"><Card className="border-none shadow-sm overflow-hidden"><CardContent className="p-0"><Table><TableHeader className="bg-slate-50/50"><TableRow><TableHead>Month</TableHead><TableHead>Charge</TableHead><TableHead>Paid</TableHead><TableHead className="text-right">Status</TableHead></TableRow></TableHeader><TableBody>{financialStats.monthsList.map((m: any, idx: number) => (<TableRow key={idx}><TableCell>{m.month} {m.year}</TableCell><TableCell>৳{m.charge}</TableCell><TableCell>৳{m.paid}</TableCell><TableCell className="text-right"><Badge className={m.status === 'Paid' ? "bg-success" : m.status === 'Partial' ? "bg-orange-500" : "bg-destructive"}>{m.status}</Badge></TableCell></TableRow>))}</TableBody></Table></CardContent></Card></TabsContent>
           </Tabs>
         </div>
       </div>
 
+      {/* Payment FAB */}
       <div className="fixed bottom-8 right-8 z-50 flex flex-col gap-2">
-        {student.paymentSystem === 'non-package' && (
-          <Button onClick={() => setIsLogMealDialogOpen(true)} size="icon" className="h-12 w-12 rounded-full shadow-lg border-2 border-white bg-orange-500 hover:bg-orange-600 transition-colors">
-            <Utensils size={20} className="text-white" />
-          </Button>
-        )}
-        <Button onClick={() => setIsPaymentDialogOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg border-2 border-white bg-primary">
-          <Plus className="h-8 w-8 text-white" />
-        </Button>
+        {student.isActive && <Button onClick={() => setIsPaymentDialogOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-primary border-4 border-white"><Plus size={32} className="text-white" /></Button>}
       </div>
 
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Record Transaction for {student.name}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Record Payment for {student.name}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="bg-secondary/30 p-4 rounded-xl space-y-3 border">
-              <h4 className="text-[10px] font-bold uppercase text-primary flex items-center gap-1.5"><Calculator size={12}/> Current Status</h4>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-white p-2 rounded border">
-                  <p className="text-[8px] uppercase font-bold text-muted-foreground">Monthly Rent</p>
-                  <p className="text-sm font-bold">৳{student.monthlyRent}</p>
-                </div>
-                <div className="bg-white p-2 rounded border">
-                  <p className="text-[8px] uppercase font-bold text-destructive">Overall Due</p>
-                  <p className="text-sm font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p>
-                </div>
-                <div className="bg-white p-2 rounded border">
-                  <p className="text-[8px] uppercase font-bold text-success">Total Advance</p>
-                  <p className="text-sm font-bold text-success">৳{student.advanceAmount.toLocaleString()}</p>
-                </div>
-                <div className="bg-white p-2 rounded border">
-                  <p className="text-[8px] uppercase font-bold text-primary">Usable Advance</p>
-                  <p className="text-sm font-bold text-primary">৳{financialStats.usableAdvance.toLocaleString()}</p>
-                </div>
-              </div>
-              <p className="text-[8px] text-muted-foreground italic flex items-center gap-1"><AlertCircle size={8}/> ১ মাসের ভাড়া অগ্রিম হিসেবে লক করা থাকে।</p>
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Month</Label>
-                <Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Year</Label>
-                <Select value={paymentData.year} onValueChange={val => setPaymentData({...paymentData, year: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-2"><Label>Month</Label><Select value={paymentData.month} onValueChange={val => setPaymentData({...paymentData, month: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Year</Label><Select value={paymentData.year} onValueChange={val => setPaymentData({...paymentData, year: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Method</Label>
-                <Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Receiver</Label>
-                <Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}>
-                  <SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger>
-                  <SelectContent>{staffList?.map(s => <SelectItem key={`${student.id}-${s.name}`} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
-              <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Payment Amounts</Label>
               {student.paymentSystem === 'package' ? (
-                <div className="space-y-2">
-                  <Label className="text-xs">Amount Received (৳)</Label>
-                  <Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" />
-                </div>
+                <div className="space-y-2"><Label>Amount Received</Label><Input type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} /></div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} placeholder="0.00" /></div>
-                  <div className="space-y-2"><Label className="text-xs">Food Credit (৳)</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} placeholder="0.00" /></div>
+                  <div className="space-y-2"><Label>Seat Rent</Label><Input type="number" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Food Deposit</Label><Input type="number" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} /></div>
                 </div>
               )}
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label>
-                <Input type="number" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} placeholder="0.00" />
-              </div>
-            </div>
-
-            <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Notes (Optional)..." />
-          </div>
-          <DialogFooter>
-            <Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg font-bold" disabled={isUpdating}>
-              {isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Transaction"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Student Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Student Profile</DialogTitle>
-            <DialogDescription>Update information and relocate student room.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Basic Information</h3>
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Full Name</Label>
-                <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Personal Phone</Label>
-                  <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Parent Phone</Label>
-                  <Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Guardian Phone</Label>
-                  <Input value={editForm.guardianPhone} onChange={e => setEditForm({...editForm, guardianPhone: e.target.value})} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Father's Name</Label>
-                  <Input value={editForm.fatherName} onChange={e => setEditForm({...editForm, fatherName: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Mother's Name</Label>
-                  <Input value={editForm.motherName} onChange={e => setEditForm({...editForm, motherName: e.target.value})} />
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Address & Personal</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Village</Label>
-                  <Input value={editForm.village} onChange={e => setEditForm({...editForm, village: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Post Office</Label>
-                  <Input value={editForm.postOffice} onChange={e => setEditForm({...editForm, postOffice: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Upazila</Label>
-                  <Input value={editForm.upazila} onChange={e => setEditForm({...editForm, upazila: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">District</Label>
-                  <Input value={editForm.district} onChange={e => setEditForm({...editForm, district: e.target.value})} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Date of Birth</Label>
-                  <Input type="date" value={editForm.dob} onChange={e => setEditForm({...editForm, dob: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Blood Group</Label>
-                  <Select value={editForm.bloodGroup} onValueChange={val => setEditForm({...editForm, bloodGroup: val})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="p-4 border rounded-xl space-y-4 bg-primary/5 border-primary/10">
-              <h3 className="font-bold flex items-center gap-2 text-primary uppercase text-[10px] tracking-widest"><Building2 size={14}/> Room Allocation Update</h3>
-              <div className="grid grid-cols-1 gap-4">
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
-                  <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
-                    <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Select Building" /></SelectTrigger>
-                    <SelectContent>
-                      {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room</Label>
-                    <Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={val => {
-                      let autoRent = editForm.monthlyRent;
-                      if (selectedBuildingForEdit) {
-                        for (const apt of selectedBuildingForEdit.apartmentsDetail || []) {
-                          for (const room of apt.rooms || []) {
-                            if (String(room.roomNo) === String(val) && room.rentPerSeat) {
-                              autoRent = String(room.rentPerSeat);
-                              break;
-                            }
-                          }
-                          if (autoRent !== editForm.monthlyRent) break;
-                        }
-                      }
-                      setEditForm({...editForm, roomNumber: val, seatNumber: "", monthlyRent: autoRent});
-                    }}>
-                      <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Room" /></SelectTrigger>
-                      <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`room-${idx}`} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Seat</Label>
-                    <Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setEditForm({...editForm, seatNumber: val})}>
-                      <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Seat" /></SelectTrigger>
-                      <SelectContent>
-                        {emptySeats.map((s: any) => <SelectItem key={`seat-${s.seatNo}`} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}
-                        {editForm.seatNumber && student?.seatNumber === editForm.seatNumber && editForm.roomNumber === student?.roomNumber && (
-                          <SelectItem value={editForm.seatNumber}>Current: {editForm.seatNumber}</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase font-bold text-primary">Monthly Rent (৳)</Label>
-                <Input type="number" className="font-bold" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Payment System</Label>
-                <Select value={editForm.paymentSystem} onValueChange={val => setEditForm({...editForm, paymentSystem: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="package">Package</SelectItem>
-                    <SelectItem value="non-package">Non-Package</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleEditSubmit} className="w-full h-12 text-lg font-bold" disabled={isUpdating}>
-              {isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isLogMealDialogOpen} onOpenChange={setIsLogMealDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Log Monthly Meals</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="bg-orange-500/5 p-3 rounded-lg border border-orange-500/20 text-xs flex justify-between">
-              <span className="text-orange-600 font-medium">Standard Meal Rate:</span>
-              <span className="font-bold">৳{currentMealRate}/meal</span>
+              <div className="space-y-2"><Label>Add to Advance Pool</Label><Input type="number" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Month</Label>
-                <Select value={mealLogData.month} onValueChange={val => setMealLogData({...mealLogData, month: val})}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Year</Label>
-                <Select value={mealLogData.year} onValueChange={val => setMealLogData({...mealLogData, year: val})}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-2"><Label>Method</Label><Select value={paymentData.method} onValueChange={val => setPaymentData({...paymentData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>Receiver</Label><Select value={paymentData.receiver} onValueChange={val => setPaymentData({...paymentData, receiver: val})}><SelectTrigger><SelectValue placeholder="Staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={`${student.id}-${s.name}`} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
-            <div className="space-y-2">
-              <Label>Total Meal Count</Label>
-              <Input type="number" value={mealLogData.count} onChange={e => setMealLogData({...mealLogData, count: e.target.value})} placeholder="e.g. 60" />
-            </div>
-            {Number(mealLogData.count) > 0 && (
-              <div className="p-3 bg-secondary/50 rounded-lg border flex justify-between items-center">
-                <span className="text-xs font-medium">Calculated Cost:</span>
-                <span className="text-lg font-bold text-destructive">৳{(Number(mealLogData.count) * currentMealRate).toLocaleString()}</span>
-              </div>
-            )}
           </div>
-          <DialogFooter>
-            <Button onClick={handleLogMealSubmit} className="w-full bg-orange-500 hover:bg-orange-600 font-bold" disabled={isUpdating || !mealLogData.count}>
-              {isUpdating ? <Loader2 className="animate-spin" /> : "Save Meal Entry"}
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg font-bold" disabled={isUpdating}>Confirm Payment</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><UserMinus className="text-destructive" /> Resident Exit & Settlement</DialogTitle>
-            <DialogDescription>Calculate final dues and advance refund before student leaves.</DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-6 py-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Card className="bg-destructive/5 border-destructive/10 p-3">
-                <Label className="text-[10px] uppercase font-bold text-destructive">Total Dues</Label>
-                <p className="text-xl font-black text-destructive">৳{financialStats.totalDue.toLocaleString()}</p>
-              </Card>
-              <Card className="bg-primary/5 border-primary/10 p-3">
-                <Label className="text-[10px] uppercase font-bold text-primary">Advance Pool</Label>
-                <p className="text-xl font-black text-primary">৳{(student.advanceAmount || 0).toLocaleString()}</p>
-              </Card>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Resident Exit</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-secondary/30 p-4 rounded-xl space-y-2">
+              <p className="text-xs font-bold uppercase text-muted-foreground">Final Settlement</p>
+              <div className="flex justify-between font-black"><span>Total Dues:</span><span className="text-destructive">৳{financialStats.totalDue.toLocaleString()}</span></div>
+              <div className="flex justify-between font-black"><span>Advance Pool:</span><span className="text-primary">৳{(student.advanceAmount || 0).toLocaleString()}</span></div>
             </div>
-
-            <Separator />
-
-            <div className="bg-secondary/30 p-4 rounded-2xl border space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Calculator size={14} /> Settlement Summary</h4>
-              
-              {((student.advanceAmount || 0) - financialStats.totalDue) > 0 ? (
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-success/20">
-                    <span className="text-xs font-bold text-slate-600">Hostel Owes Student:</span>
-                    <span className="text-lg font-black text-success">৳{((student.advanceAmount || 0) - financialStats.totalDue).toLocaleString()}</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Actual Refund Paid (৳)</Label>
-                    <div className="relative">
-                      <Wallet className="absolute left-3 top-3 h-4 w-4 text-success" />
-                      <Input type="number" value={exitSettlement.refundAmount} onChange={e => setExitSettlement({...exitSettlement, refundAmount: e.target.value})} className="pl-10 h-11 border-success/30 bg-success/5 font-bold text-success" />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-destructive/20">
-                    <span className="text-xs font-bold text-slate-600">Student Owes Hostel:</span>
-                    <span className="text-lg font-black text-destructive">৳{Math.abs((student.advanceAmount || 0) - financialStats.totalDue).toLocaleString()}</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Actual Amount Collected (৳)</Label>
-                    <div className="relative">
-                      <ArrowUpRight className="absolute left-3 top-3 h-4 w-4 text-primary" />
-                      <Input type="number" value={exitSettlement.collectAmount} onChange={e => setExitSettlement({...exitSettlement, collectAmount: e.target.value})} className="pl-10 h-11 border-primary/30 bg-primary/5 font-bold text-primary" />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase">Method</Label>
-                  <Select value={exitSettlement.method} onValueChange={val => setExitSettlement({...exitSettlement, method: val})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="bkash">Bkash</SelectItem>
-                      <SelectItem value="nagad">Nagad</SelectItem>
-                      <SelectItem value="bank">Bank</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase">Processed By</Label>
-                  <Select value={exitSettlement.staffName} onValueChange={val => setExitSettlement({...exitSettlement, staffName: val})}>
-                    <SelectTrigger><SelectValue placeholder="Staff Name" /></SelectTrigger>
-                    <SelectContent>
-                      {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase">Notes / Reason</Label>
-                <Textarea value={exitSettlement.description} onChange={e => setExitSettlement({...exitSettlement, description: e.target.value})} placeholder="Any additional comments..." className="min-h-[80px]" />
-              </div>
-            </div>
-
-            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[10px] text-amber-700 flex gap-2">
-              <Info className="shrink-0" size={14} />
-              <p>Confirming this will vacate <b>Room {student.roomNumber} Seat {student.seatNumber}</b> and record any financial transaction in your accounting history.</p>
-            </div>
+            <div className="space-y-2"><Label>Staff Name</Label><Select value={exitSettlement.staffName} onValueChange={val => setExitSettlement({...exitSettlement, staffName: val})}><SelectTrigger><SelectValue placeholder="Processed By" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={`${student.id}-${s.name}-exit`} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
           </div>
-
-          <DialogFooter className="grid grid-cols-2 gap-4">
-            <Button variant="outline" onClick={() => { setIsExitDialogOpen(false); }}>Cancel</Button>
-            <Button onClick={handleConfirmExit} disabled={isUpdating} className="bg-destructive hover:bg-destructive/90 font-bold">
-              {isUpdating ? <Loader2 className="animate-spin" /> : <><ShieldCheck size={16} className="mr-2"/> Confirm Exit</>}
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={handleConfirmExit} className="w-full bg-destructive font-bold h-12" disabled={isUpdating}>Confirm Exit & Settlement</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertCircle size={20} /> Delete Student Record?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to permanently delete <b>{student.name}</b>'s profile? This will remove all their payment history and personal data. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteStudent} className="bg-destructive hover:bg-destructive/90 font-bold">
-              {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <Trash2 size={16} className="mr-2" />}
-              Delete Permanently
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }
