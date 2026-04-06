@@ -244,7 +244,7 @@ export default function SMSPanelPage() {
                 <CardHeader className="bg-primary text-primary-foreground">
                   <CardTitle className="text-lg flex items-center gap-2"><Smartphone size={20}/> Composer</CardTitle>
                   <CardDescription className="text-primary-foreground/70">Type your custom message below.</CardDescription>
-                </Header>
+                </CardHeader>
                 <CardContent className="pt-6 space-y-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recipients</Label>
