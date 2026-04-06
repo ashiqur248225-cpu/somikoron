@@ -29,7 +29,8 @@ import {
   Smartphone,
   Landmark,
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  HandCoins
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -185,7 +186,7 @@ export default function StudentDetailsPage({
   const emptySeats = selectedRoomForEdit?.seats?.filter((s: any) => s.status === 'empty') || []
 
   const financialStats = useMemo(() => {
-    if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [], usableAdvance: 0, totalDue: 0 }
+    if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [], usableAdvance: 0, totalDue: 0, totalLifetimeReceived: 0, totalSystemPayments: 0 }
     
     const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
     const now = new Date()
@@ -212,6 +213,10 @@ export default function StudentDetailsPage({
       const isRefund = curr.type === 'refund'
       const rentPortion = (curr.seatAmount !== undefined) ? Number(curr.seatAmount) : (student.paymentSystem === 'package' ? Number(curr.amount) : 0)
       return acc + (isRefund ? -rentPortion : rentPortion)
+    }, 0) || 0
+
+    const totalSystemPayments = student.paymentsHistory?.reduce((acc: number, curr: any) => {
+      return acc + Number(curr.amount || 0)
     }, 0) || 0
 
     const histDuesMap = student.duesBreakdown || {}
@@ -250,8 +255,10 @@ export default function StudentDetailsPage({
     const totalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
     const lockedAdvance = student.monthlyRent || 0
     const usableAdvance = Math.max(0, (student.advanceAmount || 0) - lockedAdvance)
+    
+    const totalLifetimeReceived = (student.historicalTotalReceived || 0) + totalSystemPayments
 
-    return { rentDue, foodBalance, monthsList: sortedAlloc.reverse(), usableAdvance, totalDue }
+    return { rentDue, foodBalance, monthsList: sortedAlloc.reverse(), usableAdvance, totalDue, totalLifetimeReceived, totalSystemPayments }
   }, [student])
 
   useEffect(() => {
@@ -666,6 +673,23 @@ export default function StudentDetailsPage({
                 <p className="text-[10px] uppercase text-primary font-bold">Advance Pool</p>
                 <p className="text-lg font-bold">৳{student.advanceAmount || 0}</p>
               </div>
+              
+              {/* Total Lifetime Received Card */}
+              <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 md:col-span-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-[10px] uppercase text-indigo-600 font-bold flex items-center gap-1"><HandCoins size={10}/> Total Lifetime Received</p>
+                    <p className="text-xl font-black text-indigo-700">৳{financialStats.totalLifetimeReceived.toLocaleString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[8px] text-muted-foreground uppercase font-bold">System: ৳{financialStats.totalSystemPayments.toLocaleString()}</p>
+                    {student.historicalTotalReceived > 0 && (
+                      <p className="text-[8px] text-indigo-400 uppercase font-bold">Migrated: ৳{student.historicalTotalReceived.toLocaleString()}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="p-3 rounded-lg bg-secondary/50 border border-secondary">
                 <p className="text-[10px] uppercase text-muted-foreground font-bold">Service Charge</p>
                 <p className="text-lg font-bold">৳{student.serviceCharge || 0}</p>

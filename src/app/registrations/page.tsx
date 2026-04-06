@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { 
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
-  AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2
+  AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2,
+  Receipt
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -98,20 +99,15 @@ export default function RegistrationsPage() {
 
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
-  // ENHANCED AUTO-FILL LOGIC (Final Simplified Version)
+  // ENHANCED AUTO-FILL LOGIC
   useEffect(() => {
     if (isDetailOpen && selectedReg && buildings) {
-      console.log("Processing Auto-fill for Student:", selectedReg.name);
-      
-      // 1. Collect strictly from registration fields
       const regBName = selectedReg.buildingName || "";
       const rNum = selectedReg.roomNumber || "";
       const sNum = selectedReg.seatNumber || "";
 
-      // 2. Find Building ID by Name
       const targetBuilding = buildings.find(b => b.name === regBName);
 
-      // 3. Rent Calculation from matched building & room
       let autoRent = "";
       if (targetBuilding && rNum) {
         for (const apt of targetBuilding.apartmentsDetail || []) {
@@ -125,9 +121,6 @@ export default function RegistrationsPage() {
         }
       }
 
-      console.log("Auto-fill Result -> Building:", targetBuilding?.name, "| Room:", rNum, "| Rent:", autoRent);
-
-      // 4. Update Approval Form State
       setApprovalForm({
         buildingId: targetBuilding?.id || (userRole === 'Building Manager' ? assignedBuildingId : ""),
         roomNumber: String(rNum),
@@ -539,10 +532,11 @@ export default function RegistrationsPage() {
 
                     {selectedReg.type === 'old' ? (
                       <div className="space-y-4">
-                        <div className="p-3 bg-secondary/50 rounded-lg border space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-primary flex items-center gap-1"><History size={10}/> Total Received (Historical)</Label>
-                          <Input type="number" className="h-9 bg-white" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} placeholder="Previous Total Paid" />
-                          <p className="text-[8px] text-muted-foreground italic">* রেফারেন্স ডাটা (এটি বর্তমান ইনকাম লেজারে যোগ হবে না)।</p>
+                        {/* Historical Total Received - Migration Only */}
+                        <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200 space-y-2">
+                          <Label className="text-[10px] uppercase font-bold text-indigo-700 flex items-center gap-1"><HandCoins size={10}/> Total Received (Historical)</Label>
+                          <Input type="number" className="h-9 bg-white font-bold text-indigo-700" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} placeholder="0.00" />
+                          <p className="text-[8px] text-muted-foreground leading-tight italic">* এটি শুধুমাত্র প্রোফাইলে ট্র্যাকিংয়ের জন্য। ইনকাম লেজার বা ব্যালেন্সে যোগ হবে না।</p>
                         </div>
 
                         <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20 space-y-3">
