@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { ReceiptDialog } from "@/components/receipt-dialog"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -56,6 +57,11 @@ export default function IncomeHistoryPage() {
   const [isEntryOpen, setIsEntryOpen] = useState(false)
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Receipt Modal Logic
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false)
+  const [lastPayment, setLastPayment] = useState<any>(null)
+  const [targetStudent, setTargetStudent] = useState<any>(null)
 
   // Entry Form Specific Filters
   const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
@@ -174,22 +180,6 @@ export default function IncomeHistoryPage() {
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
-  const financialStats = useMemo(() => {
-    if (!selectedStudent) return { rentDue: 0, foodBalance: 0, totalDue: 0 }
-    const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
-    const monthsElapsed = (new Date().getFullYear() - billingStart.getFullYear()) * 12 + (new Date().getMonth() - billingStart.getMonth())
-    const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (selectedStudent.monthlyRent || 0)
-    const historicalRentDue = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
-    const totalRentPaid = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || 0), 0) || 0
-    const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
-    
-    const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0
-    const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-    const totalFoodPaid = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
-    const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
-    return { rentDue, foodBalance, totalDue: rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0) }
-  }, [selectedStudent])
-
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver || !selectedStudent) return
     setIsSubmitting(true)
@@ -218,7 +208,16 @@ export default function IncomeHistoryPage() {
           advanceAmount: increment(Number(formData.addAdvanceAmount)),
           updatedAt: serverTimestamp()
         })
+        
+        // SMS Simulation
+        console.log(`Sending SMS to ${selectedStudent.phone}: প্রিয় ${selectedStudent.name}, আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳${totalAmt}। ধন্যবাদ। Somikoron`)
+        
         toast({ title: "Success", description: "Payment recorded." })
+        
+        // Trigger Receipt
+        setLastPayment(pRecord)
+        setTargetStudent(selectedStudent)
+        setIsReceiptOpen(true)
       }
       setIsEntryOpen(false)
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
@@ -226,33 +225,6 @@ export default function IncomeHistoryPage() {
   }
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
-
-  const handleExportCSV = () => {
-    try {
-      const headers = ["Date", "Student Name", "Building & Room", "Method", "Received By", "Amount"];
-      const rows = filteredPayments.map(p => [
-        formatCompactDate(p.date), p.studentName, `${p.buildingName} - R${p.roomNumber}`, p.method, p.receiver, p.amount
-      ]);
-      const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute("download", `income_report_${new Date().getTime()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e) { toast({ variant: "destructive", title: "Export Failed" }) }
-  }
-
-  const activeFilterChips = useMemo(() => {
-    const chips = []
-    if (buildingFilter !== "all") chips.push({ id: "building", label: buildings?.find(b => b.id === buildingFilter)?.name })
-    if (roomFilter !== "all") chips.push({ id: "room", label: `Room ${roomFilter}` })
-    if (methodFilter !== "all") chips.push({ id: "method", label: methodFilter.toUpperCase() })
-    if (receiverFilter !== "all") chips.push({ id: "receiver", label: receiverFilter })
-    if (startDate || endDate) chips.push({ id: "date", label: "Date Applied" })
-    return chips
-  }, [buildingFilter, roomFilter, methodFilter, receiverFilter, startDate, endDate, buildings])
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
@@ -267,72 +239,17 @@ export default function IncomeHistoryPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
-      {/* Official Ledger Print Format (Hidden on Screen) */}
-      <div className="print-only print-report-container">
-        <div className="report-header text-center">
-          <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
-          <p className="text-sm font-bold">{userBranch} Branch • Official Income Ledger</p>
-          <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[10pt]">
-            <div>
-              <p><b>Filter:</b> {buildingFilter === 'all' ? 'All Buildings' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
-              <p><b>Period:</b> {startDate || 'N/A'} to {endDate || 'N/A'}</p>
-            </div>
-            <div className="text-right">
-              <p><b>Total Collections:</b> ৳{stats.total.toLocaleString()}</p>
-              <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <TableRow>
-              <TableHead className="w-[15%]">Date</TableHead>
-              <TableHead className="w-[25%]">Student Name</TableHead>
-              <TableHead className="w-[20%]">Building & Room</TableHead>
-              <TableHead className="w-[10%]">Method</TableHead>
-              <TableHead className="w-[15%]">Received By</TableHead>
-              <TableHead className="w-[15%] text-right">Amount</TableHead>
-            </TableRow>
-          </thead>
-          <TableBody>
-            {filteredPayments.map((p: any) => (
-              <TableRow key={p.id}>
-                <TableCell>{formatCompactDate(p.date)}</TableCell>
-                <TableCell className="font-bold">{p.studentName}</TableCell>
-                <TableCell>{p.buildingName} - R{p.roomNumber}</TableCell>
-                <TableCell className="uppercase">{p.method}</TableCell>
-                <TableCell>{p.receiver}</TableCell>
-                <TableCell className="text-right font-bold">৳{p.amount?.toLocaleString()}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </table>
-
-        <div className="summary-section">
-          <div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-2">
-            <div>
-              <h3 className="font-bold uppercase text-primary text-xs mb-2">Final Summary</h3>
-              <p className="text-sm">Total Receipts: <b>{stats.count} Entries</b></p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs uppercase font-bold text-muted-foreground">Grand Total Collection</p>
-              <p className="text-2xl font-black text-income">৳{stats.total.toLocaleString()}</p>
-            </div>
-          </div>
-          <div className="print-footer mt-10">
-            <div className="signature-box">Accountant Signature</div>
-            <div className="text-center self-end print-page-number"></div>
-            <div className="signature-box">Manager Signature</div>
-          </div>
-        </div>
-      </div>
+      <ReceiptDialog 
+        isOpen={isReceiptOpen} 
+        onClose={() => setIsReceiptOpen(false)} 
+        payment={lastPayment} 
+        student={targetStudent}
+      />
 
       {/* GLOBAL FILTER BAR (Desktop) */}
       <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
@@ -384,41 +301,6 @@ export default function IncomeHistoryPage() {
           </div>
         </div>
         <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setStartDate(""); setEndDate(""); }}>Reset</Button>
-      </div>
-
-      {/* MOBILE FILTER PANEL */}
-      <div className="md:hidden space-y-4 print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-             <p className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Income History</p>
-          </div>
-          <Dialog open={isMobileFilterOpen} onOpenChange={setIsMobileFilterOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-2"><Filter size={14} /> Filter</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-[90vw] rounded-2xl">
-              <DialogHeader><DialogTitle>Income Filters</DialogTitle></DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2"><Label>Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Room</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForFilter.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Received By</Label><Select value={receiverFilter} onValueChange={setReceiverFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All Staff" /></SelectTrigger><SelectContent><SelectItem value="all">All Staff</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
-                <div className="space-y-2"><Label>Date Range</Label><div className="grid grid-cols-2 gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
-              </div>
-              <DialogFooter className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => { setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setStartDate(""); setEndDate(""); setIsMobileFilterOpen(false); }}>Reset</Button><Button onClick={() => setIsMobileFilterOpen(false)}>Apply</Button></DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-        {activeFilterChips.length > 0 && (
-          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
-            {activeFilterChips.map((chip, idx) => (
-              <Badge key={idx} variant="secondary" className="px-2 py-1 gap-1 text-[10px] font-bold uppercase bg-success/10 text-success border-none">
-                {chip.label}
-                <XCircle size={12} className="cursor-pointer" onClick={() => { if (chip.id === 'building') setBuildingFilter("all"); if (chip.id === 'room') setRoomFilter("all"); if (chip.id === 'method') setMethodFilter("all"); if (chip.id === 'receiver') setReceiverFilter("all"); if (chip.id === 'date') { setStartDate(""); setEndDate(""); } }} />
-              </Badge>
-            ))}
-          </div>
-        )}
       </div>
 
       <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden print:hidden">
@@ -490,36 +372,6 @@ export default function IncomeHistoryPage() {
             </div>
             <div className="space-y-2"><Label>Select Resident</Label><Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}><SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger><SelectContent>{filteredStudentsForEntry.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}</SelectContent></Select></div>
             
-            {selectedStudent && (
-              <div className="bg-primary/5 p-4 rounded-xl space-y-3 border border-primary/10 animate-in fade-in zoom-in-95 duration-200">
-                <h4 className="text-[10px] font-bold uppercase text-primary flex items-center gap-1.5"><Calculator size={12}/> Resident Ledger Stats</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-white p-2 rounded border shadow-sm">
-                    <p className="text-[8px] uppercase font-bold text-muted-foreground">Monthly Rent</p>
-                    <p className="text-sm font-bold text-slate-800">৳{selectedStudent.monthlyRent}</p>
-                  </div>
-                  <div className={cn("bg-white p-2 rounded border shadow-sm", financialStats.rentDue > 0 ? "border-destructive/30" : "")}>
-                    <p className="text-[8px] uppercase font-bold text-destructive">Overall Rent Due</p>
-                    <p className="text-sm font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p>
-                  </div>
-                  <div className="bg-white p-2 rounded border shadow-sm">
-                    <p className="text-[8px] uppercase font-bold text-success">Advance Pool</p>
-                    <p className="text-sm font-bold text-success">৳{(selectedStudent.advanceAmount || 0).toLocaleString()}</p>
-                  </div>
-                  {selectedStudent.paymentSystem === 'non-package' && (
-                    <div className={cn("bg-white p-2 rounded border shadow-sm", financialStats.foodBalance < 0 ? "border-destructive/30" : "border-success/30")}>
-                      <p className={cn("text-[8px] uppercase font-bold", financialStats.foodBalance < 0 ? "text-destructive" : "text-success")}>Food Balance</p>
-                      <p className={cn("text-sm font-bold", financialStats.foodBalance < 0 ? "text-destructive" : "text-success")}>৳{financialStats.foodBalance.toLocaleString()}</p>
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Badge variant="outline" className="text-[8px] h-4 uppercase bg-white">Plan: {selectedStudent.paymentSystem}</Badge>
-                  <Badge variant="outline" className="text-[8px] h-4 uppercase bg-white">Building: {selectedStudent.buildingName}</Badge>
-                </div>
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{"2024,2025,2026".split(',').map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>

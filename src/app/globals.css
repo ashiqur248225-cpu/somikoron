@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -103,66 +104,17 @@
   background-color: hsl(var(--destructive));
 }
 
-/* Custom Rich Text Styling for Rules (Document Style) */
-.rich-text {
-  word-wrap: break-word;
-  line-height: 1.6;
-}
-.rich-text h1 {
-  font-size: 1.75rem;
-  font-weight: 800;
-  margin-top: 1.5rem;
-  margin-bottom: 1rem;
-  color: #296EB3;
-  display: block;
-}
-.rich-text h2 {
-  font-size: 1.4rem;
-  font-weight: 700;
-  margin-top: 1.25rem;
-  margin-bottom: 0.75rem;
-  color: #296EB3;
-  display: block;
-}
-.rich-text b, .rich-text strong {
-  font-weight: 700;
-}
-.rich-text p {
-  margin-bottom: 0.75rem;
-}
-.rich-text ul, .rich-text ol {
-  margin-left: 1.5rem;
-  margin-bottom: 1rem;
-  display: block;
-}
-.rich-text ul li {
-  list-style-type: disc;
-  margin-bottom: 0.4rem;
-}
-.rich-text ol li {
-  list-style-type: decimal;
-  margin-bottom: 0.4rem;
-}
-.rich-text li {
-  display: list-item;
-}
-.rich-text mark {
-  background-color: #fef08a; /* Yellow-200 */
-  padding: 0 2px;
-  border-radius: 2px;
-}
-
 /* Professional Print Styles */
 @media print {
   @page {
     size: A4;
-    margin: 10mm 10mm 20mm 10mm;
+    margin: 10mm;
   }
 
   body {
     background-color: white !important;
     color: black !important;
-    font-size: 9pt !important;
+    font-size: 10pt !important;
     -webkit-print-color-adjust: exact;
   }
 
@@ -171,20 +123,19 @@
   .sidebar-trigger,
   button,
   .print-hidden,
-  .no-print,
   nav,
   header {
     display: none !important;
   }
 
-  /* Force report container to top */
-  .print-report-container {
+  /* Receipt Specific Print Style (Half A4) */
+  #receipt-print-area {
     display: block !important;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    visibility: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border: 1px solid #eee !important;
+    padding: 20px !important;
+    margin: 0 auto !important;
   }
 
   .sidebar-inset, 
@@ -198,68 +149,11 @@
   table {
     width: 100% !important;
     border-collapse: collapse !important;
-    margin-top: 5px;
-    table-layout: fixed;
-  }
-
-  thead {
-    display: table-header-group;
   }
 
   th, td {
     border: 0.5pt solid #ccc !important;
-    padding: 4px 6px !important;
-    overflow: hidden;
-    word-wrap: break-word;
-  }
-
-  th {
-    background-color: #f1f5f9 !important;
-    font-weight: bold;
-    text-transform: uppercase;
-    font-size: 8pt;
-  }
-
-  /* Fixed Footer on Every Page */
-  .print-footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    display: flex !important;
-    justify-content: space-between;
-    padding-top: 10px;
-    border-top: 1px solid #eee;
-    font-size: 8pt;
-    color: #666;
-  }
-
-  .print-page-number:after {
-    content: "Page " counter(page);
-  }
-
-  .signature-box {
-    width: 150px;
-    border-top: 1px solid black;
-    text-align: center;
-    margin-top: 30px;
-    padding-top: 5px;
-    font-weight: bold;
-  }
-
-  /* First page only header */
-  .report-header {
-    margin-bottom: 20px;
-  }
-
-  /* Multi-page break handling */
-  tr {
-    page-break-inside: avoid !important;
-  }
-
-  .summary-section {
-    margin-top: 30px;
-    page-break-inside: avoid;
+    padding: 6px !important;
   }
 }
 

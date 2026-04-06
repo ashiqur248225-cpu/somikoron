@@ -18,7 +18,8 @@ import {
   LogOut,
   MapPin,
   BellRing,
-  ChevronRight
+  ChevronRight,
+  MessageSquareQuote
 } from "lucide-react"
 import {
   Sidebar,
@@ -83,12 +84,13 @@ export function AppSidebar() {
     { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Buildings", url: "/buildings", icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
-    { title: "Pending Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
+    { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
     { title: "Manager Requests", url: "/manager-requests", icon: BellRing, roles: ["Admin", "Branch Manager"] },
     { title: "Income", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },
+    { title: "SMS Panel", url: "/sms", icon: MessageSquareQuote, roles: ["Admin", "Branch Manager"] },
     { title: "Staff & Roles", url: "/staff", icon: UserCog, roles: ["Admin"] },
     { title: "Branches", url: "/branches", icon: MapPin, roles: ["Admin"] },
     { title: "Transfers", url: "/transfers", icon: ArrowLeftRight, roles: ["Admin", "Branch Manager"] },

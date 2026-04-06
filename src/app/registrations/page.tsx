@@ -288,9 +288,13 @@ export default function RegistrationsPage() {
         })
       }
 
+      // SMS Simulation Logic
+      const smsText = `প্রিয় ${selectedReg.name}, ${userBranch}-এ আপনার admission সফল হয়েছে। রুম: ${rNum}, সিট: ${sNum}। আমাদের সাথে থাকার জন্য ধন্যবাদ। Somikoron`
+      console.log(`Sending SMS to ${selectedReg.phone}: ${smsText}`)
+
       await deleteDoc(doc(db, "registrations", selectedReg.id))
       
-      toast({ title: "Approved!", description: `${selectedReg.name} is now an active resident.` })
+      toast({ title: "Approved & SMS Sent", description: `${selectedReg.name} is now an active resident.` })
       setIsDetailOpen(false)
       setSelectedReg(null)
       setInitializedId(null)
