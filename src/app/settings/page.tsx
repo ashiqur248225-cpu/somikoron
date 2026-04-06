@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button"
 import { 
   Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, 
   Link as LinkIcon, Copy, ExternalLink, ScrollText,
-  Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered, History, TrendingUp, Search, Printer, Calendar as CalendarIcon, XCircle, ArrowUpRight, ArrowDownRight, Calculator, UserCheck, Info, RefreshCw
+  Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered, History
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, setDoc, serverTimestamp, collection, query, where, limit } from "firebase/firestore"
+import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
+import { doc, setDoc, serverTimestamp } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -25,20 +25,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
-
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function SettingsPage() {
   const { toast } = useToast()
@@ -48,11 +34,6 @@ export default function SettingsPage() {
   const [rules, setRules] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
-  const [isFoodHistoryOpen, setIsFoodHistoryOpen] = useState(false)
-  
-  // Food History Filter States
-  const [foodStartDate, setFoodStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-  const [foodEndDate, setFoodEndDate] = useState(new Date().toISOString().split('T')[0])
   
   const editorRef = useRef<HTMLDivElement>(null)
   
@@ -77,68 +58,6 @@ export default function SettingsPage() {
 
   const rulesRef = useMemoFirebase(() => doc(db, "configs", "hostelRules"), [db])
   const { data: rulesData, isLoading: isRulesLoading } = useDoc(rulesRef)
-
-  // Food Cost History Query - directly filter for Food category
-  const foodHistoryQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(
-      collection(db, "expenses"), 
-      where("branch", "==", userBranch),
-      where("category", "==", "food"),
-      limit(1000)
-    )
-  }, [db, userBranch])
-  const { data: rawFoodHistory, isLoading: isFoodHistoryLoading } = useCollection(foodHistoryQuery)
-
-  const filteredFoodHistory = useMemo(() => {
-    if (!rawFoodHistory) return []
-    const start = new Date(foodStartDate)
-    const end = new Date(foodEndDate)
-    end.setHours(23, 59, 59)
-
-    return rawFoodHistory
-      .filter(item => {
-        const itemDate = new Date(item.expenseDate)
-        return itemDate >= start && itemDate <= end
-      })
-      .sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime())
-  }, [rawFoodHistory, foodStartDate, foodEndDate])
-
-  // Analytics for the Report
-  const foodAnalytics = useMemo(() => {
-    if (!filteredFoodHistory.length) return {
-      totalCost: 0,
-      totalMeals: 0,
-      avgPerMeal: 0,
-      highestDay: null,
-      lowestDay: null,
-      totalDays: 0
-    }
-
-    let totalCost = 0
-    let totalMeals = 0
-    let highestDay = filteredFoodHistory[0]
-    let lowestDay = filteredFoodHistory[0]
-
-    filteredFoodHistory.forEach(item => {
-      const cost = Number(item.amount || 0)
-      const meals = Number(item.totalMeals || 0)
-      totalCost += cost
-      totalMeals += meals
-
-      if (cost > (Number(highestDay?.amount) || 0)) highestDay = item
-      if (cost < (Number(lowestDay?.amount) || Infinity) && cost > 0) lowestDay = item
-    })
-
-    return {
-      totalCost,
-      totalMeals,
-      avgPerMeal: totalMeals > 0 ? (totalCost / totalMeals) : 0,
-      highestDay,
-      lowestDay,
-      totalDays: filteredFoodHistory.length
-    }
-  }, [filteredFoodHistory])
 
   useEffect(() => {
     if (config) {
@@ -233,12 +152,6 @@ export default function SettingsPage() {
     toast({ title: "Copied!", description: "Link copied to clipboard." })
   }
 
-  const handlePrintFoodHistory = () => {
-    if (typeof window !== "undefined") {
-      window.print();
-    }
-  }
-
   const regLinks = [
     { label: "New Student Registration", type: "new", icon: LinkIcon },
     { label: "Existing Resident (Data Import)", type: "old", icon: LinkIcon }
@@ -272,98 +185,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* OFFICIAL PROFESSIONAL FOOD COST HISTORY REPORT (Only visible in print) */}
-      <div className="print-only print-report-container">
-        <div className="report-header text-center">
-          <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">SOMIKORON HOSTEL</h1>
-          <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Official Records</p>
-          <div className="mt-4 border-y-2 border-slate-200 py-4 bg-slate-50/50">
-            <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">DAILY FOOD COST HISTORY REPORT</h2>
-            <div className="flex justify-center gap-8 text-[10pt] font-bold text-muted-foreground mt-2">
-              <p>Period: {new Date(foodStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} to {new Date(foodEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-              <p>Generated At: {new Date().toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Professional Summary Row for Print */}
-        <div className="grid grid-cols-3 gap-4 my-8">
-          <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl flex flex-col items-center shadow-sm">
-            <p className="text-[8pt] uppercase font-black text-muted-foreground tracking-widest mb-1">Grand Total Food Cost</p>
-            <p className="text-xl font-black text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</p>
-          </div>
-          <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl flex flex-col items-center shadow-sm">
-            <p className="text-[8pt] uppercase font-black text-muted-foreground tracking-widest mb-1">Total Meals Served</p>
-            <p className="text-xl font-black text-slate-800">{foodAnalytics.totalMeals.toLocaleString()}</p>
-          </div>
-          <div className="p-4 bg-primary/5 border-2 border-primary/20 rounded-2xl flex flex-col items-center shadow-sm">
-            <p className="text-[8pt] uppercase font-black text-primary tracking-widest mb-1">Overall Avg Cost/Meal</p>
-            <p className="text-xl font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</p>
-          </div>
-        </div>
-
-        <div className="flex justify-between items-center px-2 mb-4">
-          <p className="text-[9pt] font-bold text-slate-600">Highest Daily Cost: <span className="text-destructive">৳{foodAnalytics.highestDay?.amount?.toLocaleString()} ({foodAnalytics.highestDay?.expenseDate})</span></p>
-          <p className="text-[9pt] font-bold text-slate-600">Lowest Daily Cost: <span className="text-success">৳{foodAnalytics.lowestDay?.amount?.toLocaleString()} ({foodAnalytics.lowestDay?.expenseDate})</span></p>
-        </div>
-
-        {/* Official Data Table */}
-        <Table className="border-collapse border w-full text-[10pt]">
-          <TableHeader>
-            <TableRow className="bg-slate-100 border-b-2 border-slate-300">
-              <TableHead className="border border-slate-300 font-black text-slate-900 h-12">Date</TableHead>
-              <TableHead className="border border-slate-300 font-black text-slate-900 text-center h-12">Total Meals</TableHead>
-              <TableHead className="border border-slate-300 font-black text-slate-900 text-right h-12">Total Food Cost</TableHead>
-              <TableHead className="border border-slate-300 font-black text-slate-900 text-right h-12">Avg Cost/Meal</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredFoodHistory.map((item) => {
-              const totalMeals = Number(item.totalMeals || 0)
-              const amount = Number(item.amount || 0)
-              const perMealPrice = totalMeals > 0 ? (amount / totalMeals).toFixed(2) : "N/A"
-              return (
-                <TableRow key={item.id} className="border-b border-slate-200">
-                  <TableCell className="border border-slate-200 h-10 font-medium">{new Date(item.expenseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
-                  <TableCell className="border border-slate-200 text-center h-10 font-bold">{totalMeals || '-'}</TableCell>
-                  <TableCell className="border border-slate-200 text-right h-10 font-bold">৳{amount.toLocaleString()}</TableCell>
-                  <TableCell className="border border-slate-200 text-right h-10 font-black text-primary">৳{perMealPrice}</TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-
-        {/* Grand Total Summary (Last Page Bottom) */}
-        <div className="summary-section mt-12 p-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl">
-          <h3 className="text-[10pt] font-black uppercase text-primary mb-6 border-b-2 border-primary/10 pb-2">Final Summary Analysis</h3>
-          <div className="grid grid-cols-2 gap-x-12 gap-y-4 text-[10pt]">
-            <div className="flex justify-between items-center border-b border-slate-200 pb-2"><span>Grand Total Meals:</span><span className="font-black">{foodAnalytics.totalMeals.toLocaleString()}</span></div>
-            <div className="flex justify-between items-center border-b border-slate-200 pb-2"><span>Total Days Analyzed:</span><span className="font-black">{foodAnalytics.totalDays} Days</span></div>
-            <div className="flex justify-between items-center border-b border-slate-200 pb-2"><span>Grand Total Cost:</span><span className="font-black text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</span></div>
-            <div className="flex justify-between items-center border-b border-slate-200 pb-2"><span>System Avg Cost/Meal:</span><span className="font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</span></div>
-          </div>
-        </div>
-
-        {/* Professional Footer / Signatures */}
-        <div className="print-footer mt-24 flex justify-between px-10">
-          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
-            <p className="text-[9pt] font-black uppercase">Kitchen / Food Manager</p>
-          </div>
-          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
-            <p className="text-[9pt] font-black uppercase">Branch Manager</p>
-          </div>
-          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
-            <p className="text-[9pt] font-black uppercase">Accountant Signature</p>
-          </div>
-        </div>
-        
-        <div className="text-[8pt] text-muted-foreground text-center mt-12 italic">
-          Disclaimer: This is an automatically generated system report. Any manual corrections must be authorized.
-        </div>
-      </div>
-
-      {/* Meal Configuration Section (Screen View) */}
+      {/* Meal Configuration Section */}
       <Card className="border-none shadow-sm overflow-hidden print:hidden">
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="space-y-1">
@@ -373,107 +195,11 @@ export default function SettingsPage() {
             </div>
             <CardDescription>Set the monthly standard meal rate for all non-package students.</CardDescription>
           </div>
-          <Dialog open={isFoodHistoryOpen} onOpenChange={setIsFoodHistoryOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg border-primary/20 text-primary hover:bg-primary/5 font-bold">
-                <History size={14} /> Daily Food History
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase text-primary">
-                  <TrendingUp className="text-primary"/> Daily Food Cost History
-                </DialogTitle>
-                <DialogDescription>Detailed food cost analysis for {userBranch} fetched from expenses.</DialogDescription>
-              </DialogHeader>
-              
-              {/* Summary Cards in Dialog */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 my-4">
-                <div className="p-4 bg-destructive/5 border border-destructive/10 rounded-2xl">
-                  <p className="text-[10px] font-black uppercase text-destructive/60 tracking-widest">Period Cost</p>
-                  <p className="text-2xl font-black text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</p>
-                </div>
-                <div className="p-4 bg-primary/5 border border-primary/10 rounded-2xl">
-                  <p className="text-[10px] font-black uppercase text-primary/60 tracking-widest">Avg Cost/Meal</p>
-                  <p className="text-2xl font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</p>
-                </div>
-                <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl">
-                  <p className="text-[10px] font-black uppercase text-orange-600 tracking-widest">Meals Logged</p>
-                  <p className="text-2xl font-black text-orange-700">{foodAnalytics.totalMeals}</p>
-                </div>
-              </div>
-
-              {/* Filter Bar */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-secondary/20 p-4 rounded-xl border items-end mb-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">From Date</Label>
-                  <Input type="date" value={foodStartDate} onChange={e => setFoodStartDate(e.target.value)} className="bg-white h-10 rounded-lg" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">To Date</Label>
-                  <Input type="date" value={foodEndDate} onChange={e => setFoodEndDate(e.target.value)} className="bg-white h-10 rounded-lg" />
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 h-10 gap-2 font-bold uppercase text-xs rounded-lg border-primary/20 text-primary" onClick={handlePrintFoodHistory}>
-                    <Printer size={16} /> Print Report
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground" onClick={() => {
-                    setFoodStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
-                    setFoodEndDate(new Date().toISOString().split('T')[0]);
-                  }}>
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="py-2">
-                <div className="rounded-xl border overflow-hidden bg-white shadow-sm">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50">
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Total Meals</TableHead>
-                        <TableHead>Total Cost (৳)</TableHead>
-                        <TableHead className="text-right">Per Meal Price</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {isFoodHistoryLoading ? (
-                        <TableRow><TableCell colSpan={4} className="text-center py-12"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
-                      ) : (
-                        filteredFoodHistory.map((item) => {
-                          const totalMeals = Number(item.totalMeals || 0)
-                          const amount = Number(item.amount || 0)
-                          const perMealPrice = totalMeals > 0 ? (amount / totalMeals).toFixed(2) : "N/A"
-                          
-                          return (
-                            <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="font-bold text-slate-600">{new Date(item.expenseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
-                              <TableCell>
-                                {totalMeals > 0 ? (
-                                  <Badge variant="secondary" className="bg-orange-50 text-orange-700 hover:bg-orange-100 border-none font-bold">{totalMeals} Meals</Badge>
-                                ) : <span className="text-muted-foreground italic text-xs">Not set</span>}
-                              </TableCell>
-                              <TableCell className="font-bold text-destructive">৳{amount.toLocaleString()}</TableCell>
-                              <TableCell className="text-right font-black text-primary">
-                                {perMealPrice !== "N/A" ? `৳${perMealPrice}` : perMealPrice}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })
-                      )}
-                      {!isFoodHistoryLoading && filteredFoodHistory.length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No food expense records found for selected period.</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={() => setIsFoodHistoryOpen(false)} variant="secondary" className="w-full h-11 rounded-xl">Close Report</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Link href="/food-history">
+            <Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg border-primary/20 text-primary hover:bg-primary/5 font-bold">
+              <History size={14} /> Daily Food History
+            </Button>
+          </Link>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
