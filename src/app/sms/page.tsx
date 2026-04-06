@@ -29,7 +29,10 @@ import {
   ShieldCheck,
   Globe,
   Wallet,
-  Info
+  Info,
+  Plus,
+  Trash2,
+  Building
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -47,6 +50,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { sendSMS, getSMSBalance } from "@/app/actions/sms"
 
@@ -56,11 +68,7 @@ const DEFAULT_TEMPLATES = [
   { id: "due_reminder", label: "Due Reminder", text: "প্রিয় [নাম], [মাস] মাসের ভাড়া/খাবার বাবদ আপনার ৳[বকেয়া] বকেয়া রয়েছে। অনুগ্রহ করে দ্রুত পরিশোধ করুন। [Hostel Name]" },
   { id: "low_food", label: "Low Food Balance", text: "প্রিয় [নাম], আপনার খাবার ব্যালেন্স কমে ৳[ব্যালেন্স] হয়েছে। অনুগ্রহ করে দ্রুত রিচার্জ করুন। [Hostel Name]" },
   { id: "meal_summary", label: "Monthly Meal Summary", text: "প্রিয় [নাম], [মাস] মাসে আপনার মোট meal: [meal_count] টি। Meal rate: ৳[meal_rate]। মোট meal bill: ৳[meal_bill]। [Hostel Name]" },
-  { id: "full_bill", label: "Full Monthly Bill", text: "প্রিয় [নাম], [মাস] মাসের হিসাব: সিট ভাড়া ৳[rent], meal bill ৳[meal_bill], বকেয়া ৳[previous_due]। মোট payable: ৳[total_payable]। [Hostel Name]" },
-  { id: "paid_due", label: "Payment & Remaining Due", text: "প্রিয় [নাম], [মাস] মাসের মোট বিল ৳[total_payable]। জমা হয়েছে ৳[paid]। অবশিষ্ট বকেয়া: ৳[current_due]। [Hostel Name]" },
-  { id: "birthday", label: "Birthday Wishes", text: "শুভ জন্মদিন [নাম]। আপনার দিনটি সুন্দর ও আনন্দময় হোক। [Hostel Name]-এর পক্ষ থেকে অনেক শুভকামনা।" },
-  { id: "exit", label: "Exit Message", text: "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।" },
-  { id: "seat_confirm", label: "Seat Confirmation", text: "প্রিয় [নাম], আপনার জন্য [রুম]-এর [সিট] confirm করা হয়েছে। ভর্তি/উঠার তারিখ: [তারিখ]। [Hostel Name]" }
+  { id: "birthday", label: "Birthday Wishes", text: "শুভ জন্মদিন [নাম]। আপনার দিনটি সুন্দর ও আনন্দময় হোক। [Hostel Name]-এর পক্ষ থেকে অনেক শুভকামনা।" }
 ]
 
 export default function SMSPanelPage() {
@@ -71,6 +79,10 @@ export default function SMSPanelPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [smsBalance, setSmsBalance] = useState<string | null>(null)
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false)
+
+  // New Template Dialog State
+  const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false)
+  const [newTemplate, setNewTemplate] = useState({ label: "", text: "" })
 
   // API Config States
   const [apiConfig, setApiConfig] = useState({
@@ -98,12 +110,18 @@ export default function SMSPanelPage() {
   const { data: templatesData, isLoading: templatesLoading } = useDoc(templatesRef)
   
   const [localTemplates, setLocalTemplates] = useState<any[]>(DEFAULT_TEMPLATES)
+  const [hostelNameForSms, setHostelNameForSms] = useState("")
 
   useEffect(() => {
     if (templatesData?.templates) {
       setLocalTemplates(templatesData.templates)
     }
-  }, [templatesData])
+    if (templatesData?.hostelName) {
+      setHostelNameForSms(templatesData.hostelName)
+    } else {
+      setHostelNameForSms(userBranch)
+    }
+  }, [templatesData, userBranch])
 
   // API Config Logic
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
@@ -188,15 +206,30 @@ export default function SMSPanelPage() {
     try {
       await setDoc(templatesRef, {
         templates: localTemplates,
+        hostelName: hostelNameForSms,
         updatedAt: serverTimestamp(),
         updatedBy: userName
       })
-      toast({ title: "Success", description: "SMS Templates updated successfully." })
+      toast({ title: "Success", description: "SMS Templates and Hostel Name updated." })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const handleAddCustomTemplate = () => {
+    if (!newTemplate.label || !newTemplate.text) return
+    const id = "custom_" + Math.random().toString(36).substr(2, 5)
+    setLocalTemplates([...localTemplates, { ...newTemplate, id }])
+    setNewTemplate({ label: "", text: "" })
+    setIsNewTemplateOpen(false)
+    toast({ title: "Added", description: "New custom template added to your list." })
+  }
+
+  const handleRemoveTemplate = (id: string) => {
+    setLocalTemplates(localTemplates.filter(t => t.id !== id))
+    toast({ title: "Removed", description: "Template removed from list." })
   }
 
   const handleBroadcast = async () => {
@@ -271,7 +304,7 @@ export default function SMSPanelPage() {
       const bTemplate = localTemplates.find(t => t.id === 'birthday')?.text || ""
       
       for (const s of birthdayStudents) {
-        const msg = bTemplate.replace('[নাম]', s.name).replace('[Hostel Name]', userBranch)
+        const msg = bTemplate.replace('[নাম]', s.name).replace('[Hostel Name]', hostelNameForSms)
         await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg)
       }
 
@@ -559,19 +592,93 @@ export default function SMSPanelPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="templates">
+        <TabsContent value="templates" className="space-y-6">
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden">
-            <CardHeader className="border-b">
-              <CardTitle>System SMS Templates</CardTitle>
-              <CardDescription>Edit automated messages triggered by system events.</CardDescription>
+            <CardHeader className="border-b bg-slate-50/50 flex flex-col md:flex-row justify-between md:items-center gap-4">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2"><Settings2 className="text-primary"/> Message & Profile Setup</CardTitle>
+                <CardDescription>Manage how your hostel name appears and customize SMS templates.</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Dialog open={isNewTemplateOpen} onOpenChange={setIsNewTemplateOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="gap-2 h-10 rounded-xl font-bold border-primary/30 text-primary">
+                      <Plus size={16}/> Create Extra Template
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>New Custom Template</DialogTitle>
+                      <DialogDescription>Define a reusable message for specific events.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Template Name (Label)</Label>
+                        <Input 
+                          placeholder="e.g. Festival Wish" 
+                          value={newTemplate.label}
+                          onChange={e => setNewTemplate({...newTemplate, label: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Message Content</Label>
+                        <Textarea 
+                          placeholder="Your message here..." 
+                          className="min-h-[120px]"
+                          value={newTemplate.text}
+                          onChange={e => setNewTemplate({...newTemplate, text: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button className="w-full h-12 text-lg font-bold" onClick={handleAddCustomTemplate}>Add to My Templates</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                <Button onClick={handleSaveTemplates} disabled={isSubmitting} className="h-10 px-6 font-bold rounded-xl gap-2 shadow-lg shadow-primary/20">
+                  {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />}
+                  Save All Changes
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="p-6">
+            <CardContent className="p-6 space-y-8">
+              {/* Hostel Name Box */}
+              <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 space-y-4">
+                <div className="flex items-center gap-2 text-primary font-bold uppercase text-[10px] tracking-widest">
+                  <Building size={14} /> Hostel Brand Name
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-slate-600">This name will replace [Hostel Name] in all SMS</Label>
+                    <Input 
+                      value={hostelNameForSms}
+                      onChange={e => setHostelNameForSms(e.target.value)}
+                      placeholder="Enter your official hostel name"
+                      className="bg-white h-12 text-lg font-bold border-primary/20 focus:border-primary shadow-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 p-3 bg-white/50 rounded-xl border border-dashed border-primary/20">
+                    <Info size={16} className="text-primary shrink-0" />
+                    <p className="text-[10px] text-slate-500 italic">
+                      <b>Example:</b> "Dear [নাম], Welcome to [Hostel Name]" becomes "Dear Rafi, Welcome to {hostelNameForSms || 'Your Hostel'}"
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {localTemplates.map((template: any, idx: number) => (
-                  <div key={template.id} className="space-y-3 p-6 rounded-3xl bg-slate-50 border border-slate-100 group hover:border-primary/20 transition-all">
+                  <div key={template.id} className="relative space-y-3 p-6 rounded-3xl bg-slate-50 border border-slate-100 group hover:border-primary/20 transition-all shadow-sm hover:shadow-md">
                     <div className="flex justify-between items-center">
                       <Label className="text-xs font-black uppercase tracking-wider text-primary">{template.label}</Label>
-                      <Badge variant="outline" className="text-[8px] bg-white">#{template.id}</Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[8px] bg-white">#{template.id}</Badge>
+                        {template.id.startsWith('custom_') && (
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-destructive/5" onClick={() => handleRemoveTemplate(template.id)}>
+                            <Trash2 size={12}/>
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     <Textarea 
                       value={template.text}
@@ -580,11 +687,11 @@ export default function SMSPanelPage() {
                         newT[idx] = { ...newT[idx], text: e.target.value }
                         setLocalTemplates(newT)
                       }}
-                      className="min-h-[100px] bg-white border-slate-200 text-sm leading-relaxed"
+                      className="min-h-[100px] bg-white border-slate-200 text-sm leading-relaxed focus:ring-primary/20 rounded-2xl"
                     />
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex gap-1.5 flex-wrap">
                       {['[নাম]', '[মাস]', '[meal_count]', '[meal_rate]', '[meal_bill]', '[rent]', '[previous_due]', '[total_payable]', '[paid]', '[current_due]', '[রুম]', '[সিট]', '[Hostel Name]'].map(tag => (
-                        <Badge key={tag} variant="secondary" className="text-[8px] cursor-pointer hover:bg-primary hover:text-white" onClick={() => {
+                        <Badge key={tag} variant="secondary" className="text-[8px] py-0 px-1.5 cursor-pointer hover:bg-primary hover:text-white transition-colors" onClick={() => {
                           const newT = [...localTemplates]
                           newT[idx] = { ...newT[idx], text: newT[idx].text + ` ${tag}` }
                           setLocalTemplates(newT)
@@ -593,12 +700,6 @@ export default function SMSPanelPage() {
                     </div>
                   </div>
                 ))}
-              </div>
-              <div className="mt-8 flex justify-end">
-                <Button onClick={handleSaveTemplates} disabled={isSubmitting} className="h-12 px-10 font-bold rounded-xl gap-2">
-                  {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />}
-                  Save All Template Changes
-                </Button>
               </div>
             </CardContent>
           </Card>
