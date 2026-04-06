@@ -20,10 +20,10 @@ import { Separator } from "@/components/ui/separator"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -98,24 +98,20 @@ export default function RegistrationsPage() {
 
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
-  // ENHANCED AUTO-FILL LOGIC (Final Locked Version)
+  // ENHANCED AUTO-FILL LOGIC (Final Simplified Version)
   useEffect(() => {
     if (isDetailOpen && selectedReg && buildings) {
       console.log("Processing Auto-fill for Student:", selectedReg.name);
       
-      // Step 1: Identification with robust fallbacks
-      const regBId = selectedReg.buildingId || selectedReg.building?.id || "";
-      const regBName = selectedReg.buildingName || selectedReg.building?.name || "";
-      const rNum = selectedReg.roomNumber || selectedReg.roomNo || "";
-      const sNum = selectedReg.seatNumber || selectedReg.seatNo || "";
+      // 1. Collect strictly from registration fields
+      const regBName = selectedReg.buildingName || "";
+      const rNum = selectedReg.roomNumber || "";
+      const sNum = selectedReg.seatNumber || "";
 
-      // Step 2: Building Matching (ID first, then Name)
-      const targetBuilding = buildings.find(b => 
-        (regBId && b.id === regBId) || 
-        (regBName && b.name === regBName)
-      );
+      // 2. Find Building ID by Name
+      const targetBuilding = buildings.find(b => b.name === regBName);
 
-      // Step 3: Rent Auto-calculation from matched building & room
+      // 3. Rent Calculation from matched building & room
       let autoRent = "";
       if (targetBuilding && rNum) {
         for (const apt of targetBuilding.apartmentsDetail || []) {
@@ -131,7 +127,7 @@ export default function RegistrationsPage() {
 
       console.log("Auto-fill Result -> Building:", targetBuilding?.name, "| Room:", rNum, "| Rent:", autoRent);
 
-      // Step 4: Update Approval Form State
+      // 4. Update Approval Form State
       setApprovalForm({
         buildingId: targetBuilding?.id || (userRole === 'Building Manager' ? assignedBuildingId : ""),
         roomNumber: String(rNum),
