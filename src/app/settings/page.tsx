@@ -78,7 +78,7 @@ export default function SettingsPage() {
   const rulesRef = useMemoFirebase(() => doc(db, "configs", "hostelRules"), [db])
   const { data: rulesData, isLoading: isRulesLoading } = useDoc(rulesRef)
 
-  // Food Cost History Query - directo filter for Food category
+  // Food Cost History Query - directly filter for Food category
   const foodHistoryQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(
@@ -112,7 +112,6 @@ export default function SettingsPage() {
       avgPerMeal: 0,
       highestDay: null,
       lowestDay: null,
-      bestEfficiency: null,
       totalDays: 0
     }
 
@@ -120,7 +119,6 @@ export default function SettingsPage() {
     let totalMeals = 0
     let highestDay = filteredFoodHistory[0]
     let lowestDay = filteredFoodHistory[0]
-    let bestEfficiency = { date: '', rate: Infinity }
 
     filteredFoodHistory.forEach(item => {
       const cost = Number(item.amount || 0)
@@ -128,15 +126,8 @@ export default function SettingsPage() {
       totalCost += cost
       totalMeals += meals
 
-      if (cost > (highestDay?.amount || 0)) highestDay = item
-      if (cost < (lowestDay?.amount || Infinity) && cost > 0) lowestDay = item
-
-      if (meals > 0) {
-        const currentRate = cost / meals
-        if (currentRate < bestEfficiency.rate) {
-          bestEfficiency = { date: item.expenseDate, rate: currentRate }
-        }
-      }
+      if (cost > (Number(highestDay?.amount) || 0)) highestDay = item
+      if (cost < (Number(lowestDay?.amount) || Infinity) && cost > 0) lowestDay = item
     })
 
     return {
@@ -145,7 +136,6 @@ export default function SettingsPage() {
       avgPerMeal: totalMeals > 0 ? (totalCost / totalMeals) : 0,
       highestDay,
       lowestDay,
-      bestEfficiency: bestEfficiency.rate === Infinity ? null : bestEfficiency,
       totalDays: filteredFoodHistory.length
     }
   }, [filteredFoodHistory])
@@ -282,52 +272,49 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* COMPREHENSIVE OFFICIAL FOOD COST HISTORY REPORT (Only visible in print) */}
+      {/* OFFICIAL PROFESSIONAL FOOD COST HISTORY REPORT (Only visible in print) */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
-          <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">SOMIKORON HOSTEL LEDGER</h1>
-          <p className="text-sm font-bold text-slate-600">{userBranch} Branch</p>
-          <div className="mt-4 border-y-2 border-primary/20 py-3">
-            <h2 className="text-lg font-black text-slate-800 uppercase tracking-widest">DAILY FOOD COST HISTORY REPORT</h2>
-            <p className="text-[9pt] font-medium text-muted-foreground mt-1">
-              Period: <b>{new Date(foodStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b> to <b>{new Date(foodEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b>
-            </p>
+          <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">SOMIKORON HOSTEL</h1>
+          <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Official Records</p>
+          <div className="mt-4 border-y-2 border-slate-200 py-4 bg-slate-50/50">
+            <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">DAILY FOOD COST HISTORY REPORT</h2>
+            <div className="flex justify-center gap-8 text-[10pt] font-bold text-muted-foreground mt-2">
+              <p>Period: {new Date(foodStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} to {new Date(foodEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+              <p>Generated At: {new Date().toLocaleString()}</p>
+            </div>
           </div>
         </div>
 
-        {/* Top Summary Row for Print */}
-        <div className="grid grid-cols-3 gap-4 my-6">
-          <div className="p-3 bg-slate-50 border rounded-xl flex flex-col items-center">
-            <p className="text-[7pt] uppercase font-bold text-muted-foreground tracking-widest">Total Food Cost</p>
-            <p className="text-sm font-black text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</p>
+        {/* Professional Summary Row for Print */}
+        <div className="grid grid-cols-3 gap-4 my-8">
+          <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl flex flex-col items-center shadow-sm">
+            <p className="text-[8pt] uppercase font-black text-muted-foreground tracking-widest mb-1">Grand Total Food Cost</p>
+            <p className="text-xl font-black text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</p>
           </div>
-          <div className="p-3 bg-slate-50 border rounded-xl flex flex-col items-center">
-            <p className="text-[7pt] uppercase font-bold text-muted-foreground tracking-widest">Total Meals</p>
-            <p className="text-sm font-black text-slate-800">{foodAnalytics.totalMeals}</p>
+          <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl flex flex-col items-center shadow-sm">
+            <p className="text-[8pt] uppercase font-black text-muted-foreground tracking-widest mb-1">Total Meals Served</p>
+            <p className="text-xl font-black text-slate-800">{foodAnalytics.totalMeals.toLocaleString()}</p>
           </div>
-          <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl flex flex-col items-center">
-            <p className="text-[7pt] uppercase font-bold text-primary tracking-widest">Avg Cost/Meal</p>
-            <p className="text-sm font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="text-[8pt] text-slate-600 font-medium">
-            <p>Highest Cost Day: <b>{foodAnalytics.highestDay?.expenseDate} (৳{foodAnalytics.highestDay?.amount.toLocaleString()})</b></p>
-          </div>
-          <div className="text-[8pt] text-slate-600 font-medium text-right">
-            <p>Lowest Cost Day: <b>{foodAnalytics.lowestDay?.expenseDate} (৳{foodAnalytics.lowestDay?.amount.toLocaleString()})</b></p>
+          <div className="p-4 bg-primary/5 border-2 border-primary/20 rounded-2xl flex flex-col items-center shadow-sm">
+            <p className="text-[8pt] uppercase font-black text-primary tracking-widest mb-1">Overall Avg Cost/Meal</p>
+            <p className="text-xl font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</p>
           </div>
         </div>
 
-        {/* Main Printable Table */}
-        <Table className="border w-full text-[9pt]">
+        <div className="flex justify-between items-center px-2 mb-4">
+          <p className="text-[9pt] font-bold text-slate-600">Highest Daily Cost: <span className="text-destructive">৳{foodAnalytics.highestDay?.amount?.toLocaleString()} ({foodAnalytics.highestDay?.expenseDate})</span></p>
+          <p className="text-[9pt] font-bold text-slate-600">Lowest Daily Cost: <span className="text-success">৳{foodAnalytics.lowestDay?.amount?.toLocaleString()} ({foodAnalytics.lowestDay?.expenseDate})</span></p>
+        </div>
+
+        {/* Official Data Table */}
+        <Table className="border-collapse border w-full text-[10pt]">
           <TableHeader>
-            <TableRow className="bg-slate-100/80">
-              <TableHead className="border font-bold text-slate-900 h-10">Date</TableHead>
-              <TableHead className="border font-bold text-slate-900 text-center h-10">Total Meals</TableHead>
-              <TableHead className="border font-bold text-slate-900 text-right h-10">Total Food Cost</TableHead>
-              <TableHead className="border font-bold text-slate-900 text-right h-10">Avg Cost/Meal</TableHead>
+            <TableRow className="bg-slate-100 border-b-2 border-slate-300">
+              <TableHead className="border border-slate-300 font-black text-slate-900 h-12">Date</TableHead>
+              <TableHead className="border border-slate-300 font-black text-slate-900 text-center h-12">Total Meals</TableHead>
+              <TableHead className="border border-slate-300 font-black text-slate-900 text-right h-12">Total Food Cost</TableHead>
+              <TableHead className="border border-slate-300 font-black text-slate-900 text-right h-12">Avg Cost/Meal</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -336,43 +323,43 @@ export default function SettingsPage() {
               const amount = Number(item.amount || 0)
               const perMealPrice = totalMeals > 0 ? (amount / totalMeals).toFixed(2) : "N/A"
               return (
-                <TableRow key={item.id}>
-                  <TableCell className="border h-9">{new Date(item.expenseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
-                  <TableCell className="border text-center h-9 font-bold">{totalMeals || '-'}</TableCell>
-                  <TableCell className="border text-right h-9 font-bold">৳{amount.toLocaleString()}</TableCell>
-                  <TableCell className="border text-right h-9 font-black text-primary">৳{perMealPrice}</TableCell>
+                <TableRow key={item.id} className="border-b border-slate-200">
+                  <TableCell className="border border-slate-200 h-10 font-medium">{new Date(item.expenseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
+                  <TableCell className="border border-slate-200 text-center h-10 font-bold">{totalMeals || '-'}</TableCell>
+                  <TableCell className="border border-slate-200 text-right h-10 font-bold">৳{amount.toLocaleString()}</TableCell>
+                  <TableCell className="border border-slate-200 text-right h-10 font-black text-primary">৳{perMealPrice}</TableCell>
                 </TableRow>
               )
             })}
           </TableBody>
         </Table>
 
-        {/* Grand Total Summary (Last Page) */}
-        <div className="summary-section mt-10 p-6 bg-slate-50 border rounded-2xl">
-          <h3 className="text-[9pt] font-black uppercase text-primary mb-4 border-b pb-2">Final Summary Analysis</h3>
-          <div className="grid grid-cols-2 gap-y-3 text-[9pt]">
-            <div className="flex justify-between pr-8"><span>Grand Total Meals:</span><span className="font-bold">{foodAnalytics.totalMeals}</span></div>
-            <div className="flex justify-between pl-8"><span>Total Observation Days:</span><span className="font-bold">{foodAnalytics.totalDays} Days</span></div>
-            <div className="flex justify-between pr-8"><span>Grand Total Food Cost:</span><span className="font-bold text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</span></div>
-            <div className="flex justify-between pl-8"><span>Overall Avg Cost/Meal:</span><span className="font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</span></div>
+        {/* Grand Total Summary (Last Page Bottom) */}
+        <div className="summary-section mt-12 p-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl">
+          <h3 className="text-[10pt] font-black uppercase text-primary mb-6 border-b-2 border-primary/10 pb-2">Final Summary Analysis</h3>
+          <div className="grid grid-cols-2 gap-x-12 gap-y-4 text-[10pt]">
+            <div className="flex justify-between items-center border-b border-slate-200 pb-2"><span>Grand Total Meals:</span><span className="font-black">{foodAnalytics.totalMeals.toLocaleString()}</span></div>
+            <div className="flex justify-between items-center border-b border-slate-200 pb-2"><span>Total Days Analyzed:</span><span className="font-black">{foodAnalytics.totalDays} Days</span></div>
+            <div className="flex justify-between items-center border-b border-slate-200 pb-2"><span>Grand Total Cost:</span><span className="font-black text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</span></div>
+            <div className="flex justify-between items-center border-b border-slate-200 pb-2"><span>System Avg Cost/Meal:</span><span className="font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</span></div>
           </div>
         </div>
 
-        {/* Footer / Signatures */}
-        <div className="print-footer mt-20 flex justify-between px-6">
-          <div className="signature-box">
-            <p className="text-[8pt] font-bold uppercase">Kitchen / Food Manager</p>
+        {/* Professional Footer / Signatures */}
+        <div className="print-footer mt-24 flex justify-between px-10">
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[9pt] font-black uppercase">Kitchen / Food Manager</p>
           </div>
-          <div className="signature-box">
-            <p className="text-[8pt] font-bold uppercase">Branch Manager</p>
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[9pt] font-black uppercase">Branch Manager</p>
           </div>
-          <div className="signature-box">
-            <p className="text-[8pt] font-bold uppercase">Accountant Signature</p>
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[9pt] font-black uppercase">Accountant Signature</p>
           </div>
         </div>
         
-        <div className="text-[7pt] text-muted-foreground text-center mt-10">
-          Generated on {new Date().toLocaleString()} | User: {userName} | Page <span className="print-page-number" />
+        <div className="text-[8pt] text-muted-foreground text-center mt-12 italic">
+          Disclaimer: This is an automatically generated system report. Any manual corrections must be authorized.
         </div>
       </div>
 
@@ -476,7 +463,7 @@ export default function SettingsPage() {
                         })
                       )}
                       {!isFoodHistoryLoading && filteredFoodHistory.length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No food expense records found. Ensure expenses are recorded under "Food" category.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No food expense records found for selected period.</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
