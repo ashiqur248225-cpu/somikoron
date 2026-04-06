@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -54,8 +55,12 @@ const DEFAULT_TEMPLATES = [
   { id: "payment", label: "Payment Receipt", text: "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[পরিমাণ] টাকা। বর্তমান বকেয়া: ৳[বকেয়া]। ধন্যবাদ। [Hostel Name]" },
   { id: "due_reminder", label: "Due Reminder", text: "প্রিয় [নাম], [মাস] মাসের ভাড়া/খাবার বাবদ আপনার ৳[বকেয়া] বকেয়া রয়েছে। অনুগ্রহ করে দ্রুত পরিশোধ করুন। [Hostel Name]" },
   { id: "low_food", label: "Low Food Balance", text: "প্রিয় [নাম], আপনার খাবার ব্যালেন্স কমে ৳[ব্যালেন্স] হয়েছে। অনুগ্রহ করে দ্রুত রিচার্জ করুন। [Hostel Name]" },
+  { id: "meal_summary", label: "Monthly Meal Summary", text: "প্রিয় [নাম], [মাস] মাসে আপনার মোট meal: [meal_count] টি। Meal rate: ৳[meal_rate]। মোট meal bill: ৳[meal_bill]। [Hostel Name]" },
+  { id: "full_bill", label: "Full Monthly Bill", text: "প্রিয় [নাম], [মাস] মাসের হিসাব: সিট ভাড়া ৳[rent], meal bill ৳[meal_bill], বকেয়া ৳[previous_due]। মোট payable: ৳[total_payable]। [Hostel Name]" },
+  { id: "paid_due", label: "Payment & Remaining Due", text: "প্রিয় [নাম], [মাস] মাসের মোট বিল ৳[total_payable]। জমা হয়েছে ৳[paid]। অবশিষ্ট বকেয়া: ৳[current_due]। [Hostel Name]" },
+  { id: "birthday", label: "Birthday Wishes", text: "শুভ জন্মদিন [নাম]। আপনার দিনটি সুন্দর ও আনন্দময় হোক। [Hostel Name]-এর পক্ষ থেকে অনেক শুভকামনা।" },
   { id: "exit", label: "Exit Message", text: "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।" },
-  { id: "birthday", label: "Birthday Wishes", text: "শুভ জন্মদিন [নাম]। আপনার দিনটি সুন্দর ও আনন্দময় হোক। [Hostel Name]-এর পক্ষ থেকে অনেক শুভকামনা।" }
+  { id: "seat_confirm", label: "Seat Confirmation", text: "প্রিয় [নাম], আপনার জন্য [রুম]-এর [সিট] confirm করা হয়েছে। ভর্তি/উঠার তারিখ: [তারিখ]। [Hostel Name]" }
 ]
 
 export default function SMSPanelPage() {
@@ -578,7 +583,7 @@ export default function SMSPanelPage() {
                       className="min-h-[100px] bg-white border-slate-200 text-sm leading-relaxed"
                     />
                     <div className="flex gap-2 flex-wrap">
-                      {['[নাম]', '[পরিমাণ]', '[বকেয়া]', '[রুম]', '[সিট]', '[Hostel Name]'].map(tag => (
+                      {['[নাম]', '[মাস]', '[meal_count]', '[meal_rate]', '[meal_bill]', '[rent]', '[previous_due]', '[total_payable]', '[paid]', '[current_due]', '[রুম]', '[সিট]', '[Hostel Name]'].map(tag => (
                         <Badge key={tag} variant="secondary" className="text-[8px] cursor-pointer hover:bg-primary hover:text-white" onClick={() => {
                           const newT = [...localTemplates]
                           newT[idx] = { ...newT[idx], text: newT[idx].text + ` ${tag}` }

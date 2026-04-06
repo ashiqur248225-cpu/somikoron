@@ -78,6 +78,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -195,6 +196,12 @@ export default function DashboardPage() {
   const mealRateRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
   const { data: mealRateConfig } = useDoc(mealRateRef)
   const currentMealRate = mealRateConfig?.rate || 0
+
+  const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
+  const { data: apiConfig } = useDoc(apiConfigRef)
+
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
 
   // 3. Fetch All Payments
   const allPaymentsQuery = useMemoFirebase(() => {
@@ -614,6 +621,7 @@ export default function DashboardPage() {
     setIsSubmitting(true)
     try {
       const monthLabel = `${mealLogFilter.month} ${mealLogFilter.year}`
+      const mealTemplate = templatesData?.templates?.find((t: any) => t.id === 'meal_summary')
       
       const promises = entries.map(async ([sId, count]) => {
         const student = students?.find(s => s.id === sId)
@@ -634,6 +642,19 @@ export default function DashboardPage() {
           mealsHistory: arrayUnion(mealRecord),
           updatedAt: serverTimestamp()
         })
+
+        // Automated SMS Logic
+        if (apiConfig?.apikey && mealTemplate) {
+          let msg = mealTemplate.text
+            .replaceAll('[নাম]', student.name)
+            .replaceAll('[মাস]', monthLabel)
+            .replaceAll('[meal_count]', count)
+            .replaceAll('[meal_rate]', currentMealRate.toString())
+            .replaceAll('[meal_bill]', cost.toString())
+            .replaceAll('[Hostel Name]', userBranch);
+          
+          await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
+        }
       })
 
       await Promise.all(promises)
