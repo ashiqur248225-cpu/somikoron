@@ -189,24 +189,19 @@ export default function IncomeHistoryPage() {
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
-  const currentDueForSMS = useMemo(() => {
-    if (!selectedStudent) return 0;
-    // Simple calculation for SMS purpose
-    const histDues = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0;
-    return histDues;
-  }, [selectedStudent]);
-
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver || !selectedStudent) return
     setIsSubmitting(true)
     try {
       const pId = doc(collection(db, "payments")).id
-      const totalAmt = (selectedStudent.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount) + Number(formData.foodAmount)) + Number(formData.addAdvanceAmount)
+      const seatPaid = selectedStudent.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
+      const foodPaid = selectedStudent.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
+      const totalAmt = seatPaid + foodPaid + Number(formData.addAdvanceAmount)
       
       const pRecord = {
         id: pId, amount: totalAmt, 
-        seatAmount: Number(formData.seatAmount || (selectedStudent.paymentSystem === 'package' ? formData.amount : 0)),
-        foodAmount: Number(formData.foodAmount || 0), advanceAmount: Number(formData.addAdvanceAmount),
+        seatAmount: seatPaid,
+        foodAmount: foodPaid, advanceAmount: Number(formData.addAdvanceAmount),
         studentName: selectedStudent.name, studentId: selectedStudent.id, buildingId: selectedStudent.buildingId,
         buildingName: selectedStudent.buildingName, roomNumber: selectedStudent.roomNumber, branch: userBranch,
         type: "income", month: formData.month, year: formData.year, method: formData.method, receiver: formData.receiver,
@@ -219,6 +214,24 @@ export default function IncomeHistoryPage() {
         toast({ title: "Request Sent", description: "Payment is waiting for approval." })
       } else {
         await setDoc(doc(db, "payments", pId), pRecord)
+        
+        // Calculate dynamic values for SMS mapping
+        const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
+        const now = new Date()
+        const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
+        const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (selectedStudent.monthlyRent || 0)
+        
+        const totalRentPaidPrev = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.seatAmount || (selectedStudent.paymentSystem === 'package' ? curr.amount : 0)), 0) || 0
+        const historicalRentDue = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
+        const rentDueAfter = Math.max(0, (historicalRentDue + generatedRent) - (totalRentPaidPrev + seatPaid))
+
+        const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0
+        const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+        const totalFoodPaidPrev = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || (selectedStudent.paymentSystem === 'non-package' ? curr.amount : 0)), 0) || 0
+        const foodBalanceAfter = (totalFoodPaidPrev + foodPaid) - (historicalFoodDue + generatedFoodCost)
+        
+        const totalPayableAfter = rentDueAfter + Math.max(0, -foodBalanceAfter)
+
         await updateDoc(doc(db, "students", selectedStudent.id), {
           paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }),
           advanceAmount: increment(Number(formData.addAdvanceAmount)),
@@ -233,7 +246,10 @@ export default function IncomeHistoryPage() {
             let msg = paymentTemplate.text
               .replaceAll('[নাম]', selectedStudent.name)
               .replaceAll('[পরিমাণ]', totalAmt.toString())
-              .replaceAll('[বকেয়া]', (currentDueForSMS - totalAmt).toString())
+              .replaceAll('[বকেয়া]', totalPayableAfter.toString())
+              .replaceAll('[total_payable]', totalPayableAfter.toString())
+              .replaceAll('[food_balance]', Math.max(0, foodBalanceAfter).toString())
+              .replaceAll('[food_due]', Math.max(0, -foodBalanceAfter).toString())
               .replaceAll('[মাস]', formData.month)
               .replaceAll('[খাত]', selectedStudent.paymentSystem === 'package' ? 'প্যাকেজ ভাড়া' : 'ভাড়া/খাবার')
               .replaceAll('[Hostel Name]', hostelDisplayName);

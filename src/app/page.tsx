@@ -501,10 +501,13 @@ export default function DashboardPage() {
           const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
           if (paymentTemplate) {
             const hostelDisplayName = templatesData.hostelName || userBranch;
+            const finalDueAfterPayment = financialStats.totalDue - seatPaid - foodPaid;
+            
             let msg = paymentTemplate.text
               .replaceAll('[নাম]', selectedStudent.name)
               .replaceAll('[পরিমাণ]', totalCashAmount.toString())
-              .replaceAll('[বকেয়া]', (financialStats.totalDue - seatPaid - foodPaid).toString())
+              .replaceAll('[বকেয়া]', finalDueAfterPayment.toString())
+              .replaceAll('[total_payable]', finalDueAfterPayment.toString())
               .replaceAll('[মাস]', formData.month)
               .replaceAll('[Hostel Name]', hostelDisplayName);
             
@@ -661,14 +664,36 @@ export default function DashboardPage() {
           updatedAt: serverTimestamp()
         })
 
-        // Automated SMS Logic with correct tag mapping
+        // Automated SMS Logic with dynamic tags
         if (apiConfig?.apikey && mealTemplate) {
+          // Calculate stats for SMS mapping
+          const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
+          const now = new Date()
+          const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
+          const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (student.monthlyRent || 0)
+          
+          const totalRentPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.seatAmount || (student.paymentSystem === 'package' ? curr.amount : 0)), 0) || 0
+          const historicalRentDue = student.duesBreakdown ? Object.values(student.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
+          const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+
+          const historicalFoodDue = Number(student.foodDueAmount) || 0
+          const generatedFoodCostBefore = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+          const totalFoodPaid = student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || (student.paymentSystem === 'non-package' ? curr.amount : 0)), 0) || 0
+          
+          // Current status AFTER adding the new meal bill
+          const currentFoodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCostBefore + cost)
+          const totalPayable = rentDue + Math.max(0, -currentFoodBalance)
+
           let msg = mealTemplate.text
             .replaceAll('[নাম]', student.name)
             .replaceAll('[মাস]', monthLabel)
             .replaceAll('[meal_count]', count)
             .replaceAll('[meal_rate]', currentMealRate.toString())
             .replaceAll('[meal_bill]', cost.toString())
+            .replaceAll('[rent]', student.monthlyRent?.toString() || '0')
+            .replaceAll('[food_balance]', Math.max(0, currentFoodBalance).toString())
+            .replaceAll('[food_due]', Math.max(0, -currentFoodBalance).toString())
+            .replaceAll('[total_payable]', totalPayable.toString())
             .replaceAll('[Hostel Name]', hostelDisplayName);
           
           await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
