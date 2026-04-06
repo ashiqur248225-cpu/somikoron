@@ -253,7 +253,7 @@ export default function SettingsPage() {
 
             <TabsContent value="preview" className="border rounded-lg p-6 bg-white min-h-[300px]">
               <div 
-                className="prose prose-sm max-w-none text-slate-600 font-medium leading-relaxed whitespace-pre-wrap"
+                className="rich-text text-sm max-w-none text-slate-600 font-medium leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: rules || "<i>No rules written yet. Switch to Editor to start.</i>" }}
               />
             </TabsContent>

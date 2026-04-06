@@ -207,7 +207,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
               </AccordionTrigger>
               <AccordionContent className="bg-white mt-2 p-6 rounded-2xl shadow-sm">
                 <div 
-                  className="prose prose-sm max-w-none text-slate-600 font-medium leading-relaxed"
+                  className="rich-text text-sm max-w-none text-slate-600 font-medium leading-relaxed"
                   dangerouslySetInnerHTML={{ __html: rulesData?.rulesText || "No rules defined by admin." }}
                 />
               </AccordionContent>
@@ -405,7 +405,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-primary/20">
                 <div 
-                  className="prose prose-sm max-w-none text-slate-600 font-medium leading-relaxed"
+                  className="rich-text text-sm max-w-none text-slate-600 font-medium leading-relaxed"
                   dangerouslySetInnerHTML={{ __html: rulesData?.rulesText || "No rules defined by admin." }}
                 />
               </CardContent>
