@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
-  AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle
+  AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle, CheckCircle2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -245,30 +245,33 @@ export default function RegistrationsPage() {
         updatedAt: serverTimestamp()
       })
 
-      const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
-        if (apt.name === aptName) {
-          return {
-            ...apt,
-            rooms: apt.rooms.map((room: any) => {
-              if (room.roomNo === rNum) {
-                return {
-                  ...room,
-                  seats: room.seats.map((seat: any) => seat.seatNo === sNum ? { ...seat, status: 'occupied' } : seat)
+      // Update building occupied status
+      if (selectedBuilding) {
+        const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
+          if (apt.name === aptName) {
+            return {
+              ...apt,
+              rooms: apt.rooms.map((room: any) => {
+                if (room.roomNo === rNum) {
+                  return {
+                    ...room,
+                    seats: room.seats.map((seat: any) => seat.seatNo === sNum ? { ...seat, status: 'occupied' } : seat)
+                  }
                 }
-              }
-              return room
-            })
+                return room
+              })
+            }
           }
-        }
-        return apt
-      })
-      
-      await updateDoc(doc(db, "buildings", bId), {
-        apartmentsDetail: updatedApts,
-        occupiedSeats: increment(1),
-        emptySeats: increment(-1),
-        updatedAt: serverTimestamp()
-      })
+          return apt
+        })
+        
+        await updateDoc(doc(db, "buildings", bId), {
+          apartmentsDetail: updatedApts,
+          occupiedSeats: increment(1),
+          emptySeats: increment(-1),
+          updatedAt: serverTimestamp()
+        })
+      }
 
       await deleteDoc(doc(db, "registrations", selectedReg.id))
       
@@ -451,7 +454,7 @@ export default function RegistrationsPage() {
                     </div>
                     {selectedReg.type === 'old' && (
                       <p className="text-[9px] text-primary font-bold italic flex items-center gap-1">
-                        <CheckCircle size={10} /> ফরমে দেওয়া বিল্ডিং ও রুম স্বয়ংক্রিয়ভাবে সিলেক্ট করা হয়েছে।
+                        <CheckCircle2 size={10} /> স্টুডেন্টের দেওয়া লোকেশন ও সিট ডাটাবেজ থেকে অটো-ফিল করা হয়েছে।
                       </p>
                     )}
                   </div>
