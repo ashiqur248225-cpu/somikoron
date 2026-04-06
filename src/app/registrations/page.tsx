@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
-  AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle, CheckCircle2
+  AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -98,23 +98,34 @@ export default function RegistrationsPage() {
 
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
-  // ROBUST INITIALIZATION LOGIC
+  // CRITICAL: ROBUST AUTO-FILL LOGIC FOR OLD STUDENTS
   useEffect(() => {
-    if (selectedReg && buildings && selectedReg.id !== initializedId) {
-      // 1. Find Building ID (Fallback to matching by Name if ID is missing)
-      let bId = selectedReg.buildingId || "";
-      if (!bId && selectedReg.buildingName) {
-        const found = buildings.find(b => b.name === selectedReg.buildingName);
-        if (found) bId = found.id;
+    if (isDetailOpen && selectedReg && buildings && selectedReg.id !== initializedId) {
+      // 1. Find Building ID from Name provided in registration
+      let targetBuilding = buildings.find(b => b.id === selectedReg.buildingId);
+      if (!targetBuilding && selectedReg.buildingName) {
+        targetBuilding = buildings.find(b => b.name === selectedReg.buildingName);
       }
 
-      // 2. Initialize form with Database values
+      // 2. Find Room Rent from Database
+      let autoRent = "";
+      if (targetBuilding && selectedReg.roomNumber) {
+        targetBuilding.apartmentsDetail?.forEach((apt: any) => {
+          apt.rooms?.forEach((room: any) => {
+            if (room.roomNo === selectedReg.roomNumber && room.rentPerSeat) {
+              autoRent = room.rentPerSeat.toString();
+            }
+          });
+        });
+      }
+
+      // 3. Update the form with registration data
       setApprovalForm({
-        buildingId: bId || (userRole === 'Building Manager' ? assignedBuildingId : ""),
+        buildingId: targetBuilding?.id || (userRole === 'Building Manager' ? assignedBuildingId : ""),
         roomNumber: selectedReg.roomNumber || "",
         seatNumber: selectedReg.seatNumber || "",
         paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
-        monthlyRent: "", // Auto-filled by the next effect
+        monthlyRent: autoRent || "", 
         serviceCharge: "0",
         advanceAmount: "0",
         initialRentPayment: "0",
@@ -129,7 +140,7 @@ export default function RegistrationsPage() {
       setInitializedId(selectedReg.id);
       setHistoricalDues([]);
     }
-  }, [selectedReg, buildings, userRole, assignedBuildingId, initializedId])
+  }, [isDetailOpen, selectedReg, buildings, userRole, assignedBuildingId, initializedId])
 
   const selectedBuilding = buildings?.find(b => b.id === approvalForm.buildingId)
   const roomsInBuilding = useMemo(() => {
@@ -142,7 +153,7 @@ export default function RegistrationsPage() {
   const selectedRoom = roomsInBuilding.find((r: any) => r.roomNo === approvalForm.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
-  // AUTO-FILL RENT FROM DATABASE
+  // FALLBACK AUTO-FILL RENT (When admin manually changes room)
   useEffect(() => {
     if (selectedRoom?.rentPerSeat) {
       setApprovalForm(prev => ({ ...prev, monthlyRent: selectedRoom.rentPerSeat.toString() }))
@@ -195,7 +206,6 @@ export default function RegistrationsPage() {
         }
       })
 
-      // ONLY CREATE PAYMENT DOC FOR NEW STUDENTS
       if (!isOld) {
         const rentPaid = Number(approvalForm.initialRentPayment)
         const foodPaid = Number(approvalForm.initialFoodPayment)
@@ -245,7 +255,6 @@ export default function RegistrationsPage() {
         serviceCharge: svcCharge,
         advanceAmount: advAmount,
         duesBreakdown: duesBreakdown,
-        // Historical data ONLY for profile (NOT Ledger)
         historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : 0,
         foodDueAmount: isOld ? -Number(approvalForm.foodDueAmount || 0) : 0, 
         billingStartDate: approvalForm.billingStartDate,
@@ -258,7 +267,6 @@ export default function RegistrationsPage() {
         updatedAt: serverTimestamp()
       })
 
-      // Update seat status in building
       if (selectedBuilding) {
         const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
           if (apt.name === aptName) {
@@ -468,7 +476,7 @@ export default function RegistrationsPage() {
                     </div>
                     {selectedReg.type === 'old' && (
                       <p className="text-[9px] text-primary font-bold italic flex items-center gap-1">
-                        <CheckCircle2 size={10} /> স্টুডেন্টের দেওয়া লোকেশন ও সিট ডাটাবেজ থেকে অটো-ফিল করা হয়েছে।
+                        <CheckCircle2 size={10} /> স্টুডেন্টের ফর্মে দেওয়া বিল্ডিং, রুম ও সিট সরাসরি ডাটাবেজ থেকে অটো-ফিল করা হয়েছে।
                       </p>
                     )}
                   </div>
@@ -515,9 +523,9 @@ export default function RegistrationsPage() {
                     {selectedReg.type === 'old' ? (
                       <div className="space-y-4">
                         <div className="p-3 bg-secondary/50 rounded-lg border space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-primary flex items-center gap-1"><History size={10}/> Total Received So Far (Historical)</Label>
+                          <Label className="text-[10px] uppercase font-bold text-primary flex items-center gap-1"><History size={10}/> Total Received (Historical)</Label>
                           <Input type="number" className="h-9 bg-white" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} placeholder="Previous Total Paid" />
-                          <p className="text-[8px] text-muted-foreground italic">* এটি শুধুমাত্র প্রোফাইলে দেখাবে, লেজারে ইনকাম হিসেবে যোগ হবে না।</p>
+                          <p className="text-[8px] text-muted-foreground italic">* রেফারেন্স ডাটা (এটি বর্তমান ইনকাম লেজারে যোগ হবে না)।</p>
                         </div>
 
                         <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20 space-y-3">
