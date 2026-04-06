@@ -160,15 +160,14 @@ export default function StudentDetailsPage({
         branch: student.branch, 
         method: paymentData.method, 
         receiver: paymentData.receiver, 
-        date: serverTimestamp(), 
-        createdAt: serverTimestamp() 
+        date: new Date().toISOString()
       }
       
-      await setDoc(doc(db, "payments", pId), pRecord)
+      await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       
-      // CRITICAL FIX: Use Date string instead of serverTimestamp inside arrayUnion
+      // CRITICAL FIX: Removed serverTimestamp() from arrayUnion
       await updateDoc(studentRef, { 
-        paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }), 
+        paymentsHistory: arrayUnion(pRecord), 
         advanceAmount: increment(Number(paymentData.addAdvanceAmount)), 
         updatedAt: serverTimestamp() 
       })
@@ -194,7 +193,9 @@ export default function StudentDetailsPage({
       }
       setIsPaymentDialogOpen(false)
       toast({ title: "Payment Recorded" })
-    } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
+    } catch (e: any) { 
+      toast({ variant: "destructive", description: e.message }) 
+    }
     finally { setIsUpdating(false) }
   }
 
@@ -214,7 +215,9 @@ export default function StudentDetailsPage({
       }
       toast({ title: "Exit Confirmed" })
       router.push("/students")
-    } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
+    } catch (e: any) { 
+      toast({ variant: "destructive", description: e.message }) 
+    }
     finally { setIsUpdating(false) }
   }
 

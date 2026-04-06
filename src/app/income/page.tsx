@@ -221,7 +221,7 @@ export default function IncomeHistoryPage() {
         studentName: selectedStudent.name, studentId: selectedStudent.id, buildingId: selectedStudent.buildingId,
         buildingName: selectedStudent.buildingName, roomNumber: selectedStudent.roomNumber, branch: userBranch,
         type: "income", month: formData.month, year: formData.year, method: formData.method, receiver: formData.receiver,
-        description: formData.description, date: serverTimestamp(), createdAt: serverTimestamp()
+        description: formData.description, date: new Date().toISOString()
       }
 
       if (userRole === 'Building Manager') {
@@ -229,7 +229,7 @@ export default function IncomeHistoryPage() {
         await setDoc(doc(db, "managerRequests", reqId), { ...pRecord, id: reqId, requestType: "income", requestedBy: localStorage.getItem("somikoron_auth_id"), requestedByName: userName, createdAt: serverTimestamp() })
         toast({ title: "Request Sent", description: "Payment is waiting for approval." })
       } else {
-        await setDoc(doc(db, "payments", pId), pRecord)
+        await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
         
         // Calculate totals for SMS mapping
         const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
@@ -248,9 +248,9 @@ export default function IncomeHistoryPage() {
         
         const totalPayableAfter = rentDueAfter + Math.max(0, -foodBalanceAfter)
 
-        // CRITICAL FIX: Use Date string instead of serverTimestamp inside arrayUnion
+        // CRITICAL FIX: Removed serverTimestamp() from arrayUnion
         await updateDoc(doc(db, "students", selectedStudent.id), {
-          paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }),
+          paymentsHistory: arrayUnion(pRecord),
           advanceAmount: increment(Number(formData.addAdvanceAmount)),
           updatedAt: serverTimestamp()
         })
@@ -292,7 +292,9 @@ export default function IncomeHistoryPage() {
         setIsReceiptOpen(true)
       }
       setIsEntryOpen(false)
-    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
+    } catch (e: any) { 
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    }
     finally { setIsSubmitting(false) }
   }
 
