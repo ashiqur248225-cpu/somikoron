@@ -86,7 +86,7 @@ export default function BuildingDetailsPage({
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [showRevenueMatrix, setShowRevenueMatrix] = useState(false)
+  const [isMatrixOpen, setIsMatrixOpen] = useState(false)
 
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
@@ -276,6 +276,9 @@ export default function BuildingDetailsPage({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
+              <DropdownMenuItem onSelect={() => setIsMatrixOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                <BarChart3 size={16} className="text-primary" /> Revenue Matrix
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
                 <Edit size={16} className="text-primary" /> Edit Building
               </DropdownMenuItem>
@@ -299,6 +302,10 @@ export default function BuildingDetailsPage({
           </div>
         </div>
         <div className="flex gap-2">
+           <Button variant="outline" className="gap-2 h-11 px-6 rounded-xl font-bold text-primary" onClick={() => setIsMatrixOpen(true)}>
+             <BarChart3 size={18} /> Revenue Matrix
+           </Button>
+
            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
              <DialogTrigger asChild>
                <Button variant="outline" className="gap-2 h-11 px-6 rounded-xl font-bold text-slate-700">
@@ -438,6 +445,56 @@ export default function BuildingDetailsPage({
         </div>
       </div>
 
+      {/* Revenue Matrix Dialog */}
+      <Dialog open={isMatrixOpen} onOpenChange={setIsMatrixOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><BarChart3 className="text-primary" /> Room Wise Revenue Matrix</DialogTitle>
+            <DialogDescription>A complete breakdown of income potential vs current occupancy for each room.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Card className="border-none shadow-none bg-white rounded-2xl overflow-hidden">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/50">
+                      <TableHead className="font-bold">Room</TableHead>
+                      <TableHead className="text-center font-bold">Seats</TableHead>
+                      <TableHead className="text-center font-bold">Occ.</TableHead>
+                      <TableHead className="text-right font-bold">Rent</TableHead>
+                      <TableHead className="text-right font-bold">Expected</TableHead>
+                      <TableHead className="text-right font-bold">Current</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {revenueStats.roomRevenueList.map((room: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-bold">R-{room.roomNo}<br/><span className="text-[10px] text-muted-foreground font-normal">{room.aptName}</span></TableCell>
+                        <TableCell className="text-center font-medium">{room.totalSeats}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] font-black",
+                            room.occupiedSeats === room.totalSeats ? "border-success text-success" : "border-orange-400 text-orange-600"
+                          )}>
+                            {room.occupiedSeats}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-slate-600">৳{room.rentPerSeat}</TableCell>
+                        <TableCell className="text-right font-bold">৳{room.expected.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-black text-primary">৳{room.current.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsMatrixOpen(false)} variant="secondary" className="w-full">Close Matrix</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Summary Analytics Cards - Arranged 3 then 2 */}
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -541,63 +598,6 @@ export default function BuildingDetailsPage({
               </div>
             </CardContent>
           </Card>
-
-          {/* Toggle for Room Wise Revenue Table */}
-          <div className="flex justify-center">
-            <Button 
-              variant="ghost" 
-              onClick={() => setShowRevenueMatrix(!showRevenueMatrix)}
-              className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary gap-2 h-8"
-            >
-              <BarChart3 size={14} />
-              {showRevenueMatrix ? "Hide Detailed Revenue Matrix" : "Show Detailed Revenue Matrix"}
-              {showRevenueMatrix ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </Button>
-          </div>
-
-          {showRevenueMatrix && (
-            <Card className="border-none shadow-sm bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
-              <CardHeader className="bg-slate-50/50 border-b pb-4">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="text-primary" size={18} />
-                  <CardTitle className="text-sm font-bold uppercase tracking-tight">Room Wise Revenue Matrix</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/50">
-                      <TableHead className="font-bold">Room</TableHead>
-                      <TableHead className="text-center font-bold">Seats</TableHead>
-                      <TableHead className="text-center font-bold">Occ.</TableHead>
-                      <TableHead className="text-right font-bold">Rent</TableHead>
-                      <TableHead className="text-right font-bold">Expected</TableHead>
-                      <TableHead className="text-right font-bold">Current</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {revenueStats.roomRevenueList.map((room: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-bold">R-{room.roomNo}<br/><span className="text-[10px] text-muted-foreground font-normal">{room.aptName}</span></TableCell>
-                        <TableCell className="text-center font-medium">{room.totalSeats}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={cn(
-                            "text-[10px] font-black",
-                            room.occupiedSeats === room.totalSeats ? "border-success text-success" : "border-orange-400 text-orange-600"
-                          )}>
-                            {room.occupiedSeats}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-slate-600">৳{room.rentPerSeat}</TableCell>
-                        <TableCell className="text-right font-bold">৳{room.expected.toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-black text-primary">৳{room.current.toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         <div className="space-y-8">
