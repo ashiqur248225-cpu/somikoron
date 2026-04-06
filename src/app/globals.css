@@ -93,41 +93,53 @@
   background-color: hsl(var(--destructive));
 }
 
-/* Custom Rich Text Styling for Rules */
+/* Custom Rich Text Styling for Rules (Document Style) */
 .rich-text {
-  white-space: pre-wrap;
   word-wrap: break-word;
+  line-height: 1.6;
 }
 .rich-text h1 {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 800;
   margin-top: 1.5rem;
   margin-bottom: 1rem;
-  color: hsl(var(--primary));
+  color: #296EB3;
   display: block;
-  line-height: 1.2;
 }
 .rich-text h2 {
-  font-size: 1.25rem;
+  font-size: 1.4rem;
   font-weight: 700;
   margin-top: 1.25rem;
   margin-bottom: 0.75rem;
-  color: hsl(var(--primary));
+  color: #296EB3;
   display: block;
-  line-height: 1.3;
 }
 .rich-text b, .rich-text strong {
   font-weight: 700;
-  color: inherit;
-}
-.rich-text li {
-  display: list-item;
-  list-style-type: disc;
-  margin-left: 1.5rem;
-  margin-bottom: 0.5rem;
 }
 .rich-text p {
   margin-bottom: 0.75rem;
+}
+.rich-text ul, .rich-text ol {
+  margin-left: 1.5rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+.rich-text ul li {
+  list-style-type: disc;
+  margin-bottom: 0.4rem;
+}
+.rich-text ol li {
+  list-style-type: decimal;
+  margin-bottom: 0.4rem;
+}
+.rich-text li {
+  display: list-item;
+}
+.rich-text mark {
+  background-color: #fef08a; /* Yellow-200 */
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 /* Professional Print Styles */

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useRef } from "react"
@@ -6,11 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import { 
   Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, 
-  Link as LinkIcon, Copy, CheckCircle2, ExternalLink, ScrollText,
-  Bold, Heading1, Heading2, List, Palette, Eye, Edit3
+  Link as LinkIcon, Copy, ExternalLink, ScrollText,
+  Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
@@ -20,6 +18,12 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function SettingsPage() {
   const { toast } = useToast()
@@ -29,7 +33,7 @@ export default function SettingsPage() {
   const [rules, setRules] = useState("")
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
   
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -71,8 +75,8 @@ export default function SettingsPage() {
   }, [openingBalances])
 
   useEffect(() => {
-    if (rulesData) {
-      setRules(rulesData.rulesText || "")
+    if (rulesData && rulesData.rulesText) {
+      setRules(rulesData.rulesText)
     }
   }, [rulesData])
 
@@ -116,12 +120,15 @@ export default function SettingsPage() {
 
   const handleSaveRules = async () => {
     setIsUpdating(true)
+    // Pull final HTML from editor ref if possible, or use rules state
+    const finalHtml = editorRef.current?.innerHTML || rules;
     try {
       await setDoc(rulesRef, {
-        rulesText: rules,
+        rulesText: finalHtml,
         updatedAt: serverTimestamp(),
         updatedBy: localStorage.getItem("somikoron_auth_id")
       })
+      setRules(finalHtml)
       toast({ title: "Rules Updated", description: "Hostel rules and regulations have been saved." })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -130,23 +137,12 @@ export default function SettingsPage() {
     }
   }
 
-  const insertTag = (tagOpen: string, tagClose: string) => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = textarea.value
-    const before = text.substring(0, start)
-    const after = text.substring(end, text.length)
-    const selected = text.substring(start, end)
-    const newText = before + tagOpen + selected + tagClose + after
-    setRules(newText)
-    
-    setTimeout(() => {
-      textarea.focus()
-      textarea.setSelectionRange(start + tagOpen.length, end + tagOpen.length)
-    }, 0)
-  }
+  const execCommand = (command: string, value?: string) => {
+    document.execCommand(command, false, value);
+    if (editorRef.current) {
+      setRules(editorRef.current.innerHTML);
+    }
+  };
 
   const copyToClipboard = (text: string) => {
     const baseUrl = window.location.origin
@@ -188,6 +184,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Registration Links Section */}
       <Card className="border-none shadow-sm border-l-4 border-l-primary bg-primary/5">
         <CardHeader>
           <div className="flex items-center gap-2 text-primary">
@@ -217,55 +214,96 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Rules & Regulations Editor Section */}
       <Card className="border-none shadow-sm overflow-hidden">
         <CardHeader>
           <div className="flex items-center gap-2 text-primary">
             <ScrollText size={20} />
             <CardTitle>Rules & Regulations Setup</CardTitle>
           </div>
-          <CardDescription>Enter hostel rules with formatting (Bold, Headings, Lists, Colors).</CardDescription>
+          <CardDescription>Edit hostel rules like a document (Highlight, Bold, Colors).</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Tabs defaultValue="edit" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="edit" className="gap-2"><Edit3 size={14} /> Editor</TabsTrigger>
-              <TabsTrigger value="preview" className="gap-2"><Eye size={14} /> Live Preview</TabsTrigger>
+              <TabsTrigger value="edit" className="gap-2"><Edit3 size={14} /> Document Editor</TabsTrigger>
+              <TabsTrigger value="preview" className="gap-2"><Eye size={14} /> Form View Preview</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="edit" className="space-y-4">
-              <div className="flex flex-wrap gap-2 p-2 bg-secondary/30 rounded-t-lg border-x border-t">
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Bold" onClick={() => insertTag('<b>', '</b>')}><Bold size={14} /></Button>
-                <Button variant="outline" size="sm" className="h-8 px-2 text-xs" title="H1" onClick={() => insertTag('<h1>', '</h1>')}><Heading1 size={14} /></Button>
-                <Button variant="outline" size="sm" className="h-8 px-2 text-xs" title="H2" onClick={() => insertTag('<h2>', '</h2>')}><Heading2 size={14} /></Button>
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="List Item" onClick={() => insertTag('<li>', '</li>')}><List size={14} /></Button>
-                <Button variant="outline" size="sm" className="h-8 px-2 text-xs gap-1 text-destructive" title="Red Color" onClick={() => insertTag('<span style="color: red">', '</span>')}><Palette size={14} /> Red</Button>
+            <TabsContent value="edit" className="space-y-0">
+              {/* WYSIWYG Toolbar */}
+              <div className="flex flex-wrap gap-1 p-2 bg-secondary/30 rounded-t-lg border-x border-t sticky top-0 z-10 backdrop-blur-sm">
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Bold" onClick={() => execCommand('bold')}><Bold size={14} /></Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Heading 1" onClick={() => execCommand('formatBlock', 'H1')}><Heading1 size={14} /></Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Heading 2" onClick={() => execCommand('formatBlock', 'H2')}><Heading2 size={14} /></Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Paragraph" onClick={() => execCommand('formatBlock', 'P')}><Type size={14} /></Button>
+                <Separator orientation="vertical" className="h-6 mx-1" />
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Bullet List" onClick={() => execCommand('insertUnorderedList')}><List size={14} /></Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Ordered List" onClick={() => execCommand('insertOrderedList')}><ListOrdered size={14} /></Button>
+                <Separator orientation="vertical" className="h-6 mx-1" />
+                
+                {/* Color Picker Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Text Color"><Palette size={14} /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={() => execCommand('foreColor', '#000000')} className="gap-2"><div className="w-3 h-3 rounded-full bg-black" /> Black</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => execCommand('foreColor', '#296EB3')} className="gap-2"><div className="w-3 h-3 rounded-full bg-[#296EB3]" /> Hoste Blue</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => execCommand('foreColor', '#F06A6A')} className="gap-2"><div className="w-3 h-3 rounded-full bg-[#F06A6A]" /> Warning Red</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Highlight Picker Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Highlight"><Highlighter size={14} /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={() => execCommand('backColor', '#fef08a')} className="gap-2"><div className="w-3 h-3 bg-[#fef08a]" /> Yellow</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => execCommand('backColor', '#ffffff')} className="gap-2"><div className="w-3 h-3 bg-white border" /> None</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Separator orientation="vertical" className="h-6 mx-1" />
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" title="Clear Formatting" onClick={() => execCommand('removeFormat')}><Eraser size={14} /></Button>
               </div>
-              <Textarea 
-                ref={textareaRef}
-                id="hostelRulesInput"
-                placeholder="Enter rules here using toolbar..." 
-                className="min-h-[250px] rounded-t-none border-t-0 font-mono text-sm" 
-                value={rules} 
-                onChange={e => setRules(e.target.value)}
+
+              {/* Editable Content Area */}
+              <div
+                ref={editorRef}
+                contentEditable
+                onInput={(e) => setRules(e.currentTarget.innerHTML)}
+                className="rich-text min-h-[400px] p-6 border rounded-b-lg focus:outline-none bg-white shadow-inner overflow-y-auto"
+                dangerouslySetInnerHTML={{ __html: rules }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    document.execCommand('indent', false);
+                  }
+                }}
               />
-              <p className="text-[10px] text-muted-foreground italic">* আপনি টুলবার ব্যবহার করে টেক্সট ফরমেট করতে পারেন অথবা সরাসরি HTML ট্যাগ ব্যবহার করতে পারেন।</p>
+              <p className="text-[10px] text-muted-foreground italic mt-2 px-1">* মাইক্রোসফট ওয়ার্ডের মতো এখানে সরাসরি নিয়মগুলো সাজান। আপনি যেভাবে সেভ করবেন, স্টুডেন্টরা ঠিক সেভাবেই দেখতে পাবে।</p>
             </TabsContent>
 
-            <TabsContent value="preview" className="border rounded-lg p-6 bg-white min-h-[300px]">
-              <div 
-                className="rich-text text-sm max-w-none text-slate-600 font-medium leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: rules || "<i>No rules written yet. Switch to Editor to start.</i>" }}
-              />
+            <TabsContent value="preview" className="border rounded-lg p-8 bg-slate-50 min-h-[400px]">
+              <div className="bg-white p-8 rounded-2xl shadow-sm border max-w-2xl mx-auto">
+                <div 
+                  className="rich-text text-sm max-w-none text-slate-600 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: rules || "<i>No rules written yet.</i>" }}
+                />
+              </div>
             </TabsContent>
           </Tabs>
 
-          <Button onClick={handleSaveRules} disabled={isUpdating} className="w-full gap-2 h-12 text-lg font-bold">
+          <Button onClick={handleSaveRules} disabled={isUpdating} className="w-full gap-2 h-14 text-lg font-bold shadow-lg mt-4">
             {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={20} />}
-            Save & Update Rules
+            Save & Publish Final Rules
           </Button>
         </CardContent>
       </Card>
 
+      {/* Meal Configuration Section */}
       <Card className="border-none shadow-sm">
         <CardHeader>
           <div className="flex items-center gap-2 text-primary">
@@ -295,6 +333,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Opening Balances Section */}
       <Card className="border-none shadow-sm">
         <CardHeader>
           <div className="flex items-center gap-2 text-primary">
