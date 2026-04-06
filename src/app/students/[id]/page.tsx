@@ -5,7 +5,7 @@ import * as React from "react"
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, serverTimestamp, updateDoc, setDoc, getDoc, arrayUnion, increment, collection, deleteDoc } from "firebase/firestore"
+import { doc, serverTimestamp, updateDoc, setDoc, getDoc, arrayUnion, increment, collection, deleteDoc, query, where } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,7 +28,8 @@ import {
   Banknote,
   Smartphone,
   Landmark,
-  ShieldCheck
+  ShieldCheck,
+  CheckCircle2
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -125,7 +126,11 @@ export default function StudentDetailsPage({
     address: "",
     monthlyRent: "",
     paymentSystem: "package",
-    billingStartDate: ""
+    billingStartDate: "",
+    buildingId: "",
+    roomNumber: "",
+    seatNumber: "",
+    apartmentName: ""
   })
 
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
@@ -133,6 +138,12 @@ export default function StudentDetailsPage({
 
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
+
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!student?.branch) return null
+    return query(collection(db, "buildings"), where("branch", "==", student.branch))
+  }, [db, student?.branch])
+  const { data: buildings } = useCollection(buildingsQuery)
 
   const mealRateRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
   const { data: mealRateConfig } = useDoc(mealRateRef)
@@ -153,10 +164,25 @@ export default function StudentDetailsPage({
         address: student.address || "",
         monthlyRent: (student.monthlyRent || 0).toString(),
         paymentSystem: student.paymentSystem || "package",
-        billingStartDate: student.billingStartDate || ""
+        billingStartDate: student.billingStartDate || "",
+        buildingId: student.buildingId || "",
+        roomNumber: student.roomNumber || "",
+        seatNumber: student.seatNumber || "",
+        apartmentName: student.apartmentName || ""
       })
     }
   }, [student])
+
+  const selectedBuildingForEdit = buildings?.find(b => b.id === editForm.buildingId)
+  const roomsInBuilding = useMemo(() => {
+    if (!selectedBuildingForEdit) return []
+    return selectedBuildingForEdit.apartmentsDetail?.flatMap((apt: any) => 
+      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
+    ) || []
+  }, [selectedBuildingForEdit])
+
+  const selectedRoomForEdit = roomsInBuilding.find((r: any) => String(r.roomNo) === String(editForm.roomNumber))
+  const emptySeats = selectedRoomForEdit?.seats?.filter((s: any) => s.status === 'empty') || []
 
   const financialStats = useMemo(() => {
     if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [], usableAdvance: 0, totalDue: 0 }
@@ -324,14 +350,89 @@ export default function StudentDetailsPage({
   }
 
   const handleEditSubmit = async () => {
-    if (!studentRef) return
+    if (!studentRef || !student) return
     setIsUpdating(true)
     try {
+      const isLocationChanged = 
+        editForm.buildingId !== student.buildingId || 
+        editForm.roomNumber !== student.roomNumber || 
+        editForm.seatNumber !== student.seatNumber
+
+      if (isLocationChanged) {
+        // 1. Mark OLD seat as EMPTY
+        const oldBRef = doc(db, "buildings", student.buildingId)
+        const oldBSnap = await getDoc(oldBRef)
+        if (oldBSnap.exists()) {
+          const bData = oldBSnap.data()
+          const updatedApts = bData.apartmentsDetail.map((apt: any) => {
+            if (apt.name === student.apartmentName) {
+              return {
+                ...apt,
+                rooms: apt.rooms.map((room: any) => {
+                  if (String(room.roomNo) === String(student.roomNumber)) {
+                    return {
+                      ...room,
+                      seats: room.seats.map((seat: any) => 
+                        seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat
+                      )
+                    }
+                  }
+                  return room
+                })
+              }
+            }
+            return apt
+          })
+          await updateDoc(oldBRef, { 
+            apartmentsDetail: updatedApts,
+            occupiedSeats: increment(-1),
+            emptySeats: increment(1),
+            updatedAt: serverTimestamp()
+          })
+        }
+
+        // 2. Mark NEW seat as OCCUPIED
+        const newBRef = doc(db, "buildings", editForm.buildingId)
+        const newBSnap = await getDoc(newBRef)
+        if (newBSnap.exists()) {
+          const bData = newBSnap.data()
+          const updatedApts = bData.apartmentsDetail.map((apt: any) => {
+            if (apt.name === (selectedRoomForEdit?.aptName || editForm.apartmentName)) {
+              return {
+                ...apt,
+                rooms: apt.rooms.map((room: any) => {
+                  if (String(room.roomNo) === String(editForm.roomNumber)) {
+                    return {
+                      ...room,
+                      seats: room.seats.map((seat: any) => 
+                        seat.seatNo === editForm.seatNumber ? { ...seat, status: 'occupied' } : seat
+                      )
+                    }
+                  }
+                  return room
+                })
+              }
+            }
+            return apt
+          })
+          await updateDoc(newBRef, { 
+            apartmentsDetail: updatedApts,
+            occupiedSeats: increment(1),
+            emptySeats: increment(-1),
+            updatedAt: serverTimestamp()
+          })
+        }
+      }
+
+      // 3. Update Student Record
       await updateDoc(studentRef, {
         ...editForm,
+        buildingName: selectedBuildingForEdit?.name || student.buildingName,
+        apartmentName: selectedRoomForEdit?.aptName || editForm.apartmentName,
         monthlyRent: Number(editForm.monthlyRent),
         updatedAt: serverTimestamp()
       })
+
       toast({ title: "Profile Updated", description: `${editForm.name}'s information has been saved.` })
       setIsEditDialogOpen(false)
     } catch (e: any) {
@@ -400,7 +501,7 @@ export default function StudentDetailsPage({
             return {
               ...apt,
               rooms: apt.rooms.map((room: any) => {
-                if (room.roomNo === student.roomNumber) {
+                if (String(room.roomNo) === String(student.roomNumber)) {
                   return {
                     ...room,
                     seats: room.seats.map((seat: any) => 
@@ -864,35 +965,87 @@ export default function StudentDetailsPage({
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Student Profile</DialogTitle>
-            <DialogDescription>Update basic information and financial settings.</DialogDescription>
+            <DialogDescription>Update information and relocate student room.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Full Name</Label>
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Full Name</Label>
               <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
             </div>
+            
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Personal Phone</Label>
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Personal Phone</Label>
                 <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label>Parent Phone</Label>
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Parent Phone</Label>
                 <Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Address</Label>
-              <Input value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} />
+
+            <div className="p-4 border rounded-xl space-y-4 bg-primary/5 border-primary/10">
+              <h3 className="font-bold flex items-center gap-2 text-primary uppercase text-[10px] tracking-widest"><Building2 size={14}/> Room Allocation Update</h3>
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
+                  <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
+                    <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Select Building" /></SelectTrigger>
+                    <SelectContent>
+                      {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room</Label>
+                    <Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={val => {
+                      let autoRent = editForm.monthlyRent;
+                      if (selectedBuildingForEdit) {
+                        for (const apt of selectedBuildingForEdit.apartmentsDetail || []) {
+                          for (const room of apt.rooms || []) {
+                            if (String(room.roomNo) === String(val) && room.rentPerSeat) {
+                              autoRent = String(room.rentPerSeat);
+                              break;
+                            }
+                          }
+                          if (autoRent !== editForm.monthlyRent) break;
+                        }
+                      }
+                      setEditForm({...editForm, roomNumber: val, seatNumber: "", monthlyRent: autoRent});
+                    }}>
+                      <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Room" /></SelectTrigger>
+                      <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`room-${idx}`} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Seat</Label>
+                    <Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setEditForm({...editForm, seatNumber: val})}>
+                      <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Seat" /></SelectTrigger>
+                      <SelectContent>
+                        {emptySeats.map((s: any) => <SelectItem key={`seat-${s.seatNo}`} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}
+                        {editForm.seatNumber && student?.seatNumber === editForm.seatNumber && editForm.roomNumber === student?.roomNumber && (
+                          <SelectItem value={editForm.seatNumber}>Current: {editForm.seatNumber}</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              <p className="text-[9px] text-primary font-bold italic flex items-center gap-1">
+                <CheckCircle2 size={10} /> রুম পরিবর্তন করলে ভাড়ার হার স্বয়ংক্রিয়ভাবে আপডেট হবে।
+              </p>
             </div>
+
             <Separator />
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Monthly Rent (৳)</Label>
-                <Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: e.target.value})} />
+                <Label className="text-[10px] uppercase font-bold text-primary">Monthly Rent (৳)</Label>
+                <Input type="number" className="font-bold" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label>Payment System</Label>
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Payment System</Label>
                 <Select value={editForm.paymentSystem} onValueChange={val => setEditForm({...editForm, paymentSystem: val})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -903,7 +1056,7 @@ export default function StudentDetailsPage({
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Billing Start Date</Label>
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Billing Start Date</Label>
               <Input type="date" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} />
             </div>
           </div>
