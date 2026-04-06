@@ -25,7 +25,6 @@ import {
   Filter, 
   Bed,
   CircleDot,
-  MapPin as MapIcon,
   Banknote,
   Wind,
   Construction,
@@ -124,7 +123,7 @@ export default function BuildingsPage() {
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
   }, [db, userBranch])
   
-  const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
+  const { data: buildings, isLoading } = useCollection(buildingsQuery)
 
   // Initialize building branch based on context when opening dialog
   useEffect(() => {
@@ -340,7 +339,7 @@ export default function BuildingsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-3 bg-secondary/30 rounded-lg border flex items-center justify-between">
                     <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
-                      <MapIcon size={12} /> Target Branch: <span className="text-primary">{userBranch}</span>
+                      <MapPin size={12} /> Target Branch: <span className="text-primary">{userBranch}</span>
                     </p>
                     <Badge variant="outline" className="text-[10px] bg-white">Auto-assigned</Badge>
                   </div>
