@@ -87,6 +87,7 @@ export default function BuildingDetailsPage({
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isMatrixOpen, setIsMatrixOpen] = useState(false)
+  const [showRecentCollections, setShowRecentCollections] = useState(false)
 
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
@@ -603,35 +604,40 @@ export default function BuildingDetailsPage({
         <div className="space-y-8">
           {/* Collection Logs Summary */}
           <Card className="border-none shadow-sm bg-white rounded-2xl overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b pb-4">
-              <div className="flex items-center gap-2">
-                <Calculator className="text-primary" size={18} />
-                <CardTitle className="text-sm font-bold uppercase tracking-tight">Recent Collections</CardTitle>
+            <CardHeader className="bg-slate-50/50 border-b pb-4 cursor-pointer" onClick={() => setShowRecentCollections(!showRecentCollections)}>
+              <div className="flex justify-between items-center w-full">
+                <div className="flex items-center gap-2">
+                  <Calculator className="text-primary" size={18} />
+                  <CardTitle className="text-sm font-bold uppercase tracking-tight">Recent Collections</CardTitle>
+                </div>
+                {showRecentCollections ? <ChevronUp size={18} className="text-muted-foreground" /> : <ChevronDown size={18} className="text-muted-foreground" />}
               </div>
             </CardHeader>
-            <CardContent className="p-6 space-y-6">
-              <div className="flex justify-between items-center pb-4 border-b border-dashed">
-                <div className="space-y-0.5">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Last 7 Days</p>
-                  <p className="text-lg font-bold">৳{revenueStats.last7DaysCollected.toLocaleString()}</p>
+            {showRecentCollections && (
+              <CardContent className="p-6 space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex justify-between items-center pb-4 border-b border-dashed">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Last 7 Days</p>
+                    <p className="text-lg font-bold">৳{revenueStats.last7DaysCollected.toLocaleString()}</p>
+                  </div>
+                  <ArrowUpRight className="text-success" />
                 </div>
-                <ArrowUpRight className="text-success" />
-              </div>
-              <div className="flex justify-between items-center pb-4 border-b border-dashed">
-                <div className="space-y-0.5">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Last 30 Days</p>
-                  <p className="text-lg font-bold">৳{revenueStats.last30DaysCollected.toLocaleString()}</p>
+                <div className="flex justify-between items-center pb-4 border-b border-dashed">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Last 30 Days</p>
+                    <p className="text-lg font-bold">৳{revenueStats.last30DaysCollected.toLocaleString()}</p>
+                  </div>
+                  <ArrowUpRight className="text-success" />
                 </div>
-                <ArrowUpRight className="text-success" />
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="space-y-0.5">
-                  <p className="text-[10px] font-black uppercase text-primary tracking-widest">This Calendar Month</p>
-                  <p className="text-xl font-black text-primary">৳{revenueStats.thisMonthCollected.toLocaleString()}</p>
+                <div className="flex justify-between items-center">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] font-black uppercase text-primary tracking-widest">This Calendar Month</p>
+                    <p className="text-xl font-black text-primary">৳{revenueStats.thisMonthCollected.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-primary/10 p-2 rounded-full text-primary"><Calendar size={18}/></div>
                 </div>
-                <div className="bg-primary/10 p-2 rounded-full text-primary"><Calendar size={18}/></div>
-              </div>
-            </CardContent>
+              </CardContent>
+            )}
           </Card>
 
           {/* Occupancy Summary Stats */}
