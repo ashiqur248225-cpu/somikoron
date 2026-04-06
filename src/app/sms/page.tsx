@@ -68,7 +68,7 @@ const DEFAULT_TEMPLATES = [
   { id: "payment", label: "Payment Receipt", text: "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[পরিমাণ] টাকা। বর্তমান বকেয়া: ৳[total_payable]। ধন্যবাদ। [Hostel Name]" },
   { id: "due_reminder", label: "Due Reminder", text: "প্রিয় [নাম], [মাস] মাসের ভাড়া/খাবার বাবদ আপনার ৳[total_payable] বকেয়া রয়েছে। অনুগ্রহ করে দ্রুত পরিশোধ করুন। [Hostel Name]" },
   { id: "low_food", label: "Low Food Balance", text: "প্রিয় [নাম], আপনার খাবার ব্যালেন্স কমে ৳[food_balance] হয়েছে। অনুগ্রহ করে দ্রুত রিচার্জ করুন। [Hostel Name]" },
-  { id: "meal_summary", label: "Monthly Meal Summary", text: "প্রিয় [নাম], [মাস] মাসে আপনার মোট meal: [meal_count] টি। বিল: ৳[meal_bill]। খাবার ঋণ: ৳[food_due]। সর্বমোট বকেয়া: ৳[total_payable]। [Hostel Name]" },
+  { id: "meal_summary", label: "Monthly Meal Summary", text: "প্রিয় [নাম], [মাস] মাসে আপনি মোট [meal_count] টি meal গ্রহণ করেছেন। মোট খাবার বিল ৳[meal_bill]। আপনার বর্তমান Food Balance ৳[food_balance] এবং খাবার বাবদ বকেয়া ৳[food_due]। [Hostel Name]" },
   { id: "birthday", label: "Birthday Wishes", text: "শুভ জন্মদিন [নাম]। আপনার দিনটি সুন্দর ও আনন্দময় হোক। [Hostel Name]-এর পক্ষ থেকে অনেক শুভকামনা।" },
   { id: "exit", label: "Exit Message", text: "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।" }
 ]
