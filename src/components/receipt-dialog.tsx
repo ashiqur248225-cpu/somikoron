@@ -41,6 +41,11 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl p-0 overflow-hidden rounded-3xl print:shadow-none print:border-none">
+        {/* Accessibility Title (Hidden from view) */}
+        <DialogHeader className="sr-only">
+          <DialogTitle>Payment Receipt - {student.name}</DialogTitle>
+        </DialogHeader>
+
         <div className="flex flex-col h-full bg-white">
           {/* Header Controls (Hidden in Print) */}
           <div className="flex items-center justify-between p-4 border-b bg-slate-50/50 print:hidden">
