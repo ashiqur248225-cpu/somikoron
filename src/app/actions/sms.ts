@@ -14,7 +14,8 @@ export async function sendSMS(apiKey: string, senderId: string | null | undefine
     // Construct base URL
     let url = `https://api.sms.net.bd/sendsms?api_key=${apiKey}&msg=${encodeURIComponent(msg)}&to=${cleanTo}`;
     
-    // Only add sender_id if it's explicitly provided and not just empty whitespace
+    // EXPLAINED LOGIC: Only add sender_id parameter if it is provided and has content.
+    // If you don't have a sender_id, this block is skipped, making it work with the default gateway.
     const trimmedSenderId = senderId?.trim();
     if (trimmedSenderId && trimmedSenderId.length > 0) {
       url += `&sender_id=${trimmedSenderId}`;
