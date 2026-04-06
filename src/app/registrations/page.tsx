@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
-  AlertCircle, Calculator, Info, Utensils, Plus, Minus, History
+  AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -82,7 +82,8 @@ export default function RegistrationsPage() {
     monthlyRent: "",
     serviceCharge: "0",
     advanceAmount: "0",
-    foodDueAmount: "0", // For old students balance
+    foodDueAmount: "0", 
+    historicalTotalReceived: "0", // New Field for Old Students
     initialRentPayment: "0", 
     initialFoodPayment: "0", 
     paymentSystem: "package",
@@ -94,7 +95,6 @@ export default function RegistrationsPage() {
     seatNumber: ""
   })
 
-  // State for Month-wise dues for Old Students
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
   const addDueRow = () => {
@@ -125,6 +125,7 @@ export default function RegistrationsPage() {
         initialRentPayment: "0",
         initialFoodPayment: "0",
         foodDueAmount: "0",
+        historicalTotalReceived: "0",
         receiver: "",
         method: "cash"
       }))
@@ -143,9 +144,16 @@ export default function RegistrationsPage() {
   const selectedRoom = roomsInBuilding.find((r: any) => r.roomNo === approvalForm.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
+  // AUTO-FILL RENT LOGIC
+  useEffect(() => {
+    if (selectedRoom?.rentPerSeat) {
+      setApprovalForm(prev => ({ ...prev, monthlyRent: selectedRoom.rentPerSeat.toString() }))
+    }
+  }, [selectedRoom])
+
   const handleApprove = async () => {
     if (!approvalForm.monthlyRent || !approvalForm.buildingId || !approvalForm.roomNumber || !approvalForm.seatNumber) {
-      toast({ variant: "destructive", title: "Error", description: "Monthly Rent and Location (Building/Room/Seat) are required." })
+      toast({ variant: "destructive", title: "Error", description: "Monthly Rent and Location are required." })
       return
     }
 
@@ -167,47 +175,46 @@ export default function RegistrationsPage() {
       const svcCharge = Number(approvalForm.serviceCharge)
       const advAmount = Number(approvalForm.advanceAmount)
       
-      // Calculate Historical Dues for Old Students
       const duesBreakdown: Record<string, number> = {}
-      let totalHistDue = 0
       historicalDues.forEach(d => {
         if (d.amount && Number(d.amount) > 0) {
           const key = `${d.month} ${d.year}`
           duesBreakdown[key] = (duesBreakdown[key] || 0) + Number(d.amount)
-          totalHistDue += Number(d.amount)
         }
       })
 
-      // NEW STUDENT INCOME LOGIC: Collect all initial payments into income
-      const rentPaid = Number(approvalForm.initialRentPayment)
-      const foodPaid = Number(approvalForm.initialFoodPayment)
-      const totalNewReceived = rentPaid + advAmount + svcCharge + foodPaid
+      // ONLY for NEW students: Create a live payment record
+      if (!isOld) {
+        const rentPaid = Number(approvalForm.initialRentPayment)
+        const foodPaid = Number(approvalForm.initialFoodPayment)
+        const totalNewReceived = rentPaid + advAmount + svcCharge + foodPaid
 
-      if (!isOld && totalNewReceived > 0) {
-        const pId = doc(collection(db, "payments")).id
-        const pRecord = {
-          id: pId,
-          amount: totalNewReceived,
-          seatAmount: rentPaid,
-          advanceAmount: advAmount,
-          serviceCharge: svcCharge,
-          foodAmount: foodPaid,
-          buildingId: bId,
-          buildingName: selectedBuilding?.name || "Unknown",
-          studentName: selectedReg.name,
-          studentId: studentId,
-          roomNumber: rNum,
-          branch: userBranch,
-          type: "income",
-          month: new Date().toLocaleString('default', { month: 'long' }),
-          year: new Date().getFullYear().toString(),
-          method: approvalForm.method,
-          receiver: approvalForm.receiver,
-          description: "Admission initial payment (Rent + Adv + Svc + Food)",
-          date: serverTimestamp(),
-          createdAt: serverTimestamp()
+        if (totalNewReceived > 0) {
+          const pId = doc(collection(db, "payments")).id
+          const pRecord = {
+            id: pId,
+            amount: totalNewReceived,
+            seatAmount: rentPaid,
+            advanceAmount: advAmount,
+            serviceCharge: svcCharge,
+            foodAmount: foodPaid,
+            buildingId: bId,
+            buildingName: selectedBuilding?.name || "Unknown",
+            studentName: selectedReg.name,
+            studentId: studentId,
+            roomNumber: rNum,
+            branch: userBranch,
+            type: "income",
+            month: new Date().toLocaleString('default', { month: 'long' }),
+            year: new Date().getFullYear().toString(),
+            method: approvalForm.method,
+            receiver: approvalForm.receiver,
+            description: "Admission initial payment (Rent + Adv + Svc + Food)",
+            date: serverTimestamp(),
+            createdAt: serverTimestamp()
+          }
+          await setDoc(doc(db, "payments", pId), pRecord)
         }
-        await setDoc(doc(db, "payments", pId), pRecord)
       }
 
       // Create Student Document
@@ -226,28 +233,15 @@ export default function RegistrationsPage() {
         monthlyRent: monthlyRent,
         serviceCharge: svcCharge,
         advanceAmount: advAmount,
-        // Dues Logic: New student starts clean or with current month unpaid if rentPaid < monthlyRent
-        // Old student gets the historical dues map
-        duesBreakdown: isOld ? duesBreakdown : {},
-        // Food Balance: Old student can have historical balance (positive or negative)
+        duesBreakdown: duesBreakdown,
+        // Historical Rule: This field is only for tracking, doesn't affect live cash
+        historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : 0,
         foodDueAmount: isOld ? -Number(approvalForm.foodDueAmount || 0) : 0, 
         billingStartDate: approvalForm.billingStartDate,
         paymentSystem: approvalForm.paymentSystem,
         isActive: true,
         branch: userBranch,
-        paymentsHistory: !isOld && totalNewReceived > 0 ? [{
-          id: 'admission-initial',
-          amount: totalNewReceived,
-          seatAmount: rentPaid,
-          advanceAmount: advAmount,
-          serviceCharge: svcCharge,
-          foodAmount: foodPaid,
-          method: approvalForm.method,
-          description: "Payment at admission",
-          date: new Date().toISOString(),
-          month: new Date().toLocaleString('default', { month: 'long' }),
-          year: new Date().getFullYear().toString()
-        }] : [],
+        paymentsHistory: [], 
         mealsHistory: [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -279,7 +273,6 @@ export default function RegistrationsPage() {
         updatedAt: serverTimestamp()
       })
 
-      // Remove from Pending Requests
       await deleteDoc(doc(db, "registrations", selectedReg.id))
       
       toast({ title: "Approved!", description: `${selectedReg.name} is now an active resident.` })
@@ -320,7 +313,6 @@ export default function RegistrationsPage() {
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
         <>
-          {/* Table for Desktop */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
             <CardContent className="p-0">
               <Table>
@@ -369,7 +361,6 @@ export default function RegistrationsPage() {
             </CardContent>
           </Card>
 
-          {/* Cards for Mobile */}
           <div className="md:hidden space-y-4">
             {registrations?.map((reg) => (
               <Card key={reg.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
@@ -380,7 +371,6 @@ export default function RegistrationsPage() {
                     </Badge>
                     <p className="text-[10px] font-bold text-slate-400">{new Date(reg.createdAt?.toDate?.() || reg.createdAt).toLocaleDateString()}</p>
                   </div>
-
                   <div className="flex justify-between items-center">
                     <div className="space-y-1">
                       <h3 className="font-black text-slate-800 text-lg leading-tight">{reg.name}</h3>
@@ -391,12 +381,10 @@ export default function RegistrationsPage() {
                       </div>
                     </div>
                   </div>
-
                   <div className="bg-secondary/30 p-3 rounded-xl border border-secondary text-xs flex justify-between items-center">
                     <span className="font-bold text-muted-foreground">Requested:</span>
                     <span className="font-black text-slate-700">{reg.buildingName} • Room {reg.roomNumber || 'Any'}</span>
                   </div>
-
                   <Button className="w-full h-10 rounded-xl font-bold gap-2" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}>
                     <Eye size={16} /> Process Application
                   </Button>
@@ -410,7 +398,7 @@ export default function RegistrationsPage() {
         </>
       )}
 
-      {/* Process Dialog */}
+      {/* Enrollment Dialog */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -420,7 +408,6 @@ export default function RegistrationsPage() {
           {selectedReg && (
             <div className="space-y-6 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Column 1: Info & Location */}
                 <div className="space-y-4">
                   <div className="p-4 bg-secondary/20 rounded-xl border space-y-3">
                     <h3 className="font-bold flex items-center gap-2 text-primary uppercase text-[10px] tracking-widest"><Info size={14}/> Applicant Info</h3>
@@ -465,11 +452,9 @@ export default function RegistrationsPage() {
                   <div className="space-y-1">
                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">Billing Starts From</Label>
                     <Input type="date" value={approvalForm.billingStartDate} onChange={e => setApprovalForm({...approvalForm, billingStartDate: e.target.value})} className="h-10" />
-                    <p className="text-[9px] text-muted-foreground mt-1">ভাড়ার হিসাব এই তারিখ থেকে স্বয়ংক্রিয়ভাবে গণনা করা হবে।</p>
                   </div>
                 </div>
 
-                {/* Column 2: Financial Setup */}
                 <div className="space-y-4">
                   <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
                     <h3 className="font-bold text-primary flex items-center gap-2 uppercase text-[10px] tracking-widest"><Calculator size={14}/> Financial Parameters</h3>
@@ -486,8 +471,8 @@ export default function RegistrationsPage() {
                         </Select>
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold">Monthly Rent (৳)</Label>
-                        <Input type="number" className="h-9" value={approvalForm.monthlyRent} onChange={e => setApprovalForm({...approvalForm, monthlyRent: e.target.value})} placeholder="0.00" />
+                        <Label className="text-[10px] uppercase font-bold text-primary">Monthly Rent (৳)</Label>
+                        <Input type="number" className="h-9 font-bold" value={approvalForm.monthlyRent} onChange={e => setApprovalForm({...approvalForm, monthlyRent: e.target.value})} placeholder="Auto-filled" />
                       </div>
                     </div>
 
@@ -504,76 +489,75 @@ export default function RegistrationsPage() {
 
                     {selectedReg.type === 'old' ? (
                       <div className="space-y-4">
+                        <div className="p-3 bg-secondary/50 rounded-lg border space-y-2">
+                          <Label className="text-[10px] uppercase font-bold text-primary flex items-center gap-1"><History size={10}/> Total Received So Far (Historical)</Label>
+                          <Input type="number" className="h-9 bg-white" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} placeholder="Previous Total Paid" />
+                          <p className="text-[8px] text-muted-foreground italic">* এটি শুধুমাত্র প্রোফাইলে দেখাবে, লেজারে ইনকাম হিসেবে যোগ হবে না।</p>
+                        </div>
+
                         <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20 space-y-3">
-                          <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Rent Dues</Label>
-                          <Button variant="outline" size="sm" className="h-7 text-[9px] w-full gap-1" onClick={addDueRow}><Plus size={10}/> Add Month-wise Due</Button>
-                          
+                          <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Arrears (বকেয়া মাসসমূহ)</Label>
+                          <Button variant="outline" size="sm" className="h-7 text-[9px] w-full gap-1" onClick={addDueRow}><Plus size={10}/> Add Arrear Month</Button>
                           <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
                             {historicalDues.map((due, idx) => (
-                              <div key={idx} className="flex gap-1 items-end bg-white p-2 rounded border border-destructive/10 shadow-sm animate-in fade-in slide-in-from-top-1">
-                                <div className="flex-1 space-y-1">
+                              <div key={idx} className="flex gap-1 items-end bg-white p-2 rounded border border-destructive/10 shadow-sm">
+                                <div className="flex-1">
                                   <Select value={due.month} onValueChange={val => updateDueRow(idx, "month", val)}>
                                     <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
                                     <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m} className="text-[10px]">{m}</SelectItem>)}</SelectContent>
                                   </Select>
                                 </div>
-                                <div className="w-[60px] space-y-1">
+                                <div className="w-[60px]">
                                   <Select value={due.year} onValueChange={val => updateDueRow(idx, "year", val)}>
                                     <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
                                     <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y} className="text-[10px]">{y}</SelectItem>)}</SelectContent>
                                   </Select>
                                 </div>
-                                <div className="w-[80px] space-y-1">
+                                <div className="w-[80px]">
                                   <Input type="number" className="h-7 text-[10px]" value={due.amount} onChange={e => updateDueRow(idx, "amount", e.target.value)} placeholder="৳" />
                                 </div>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeDueRow(idx)}><Minus size={12}/></Button>
                               </div>
                             ))}
-                            {historicalDues.length === 0 && <p className="text-[10px] text-center text-muted-foreground italic py-2">No historical dues added.</p>}
                           </div>
                         </div>
 
                         {approvalForm.paymentSystem === 'non-package' && (
                           <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2">
-                            <Label className="text-[10px] uppercase font-bold text-blue-700 flex items-center gap-1"><Utensils size={10}/> Existing Food Balance</Label>
-                            <Input type="number" className="h-9" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="+/- Balance" />
-                            <p className="text-[9px] text-blue-600">বাকি থাকলে মাইনাস (-) দিয়ে এন্ট্রি দিন।</p>
+                            <Label className="text-[10px] uppercase font-bold text-blue-700 flex items-center gap-1"><Utensils size={10}/> Prev. Food Balance</Label>
+                            <Input type="number" className="h-9 bg-white" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="+/- Balance" />
                           </div>
                         )}
                       </div>
                     ) : (
                       <div className="space-y-4">
                         <div className="p-3 bg-success/5 rounded-lg border border-success/20 space-y-3">
-                          <Label className="text-[10px] uppercase font-bold text-success flex items-center gap-1"><History size={10}/> Current Collection (Income)</Label>
+                          <Label className="text-[10px] uppercase font-bold text-success flex items-center gap-1"><Wallet size={10}/> Admission Payment (Income)</Label>
                           <div className="grid grid-cols-2 gap-2">
                             <div className="space-y-1">
                               <Label className="text-[9px]">Current Month Rent (৳)</Label>
-                              <Input type="number" className="h-8 text-xs" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} placeholder="Running Month" />
+                              <Input type="number" className="h-8 text-xs" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} placeholder="Rent" />
                             </div>
                             {approvalForm.paymentSystem === 'non-package' && (
                               <div className="space-y-1">
                                 <Label className="text-[9px]">Food Deposit (৳)</Label>
-                                <Input type="number" className="h-8 text-xs" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} placeholder="Food Fund" />
+                                <Input type="number" className="h-8 text-xs" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} placeholder="Food" />
                               </div>
                             )}
                           </div>
-                          <Separator className="opacity-50" />
                           <div className="space-y-2">
                             <Label className="text-[9px]">Received By (Staff)</Label>
                             <Select value={approvalForm.receiver} onValueChange={val => setApprovalForm({...approvalForm, receiver: val})}>
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Who received cash?" /></SelectTrigger>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Staff" /></SelectTrigger>
                               <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
                           <div className="space-y-2">
-                            <Label className="text-[9px]">Payment Method</Label>
+                            <Label className="text-[9px]">Method</Label>
                             <Select value={approvalForm.method} onValueChange={val => setApprovalForm({...approvalForm, method: val})}>
                               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="cash">Cash</SelectItem>
-                                <SelectItem value="bkash">Bkash</SelectItem>
-                                <SelectItem value="nagad">Nagad</SelectItem>
-                                <SelectItem value="bank">Bank</SelectItem>
+                                <SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -586,8 +570,8 @@ export default function RegistrationsPage() {
             </div>
           )}
           <DialogFooter className="grid grid-cols-2 gap-4">
-            <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/5" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject & Delete</Button>
-            <Button className="bg-success hover:bg-success/90 h-12" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : "Approve & Admit"}</Button>
+            <Button variant="outline" className="border-destructive text-destructive" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject</Button>
+            <Button className="bg-success hover:bg-success/90 h-12 font-bold" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : "Approve & Admit"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
