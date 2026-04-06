@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -31,6 +30,14 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 
 const DEFAULT_TEMPLATES = [
   { id: "admission", label: "Admission Success", text: "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], সিট: [সিট]। আমাদের সাথে থাকার জন্য ধন্যবাদ।" },
@@ -237,7 +244,7 @@ export default function SMSPanelPage() {
                 <CardHeader className="bg-primary text-primary-foreground">
                   <CardTitle className="text-lg flex items-center gap-2"><Smartphone size={20}/> Composer</CardTitle>
                   <CardDescription className="text-primary-foreground/70">Type your custom message below.</CardDescription>
-                </CardHeader>
+                </Header>
                 <CardContent className="pt-6 space-y-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recipients</Label>
