@@ -41,6 +41,7 @@ export default function RegistrationsPage() {
   const [selectedReg, setSelectedReg] = useState<any>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [initializedId, setInitializedId] = useState<string | null>(null)
   
   const [userRole, setUserRole] = useState("Manager")
   const [userBranch, setUserBranch] = useState("Main Branch")
@@ -97,6 +98,57 @@ export default function RegistrationsPage() {
 
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
+  // ROBUST INITIALIZATION LOGIC
+  useEffect(() => {
+    if (selectedReg && buildings && selectedReg.id !== initializedId) {
+      // 1. Find Building ID (Fallback to matching by Name if ID is missing)
+      let bId = selectedReg.buildingId || "";
+      if (!bId && selectedReg.buildingName) {
+        const found = buildings.find(b => b.name === selectedReg.buildingName);
+        if (found) bId = found.id;
+      }
+
+      // 2. Initialize form with Database values
+      setApprovalForm({
+        buildingId: bId || (userRole === 'Building Manager' ? assignedBuildingId : ""),
+        roomNumber: selectedReg.roomNumber || "",
+        seatNumber: selectedReg.seatNumber || "",
+        paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
+        monthlyRent: "", // Auto-filled by the next effect
+        serviceCharge: "0",
+        advanceAmount: "0",
+        initialRentPayment: "0",
+        initialFoodPayment: "0",
+        foodDueAmount: "0",
+        historicalTotalReceived: "0",
+        receiver: "",
+        method: "cash",
+        billingStartDate: new Date().toISOString().split('T')[0]
+      });
+      
+      setInitializedId(selectedReg.id);
+      setHistoricalDues([]);
+    }
+  }, [selectedReg, buildings, userRole, assignedBuildingId, initializedId])
+
+  const selectedBuilding = buildings?.find(b => b.id === approvalForm.buildingId)
+  const roomsInBuilding = useMemo(() => {
+    if (!selectedBuilding) return []
+    return selectedBuilding.apartmentsDetail?.flatMap((apt: any) => 
+      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
+    ) || []
+  }, [selectedBuilding])
+
+  const selectedRoom = roomsInBuilding.find((r: any) => r.roomNo === approvalForm.roomNumber)
+  const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
+
+  // AUTO-FILL RENT FROM DATABASE
+  useEffect(() => {
+    if (selectedRoom?.rentPerSeat) {
+      setApprovalForm(prev => ({ ...prev, monthlyRent: selectedRoom.rentPerSeat.toString() }))
+    }
+  }, [selectedRoom])
+
   const addDueRow = () => {
     setHistoricalDues([...historicalDues, { month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: "" }])
   }
@@ -110,47 +162,6 @@ export default function RegistrationsPage() {
     ;(updated[idx] as any)[field] = value
     setHistoricalDues(updated)
   }
-
-  // Effect to initialize form data from registration
-  useEffect(() => {
-    if (selectedReg) {
-      setApprovalForm({
-        buildingId: selectedReg.buildingId || (userRole === 'Building Manager' ? assignedBuildingId : ""),
-        roomNumber: selectedReg.roomNumber || "",
-        seatNumber: selectedReg.seatNumber || "",
-        paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
-        monthlyRent: "",
-        serviceCharge: "0",
-        advanceAmount: "0",
-        initialRentPayment: "0",
-        initialFoodPayment: "0",
-        foodDueAmount: "0",
-        historicalTotalReceived: "0",
-        receiver: "",
-        method: "cash",
-        billingStartDate: new Date().toISOString().split('T')[0]
-      })
-      setHistoricalDues([])
-    }
-  }, [selectedReg, userRole, assignedBuildingId])
-
-  const selectedBuilding = buildings?.find(b => b.id === approvalForm.buildingId)
-  const roomsInBuilding = useMemo(() => {
-    if (!selectedBuilding) return []
-    return selectedBuilding.apartmentsDetail?.flatMap((apt: any) => 
-      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
-    ) || []
-  }, [selectedBuilding])
-
-  const selectedRoom = roomsInBuilding.find((r: any) => r.roomNo === approvalForm.roomNumber)
-  const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
-
-  // AUTO-FILL RENT LOGIC
-  useEffect(() => {
-    if (selectedRoom?.rentPerSeat) {
-      setApprovalForm(prev => ({ ...prev, monthlyRent: selectedRoom.rentPerSeat.toString() }))
-    }
-  }, [selectedRoom])
 
   const handleApprove = async () => {
     if (!approvalForm.monthlyRent || !approvalForm.buildingId || !approvalForm.roomNumber || !approvalForm.seatNumber) {
@@ -184,6 +195,7 @@ export default function RegistrationsPage() {
         }
       })
 
+      // ONLY CREATE PAYMENT DOC FOR NEW STUDENTS
       if (!isOld) {
         const rentPaid = Number(approvalForm.initialRentPayment)
         const foodPaid = Number(approvalForm.initialFoodPayment)
@@ -233,6 +245,7 @@ export default function RegistrationsPage() {
         serviceCharge: svcCharge,
         advanceAmount: advAmount,
         duesBreakdown: duesBreakdown,
+        // Historical data ONLY for profile (NOT Ledger)
         historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : 0,
         foodDueAmount: isOld ? -Number(approvalForm.foodDueAmount || 0) : 0, 
         billingStartDate: approvalForm.billingStartDate,
@@ -245,7 +258,7 @@ export default function RegistrationsPage() {
         updatedAt: serverTimestamp()
       })
 
-      // Update building occupied status
+      // Update seat status in building
       if (selectedBuilding) {
         const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
           if (apt.name === aptName) {
@@ -278,6 +291,7 @@ export default function RegistrationsPage() {
       toast({ title: "Approved!", description: `${selectedReg.name} is now an active resident.` })
       setIsDetailOpen(false)
       setSelectedReg(null)
+      setInitializedId(null)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -399,7 +413,7 @@ export default function RegistrationsPage() {
       )}
 
       {/* Enrollment Dialog */}
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+      <Dialog open={isDetailOpen} onOpenChange={(val) => { setIsDetailOpen(val); if(!val) setInitializedId(null); }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Enrollment: {selectedReg?.name}</DialogTitle>
@@ -462,6 +476,7 @@ export default function RegistrationsPage() {
                   <div className="space-y-1">
                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">Billing Starts From</Label>
                     <Input type="date" value={approvalForm.billingStartDate} onChange={e => setApprovalForm({...approvalForm, billingStartDate: e.target.value})} className="h-10" />
+                    <p className="text-[8px] text-muted-foreground italic mt-1">ভাড়ার হিসাব এই তারিখ থেকে স্বয়ংক্রিয়ভাবে গণনা করা হবে।</p>
                   </div>
                 </div>
 
@@ -507,7 +522,7 @@ export default function RegistrationsPage() {
 
                         <div className="p-3 bg-destructive/5 rounded-lg border border-destructive/20 space-y-3">
                           <Label className="text-[10px] uppercase font-bold text-destructive flex items-center gap-1"><AlertCircle size={10}/> Historical Arrears (বকেয়া মাসসমূহ)</Label>
-                          <Button variant="outline" size="sm" className="h-7 text-[9px] w-full gap-1" onClick={addDueRow}><Plus size={10}/> Add Arrear Month</Button>
+                          <Button variant="outline" type="button" size="sm" className="h-7 text-[9px] w-full gap-1" onClick={addDueRow}><Plus size={10}/> Add Arrear Month</Button>
                           <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
                             {historicalDues.map((due, idx) => (
                               <div key={idx} className="flex gap-1 items-end bg-white p-2 rounded border border-destructive/10 shadow-sm">
