@@ -16,7 +16,7 @@ import {
   UserMinus, Trash2, Edit, Loader2, Plus, CheckCircle2, 
   XCircle, Zap, LayoutGrid, Calculator, TrendingUp, TrendingDown,
   ArrowUpRight, ArrowDownRight, Banknote, Calendar, BarChart3,
-  CircleDollarSign, Percent, ChevronLeft, MoreVertical
+  CircleDollarSign, Percent, ChevronLeft, MoreVertical, ChevronDown, ChevronUp
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -86,6 +86,7 @@ export default function BuildingDetailsPage({
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [showRevenueMatrix, setShowRevenueMatrix] = useState(false)
 
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
@@ -541,48 +542,62 @@ export default function BuildingDetailsPage({
             </CardContent>
           </Card>
 
-          {/* Room Wise Revenue Table */}
-          <Card className="border-none shadow-sm bg-white rounded-2xl overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b pb-4">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="text-primary" size={18} />
-                <CardTitle className="text-sm font-bold uppercase tracking-tight">Room Wise Revenue Matrix</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50/50">
-                    <TableHead className="font-bold">Room</TableHead>
-                    <TableHead className="text-center font-bold">Seats</TableHead>
-                    <TableHead className="text-center font-bold">Occ.</TableHead>
-                    <TableHead className="text-right font-bold">Rent</TableHead>
-                    <TableHead className="text-right font-bold">Expected</TableHead>
-                    <TableHead className="text-right font-bold">Current</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {revenueStats.roomRevenueList.map((room: any, idx: number) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-bold">R-{room.roomNo}<br/><span className="text-[10px] text-muted-foreground font-normal">{room.aptName}</span></TableCell>
-                      <TableCell className="text-center font-medium">{room.totalSeats}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className={cn(
-                          "text-[10px] font-black",
-                          room.occupiedSeats === room.totalSeats ? "border-success text-success" : "border-orange-400 text-orange-600"
-                        )}>
-                          {room.occupiedSeats}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-slate-600">৳{room.rentPerSeat}</TableCell>
-                      <TableCell className="text-right font-bold">৳{room.expected.toLocaleString()}</TableCell>
-                      <TableCell className="text-right font-black text-primary">৳{room.current.toLocaleString()}</TableCell>
+          {/* Toggle for Room Wise Revenue Table */}
+          <div className="flex justify-center">
+            <Button 
+              variant="ghost" 
+              onClick={() => setShowRevenueMatrix(!showRevenueMatrix)}
+              className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary gap-2 h-8"
+            >
+              <BarChart3 size={14} />
+              {showRevenueMatrix ? "Hide Detailed Revenue Matrix" : "Show Detailed Revenue Matrix"}
+              {showRevenueMatrix ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </Button>
+          </div>
+
+          {showRevenueMatrix && (
+            <Card className="border-none shadow-sm bg-white rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+              <CardHeader className="bg-slate-50/50 border-b pb-4">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="text-primary" size={18} />
+                  <CardTitle className="text-sm font-bold uppercase tracking-tight">Room Wise Revenue Matrix</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/50">
+                      <TableHead className="font-bold">Room</TableHead>
+                      <TableHead className="text-center font-bold">Seats</TableHead>
+                      <TableHead className="text-center font-bold">Occ.</TableHead>
+                      <TableHead className="text-right font-bold">Rent</TableHead>
+                      <TableHead className="text-right font-bold">Expected</TableHead>
+                      <TableHead className="text-right font-bold">Current</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {revenueStats.roomRevenueList.map((room: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-bold">R-{room.roomNo}<br/><span className="text-[10px] text-muted-foreground font-normal">{room.aptName}</span></TableCell>
+                        <TableCell className="text-center font-medium">{room.totalSeats}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] font-black",
+                            room.occupiedSeats === room.totalSeats ? "border-success text-success" : "border-orange-400 text-orange-600"
+                          )}>
+                            {room.occupiedSeats}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-slate-600">৳{room.rentPerSeat}</TableCell>
+                        <TableCell className="text-right font-bold">৳{room.expected.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-black text-primary">৳{room.current.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="space-y-8">
