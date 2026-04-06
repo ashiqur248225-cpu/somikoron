@@ -334,10 +334,10 @@ export default function FoodHistoryPage() {
         <Card className="border-none shadow-sm bg-orange-50 border border-orange-100 rounded-2xl">
           <CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase text-orange-700 tracking-widest">Efficiency Alert</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-sm text-orange-800 leading-relaxed">
+            <div className="text-sm text-orange-800 leading-relaxed">
               If the average meal price exceeds your threshold, consider reviewing vendor rates or bulk purchases. 
               Currently, your branch efficiency is <Badge variant="outline" className="bg-white text-orange-700 border-orange-200">Stable</Badge>.
-            </p>
+            </div>
           </CardContent>
         </Card>
       </div>
