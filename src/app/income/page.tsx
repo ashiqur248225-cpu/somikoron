@@ -45,7 +45,6 @@ export default function IncomeHistoryPage() {
   const [userRole, setUserRole] = useState("")
 
   // Filtering States
-  const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [roomFilter, setRoomFilter] = useState("all")
   const [methodFilter, setMethodFilter] = useState("all")
@@ -118,15 +117,14 @@ export default function IncomeHistoryPage() {
       const matchesRoom = roomFilter === "all" || p.roomNumber === roomFilter
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
       const matchesReceiver = receiverFilter === "all" || p.receiver === receiverFilter
-      const matchesSearch = (p.studentName || "").toLowerCase().includes(searchTerm.toLowerCase())
       
-      return matchesStartDate && matchesEndDate && matchesBuilding && matchesRoom && matchesMethod && matchesReceiver && matchesSearch
+      return matchesStartDate && matchesEndDate && matchesBuilding && matchesRoom && matchesMethod && matchesReceiver
     }).sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date)
       const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date)
       return dateB.getTime() - dateA.getTime()
     })
-  }, [rawPayments, startDate, endDate, buildingFilter, roomFilter, methodFilter, receiverFilter, searchTerm])
+  }, [rawPayments, startDate, endDate, buildingFilter, roomFilter, methodFilter, receiverFilter])
 
   const stats = useMemo(() => {
     const total = filteredPayments.reduce((acc, curr) => acc + (curr.amount || 0), 0)
@@ -338,19 +336,12 @@ export default function IncomeHistoryPage() {
 
       {/* GLOBAL FILTER BAR (Desktop) */}
       <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
-        <div className="flex-1 space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Student Search</Label>
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search name..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-          </div>
-        </div>
         <div className="w-[150px] space-y-1.5">
           <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label>
           <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}>
             <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">All Buildings</SelectItem>
               {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -362,6 +353,16 @@ export default function IncomeHistoryPage() {
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
               {availableRoomsForFilter.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-[180px] space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Received By</Label>
+          <Select value={receiverFilter} onValueChange={setReceiverFilter}>
+            <SelectTrigger className="bg-white h-10"><SelectValue placeholder="All Staff" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Staff</SelectItem>
+              {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -382,15 +383,14 @@ export default function IncomeHistoryPage() {
             <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" />
           </div>
         </div>
-        <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setStartDate(""); setEndDate(""); }}>Reset</Button>
+        <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setStartDate(""); setEndDate(""); }}>Reset</Button>
       </div>
 
       {/* MOBILE FILTER PANEL */}
       <div className="md:hidden space-y-4 print:hidden">
         <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search name..." className="pl-9 h-9 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <div className="flex-1">
+             <p className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Income History</p>
           </div>
           <Dialog open={isMobileFilterOpen} onOpenChange={setIsMobileFilterOpen}>
             <DialogTrigger asChild>
@@ -399,12 +399,13 @@ export default function IncomeHistoryPage() {
             <DialogContent className="max-w-[90vw] rounded-2xl">
               <DialogHeader><DialogTitle>Income Filters</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2"><Label>Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label>Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-2"><Label>Room</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForFilter.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label>Received By</Label><Select value={receiverFilter} onValueChange={setReceiverFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All Staff" /></SelectTrigger><SelectContent><SelectItem value="all">All Staff</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-2"><Label>Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
                 <div className="space-y-2"><Label>Date Range</Label><div className="grid grid-cols-2 gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
               </div>
-              <DialogFooter className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setStartDate(""); setEndDate(""); setIsMobileFilterOpen(false); }}>Reset</Button><Button onClick={() => setIsMobileFilterOpen(false)}>Apply</Button></DialogFooter>
+              <DialogFooter className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => { setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setStartDate(""); setEndDate(""); setIsMobileFilterOpen(false); }}>Reset</Button><Button onClick={() => setIsMobileFilterOpen(false)}>Apply</Button></DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
@@ -413,7 +414,7 @@ export default function IncomeHistoryPage() {
             {activeFilterChips.map((chip, idx) => (
               <Badge key={idx} variant="secondary" className="px-2 py-1 gap-1 text-[10px] font-bold uppercase bg-success/10 text-success border-none">
                 {chip.label}
-                <XCircle size={12} className="cursor-pointer" onClick={() => { if (chip.id === 'building') setBuildingFilter("all"); if (chip.id === 'room') setRoomFilter("all"); if (chip.id === 'method') setMethodFilter("all"); if (chip.id === 'date') { setStartDate(""); setEndDate(""); } }} />
+                <XCircle size={12} className="cursor-pointer" onClick={() => { if (chip.id === 'building') setBuildingFilter("all"); if (chip.id === 'room') setRoomFilter("all"); if (chip.id === 'method') setMethodFilter("all"); if (chip.id === 'receiver') setReceiverFilter("all"); if (chip.id === 'date') { setStartDate(""); setEndDate(""); } }} />
               </Badge>
             ))}
           </div>
