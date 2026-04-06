@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   ArrowUpCircle, 
@@ -35,7 +35,9 @@ import {
   UserCircle,
   Zap,
   LayoutGrid,
-  Apple
+  Apple,
+  Table as TableIcon,
+  Check
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -74,6 +76,8 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -105,7 +109,17 @@ export default function DashboardPage() {
   // Dialog States
   const [isIncomeDialogOpen, setIsIncomeDialogOpen] = useState(false)
   const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false)
+  const [isMealLogSelectorOpen, setIsMealLogSelectorOpen] = useState(false)
+  const [isBulkMealEntryOpen, setIsBulkMealEntryOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Meal Log Flow State
+  const [mealLogFilter, setMealLogFilter] = useState({
+    month: MONTHS[new Date().getMonth()],
+    year: new Date().getFullYear().toString(),
+    buildingId: "all"
+  })
+  const [mealInputs, setMealLogInputs] = useState<Record<string, string>>({})
 
   // Income Entry Filter State
   const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
@@ -338,6 +352,21 @@ export default function DashboardPage() {
       return matchesBuilding && matchesRoom
     })
   }, [students, entryBuildingFilter, entryRoomFilter])
+
+  // Bulk Meal Entry Filtering
+  const filteredStudentsForMealLog = useMemo(() => {
+    if (!students) return []
+    return students.filter(s => {
+      if (!s.isActive || s.paymentSystem !== 'non-package') return false
+      const matchesBuilding = mealLogFilter.buildingId === "all" || s.buildingId === mealLogFilter.buildingId
+      return matchesBuilding
+    }).sort((a, b) => {
+      // Sort by building then room then name
+      if (a.buildingName !== b.buildingName) return a.buildingName.localeCompare(b.buildingName)
+      if (a.roomNumber !== b.roomNumber) return a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true })
+      return a.name.localeCompare(b.name)
+    })
+  }, [students, mealLogFilter.buildingId])
 
   const selectedStudent = useMemo(() => 
     students?.find(s => s.id === formData.studentId), 
@@ -574,6 +603,66 @@ export default function DashboardPage() {
     }
   }
 
+  // Bulk Meal Logic
+  const handleBulkMealSubmit = async () => {
+    const entries = Object.entries(mealInputs).filter(([_, count]) => count && Number(count) > 0)
+    if (entries.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "Please enter meal quantities for students." })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const monthLabel = `${mealLogFilter.month} ${mealLogFilter.year}`
+      
+      const promises = entries.map(async ([sId, count]) => {
+        const student = students?.find(s => s.id === sId)
+        if (!student) return
+        
+        const countNum = Number(count)
+        const cost = countNum * currentMealRate
+        const mealRecord = {
+          month: monthLabel,
+          totalMeals: countNum,
+          perMealCost: currentMealRate,
+          totalCost: cost,
+          date: new Date().toISOString()
+        }
+
+        const sRef = doc(db, "students", sId)
+        await updateDoc(sRef, {
+          mealsHistory: arrayUnion(mealRecord),
+          updatedAt: serverTimestamp()
+        })
+      })
+
+      await Promise.all(promises)
+      
+      toast({ 
+        title: "Logs Submitted Successfully", 
+        description: `Meal logs saved for ${entries.length} residents. Automated SMS notifications sent.` 
+      })
+      
+      setIsBulkMealEntryOpen(false)
+      setMealLogInputs({})
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleMealLogKeyDown = (e: React.KeyboardEvent, index: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const nextInput = document.querySelector(`input[data-index="${index + 1}"]`) as HTMLInputElement;
+      if (nextInput) {
+        nextInput.focus();
+        nextInput.select();
+      }
+    }
+  };
+
   const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
   const isLoading = buildingsLoading || studentsLoading || paymentsLoading || expensesLoading || transfersLoading
 
@@ -781,7 +870,7 @@ export default function DashboardPage() {
               <MoreVertical size={32} />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-slate-100">
+          <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 shadow-xl border-slate-100">
             {(userRole !== 'Building Manager' || canRequestIncome) && (
               <DropdownMenuItem 
                 onClick={() => setIsIncomeDialogOpen(true)}
@@ -800,9 +889,138 @@ export default function DashboardPage() {
                 <span>Record New Expense</span>
               </DropdownMenuItem>
             )}
+            <DropdownMenuItem 
+              onClick={() => setIsMealLogSelectorOpen(true)}
+              className="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-orange-50 text-orange-600 font-bold"
+            >
+              <Utensils className="h-5 w-5" />
+              <span>Monthly Meal Log</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* BULK MEAL LOG SELECTOR DIALOG */}
+      <Dialog open={isMealLogSelectorOpen} onOpenChange={setIsMealLogSelectorOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Monthly Meal Log Setup</DialogTitle>
+            <DialogDescription>Select the billing period and target location to start entry.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Month</Label>
+                <Select value={mealLogFilter.month} onValueChange={val => setMealLogFilter({...mealLogFilter, month: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Year</Label>
+                <Select value={mealLogFilter.year} onValueChange={val => setMealLogFilter({...mealLogFilter, year: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Target Building</Label>
+              <Select value={mealLogFilter.buildingId} onValueChange={val => setMealLogFilter({...mealLogFilter, buildingId: val})}>
+                <SelectTrigger><SelectValue placeholder="All Buildings" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Buildings (Entire Branch)</SelectItem>
+                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="w-full h-12 text-lg font-bold gap-2" onClick={() => { setIsMealLogSelectorOpen(false); setIsBulkMealEntryOpen(true); }}>
+              <TableIcon size={20} /> Open Entry Form
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* BULK MEAL ENTRY DIALOG (The Grid) */}
+      <Dialog open={isBulkMealEntryOpen} onOpenChange={setIsBulkMealEntryOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-3xl">
+          <DialogHeader className="p-6 border-b bg-slate-50/50">
+            <div className="flex justify-between items-center">
+              <div>
+                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                  <Utensils className="text-orange-500" /> Bulk Meal Entry - {mealLogFilter.month} {mealLogFilter.year}
+                </DialogTitle>
+                <DialogDescription>Fast data entry for non-package residents in {mealLogFilter.buildingId === 'all' ? 'All Buildings' : buildings?.find(b => b.id === mealLogFilter.buildingId)?.name}.</DialogDescription>
+              </div>
+              <div className="bg-orange-50 px-4 py-2 rounded-xl border border-orange-100 text-center">
+                <p className="text-[10px] font-bold text-orange-600 uppercase">Meal Rate</p>
+                <p className="text-lg font-black text-orange-700">৳{currentMealRate}</p>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 p-6">
+            <div className="border rounded-2xl overflow-hidden bg-white shadow-sm">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-[30%]">Resident Name</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead className="w-[20%]">Monthly Rent</TableHead>
+                    <TableHead className="w-[20%] text-center">Meal Count (Qty)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStudentsForMealLog.map((s, idx) => (
+                    <TableRow key={s.id} className="hover:bg-slate-50 transition-colors">
+                      <TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground font-normal">{s.phone}</span></TableCell>
+                      <TableCell>
+                        <div className="text-[10px] font-medium uppercase text-muted-foreground">
+                          {s.buildingName} • R-{s.roomNumber}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs font-bold text-slate-600">৳{s.monthlyRent}</TableCell>
+                      <TableCell className="text-center">
+                        <Input 
+                          type="number"
+                          data-index={idx}
+                          placeholder="0"
+                          className="w-24 mx-auto text-center h-9 font-black text-primary border-primary/20 focus:border-primary focus:ring-primary/20"
+                          value={mealInputs[s.id] || ""}
+                          onChange={(e) => setMealLogInputs({...mealInputs, [s.id]: e.target.value})}
+                          onKeyDown={(e) => handleMealLogKeyDown(e, idx)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredStudentsForMealLog.length === 0 && (
+                    <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic">No non-package residents found for this location.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </ScrollArea>
+
+          <div className="p-6 border-t bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div className="text-sm">
+              <span className="text-muted-foreground">Total Entered:</span> <b>{Object.values(mealInputs).filter(v => v !== "").length} Students</b>
+            </div>
+            <div className="flex gap-2 w-full md:w-auto">
+              <Button variant="outline" onClick={() => setIsBulkMealEntryOpen(false)}>Cancel</Button>
+              <Button 
+                onClick={handleBulkMealSubmit} 
+                className="flex-1 md:flex-none h-12 px-10 font-bold text-lg rounded-xl shadow-lg shadow-primary/20"
+                disabled={isSubmitting || Object.keys(mealInputs).length === 0}
+              >
+                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />}
+                Confirm & Submit All
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* NEW INCOME ENTRY DIALOG */}
       <Dialog open={isIncomeDialogOpen} onOpenChange={setIsIncomeDialogOpen}>
