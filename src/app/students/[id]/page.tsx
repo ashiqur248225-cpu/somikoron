@@ -90,6 +90,7 @@ export default function StudentDetailsPage({
   const [isLogMealDialogOpen, setIsLogMealDialogOpen] = useState(false)
   const [isExitDialogOpen, setIsExitDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   
   const [paymentData, setPaymentData] = useState({ 
     month: MONTHS[new Date().getMonth()], 
@@ -117,6 +118,16 @@ export default function StudentDetailsPage({
     description: ""
   })
 
+  const [editForm, setEditForm] = useState({
+    name: "",
+    phone: "",
+    parentPhone: "",
+    address: "",
+    monthlyRent: "",
+    paymentSystem: "package",
+    billingStartDate: ""
+  })
+
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
@@ -132,6 +143,20 @@ export default function StudentDetailsPage({
     if (action === 'payment') setIsPaymentDialogOpen(true)
     if (action === 'meals') setIsLogMealDialogOpen(true)
   }, [resolvedSearchParams])
+
+  useEffect(() => {
+    if (student) {
+      setEditForm({
+        name: student.name || "",
+        phone: student.phone || "",
+        parentPhone: student.parentPhone || "",
+        address: student.address || "",
+        monthlyRent: (student.monthlyRent || 0).toString(),
+        paymentSystem: student.paymentSystem || "package",
+        billingStartDate: student.billingStartDate || ""
+      })
+    }
+  }, [student])
 
   const financialStats = useMemo(() => {
     if (!student) return { rentDue: 0, foodBalance: 0, monthsList: [], usableAdvance: 0, totalDue: 0 }
@@ -298,6 +323,24 @@ export default function StudentDetailsPage({
     }
   }
 
+  const handleEditSubmit = async () => {
+    if (!studentRef) return
+    setIsUpdating(true)
+    try {
+      await updateDoc(studentRef, {
+        ...editForm,
+        monthlyRent: Number(editForm.monthlyRent),
+        updatedAt: serverTimestamp()
+      })
+      toast({ title: "Profile Updated", description: `${editForm.name}'s information has been saved.` })
+      setIsEditDialogOpen(false)
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleConfirmExit = async () => {
     if (!student || !studentRef) return
     if (!exitSettlement.staffName) {
@@ -431,16 +474,16 @@ export default function StudentDetailsPage({
                 <MoreVertical size={20} />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 rounded-xl">
-              <DropdownMenuItem className="gap-2 font-medium">
-                <Edit size={16} /> Edit Profile
+            <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
+              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                <Edit size={16} className="text-primary" /> Edit Profile
               </DropdownMenuItem>
               {student.isActive && (
-                <DropdownMenuItem onClick={() => setIsExitDialogOpen(true)} className="gap-2 font-medium text-destructive">
+                <DropdownMenuItem onSelect={() => setIsExitDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
                   <UserMinus size={16} /> Mark as Left
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={() => setIsDeleteDialogOpen(true)} className="gap-2 font-medium text-destructive">
+              <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
                 <Trash2 size={16} /> Delete Record
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -463,18 +506,18 @@ export default function StudentDetailsPage({
         <div className="flex gap-2 items-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" className="gap-2 h-11 px-6 rounded-xl font-bold text-slate-700">
                 <MoreVertical size={18} /> Actions
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-xl border-slate-100">
-              <DropdownMenuItem className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-slate-50 font-bold text-slate-700">
+              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-slate-50 font-bold text-slate-700">
                 <Edit size={18} className="text-primary" />
                 <span>Edit Profile</span>
               </DropdownMenuItem>
               {student.isActive && (
                 <DropdownMenuItem 
-                  onClick={() => setIsExitDialogOpen(true)}
+                  onSelect={() => setIsExitDialogOpen(true)}
                   className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-destructive/5 text-destructive font-bold"
                 >
                   <UserMinus size={18} />
@@ -482,7 +525,7 @@ export default function StudentDetailsPage({
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem 
-                onClick={() => setIsDeleteDialogOpen(true)}
+                onSelect={() => setIsDeleteDialogOpen(true)}
                 className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-destructive/5 text-destructive font-bold"
               >
                 <Trash2 size={18} />
@@ -490,7 +533,7 @@ export default function StudentDetailsPage({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" onClick={() => router.push("/students")}>Back</Button>
+          <Button variant="ghost" onClick={() => router.push("/students")} className="h-11 rounded-xl">Back</Button>
         </div>
       </div>
 
@@ -811,6 +854,62 @@ export default function StudentDetailsPage({
           <DialogFooter>
             <Button onClick={handlePaymentSubmit} className="w-full h-12 text-lg font-bold" disabled={isUpdating}>
               {isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Transaction"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Student Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Student Profile</DialogTitle>
+            <DialogDescription>Update basic information and financial settings.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Full Name</Label>
+              <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Personal Phone</Label>
+                <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Parent Phone</Label>
+                <Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Address</Label>
+              <Input value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} />
+            </div>
+            <Separator />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Monthly Rent (৳)</Label>
+                <Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Payment System</Label>
+                <Select value={editForm.paymentSystem} onValueChange={val => setEditForm({...editForm, paymentSystem: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="package">Package</SelectItem>
+                    <SelectItem value="non-package">Non-Package</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Billing Start Date</Label>
+              <Input type="date" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleEditSubmit} className="w-full h-12 text-lg font-bold" disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
