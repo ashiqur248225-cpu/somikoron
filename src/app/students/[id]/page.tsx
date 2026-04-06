@@ -674,11 +674,11 @@ export default function StudentDetailsPage({
                 <p className="text-lg font-bold">৳{student.advanceAmount || 0}</p>
               </div>
               
-              {/* Total Lifetime Received Card */}
+              {/* Total Received Card */}
               <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 md:col-span-2">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-[10px] uppercase text-indigo-600 font-bold flex items-center gap-1"><HandCoins size={10}/> Total Lifetime Received</p>
+                    <p className="text-[10px] uppercase text-indigo-600 font-bold flex items-center gap-1"><HandCoins size={10}/> Total Received</p>
                     <p className="text-xl font-black text-indigo-700">৳{financialStats.totalLifetimeReceived.toLocaleString()}</p>
                   </div>
                   <div className="text-right">
