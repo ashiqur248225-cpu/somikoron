@@ -98,30 +98,28 @@ export default function RegistrationsPage() {
 
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
-  // ENHANCED AUTO-FILL LOGIC (Fixed based on user guidelines)
+  // ENHANCED AUTO-FILL LOGIC (Final Locked Version)
   useEffect(() => {
-    if (isDetailOpen && selectedReg && buildings && selectedReg.id !== initializedId) {
-      console.log("Auto-filling for:", selectedReg.name);
+    if (isDetailOpen && selectedReg && buildings) {
+      console.log("Processing Auto-fill for Student:", selectedReg.name);
       
-      // Fix #2: Resolving Building with fallbacks
+      // Step 1: Identification with robust fallbacks
       const regBId = selectedReg.buildingId || selectedReg.building?.id || "";
       const regBName = selectedReg.buildingName || selectedReg.building?.name || "";
-      
+      const rNum = selectedReg.roomNumber || selectedReg.roomNo || "";
+      const sNum = selectedReg.seatNumber || selectedReg.seatNo || "";
+
+      // Step 2: Building Matching (ID first, then Name)
       const targetBuilding = buildings.find(b => 
         (regBId && b.id === regBId) || 
         (regBName && b.name === regBName)
       );
 
-      // Fix #3: Room and Seat with fallbacks
-      const rNum = selectedReg.roomNumber || selectedReg.roomNo || "";
-      const sNum = selectedReg.seatNumber || selectedReg.seatNo || "";
-
-      // Fix #4: Rent filling with type mismatch protection and early exit
+      // Step 3: Rent Auto-calculation from matched building & room
       let autoRent = "";
       if (targetBuilding && rNum) {
         for (const apt of targetBuilding.apartmentsDetail || []) {
           for (const room of apt.rooms || []) {
-            // String comparison to avoid type mismatch
             if (String(room.roomNo) === String(rNum) && room.rentPerSeat) {
               autoRent = String(room.rentPerSeat);
               break;
@@ -131,9 +129,9 @@ export default function RegistrationsPage() {
         }
       }
 
-      console.log("Matched Building:", targetBuilding?.name, "Room:", rNum, "Found Rent:", autoRent);
+      console.log("Auto-fill Result -> Building:", targetBuilding?.name, "| Room:", rNum, "| Rent:", autoRent);
 
-      // 4. Set state
+      // Step 4: Update Approval Form State
       setApprovalForm({
         buildingId: targetBuilding?.id || (userRole === 'Building Manager' ? assignedBuildingId : ""),
         roomNumber: String(rNum),
@@ -154,7 +152,7 @@ export default function RegistrationsPage() {
       setInitializedId(selectedReg.id);
       setHistoricalDues([]);
     }
-  }, [isDetailOpen, selectedReg, buildings, userRole, assignedBuildingId, initializedId])
+  }, [isDetailOpen, selectedReg, buildings, userRole, assignedBuildingId])
 
   const selectedBuilding = buildings?.find(b => b.id === approvalForm.buildingId)
   const roomsInBuilding = useMemo(() => {
