@@ -231,7 +231,7 @@ export default function IncomeHistoryPage() {
       } else {
         await setDoc(doc(db, "payments", pId), pRecord)
         
-        // Calculate dynamic values for SMS mapping
+        // Calculate totals for SMS mapping
         const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
         const now = new Date()
         const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
@@ -254,7 +254,7 @@ export default function IncomeHistoryPage() {
           updatedAt: serverTimestamp()
         })
         
-        // Dynamic SMS Mapping for Payment
+        // Dynamic SMS Mapping
         if (apiConfig?.apikey && templatesData?.templates) {
           const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
           if (paymentTemplate) {

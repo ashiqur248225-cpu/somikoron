@@ -83,18 +83,6 @@ import { ReceiptDialog } from "@/components/receipt-dialog"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const EXPENSE_CATEGORIES = [
-  { id: "rent", label: "Building Rent", icon: Building2 },
-  { id: "electricity", label: "Electricity Bill", icon: Lightbulb },
-  { id: "water", label: "Water & Gas Bill", icon: Receipt },
-  { id: "maintenance", label: "Maintenance/Repair", icon: Wrench },
-  { id: "food", label: "Food / Meal Cost", icon: Utensils },
-  { id: "market", label: "General Market", icon: Apple },
-  { id: "internet", label: "Internet Bill", icon: Wifi },
-  { id: "salary", label: "Staff Salary", icon: UserCircle },
-  { id: "others", label: "Others", icon: Wallet },
-]
-
 export default function DashboardPage() {
   const db = useFirestore()
   const { toast } = useToast()
@@ -209,7 +197,7 @@ export default function DashboardPage() {
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
 
-  // History Logger
+  // SMS Logger Helper
   const logSMSToDatabase = async (to: string, msg: string, status: 'Success' | 'Failed', errorMsg?: string) => {
     try {
       const logId = doc(collection(db, "smsLogs")).id
@@ -245,12 +233,6 @@ export default function DashboardPage() {
   }, [db, userBranch])
   const { data: allTransfers } = useCollection(allTransfersQuery)
 
-  const managerRequestsQuery = useMemoFirebase(() => {
-    if (!userBranch || userRole === 'Building Manager') return null
-    return query(collection(db, "managerRequests"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole])
-  const { data: pendingMgrRequests } = useCollection(managerRequestsQuery)
-
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
   const { data: openingBalances } = useDoc(balancesRef)
 
@@ -269,13 +251,7 @@ export default function DashboardPage() {
     const totalIncome = filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
     const totalExpense = filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
 
-    const fund = { 
-      cash: Number(openingBalances?.cash || 0), 
-      bank: Number(openingBalances?.bank || 0), 
-      bkash: Number(openingBalances?.bkash || 0), 
-      nagad: Number(openingBalances?.nagad || 0) 
-    };
-
+    const fund = { cash: Number(openingBalances?.cash || 0), bank: Number(openingBalances?.bank || 0), bkash: Number(openingBalances?.bkash || 0), nagad: Number(openingBalances?.nagad || 0) };
     (allPayments || []).forEach(p => { if (fund[p.method as keyof typeof fund] !== undefined) fund[p.method as keyof typeof fund] += (p.amount || 0) });
     (allExpenses || []).forEach(e => { if (fund[e.method as keyof typeof fund] !== undefined) fund[e.method as keyof typeof fund] -= (e.amount || 0) });
     (allTransfers || []).forEach(t => {
@@ -290,6 +266,31 @@ export default function DashboardPage() {
     if (!students) return []
     return students.filter(s => s.isActive && s.paymentSystem === 'non-package' && (mealLogFilter.buildingId === 'all' || s.buildingId === mealLogFilter.buildingId))
   }, [students, mealLogFilter.buildingId])
+
+  const availableRooms = useMemo(() => {
+    if (!buildings) return []
+    let rooms: string[] = []
+    buildings.forEach(b => {
+      if (entryBuildingFilter === "all" || b.id === entryBuildingFilter) {
+        b.apartmentsDetail?.forEach((apt: any) => {
+          apt.rooms?.forEach((room: any) => { if (room.roomNo && !rooms.includes(room.roomNo)) rooms.push(room.roomNo) })
+        })
+      }
+    })
+    return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }, [buildings, entryBuildingFilter])
+
+  const filteredStudentsForEntry = useMemo(() => {
+    if (!students) return []
+    return students.filter(s => {
+      if (!s.isActive) return false
+      const matchesBuilding = entryBuildingFilter === "all" || s.buildingId === entryBuildingFilter
+      const matchesRoom = entryRoomFilter === "all" || s.roomNumber === entryRoomFilter
+      return matchesBuilding && matchesRoom
+    })
+  }, [students, entryBuildingFilter, entryRoomFilter])
+
+  const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver || !selectedStudent) return
@@ -314,22 +315,45 @@ export default function DashboardPage() {
         toast({ title: "Request Sent" })
       } else {
         await setDoc(doc(db, "payments", pId), pRecord)
+        
+        // Calculate totals for SMS mapping
+        const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
+        const now = new Date()
+        const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
+        const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (selectedStudent.monthlyRent || 0)
+        
+        const totalRentPaidPrev = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.seatAmount || (selectedStudent.paymentSystem === 'package' ? curr.amount : 0)), 0) || 0
+        const historicalRentDue = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
+        const rentDueAfter = Math.max(0, (historicalRentDue + generatedRent) - (totalRentPaidPrev + seatPaid))
+
+        const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0
+        const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+        const totalFoodPaidPrev = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || (selectedStudent.paymentSystem === 'non-package' ? curr.amount : 0)), 0) || 0
+        const foodBalanceAfter = (totalFoodPaidPrev + foodPaid) - (historicalFoodDue + generatedFoodCost)
+        
+        const totalPayableAfter = rentDueAfter + Math.max(0, -foodBalanceAfter)
+
         await updateDoc(doc(db, "students", selectedStudent.id), { paymentsHistory: arrayUnion({ ...pRecord, date: new Date().toISOString() }), advanceAmount: increment(Number(formData.addAdvanceAmount)), updatedAt: serverTimestamp() })
         
-        // SMS Trigger
+        // SMS Logic
         if (apiConfig?.apikey && templatesData?.templates) {
           const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
           if (paymentTemplate) {
             const hostelDisplayName = templatesData.hostelName || userBranch;
-            let msg = paymentTemplate.text.replaceAll('[নাম]', selectedStudent.name).replaceAll('[পরিমাণ]', totalAmt.toString()).replaceAll('[Hostel Name]', hostelDisplayName);
+            let msg = paymentTemplate.text
+              .replaceAll('[নাম]', selectedStudent.name)
+              .replaceAll('[পরিমাণ]', totalAmt.toString())
+              .replaceAll('[total_payable]', totalPayableAfter.toString())
+              .replaceAll('[food_balance]', Math.max(0, foodBalanceAfter).toString())
+              .replaceAll('[food_due]', Math.max(0, -foodBalanceAfter).toString())
+              .replaceAll('[Hostel Name]', hostelDisplayName);
             const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
             await logSMSToDatabase(selectedStudent.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
-            if (result.error === 417) toast({ variant: "destructive", title: "ব্যালেন্স নেই", description: "রিচার্জ করে নিন।" })
           }
         }
         
         setLastPayment({ ...pRecord, date: new Date() })
-        setTargetStudent(selectedStudent)
+        setTargetStudent({ ...selectedStudent, totalDue: totalPayableAfter })
         setIsReceiptOpen(true)
       }
       setIsIncomeDialogOpen(false)
@@ -347,15 +371,30 @@ export default function DashboardPage() {
       const hostelDisplayName = templatesData?.hostelName || userBranch;
       
       const promises = entries.map(async ([sId, count]) => {
-        const student = students?.find(s => s.id === sId)
-        if (!student) return
+        const s = students?.find(std => std.id === sId)
+        if (!s) return
         const countNum = Number(count); const cost = countNum * currentMealRate
+        
+        // Update DB
         await updateDoc(doc(db, "students", sId), { mealsHistory: arrayUnion({ month: monthLabel, totalMeals: countNum, perMealCost: currentMealRate, totalCost: cost, date: new Date().toISOString() }), updatedAt: serverTimestamp() })
 
+        // Recalculate food balance for SMS
+        const historicalFoodDue = Number(s.foodDueAmount) || 0
+        const generatedFoodCostPrev = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+        const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || (s.paymentSystem === 'non-package' ? curr.amount : 0)), 0) || 0
+        const foodBalanceAfter = totalFoodPaid - (historicalFoodDue + generatedFoodCostPrev + cost)
+
         if (apiConfig?.apikey && mealTemplate) {
-          let msg = mealTemplate.text.replaceAll('[নাম]', student.name).replaceAll('[মাস]', monthLabel).replaceAll('[meal_count]', count).replaceAll('[meal_bill]', cost.toString()).replaceAll('[Hostel Name]', hostelDisplayName);
-          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
-          await logSMSToDatabase(student.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
+          let msg = mealTemplate.text
+            .replaceAll('[নাম]', s.name)
+            .replaceAll('[মাস]', monthLabel)
+            .replaceAll('[meal_count]', count)
+            .replaceAll('[meal_bill]', cost.toString())
+            .replaceAll('[food_balance]', Math.max(0, foodBalanceAfter).toString())
+            .replaceAll('[food_due]', Math.max(0, -foodBalanceAfter).toString())
+            .replaceAll('[Hostel Name]', hostelDisplayName);
+          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg);
+          await logSMSToDatabase(s.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
         }
       })
       await Promise.all(promises)
@@ -365,30 +404,7 @@ export default function DashboardPage() {
     finally { setIsSubmitting(false) }
   }
 
-  const handleCreateExpense = async () => {
-    if (!expenseFormData.amount || !expenseFormData.expensePartyName) return
-    setIsSubmitting(true)
-    try {
-      const selectedB = buildings?.find(b => b.id === expenseFormData.buildingId)
-      const expenseId = doc(collection(db, "expenses")).id
-      const expenseData = { ...expenseFormData, amount: Number(expenseFormData.amount), branch: userBranch, buildingName: selectedB?.name || "General", updatedAt: serverTimestamp() }
-      if (userRole === 'Building Manager') {
-        const reqId = doc(collection(db, "managerRequests")).id
-        await setDoc(doc(db, "managerRequests", reqId), { ...expenseData, id: reqId, requestType: "expense", requestedBy: localStorage.getItem("somikoron_auth_id"), requestedByName: userName, createdAt: serverTimestamp() })
-        toast({ title: "Request Sent" })
-      } else {
-        await setDoc(doc(db, "expenses", expenseId), { ...expenseData, id: expenseId, createdAt: serverTimestamp() })
-        toast({ title: "Expense Recorded" })
-      }
-      setIsExpenseDialogOpen(false)
-    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
-    finally { setIsSubmitting(false) }
-  }
-
-  const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
   const combinedBalance = stats.fund.cash + stats.fund.bank + stats.fund.bkash + stats.fund.nagad
-
-  if (buildingsLoading || studentsLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
 
   return (
     <div className="space-y-8 pb-24 relative">
@@ -397,9 +413,6 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2"><SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mr-2 h-4 md:hidden" /><div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Dashboard</h1></div></div>
         <div className="ml-auto flex items-center gap-3">
           <Select value={timeRange} onValueChange={setTimeRange}><SelectTrigger className="w-32 h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="today">Today</SelectItem><SelectItem value="this_month">This Month</SelectItem></SelectContent></Select>
-          {userRole !== 'Building Manager' && pendingMgrRequests && pendingMgrRequests.length > 0 && (
-            <Link href="/manager-requests"><Button variant="outline" className="bg-orange-50 border-orange-200 text-orange-600 gap-2 rounded-xl h-10 px-4"><BellRing size={16}/> {pendingMgrRequests.length}</Button></Link>
-          )}
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
@@ -436,16 +449,12 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* FAB */}
       <div className="fixed bottom-8 right-8 z-50">
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button size="icon" className="h-14 w-14 rounded-full shadow-2xl bg-primary border-4 border-white"><MoreVertical size={32} /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 shadow-xl">
             {(userRole !== 'Building Manager' || canRequestIncome) && (
               <DropdownMenuItem onClick={() => setIsIncomeDialogOpen(true)} className="flex items-center gap-3 p-3 cursor-pointer text-primary font-bold"><Wallet size={20} /><span>New Income Entry</span></DropdownMenuItem>
-            )}
-            {(userRole !== 'Building Manager' || canRequestExpense) && (
-              <DropdownMenuItem onClick={() => setIsExpenseDialogOpen(true)} className="flex items-center gap-3 p-3 cursor-pointer text-destructive font-bold"><Receipt size={20} /><span>Record New Expense</span></DropdownMenuItem>
             )}
             <DropdownMenuItem onClick={() => setIsMealLogSelectorOpen(true)} className="flex items-center gap-3 p-3 cursor-pointer text-orange-600 font-bold"><Utensils size={20} /><span>Monthly Meal Log</span></DropdownMenuItem>
           </DropdownMenuContent>
@@ -494,7 +503,7 @@ export default function DashboardPage() {
               )}
               <div className="space-y-2"><Label className="text-xs">Add to Advance Pool</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} /></div>
             </div>
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label>Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={`${selectedReg?.id}-${s.name}`} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div>
+            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label>Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div>
           </div>
           <DialogFooter><Button onClick={handleCreatePayment} disabled={isSubmitting} className="w-full h-12 text-lg font-bold">{isSubmitting ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
         </DialogContent>
