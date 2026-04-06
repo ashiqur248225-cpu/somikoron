@@ -29,7 +29,8 @@ import {
   Wind,
   Construction,
   Bath,
-  Sparkles
+  Sparkles,
+  ChevronDown
 } from "lucide-react"
 import {
   Dialog,
@@ -47,6 +48,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase"
 import { collection, serverTimestamp, query, where } from "firebase/firestore"
@@ -78,6 +87,8 @@ interface ApartmentDetail {
   rooms: RoomDetail[];
 }
 
+const AVAILABLE_FACILITIES = ["AC", "Balcony", "Attached Washroom"];
+
 export default function BuildingsPage() {
   const { toast } = useToast()
   const router = useRouter()
@@ -102,7 +113,7 @@ export default function BuildingsPage() {
   const [filterBuilding, setBuildingFilter] = useState("all")
   const [filterRoomType, setRoomTypeFilter] = useState("all") 
   const [filterAvailability, setAvailabilityFilter] = useState("all")
-  const [filterFacility, setFacilityFilter] = useState("all")
+  const [filterFacilities, setFilterFacilities] = useState<string[]>([])
 
   const [newBuilding, setNewBuilding] = useState({ 
     name: "", 
@@ -172,13 +183,13 @@ export default function BuildingsPage() {
 
       const matchesAvailability = filterAvailability === "all" || (filterAvailability === "empty_only" && room.emptyCount > 0)
       
-      const matchesFacility = filterFacility === "all" || room.facilities?.includes(filterFacility)
+      const matchesFacilities = filterFacilities.length === 0 || filterFacilities.every(f => room.facilities?.includes(f))
 
-      return matchesSearch && matchesBuilding && matchesRoomType && matchesAvailability && matchesFacility
+      return matchesSearch && matchesBuilding && matchesRoomType && matchesAvailability && matchesFacilities
     })
-  }, [allFlattenedRooms, searchTerm, filterBuilding, filterRoomType, filterAvailability, filterFacility])
+  }, [allFlattenedRooms, searchTerm, filterBuilding, filterRoomType, filterAvailability, filterFacilities])
 
-  const isFiltering = searchTerm !== "" || filterBuilding !== "all" || filterRoomType !== "all" || filterAvailability !== "all" || filterFacility !== "all"
+  const isFiltering = searchTerm !== "" || filterBuilding !== "all" || filterRoomType !== "all" || filterAvailability !== "all" || filterFacilities.length > 0
 
   // Create Building Logic
   const addApartment = () => {
@@ -301,6 +312,14 @@ export default function BuildingsPage() {
     toast({ title: "Building Created", description: `Hierarchy saved under branch: ${newBuilding.branch}` })
   }
 
+  const toggleFacilityFilter = (facility: string) => {
+    setFilterFacilities(prev => 
+      prev.includes(facility) 
+        ? prev.filter(f => f !== facility) 
+        : [...prev, facility]
+    )
+  }
+
   return (
     <div className="space-y-8 pb-20">
       {/* Sticky App Bar */}
@@ -401,7 +420,7 @@ export default function BuildingsPage() {
                                 <div className="space-y-2">
                                   <Label className="text-[9px] uppercase font-bold text-muted-foreground">Room Facilities</Label>
                                   <div className="flex flex-wrap gap-4">
-                                    {['AC', 'Balcony', 'Attached Washroom'].map((fac) => (
+                                    {AVAILABLE_FACILITIES.map((fac) => (
                                       <div key={fac} className="flex items-center gap-1.5">
                                         <Checkbox 
                                           id={`fac-${aptIdx}-${roomIdx}-${fac}`}
@@ -523,15 +542,30 @@ export default function BuildingsPage() {
           <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
             <Sparkles size={10} /> Facilities
           </Label>
-          <Select value={filterFacility} onValueChange={setFacilityFilter}>
-            <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Any</SelectItem>
-              <SelectItem value="AC">AC</SelectItem>
-              <SelectItem value="Balcony">Balcony</SelectItem>
-              <SelectItem value="Attached Washroom">Attached Washroom</SelectItem>
-            </SelectContent>
-          </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full justify-between h-10 px-3 py-2 text-sm font-normal">
+                <span className="truncate">
+                  {filterFacilities.length === 0 ? "Any" : `${filterFacilities.length} Selected`}
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56">
+              <DropdownMenuLabel>Filter by Facilities</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {AVAILABLE_FACILITIES.map((fac) => (
+                <DropdownMenuCheckboxItem
+                  key={fac}
+                  checked={filterFacilities.includes(fac)}
+                  onCheckedChange={() => toggleFacilityFilter(fac)}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {fac}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         {isFiltering && (
           <Button 
@@ -542,7 +576,7 @@ export default function BuildingsPage() {
               setBuildingFilter("all")
               setRoomTypeFilter("all")
               setAvailabilityFilter("all")
-              setFacilityFilter("all")
+              setFilterFacilities([])
             }}
           >
             <XCircle size={14} /> Clear
@@ -626,7 +660,7 @@ export default function BuildingsPage() {
         // Default Building Overview View
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {buildings?.map((building: any) => (
-            <Card key={building.id} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all">
+            <Card key={building.id} className="border-none shadow-sm rounded-2xl overflow-hidden group hover:shadow-md transition-all">
               <div className="h-2 bg-primary w-full" />
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
