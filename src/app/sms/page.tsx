@@ -68,7 +68,16 @@ export default function SMSPanelPage() {
   // Templates Logic
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData, isLoading: templatesLoading } = useDoc(templatesRef)
-  const currentTemplates = templatesData?.templates || DEFAULT_TEMPLATES
+  
+  // Use local state for editing templates to avoid mutating read-only document data or triggering crash on null
+  const [localTemplates, setLocalTemplates] = useState<any[]>(DEFAULT_TEMPLATES)
+
+  // Initialize local templates when Firestore data is loaded
+  useEffect(() => {
+    if (templatesData?.templates) {
+      setLocalTemplates(templatesData.templates)
+    }
+  }, [templatesData])
 
   // Student Query
   const studentsQuery = useMemoFirebase(() => {
@@ -96,7 +105,7 @@ export default function SMSPanelPage() {
     setIsSubmitting(true)
     try {
       await setDoc(templatesRef, {
-        templates: currentTemplates,
+        templates: localTemplates,
         updatedAt: serverTimestamp(),
         updatedBy: userName
       })
@@ -141,7 +150,7 @@ export default function SMSPanelPage() {
   }
 
   const selectAll = () => {
-    if (selectedStudents.length === filteredStudents.length) {
+    if (selectedStudents.length === filteredStudents.length && filteredStudents.length > 0) {
       setSelectedStudents([])
     } else {
       setSelectedStudents(filteredStudents.map(s => s.id))
@@ -170,7 +179,7 @@ export default function SMSPanelPage() {
 
         <TabsContent value="broadcast" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Student Selector */}
+            {/* Recipient Selector */}
             <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-white rounded-3xl">
               <CardHeader className="bg-slate-50/50 border-b">
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -190,7 +199,7 @@ export default function SMSPanelPage() {
                       </SelectContent>
                     </Select>
                     <Button variant="outline" size="sm" onClick={selectAll} className="h-9 font-bold text-[10px] uppercase">
-                      {selectedStudents.length === filteredStudents.length ? 'Unselect All' : 'Select All Filtered'}
+                      {selectedStudents.length === filteredStudents.length && filteredStudents.length > 0 ? 'Unselect All' : 'Select All Filtered'}
                     </Button>
                   </div>
                 </div>
@@ -285,20 +294,6 @@ export default function SMSPanelPage() {
                   </Button>
                 </CardContent>
               </Card>
-
-              <Card className="border-none shadow-sm bg-slate-50 rounded-3xl p-6 border border-slate-100">
-                <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-4">Quick Hints</h4>
-                <ul className="space-y-3 text-[10px] font-medium text-slate-500">
-                  <li className="flex gap-2">
-                    <div className="h-1 w-1 rounded-full bg-primary mt-1.5 shrink-0" />
-                    <span>আপনি চাইলে নির্দিষ্ট বিল্ডিং সিলেক্ট করে শুধু তাদের মেসেজ পাঠাতে পারেন।</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <div className="h-1 w-1 rounded-full bg-primary mt-1.5 shrink-0" />
-                    <span>বাংলা মেসেজের ক্ষেত্রে প্রতি ৭০ ক্যারেক্টারে ১টি SMS হিসেবে চার্জ হতে পারে।</span>
-                  </li>
-                </ul>
-              </Card>
             </div>
           </div>
         </TabsContent>
@@ -311,7 +306,7 @@ export default function SMSPanelPage() {
             </CardHeader>
             <CardContent className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {currentTemplates.map((template: any, idx: number) => (
+                {localTemplates.map((template: any, idx: number) => (
                   <div key={template.id} className="space-y-3 p-6 rounded-3xl bg-slate-50 border border-slate-100 group hover:border-primary/20 transition-all">
                     <div className="flex justify-between items-center">
                       <Label className="text-xs font-black uppercase tracking-wider text-primary">{template.label}</Label>
@@ -320,18 +315,18 @@ export default function SMSPanelPage() {
                     <Textarea 
                       value={template.text}
                       onChange={(e) => {
-                        const newT = [...currentTemplates]
-                        newT[idx].text = e.target.value
-                        templatesData!.templates = newT // Local state sync for demo
+                        const newT = [...localTemplates]
+                        newT[idx] = { ...newT[idx], text: e.target.value }
+                        setLocalTemplates(newT)
                       }}
                       className="min-h-[100px] bg-white border-slate-200 text-sm leading-relaxed"
                     />
                     <div className="flex gap-2 flex-wrap">
                       {['[নাম]', '[পরিমাণ]', '[বকেয়া]', '[রুম]', '[সিট]', '[Hostel Name]'].map(tag => (
                         <Badge key={tag} variant="secondary" className="text-[8px] cursor-pointer hover:bg-primary hover:text-white" onClick={() => {
-                          const newT = [...currentTemplates]
-                          newT[idx].text += ` ${tag}`
-                          templatesData!.templates = newT
+                          const newT = [...localTemplates]
+                          newT[idx] = { ...newT[idx], text: newT[idx].text + ` ${tag}` }
+                          setLocalTemplates(newT)
                         }}>{tag}</Badge>
                       ))}
                     </div>
