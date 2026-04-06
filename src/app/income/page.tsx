@@ -489,19 +489,43 @@ export default function IncomeHistoryPage() {
               <div className="space-y-1"><Label className="text-[10px] font-bold">Room</Label><Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}><SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForEntry.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="space-y-2"><Label>Select Resident</Label><Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}><SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger><SelectContent>{filteredStudentsForEntry.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}</SelectContent></Select></div>
+            
             {selectedStudent && (
-              <div className="bg-primary/5 p-4 rounded-xl space-y-3 border border-primary/10">
+              <div className="bg-primary/5 p-4 rounded-xl space-y-3 border border-primary/10 animate-in fade-in zoom-in-95 duration-200">
+                <h4 className="text-[10px] font-bold uppercase text-primary flex items-center gap-1.5"><Calculator size={12}/> Resident Ledger Stats</h4>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-white p-2 rounded border shadow-sm"><p className="text-[8px] uppercase font-bold">Monthly Rent</p><p className="text-sm font-bold">৳{selectedStudent.monthlyRent}</p></div>
-                  <div className="bg-white p-2 rounded border shadow-sm"><p className="text-[8px] uppercase font-bold text-destructive">Overall Due</p><p className="text-sm font-bold text-destructive">৳{financialStats.totalDue.toLocaleString()}</p></div>
+                  <div className="bg-white p-2 rounded border shadow-sm">
+                    <p className="text-[8px] uppercase font-bold text-muted-foreground">Monthly Rent</p>
+                    <p className="text-sm font-bold text-slate-800">৳{selectedStudent.monthlyRent}</p>
+                  </div>
+                  <div className={cn("bg-white p-2 rounded border shadow-sm", financialStats.rentDue > 0 ? "border-destructive/30" : "")}>
+                    <p className="text-[8px] uppercase font-bold text-destructive">Overall Rent Due</p>
+                    <p className="text-sm font-bold text-destructive">৳{financialStats.rentDue.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-white p-2 rounded border shadow-sm">
+                    <p className="text-[8px] uppercase font-bold text-success">Advance Pool</p>
+                    <p className="text-sm font-bold text-success">৳{(selectedStudent.advanceAmount || 0).toLocaleString()}</p>
+                  </div>
+                  {selectedStudent.paymentSystem === 'non-package' && (
+                    <div className={cn("bg-white p-2 rounded border shadow-sm", financialStats.foodBalance < 0 ? "border-destructive/30" : "border-success/30")}>
+                      <p className={cn("text-[8px] uppercase font-bold", financialStats.foodBalance < 0 ? "text-destructive" : "text-success")}>Food Balance</p>
+                      <p className={cn("text-sm font-bold", financialStats.foodBalance < 0 ? "text-destructive" : "text-success")}>৳{financialStats.foodBalance.toLocaleString()}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="text-[8px] h-4 uppercase bg-white">Plan: {selectedStudent.paymentSystem}</Badge>
+                  <Badge variant="outline" className="text-[8px] h-4 uppercase bg-white">Building: {selectedStudent.buildingName}</Badge>
                 </div>
               </div>
             )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{"2024,2025,2026".split(',').map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
+              <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Collection Amounts</Label>
               {selectedStudent?.paymentSystem === 'package' ? (
                 <div className="space-y-2"><Label className="text-xs">Amount Received (৳)</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} /></div>
               ) : (
