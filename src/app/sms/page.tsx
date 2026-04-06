@@ -118,11 +118,16 @@ export default function SMSPanelPage() {
     const k = key || apiConfig.apikey
     if (!k) return
     setIsRefreshingBalance(true)
-    const result = await getSMSBalance(k)
-    if (result.error === 0) {
-      setSmsBalance(result.data.balance)
+    try {
+      const result = await getSMSBalance(k)
+      if (result.error === 0) {
+        setSmsBalance(result.data.balance)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsRefreshingBalance(false)
     }
-    setIsRefreshingBalance(false)
   }
 
   // Student Query
@@ -154,7 +159,6 @@ export default function SMSPanelPage() {
     }
     setIsSubmitting(true)
     try {
-      // Clean data before saving
       const configToSave = {
         apikey: apiConfig.apikey.trim(),
         senderid: apiConfig.senderid.trim()
@@ -204,8 +208,6 @@ export default function SMSPanelPage() {
     setIsSubmitting(true)
     try {
       const selectedPhones = students?.filter(s => selectedStudents.includes(s.id)).map(s => s.phone) || []
-      
-      // Alpha Net allows comma separated numbers for campaign
       const toNumbers = selectedPhones.join(',')
       const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, toNumbers, customMessage)
 
@@ -548,7 +550,7 @@ export default function SMSPanelPage() {
                   Send Birthday Wishes
                 </Button>
               </CardContent>
-            </div>
+            </Card>
           </div>
         </TabsContent>
 
