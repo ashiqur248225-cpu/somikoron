@@ -28,16 +28,21 @@ export default function HostelRegistrationPage() {
     branchAddress: ""
   })
 
+  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 11)
+    setFormData({ ...formData, adminPhone: val })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!formData.adminName || !formData.adminPhone || !formData.adminPassword || !formData.branchName) {
-      toast({ variant: "destructive", title: "Error", description: "All fields are required." })
+    if (!formData.adminName || !formData.adminPhone || !formData.adminPassword || !formData.branchName || !formData.branchAddress) {
+      toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "অনুগ্রহ করে সব তথ্য সম্পূর্ণভাবে পূরণ করুন।" })
       return
     }
 
     if (formData.adminPhone.length !== 11) {
-      toast({ variant: "destructive", title: "Invalid Phone", description: "Mobile number must be 11 digits." })
+      toast({ variant: "destructive", title: "ভুল মোবাইল নাম্বার", description: "ফোন নাম্বার অবশ্যই ১১ সংখ্যার হতে হবে।" })
       return
     }
 
@@ -126,7 +131,7 @@ export default function HostelRegistrationPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Mobile Number (মোবাইল)</Label>
-                  <Input required maxLength={11} value={formData.adminPhone} onChange={e => setFormData({...formData, adminPhone: e.target.value})} placeholder="01XXXXXXXXX" className="bg-secondary/20 border-none h-11" />
+                  <Input required type="tel" value={formData.adminPhone} onChange={handlePhoneInput} placeholder="01XXXXXXXXX" className="bg-secondary/20 border-none h-11" />
                 </div>
                 <div className="space-y-2">
                   <Label>Password (পাসওয়ার্ড)</Label>
@@ -163,7 +168,7 @@ export default function HostelRegistrationPage() {
         </form>
 
         <p className="text-center text-xs text-muted-foreground">
-          By registering, you agree to our terms and conditions.
+          By registering, you agree to our terms and conditions and ensure all fields are filled correctly.
         </p>
       </div>
     </div>

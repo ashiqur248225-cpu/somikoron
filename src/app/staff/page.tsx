@@ -35,7 +35,7 @@ import { collection, serverTimestamp, doc, setDoc, deleteDoc, query, where } fro
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/tabs"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
@@ -103,6 +103,11 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
     return Math.random().toString(36).slice(-8);
   }
 
+  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 11)
+    setFormData({ ...formData, phone: val })
+  }
+
   const handleOpenAddDialog = () => {
     setFormData({
       name: "",
@@ -121,8 +126,13 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
   }
 
   const handleCreate = async () => {
-    if (!formData.name || !formData.phone || (formData.role !== 'Admin' && !formData.branch)) {
-      toast({ variant: "destructive", title: "Error", description: "Required fields are missing." })
+    if (!formData.name || !formData.phone || !formData.address || (formData.role !== 'Admin' && !formData.branch)) {
+      toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "অনুগ্রহ করে সব তথ্য সম্পূর্ণভাবে পূরণ করুন।" })
+      return
+    }
+
+    if (formData.phone.length !== 11) {
+      toast({ variant: "destructive", title: "ভুল মোবাইল নাম্বার", description: "ফোন নাম্বার অবশ্যই ১১ সংখ্যার হতে হবে।" })
       return
     }
     
@@ -268,12 +278,12 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
               <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><UserCircle size={14}/> Basic Information</h3>
               <div className="space-y-2">
                 <Label>Full Name</Label>
-                <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Full Name" />
+                <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Full Name" />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Phone Number</Label>
-                  <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="01XXXXXXXXX" />
+                  <Input required type="tel" value={formData.phone} onChange={handlePhoneInput} placeholder="01XXXXXXXXX (১১ ডিজিট)" />
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">System Password <Lock size={10}/></Label>
@@ -288,7 +298,7 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
               </div>
               <div className="space-y-2">
                 <Label>Address</Label>
-                <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Current Address" />
+                <Input required value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Current Address" />
               </div>
             </div>
 
@@ -355,7 +365,7 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
 
               <div className="space-y-2">
                 <Label>Monthly Salary (৳)</Label>
-                <Input type="number" value={formData.monthlySalary} onChange={e => setFormData({...formData, monthlySalary: e.target.value})} placeholder="0.00" />
+                <Input required type="number" value={formData.monthlySalary} onChange={e => setFormData({...formData, monthlySalary: e.target.value})} placeholder="0.00" />
               </div>
             </div>
 

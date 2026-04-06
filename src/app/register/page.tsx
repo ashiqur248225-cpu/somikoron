@@ -79,6 +79,11 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
   const selectedRoom = roomsInBuilding.find((r: any) => r.roomNo === formData.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
+  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>, field: 'phone' | 'parentPhone') => {
+    const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 11)
+    setFormData({ ...formData, [field]: val })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -87,8 +92,30 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
       return
     }
 
-    if (!formData.name || !formData.phone || !formData.parentPhone) {
-      toast({ variant: "destructive", title: "Error", description: "Required fields are missing." })
+    // Strict Field Validation
+    const requiredFields = [
+      'name', 'fatherName', 'motherName', 'dob', 'bloodGroup', 'phone', 
+      'parentPhone', 'district', 'upazila', 'postOffice', 'village', 
+      'institute', 'group', 'occupation', 'message'
+    ]
+
+    for (const field of requiredFields) {
+      if (!formData[field as keyof typeof formData]) {
+        toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "অনুগ্রহ করে ফর্মে থাকা প্রতিটি তথ্য প্রদান করুন।" })
+        return
+      }
+    }
+
+    if (formData.type === 'old') {
+      if (!formData.buildingId || !formData.roomNumber || !formData.seatNumber) {
+        toast({ variant: "destructive", title: "রুমের তথ্য প্রয়োজন", description: "পুরাতন স্টুডেন্টদের জন্য বর্তমান বিল্ডিং ও রুম সিলেক্ট করা বাধ্যতামূলক।" })
+        return
+      }
+    }
+
+    // Phone Number Validation
+    if (formData.phone.length !== 11 || formData.parentPhone.length !== 11) {
+      toast({ variant: "destructive", title: "ভুল মোবাইল নাম্বার", description: "ফোন নাম্বার অবশ্যই ১১ সংখ্যার হতে হবে।" })
       return
     }
 
@@ -207,11 +234,11 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Personal Phone (নিজস্ব মোবাইল)</Label>
-                  <Input required maxLength={11} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="01XXXXXXXXX" className="border-2 border-slate-200 h-11" />
+                  <Input required type="tel" value={formData.phone} onChange={e => handlePhoneInput(e, 'phone')} placeholder="01XXXXXXXXX (১১ ডিজিট)" className="border-2 border-slate-200 h-11" />
                 </div>
                 <div className="space-y-2">
                   <Label>Guardian's Phone (অভিভাগকের মোবাইল)</Label>
-                  <Input required maxLength={11} value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} placeholder="জরুরী যোগাযোগের জন্য" className="border-2 border-slate-200 h-11" />
+                  <Input required type="tel" value={formData.parentPhone} onChange={e => handlePhoneInput(e, 'parentPhone')} placeholder="১১ ডিজিটের সঠিক নাম্বার দিন" className="border-2 border-slate-200 h-11" />
                 </div>
               </div>
             </CardContent>
@@ -264,7 +291,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
                     <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
                   </Select>
                 ) : (
-                  <Input value={formData.group} onChange={e => setFormData({...formData, group: e.target.value})} placeholder="আপনার পদবী লিখুন" className="border-2 border-slate-200 h-11" />
+                  <Input required value={formData.group} onChange={e => setFormData({...formData, group: e.target.value})} placeholder="আপনার পদবী লিখুন" className="border-2 border-slate-200 h-11" />
                 )}
               </div>
             </CardContent>
@@ -307,7 +334,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
 
           <div className="space-y-2">
             <Label className="font-bold ml-1">Additional Message (অতিরিক্ত কিছু বলার থাকলে)</Label>
-            <Textarea value={formData.message} onChange={e => setFormData({...formData, message: e.target.value})} placeholder="আপনার কোনো বিশেষ অনুরোধ থাকলে এখানে লিখুন..." className="border-2 border-slate-200 min-h-[100px] rounded-2xl" />
+            <Textarea required value={formData.message} onChange={e => setFormData({...formData, message: e.target.value})} placeholder="আপনার কোনো বিশেষ অনুরোধ থাকলে এখানে লিখুন..." className="border-2 border-slate-200 min-h-[100px] rounded-2xl" />
           </div>
 
           <Button type="submit" className="w-full h-16 text-2xl font-black rounded-3xl shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={isSubmitting}>
@@ -317,7 +344,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
         </form>
         
         <p className="text-center text-xs text-muted-foreground font-medium pb-8">
-          By submitting this form, you certify that the information provided is correct.
+          By submitting this form, you certify that the information provided is correct and all fields are filled.
         </p>
       </div>
     </div>
