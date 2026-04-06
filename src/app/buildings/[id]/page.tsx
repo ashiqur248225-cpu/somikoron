@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, updateDoc, deleteDoc, serverTimestamp, collection, query, where } from "firebase/firestore"
@@ -16,7 +16,7 @@ import {
   UserMinus, Trash2, Edit, Loader2, Plus, CheckCircle2, 
   XCircle, Zap, LayoutGrid, Calculator, TrendingUp, TrendingDown,
   ArrowUpRight, ArrowDownRight, Banknote, Calendar, BarChart3,
-  CircleDollarSign, Percent, Wind, Construction, Bath
+  CircleDollarSign, Percent, ChevronLeft, MoreVertical
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -39,6 +39,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog"
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
@@ -79,6 +85,15 @@ export default function BuildingDetailsPage({
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+
+  const [userRole, setUserRole] = useState("")
+  const [userName, setUserName] = useState("")
+
+  useEffect(() => {
+    setUserRole(localStorage.getItem("user_role") || "Manager")
+    setUserName(localStorage.getItem("user_name") || "User")
+  }, [])
 
   const buildingRef = useMemoFirebase(() => id ? doc(db, "buildings", id) : null, [db, id])
   const { data: building, isLoading } = useDoc(buildingRef)
@@ -243,8 +258,36 @@ export default function BuildingDetailsPage({
   }
 
   return (
-    <div className="space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-8 pb-20 relative">
+      {/* Mobile App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
+          <ChevronLeft size={24} />
+        </Button>
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-bold truncate">{building.name}</h1>
+        </div>
+        <div className="flex items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreVertical size={20} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
+              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                <Edit size={16} className="text-primary" /> Edit Building
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
+                <Trash2 size={16} /> Delete Building
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Desktop Header */}
+      <div className="hidden md:flex justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
           <div className="bg-primary/10 p-3 rounded-xl text-primary"><Building2 size={32} /></div>
           <div>
@@ -257,7 +300,9 @@ export default function BuildingDetailsPage({
         <div className="flex gap-2">
            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
              <DialogTrigger asChild>
-               <Button variant="outline" className="gap-2"><Edit size={16} /> Edit Building</Button>
+               <Button variant="outline" className="gap-2 h-11 px-6 rounded-xl font-bold text-slate-700">
+                 <Edit size={18} /> Edit Building
+               </Button>
              </DialogTrigger>
              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
@@ -362,36 +407,40 @@ export default function BuildingDetailsPage({
                    </div>
                 </div>
                 <DialogFooter>
-                  <Button onClick={handleUpdate} disabled={isUpdating} className="w-full">
+                  <Button onClick={handleUpdate} disabled={isUpdating} className="w-full h-12 text-lg font-bold">
                     {isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}
                   </Button>
                 </DialogFooter>
              </DialogContent>
            </Dialog>
 
-           <AlertDialog>
+           <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
              <AlertDialogTrigger asChild>
-               <Button variant="destructive" size="icon"><Trash2 size={16}/></Button>
+               <Button variant="destructive" size="icon" className="h-11 w-11 rounded-xl shadow-lg shadow-destructive/20">
+                 <Trash2 size={18}/>
+               </Button>
              </AlertDialogTrigger>
              <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Building?</AlertDialogTitle>
-                  <AlertDialogDescription>Hierarchy Apartment &rarr; Room &rarr; Seat will be lost.</AlertDialogDescription>
+                  <AlertDialogDescription>Hierarchy Apartment &rarr; Room &rarr; Seat will be lost. This action is permanent.</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDelete} className="bg-destructive">Delete</AlertDialogAction>
+                  <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 font-bold">
+                    {isUpdating ? <Loader2 className="animate-spin" /> : "Delete Permanently"}
+                  </AlertDialogAction>
                 </AlertDialogFooter>
              </AlertDialogContent>
            </AlertDialog>
-           <Button variant="ghost" onClick={() => router.push("/buildings")}>Back</Button>
+           <Button variant="ghost" onClick={() => router.push("/buildings")} className="h-11 rounded-xl px-6">Back</Button>
         </div>
       </div>
 
       {/* Summary Analytics Cards - Arranged 3 then 2 */}
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500">
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl">
             <CardContent className="pt-6">
               <div className="flex justify-between items-start">
                 <div>
@@ -403,7 +452,7 @@ export default function BuildingDetailsPage({
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-primary">
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-primary rounded-2xl">
             <CardContent className="pt-6">
               <div className="flex justify-between items-start">
                 <div>
@@ -415,7 +464,7 @@ export default function BuildingDetailsPage({
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500">
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl">
             <CardContent className="pt-6">
               <div className="flex justify-between items-start">
                 <div>
@@ -429,7 +478,7 @@ export default function BuildingDetailsPage({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-success">
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl">
             <CardContent className="pt-6">
               <div className="flex justify-between items-start">
                 <div>
@@ -442,7 +491,7 @@ export default function BuildingDetailsPage({
           </Card>
 
           <Card className={cn(
-            "border-none shadow-sm bg-white border-l-4",
+            "border-none shadow-sm bg-white border-l-4 rounded-2xl",
             revenueStats.netProfit >= 0 ? "border-l-success" : "border-l-destructive"
           )}>
             <CardContent className="pt-6">
@@ -572,7 +621,7 @@ export default function BuildingDetailsPage({
 
           {/* Occupancy Summary Stats */}
           <div className="grid grid-cols-1 gap-4">
-            <Card className="bg-primary/5 border-none shadow-none">
+            <Card className="bg-primary/5 border-none shadow-none rounded-2xl">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-center">
                   <div><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Total Seats</p><p className="text-2xl font-black text-slate-800">{building.totalSeats}</p></div>
@@ -580,7 +629,7 @@ export default function BuildingDetailsPage({
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-success/5 border-none shadow-none">
+            <Card className="bg-success/5 border-none shadow-none rounded-2xl">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-center">
                   <div><p className="text-[10px] text-success uppercase font-bold tracking-widest">Occupied</p><p className="text-2xl font-black text-success">{building.occupiedSeats}</p></div>
@@ -588,7 +637,7 @@ export default function BuildingDetailsPage({
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-destructive/5 border-none shadow-none">
+            <Card className="bg-destructive/5 border-none shadow-none rounded-2xl">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-center">
                   <div><p className="text-[10px] text-destructive uppercase font-bold tracking-widest">Empty/Lost</p><p className="text-2xl font-black text-destructive">{building.emptySeats}</p></div>
@@ -622,7 +671,7 @@ export default function BuildingDetailsPage({
              
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ml-4">
                 {apt.rooms?.map((room: any, rIdx: number) => (
-                  <Card key={`${room.roomNo}-${rIdx}`} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all">
+                  <Card key={`${room.roomNo}-${rIdx}`} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all rounded-2xl">
                     <div className="h-1.5 bg-primary/20 w-full" />
                     <CardHeader className="pb-2">
                       <div className="flex justify-between items-start">
