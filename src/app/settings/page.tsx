@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, setDoc, serverTimestamp, collection, query, where, orderBy, limit } from "firebase/firestore"
+import { doc, setDoc, serverTimestamp, collection, query, where, limit } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -46,7 +46,7 @@ export default function SettingsPage() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [rate, setRate] = useState("")
   const [rules, setRules] = useState("")
-  const [userBranch, setUserBranch] = useState("Main Branch")
+  const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
   const [isFoodHistoryOpen, setIsFoodHistoryOpen] = useState(false)
   
@@ -78,14 +78,13 @@ export default function SettingsPage() {
   const rulesRef = useMemoFirebase(() => doc(db, "configs", "hostelRules"), [db])
   const { data: rulesData, isLoading: isRulesLoading } = useDoc(rulesRef)
 
-  // Food Cost History Query - Fetched directly from expenses now
+  // Food Cost History Query - Simplified to avoid index requirements during prototyping
   const foodHistoryQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(
       collection(db, "expenses"), 
       where("branch", "==", userBranch),
       where("category", "==", "food"),
-      orderBy("expenseDate", "desc"),
       limit(500)
     )
   }, [db, userBranch])
@@ -97,10 +96,12 @@ export default function SettingsPage() {
     const end = new Date(foodEndDate)
     end.setHours(23, 59, 59)
 
-    return rawFoodHistory.filter(item => {
-      const itemDate = new Date(item.expenseDate)
-      return itemDate >= start && itemDate <= end
-    })
+    return rawFoodHistory
+      .filter(item => {
+        const itemDate = new Date(item.expenseDate)
+        return itemDate >= start && itemDate <= end
+      })
+      .sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime())
   }, [rawFoodHistory, foodStartDate, foodEndDate])
 
   useEffect(() => {
@@ -312,8 +313,8 @@ export default function SettingsPage() {
                   <Button variant="outline" className="flex-1 h-9 gap-2 font-bold uppercase text-[10px]" onClick={handlePrintFoodHistory}>
                     <Printer size={14} /> Print Report
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => {
-                    setFoodStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+                  <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => {
+                    setFoodStartDate("2020-01-01"); // Set to a very early date to catch all
                     setFoodEndDate(new Date().toISOString().split('T')[0]);
                   }}>
                     <XCircle size={16} />
@@ -333,28 +334,32 @@ export default function SettingsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredFoodHistory.map((item) => {
-                        const totalMeals = Number(item.totalMeals || 0)
-                        const amount = Number(item.amount || 0)
-                        const perMealPrice = totalMeals > 0 ? (amount / totalMeals).toFixed(2) : "N/A"
-                        
-                        return (
-                          <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                            <TableCell className="font-medium">{new Date(item.expenseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
-                            <TableCell>
-                              {totalMeals > 0 ? (
-                                <Badge variant="secondary" className="bg-orange-50 text-orange-700 hover:bg-orange-100 border-none font-bold">{totalMeals} Meals</Badge>
-                              ) : <span className="text-muted-foreground italic text-xs">Not set</span>}
-                            </TableCell>
-                            <TableCell className="font-bold text-destructive">৳{amount.toLocaleString()}</TableCell>
-                            <TableCell className="text-right font-black text-primary">
-                              {perMealPrice !== "N/A" ? `৳${perMealPrice}` : perMealPrice}
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                      {filteredFoodHistory.length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No food expense records found for selected period.</TableCell></TableRow>
+                      {isFoodHistoryLoading ? (
+                        <TableRow><TableCell colSpan={4} className="text-center py-12"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
+                      ) : (
+                        filteredFoodHistory.map((item) => {
+                          const totalMeals = Number(item.totalMeals || 0)
+                          const amount = Number(item.amount || 0)
+                          const perMealPrice = totalMeals > 0 ? (amount / totalMeals).toFixed(2) : "N/A"
+                          
+                          return (
+                            <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                              <TableCell className="font-medium">{new Date(item.expenseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
+                              <TableCell>
+                                {totalMeals > 0 ? (
+                                  <Badge variant="secondary" className="bg-orange-50 text-orange-700 hover:bg-orange-100 border-none font-bold">{totalMeals} Meals</Badge>
+                                ) : <span className="text-muted-foreground italic text-xs">Not set</span>}
+                              </TableCell>
+                              <TableCell className="font-bold text-destructive">৳{amount.toLocaleString()}</TableCell>
+                              <TableCell className="text-right font-black text-primary">
+                                {perMealPrice !== "N/A" ? `৳${perMealPrice}` : perMealPrice}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
+                      )}
+                      {!isFoodHistoryLoading && filteredFoodHistory.length === 0 && (
+                        <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No food expense records found for selected period. Check if you have added expenses with category "food".</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
