@@ -629,7 +629,7 @@ export default function SMSPanelPage() {
                 <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
                   <div className="flex justify-between items-center">
                     <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Active Template</Label>
-                    <Badge className="bg-primary/10 text-primary border-none text-[8px]">AUTO-GEN</Badge>
+                    <Badge className="bg-primary/10 text-primary border-none text-[8px]">AUTO-GEN (ID: birthday)</Badge>
                   </div>
                   <p className="text-xs leading-relaxed text-slate-600 font-medium italic bg-white p-3 rounded-lg border border-dashed border-primary/20">
                     "{localTemplates.find(t => t.id === 'birthday')?.text}"
@@ -739,7 +739,7 @@ export default function SMSPanelPage() {
                     <div className="flex justify-between items-center">
                       <Label className="text-xs font-black uppercase tracking-wider text-primary">{template.label}</Label>
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[8px] bg-white">#{template.id}</Badge>
+                        <Badge variant="outline" className="text-[8px] bg-white">ID: {template.id}</Badge>
                         {template.id.startsWith('custom_') && (
                           <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-destructive/5" onClick={() => handleRemoveTemplate(template.id)}>
                             <Trash2 size={12}/>
