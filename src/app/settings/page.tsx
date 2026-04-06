@@ -78,7 +78,7 @@ export default function SettingsPage() {
   const rulesRef = useMemoFirebase(() => doc(db, "configs", "hostelRules"), [db])
   const { data: rulesData, isLoading: isRulesLoading } = useDoc(rulesRef)
 
-  // Food Cost History Query
+  // Food Cost History Query - directo filter for Food category
   const foodHistoryQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(
@@ -128,8 +128,8 @@ export default function SettingsPage() {
       totalCost += cost
       totalMeals += meals
 
-      if (cost > highestDay.amount) highestDay = item
-      if (cost < lowestDay.amount && cost > 0) lowestDay = item
+      if (cost > (highestDay?.amount || 0)) highestDay = item
+      if (cost < (lowestDay?.amount || Infinity) && cost > 0) lowestDay = item
 
       if (meals > 0) {
         const currentRate = cost / meals
@@ -282,47 +282,52 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* COMPREHENSIVE FOOD COST BREAKDOWN REPORT (Only visible in print) */}
+      {/* COMPREHENSIVE OFFICIAL FOOD COST HISTORY REPORT (Only visible in print) */}
       <div className="print-only print-report-container">
-        <div className="report-header text-center pb-6">
-          <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">SOMIKORON HOSTEL</h1>
-          <p className="text-sm font-bold text-slate-600">{userBranch} Branch Ledger</p>
+        <div className="report-header text-center">
+          <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">SOMIKORON HOSTEL LEDGER</h1>
+          <p className="text-sm font-bold text-slate-600">{userBranch} Branch</p>
           <div className="mt-4 border-y-2 border-primary/20 py-3">
-            <h2 className="text-xl font-bold text-slate-800 uppercase tracking-widest">Food Cost Breakdown Report</h2>
-            <p className="text-[10pt] font-medium text-muted-foreground mt-1">Report Period: <b>{foodStartDate}</b> to <b>{foodEndDate}</b></p>
+            <h2 className="text-lg font-black text-slate-800 uppercase tracking-widest">DAILY FOOD COST HISTORY REPORT</h2>
+            <p className="text-[9pt] font-medium text-muted-foreground mt-1">
+              Period: <b>{new Date(foodStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b> to <b>{new Date(foodEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b>
+            </p>
           </div>
         </div>
 
-        {/* Top Summary Stats for Print */}
-        <div className="grid grid-cols-4 gap-4 mb-8">
-          <div className="p-4 bg-slate-50 border rounded-xl space-y-1">
-            <p className="text-[8pt] uppercase font-bold text-muted-foreground tracking-widest">Total Food Cost</p>
-            <p className="text-lg font-black text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</p>
+        {/* Top Summary Row for Print */}
+        <div className="grid grid-cols-3 gap-4 my-6">
+          <div className="p-3 bg-slate-50 border rounded-xl flex flex-col items-center">
+            <p className="text-[7pt] uppercase font-bold text-muted-foreground tracking-widest">Total Food Cost</p>
+            <p className="text-sm font-black text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</p>
           </div>
-          <div className="p-4 bg-slate-50 border rounded-xl space-y-1">
-            <p className="text-[8pt] uppercase font-bold text-muted-foreground tracking-widest">Total Meals Served</p>
-            <p className="text-lg font-black text-slate-800">{foodAnalytics.totalMeals}</p>
+          <div className="p-3 bg-slate-50 border rounded-xl flex flex-col items-center">
+            <p className="text-[7pt] uppercase font-bold text-muted-foreground tracking-widest">Total Meals</p>
+            <p className="text-sm font-black text-slate-800">{foodAnalytics.totalMeals}</p>
           </div>
-          <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-1">
-            <p className="text-[8pt] uppercase font-bold text-primary tracking-widest">Avg Cost / Meal</p>
-            <p className="text-lg font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</p>
-          </div>
-          <div className="p-4 bg-slate-50 border rounded-xl space-y-1">
-            <p className="text-[8pt] uppercase font-bold text-muted-foreground tracking-widest">Days Observed</p>
-            <p className="text-lg font-black text-slate-800">{foodAnalytics.totalDays} Days</p>
+          <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl flex flex-col items-center">
+            <p className="text-[7pt] uppercase font-bold text-primary tracking-widest">Avg Cost/Meal</p>
+            <p className="text-sm font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</p>
           </div>
         </div>
 
-        {/* Detailed Table for Print */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="text-[8pt] text-slate-600 font-medium">
+            <p>Highest Cost Day: <b>{foodAnalytics.highestDay?.expenseDate} (৳{foodAnalytics.highestDay?.amount.toLocaleString()})</b></p>
+          </div>
+          <div className="text-[8pt] text-slate-600 font-medium text-right">
+            <p>Lowest Cost Day: <b>{foodAnalytics.lowestDay?.expenseDate} (৳{foodAnalytics.lowestDay?.amount.toLocaleString()})</b></p>
+          </div>
+        </div>
+
+        {/* Main Printable Table */}
         <Table className="border w-full text-[9pt]">
           <TableHeader>
             <TableRow className="bg-slate-100/80">
-              <TableHead className="border font-bold">Date</TableHead>
-              <TableHead className="border font-bold">Branch</TableHead>
-              <TableHead className="border font-bold text-center">Meals</TableHead>
-              <TableHead className="border font-bold text-right">Cost (৳)</TableHead>
-              <TableHead className="border font-bold text-right">Avg / Meal</TableHead>
-              <TableHead className="border font-bold">Spent By</TableHead>
+              <TableHead className="border font-bold text-slate-900 h-10">Date</TableHead>
+              <TableHead className="border font-bold text-slate-900 text-center h-10">Total Meals</TableHead>
+              <TableHead className="border font-bold text-slate-900 text-right h-10">Total Food Cost</TableHead>
+              <TableHead className="border font-bold text-slate-900 text-right h-10">Avg Cost/Meal</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -332,60 +337,42 @@ export default function SettingsPage() {
               const perMealPrice = totalMeals > 0 ? (amount / totalMeals).toFixed(2) : "N/A"
               return (
                 <TableRow key={item.id}>
-                  <TableCell className="border">{item.expenseDate}</TableCell>
-                  <TableCell className="border text-[8pt]">{item.branch}</TableCell>
-                  <TableCell className="border text-center font-bold">{totalMeals || '-'}</TableCell>
-                  <TableCell className="border text-right font-bold">৳{amount.toLocaleString()}</TableCell>
-                  <TableCell className="border text-right font-black">৳{perMealPrice}</TableCell>
-                  <TableCell className="border text-[8pt]">{item.expensePartyName}</TableCell>
+                  <TableCell className="border h-9">{new Date(item.expenseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
+                  <TableCell className="border text-center h-9 font-bold">{totalMeals || '-'}</TableCell>
+                  <TableCell className="border text-right h-9 font-bold">৳{amount.toLocaleString()}</TableCell>
+                  <TableCell className="border text-right h-9 font-black text-primary">৳{perMealPrice}</TableCell>
                 </TableRow>
               )
             })}
           </TableBody>
         </Table>
 
-        {/* Trend / Insight Section for Print */}
-        <div className="mt-10 p-6 bg-slate-50 border-2 border-dashed rounded-2xl">
-          <h3 className="text-xs font-black uppercase text-primary mb-4 flex items-center gap-2">
-            <TrendingUp size={14}/> Report Analytics & Insights
-          </h3>
-          <div className="grid grid-cols-2 gap-x-10 gap-y-4 text-sm">
-            <div className="flex justify-between border-b pb-2">
-              <span className="text-muted-foreground">Highest Food Cost Day:</span>
-              <span className="font-bold text-destructive">{foodAnalytics.highestDay?.expenseDate} (৳{foodAnalytics.highestDay?.amount.toLocaleString()})</span>
-            </div>
-            <div className="flex justify-between border-b pb-2">
-              <span className="text-muted-foreground">Best Cost Efficiency:</span>
-              <span className="font-bold text-success">
-                {foodAnalytics.bestEfficiency ? `${foodAnalytics.bestEfficiency.date} (৳${foodAnalytics.bestEfficiency.rate.toFixed(2)}/meal)` : 'N/A'}
-              </span>
-            </div>
-            <div className="flex justify-between border-b pb-2">
-              <span className="text-muted-foreground">Overall Expense Center:</span>
-              <span className="font-bold text-primary">{userBranch}</span>
-            </div>
-            <div className="flex justify-between border-b pb-2">
-              <span className="text-muted-foreground">Report Generated By:</span>
-              <span className="font-bold">{userName}</span>
-            </div>
+        {/* Grand Total Summary (Last Page) */}
+        <div className="summary-section mt-10 p-6 bg-slate-50 border rounded-2xl">
+          <h3 className="text-[9pt] font-black uppercase text-primary mb-4 border-b pb-2">Final Summary Analysis</h3>
+          <div className="grid grid-cols-2 gap-y-3 text-[9pt]">
+            <div className="flex justify-between pr-8"><span>Grand Total Meals:</span><span className="font-bold">{foodAnalytics.totalMeals}</span></div>
+            <div className="flex justify-between pl-8"><span>Total Observation Days:</span><span className="font-bold">{foodAnalytics.totalDays} Days</span></div>
+            <div className="flex justify-between pr-8"><span>Grand Total Food Cost:</span><span className="font-bold text-destructive">৳{foodAnalytics.totalCost.toLocaleString()}</span></div>
+            <div className="flex justify-between pl-8"><span>Overall Avg Cost/Meal:</span><span className="font-black text-primary">৳{foodAnalytics.avgPerMeal.toFixed(2)}</span></div>
           </div>
         </div>
 
-        {/* Print Footer / Signatures */}
-        <div className="print-footer mt-20 flex justify-between px-10">
-          <div className="signature-box flex flex-col items-center">
-            <div className="w-40 border-t border-black pt-2 text-center text-[9pt] font-bold uppercase">Kitchen / Cook</div>
+        {/* Footer / Signatures */}
+        <div className="print-footer mt-20 flex justify-between px-6">
+          <div className="signature-box">
+            <p className="text-[8pt] font-bold uppercase">Kitchen / Food Manager</p>
           </div>
-          <div className="signature-box flex flex-col items-center">
-            <div className="w-40 border-t border-black pt-2 text-center text-[9pt] font-bold uppercase">Manager</div>
+          <div className="signature-box">
+            <p className="text-[8pt] font-bold uppercase">Branch Manager</p>
           </div>
-          <div className="signature-box flex flex-col items-center">
-            <div className="w-40 border-t border-black pt-2 text-center text-[9pt] font-bold uppercase">Accountant</div>
+          <div className="signature-box">
+            <p className="text-[8pt] font-bold uppercase">Accountant Signature</p>
           </div>
         </div>
         
-        <div className="text-[8pt] text-muted-foreground text-center mt-10">
-          Generated via Somikoron Hostel Management System on {new Date().toLocaleString()}
+        <div className="text-[7pt] text-muted-foreground text-center mt-10">
+          Generated on {new Date().toLocaleString()} | User: {userName} | Page <span className="print-page-number" />
         </div>
       </div>
 
