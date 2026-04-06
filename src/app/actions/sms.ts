@@ -4,14 +4,23 @@
  * Server Action to communicate with Alpha Net BD SMS API.
  */
 
-export async function sendSMS(apiKey: string, senderId: string, to: string, msg: string) {
+export async function sendSMS(apiKey: string, senderId: string | null | undefined, to: string, msg: string) {
   if (!apiKey) return { error: 1, msg: "API Key is required" };
   
   try {
     // Standardizing the number format (removing spaces, ensuring 880 prefix or standard 01X)
     const cleanTo = to.replace(/\s+/g, '');
     
-    const response = await fetch(`https://api.sms.net.bd/sendsms?api_key=${apiKey}&msg=${encodeURIComponent(msg)}&to=${cleanTo}${senderId ? `&sender_id=${senderId}` : ''}`, {
+    // Construct base URL
+    let url = `https://api.sms.net.bd/sendsms?api_key=${apiKey}&msg=${encodeURIComponent(msg)}&to=${cleanTo}`;
+    
+    // Only add sender_id if it's explicitly provided and not just empty whitespace
+    const trimmedSenderId = senderId?.trim();
+    if (trimmedSenderId && trimmedSenderId.length > 0) {
+      url += `&sender_id=${trimmedSenderId}`;
+    }
+    
+    const response = await fetch(url, {
       method: 'GET',
       cache: 'no-store'
     });

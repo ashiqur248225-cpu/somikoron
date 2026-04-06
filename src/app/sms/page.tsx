@@ -27,7 +27,8 @@ import {
   Key,
   ShieldCheck,
   Globe,
-  Wallet
+  Wallet,
+  Info
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -153,13 +154,19 @@ export default function SMSPanelPage() {
     }
     setIsSubmitting(true)
     try {
+      // Clean data before saving
+      const configToSave = {
+        apikey: apiConfig.apikey.trim(),
+        senderid: apiConfig.senderid.trim()
+      }
+      
       await setDoc(apiConfigRef, {
-        ...apiConfig,
+        ...configToSave,
         updatedAt: serverTimestamp(),
         updatedBy: userName
       })
       toast({ title: "API Config Saved", description: "Alpha Net BD API settings updated." })
-      fetchBalance(apiConfig.apikey)
+      fetchBalance(configToSave.apikey)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -195,7 +202,6 @@ export default function SMSPanelPage() {
     }
 
     setIsSubmitting(true)
-    let successCount = 0
     try {
       const selectedPhones = students?.filter(s => selectedStudents.includes(s.id)).map(s => s.phone) || []
       
@@ -232,7 +238,6 @@ export default function SMSPanelPage() {
       
       const winners = students.filter(s => {
         if (!s.dob) return false
-        // Assumes dob format is YYYY-MM-DD or similar where last 5 chars are MM-DD
         return s.dob.endsWith(todayStr)
       })
       
@@ -543,7 +548,7 @@ export default function SMSPanelPage() {
                   Send Birthday Wishes
                 </Button>
               </CardContent>
-            </Card>
+            </div>
           </div>
         </TabsContent>
 
@@ -620,15 +625,21 @@ export default function SMSPanelPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">Sender ID</Label>
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">Sender ID (Optional)</Label>
                   <div className="relative">
                     <Smartphone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input 
-                      placeholder="e.g. 8801XXXX" 
+                      placeholder="e.g. 8801XXXX (Keep empty if not applied/approved)" 
                       className="pl-10 h-12 bg-slate-50 border-none shadow-inner"
                       value={apiConfig.senderid}
                       onChange={e => setApiConfig({...apiConfig, senderid: e.target.value})}
                     />
+                  </div>
+                  <div className="p-2 bg-blue-50 rounded-lg flex items-start gap-2 border border-blue-100">
+                    <Info size={14} className="text-blue-600 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-blue-700 leading-tight">
+                      আপনি যদি এখনো Sender ID এর জন্য আবেদন না করে থাকেন, তবে এটি খালি রাখুন। সিস্টেম অটোমেটিক ডিফল্ট আইডি ব্যবহার করবে।
+                    </p>
                   </div>
                 </div>
               </div>
