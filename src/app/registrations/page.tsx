@@ -239,6 +239,7 @@ export default function RegistrationsPage() {
         occupation: selectedReg.occupation || "student",
         phone: selectedReg.phone,
         parentPhone: selectedReg.parentPhone,
+        dob: selectedReg.dob || "", // IMPORTANT: Save DOB for SMS scanner
         address: `${selectedReg.village}, ${selectedReg.postOffice}, ${selectedReg.upazila}, ${selectedReg.district}`,
         buildingId: bId,
         buildingName: selectedBuilding?.name || "Unknown",

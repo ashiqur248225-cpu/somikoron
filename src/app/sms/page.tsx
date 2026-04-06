@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -19,7 +20,11 @@ import {
   Smartphone, 
   AlertCircle,
   Building2,
-  Filter
+  Filter,
+  Cake,
+  Gift,
+  RefreshCw,
+  XCircle
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -44,7 +49,8 @@ const DEFAULT_TEMPLATES = [
   { id: "payment", label: "Payment Receipt", text: "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[পরিমাণ] টাকা। বর্তমান বকেয়া: ৳[বকেয়া]। ধন্যবাদ। [Hostel Name]" },
   { id: "due_reminder", label: "Due Reminder", text: "প্রিয় [নাম], [মাস] মাসের ভাড়া/খাবার বাবদ আপনার ৳[বকেয়া] বকেয়া রয়েছে। অনুগ্রহ করে দ্রুত পরিশোধ করুন। [Hostel Name]" },
   { id: "low_food", label: "Low Food Balance", text: "প্রিয় [নাম], আপনার খাবার ব্যালেন্স কমে ৳[ব্যালেন্স] হয়েছে। অনুগ্রহ করে দ্রুত রিচার্জ করুন। [Hostel Name]" },
-  { id: "exit", label: "Exit Message", text: "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।" }
+  { id: "exit", label: "Exit Message", text: "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।" },
+  { id: "birthday", label: "Birthday Wishes", text: "শুভ জন্মদিন [নাম]। আপনার দিনটি সুন্দর ও আনন্দময় হোক। [Hostel Name]-এর পক্ষ থেকে অনেক শুভকামনা।" }
 ]
 
 export default function SMSPanelPage() {
@@ -60,6 +66,10 @@ export default function SMSPanelPage() {
   const [selectedStudents, setSelectedStudents] = useState<string[]>([])
   const [customMessage, setCustomMessage] = useState("")
 
+  // Birthday States
+  const [birthdayStudents, setBirthdayStudents] = useState<any[]>([])
+  const [isScanning, setIsScanning] = useState(false)
+
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
@@ -69,10 +79,8 @@ export default function SMSPanelPage() {
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData, isLoading: templatesLoading } = useDoc(templatesRef)
   
-  // Use local state for editing templates to avoid mutating read-only document data or triggering crash on null
   const [localTemplates, setLocalTemplates] = useState<any[]>(DEFAULT_TEMPLATES)
 
-  // Initialize local templates when Firestore data is loaded
   useEffect(() => {
     if (templatesData?.templates) {
       setLocalTemplates(templatesData.templates)
@@ -125,17 +133,61 @@ export default function SMSPanelPage() {
 
     setIsSubmitting(true)
     try {
-      // Simulation of SMS Sending
       console.log(`Sending SMS to ${selectedStudents.length} recipients: ${customMessage}`)
-      
       toast({ 
         title: "Broadcast Sent", 
         description: `SMS queue started for ${selectedStudents.length} students.`,
         action: <CheckCircle2 className="text-success" />
       })
-      
       setSelectedStudents([])
       setCustomMessage("")
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleScanBirthdays = () => {
+    if (!students) return
+    setIsScanning(true)
+    
+    // Simulate processing delay
+    setTimeout(() => {
+      const today = new Date()
+      const todayStr = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`
+      
+      const winners = students.filter(s => {
+        if (!s.dob) return false
+        // dob format: YYYY-MM-DD
+        return s.dob.endsWith(todayStr)
+      })
+      
+      setBirthdayStudents(winners)
+      setIsScanning(false)
+      
+      if (winners.length > 0) {
+        toast({ title: "Scan Complete", description: `Found ${winners.length} students with birthday today!` })
+      } else {
+        toast({ variant: "outline", title: "Scan Result", description: "No birthdays found for today." })
+      }
+    }, 1000)
+  }
+
+  const handleSendBirthdayWishes = async () => {
+    if (birthdayStudents.length === 0) return
+    
+    setIsSubmitting(true)
+    try {
+      const bTemplate = localTemplates.find(t => t.id === 'birthday')?.text || ""
+      
+      birthdayStudents.forEach(s => {
+        const msg = bTemplate.replace('[নাম]', s.name).replace('[Hostel Name]', userBranch)
+        console.log(`Sending Birthday SMS to ${s.phone}: ${msg}`)
+      })
+
+      toast({ title: "Wishes Sent!", description: `Successfully sent birthday SMS to ${birthdayStudents.length} students.` })
+      setBirthdayStudents([])
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -171,15 +223,15 @@ export default function SMSPanelPage() {
       </div>
 
       <Tabs defaultValue="broadcast" className="w-full">
-        <TabsList className="bg-secondary/50 p-1 mb-6">
-          <TabsTrigger value="broadcast" className="gap-2 flex-1"><Send size={14} /> Send Broadcast</TabsTrigger>
-          <TabsTrigger value="templates" className="gap-2 flex-1"><Settings2 size={14} /> Message Templates</TabsTrigger>
-          <TabsTrigger value="logs" className="gap-2 flex-1"><History size={14} /> Sending History</TabsTrigger>
+        <TabsList className="bg-secondary/50 p-1 mb-6 flex overflow-x-auto h-auto">
+          <TabsTrigger value="broadcast" className="gap-2 flex-1 h-10"><Send size={14} /> Send Broadcast</TabsTrigger>
+          <TabsTrigger value="birthdays" className="gap-2 flex-1 h-10"><Cake size={14} /> Birthday Wishes</TabsTrigger>
+          <TabsTrigger value="templates" className="gap-2 flex-1 h-10"><Settings2 size={14} /> Message Templates</TabsTrigger>
+          <TabsTrigger value="logs" className="gap-2 flex-1 h-10"><History size={14} /> Sending History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="broadcast" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Recipient Selector */}
             <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-white rounded-3xl">
               <CardHeader className="bg-slate-50/50 border-b">
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -247,7 +299,6 @@ export default function SMSPanelPage() {
               </CardContent>
             </Card>
 
-            {/* Message Composer */}
             <div className="space-y-6">
               <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
                 <CardHeader className="bg-primary text-primary-foreground">
@@ -295,6 +346,111 @@ export default function SMSPanelPage() {
                 </CardContent>
               </Card>
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="birthdays" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-white rounded-3xl">
+              <CardHeader className="bg-primary/5 border-b flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Cake className="text-primary" size={20} /> Birthday Scanner
+                  </CardTitle>
+                  <CardDescription>Scan database for students celebrating birthday today.</CardDescription>
+                </div>
+                <Button 
+                  onClick={handleScanBirthdays} 
+                  disabled={isScanning || studentsLoading} 
+                  className="gap-2 font-bold h-11 px-6 rounded-xl"
+                >
+                  {isScanning ? <RefreshCw className="animate-spin" /> : <RefreshCw />}
+                  Scan for Today
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[450px]">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead>Student Name</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead className="text-right">Birth Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {birthdayStudents.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="font-bold flex items-center gap-2">
+                            <Gift className="h-4 w-4 text-primary" /> {s.name}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{s.buildingName} • R-{s.roomNumber}</TableCell>
+                          <TableCell className="text-xs">{s.phone}</TableCell>
+                          <TableCell className="text-right font-bold text-primary">{s.dob || 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                      {birthdayStudents.length === 0 && !isScanning && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-24">
+                            <div className="opacity-30 space-y-2">
+                              <Cake size={48} className="mx-auto" />
+                              <p className="text-sm font-medium">Click "Scan for Today" to find birthday winners!</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      {isScanning && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-24">
+                            <Loader2 className="animate-spin h-8 w-8 mx-auto text-primary" />
+                            <p className="text-xs mt-2 font-bold text-muted-foreground animate-pulse">Scanning records...</p>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
+              <CardHeader className="bg-primary/5 border-b">
+                <CardTitle className="text-lg">Birthday Greetings</CardTitle>
+                <CardDescription>Automated wishes for today's celebrants.</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-6">
+                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Active Template</Label>
+                    <Badge className="bg-primary/10 text-primary border-none text-[8px]">AUTO-GEN</Badge>
+                  </div>
+                  <p className="text-xs leading-relaxed text-slate-600 font-medium italic bg-white p-3 rounded-lg border border-dashed border-primary/20">
+                    "{localTemplates.find(t => t.id === 'birthday')?.text}"
+                  </p>
+                  <p className="text-[8px] text-muted-foreground">* To change this text, edit the template in the "Message Templates" tab.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-end">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">Target Recipients</Label>
+                    <span className="text-xl font-black text-primary">{birthdayStudents.length} Students</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full bg-primary" style={{ width: birthdayStudents.length > 0 ? '100%' : '0%' }} />
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={handleSendBirthdayWishes} 
+                  disabled={isSubmitting || birthdayStudents.length === 0} 
+                  className="w-full h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20 gap-2"
+                >
+                  {isSubmitting ? <Loader2 className="animate-spin" /> : <Gift size={20} />}
+                  Send Birthday Wishes
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
