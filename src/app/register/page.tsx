@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, addDoc, serverTimestamp, query, where } from "firebase/firestore"
@@ -59,8 +58,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
     group: "Science",
     buildingId: "",
     roomNumber: "",
-    seatNumber: "",
-    message: ""
+    seatNumber: ""
   })
 
   // Sync type if URL changes
@@ -96,7 +94,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
     const requiredFields = [
       'name', 'fatherName', 'motherName', 'dob', 'bloodGroup', 'phone', 
       'parentPhone', 'district', 'upazila', 'postOffice', 'village', 
-      'institute', 'group', 'occupation', 'message'
+      'institute', 'group', 'occupation'
     ]
 
     for (const field of requiredFields) {
@@ -106,14 +104,15 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
       }
     }
 
+    // MANDATORY check for old students
     if (formData.type === 'old') {
       if (!formData.buildingId || !formData.roomNumber || !formData.seatNumber) {
-        toast({ variant: "destructive", title: "রুমের তথ্য প্রয়োজন", description: "পুরাতন স্টুডেন্টদের জন্য বর্তমান বিল্ডিং ও রুম সিলেক্ট করা বাধ্যতামূলক।" })
+        toast({ variant: "destructive", title: "রুমের তথ্য প্রয়োজন", description: "পুরাতন স্টুডেন্টদের জন্য বর্তমান বিল্ডিং, রুম এবং সিট সিলেক্ট করা বাধ্যতামূলক।" })
         return
       }
     }
 
-    // Phone Number Validation
+    // Phone Number Validation (Exactly 11 digits)
     if (formData.phone.length !== 11 || formData.parentPhone.length !== 11) {
       toast({ variant: "destructive", title: "ভুল মোবাইল নাম্বার", description: "ফোন নাম্বার অবশ্যই ১১ সংখ্যার হতে হবে।" })
       return
@@ -304,7 +303,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
                   <Building2 size={20} />
                   <CardTitle className="text-xl">Room Allocation (রুমের তথ্য)</CardTitle>
                 </div>
-                <CardDescription>পুরাতন স্টুডেন্টদের জন্য বর্তমান রুম সিলেক্ট করা বাধ্যতামূলক।</CardDescription>
+                <CardDescription>পুরাতন স্টুডেন্টদের জন্য বর্তমান বিল্ডিং, রুম এবং সিট সিলেক্ট করা বাধ্যতামূলক।</CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -331,11 +330,6 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
               </CardContent>
             </Card>
           )}
-
-          <div className="space-y-2">
-            <Label className="font-bold ml-1">Additional Message (অতিরিক্ত কিছু বলার থাকলে)</Label>
-            <Textarea required value={formData.message} onChange={e => setFormData({...formData, message: e.target.value})} placeholder="আপনার কোনো বিশেষ অনুরোধ থাকলে এখানে লিখুন..." className="border-2 border-slate-200 min-h-[100px] rounded-2xl" />
-          </div>
 
           <Button type="submit" className="w-full h-16 text-2xl font-black rounded-3xl shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={isSubmitting}>
             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <UserPlus className="mr-2" size={24} />}
