@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Printer, Download, Share2, X, CheckCircle2, Building2, User, Phone, Wallet, Calendar, Calculator } from "lucide-react"
+import { Printer, Download, Share2, X, CheckCircle2, Building2, User, Phone, Wallet, Calendar, Calculator, Smartphone } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
