@@ -495,6 +495,23 @@ export default function DashboardPage() {
           duesBreakdown: currentMap,
           updatedAt: serverTimestamp()
         })
+        
+        // Dynamic SMS for Payment
+        if (apiConfig?.apikey && templatesData?.templates) {
+          const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
+          if (paymentTemplate) {
+            const hostelDisplayName = templatesData.hostelName || userBranch;
+            let msg = paymentTemplate.text
+              .replaceAll('[নাম]', selectedStudent.name)
+              .replaceAll('[পরিমাণ]', totalCashAmount.toString())
+              .replaceAll('[বকেয়া]', (financialStats.totalDue - seatPaid - foodPaid).toString())
+              .replaceAll('[মাস]', formData.month)
+              .replaceAll('[Hostel Name]', hostelDisplayName);
+            
+            await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
+          }
+        }
+
         toast({ title: "Payment Recorded", description: `Amount ৳${totalCashAmount} collected.` })
       }
 
@@ -622,6 +639,7 @@ export default function DashboardPage() {
     try {
       const monthLabel = `${mealLogFilter.month} ${mealLogFilter.year}`
       const mealTemplate = templatesData?.templates?.find((t: any) => t.id === 'meal_summary')
+      const hostelDisplayName = templatesData?.hostelName || userBranch;
       
       const promises = entries.map(async ([sId, count]) => {
         const student = students?.find(s => s.id === sId)
@@ -643,7 +661,7 @@ export default function DashboardPage() {
           updatedAt: serverTimestamp()
         })
 
-        // Automated SMS Logic
+        // Automated SMS Logic with correct tag mapping
         if (apiConfig?.apikey && mealTemplate) {
           let msg = mealTemplate.text
             .replaceAll('[নাম]', student.name)
@@ -651,7 +669,7 @@ export default function DashboardPage() {
             .replaceAll('[meal_count]', count)
             .replaceAll('[meal_rate]', currentMealRate.toString())
             .replaceAll('[meal_bill]', cost.toString())
-            .replaceAll('[Hostel Name]', userBranch);
+            .replaceAll('[Hostel Name]', hostelDisplayName);
           
           await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
         }

@@ -241,7 +241,6 @@ export default function RegistrationsPage() {
         }
       }
 
-      // Store all expanded fields from the registration form
       await setDoc(doc(db, "students", studentId), {
         id: studentId,
         name: selectedReg.name,
@@ -308,15 +307,17 @@ export default function RegistrationsPage() {
         })
       }
 
-      // SMS Integration Logic
+      // Dynamic Mapping for Admission SMS
       if (apiConfig?.apikey && templatesData?.templates) {
         const admissionTemplate = templatesData.templates.find((t: any) => t.id === 'admission')
         if (admissionTemplate) {
+          const hostelDisplayName = templatesData.hostelName || userBranch;
           let msg = admissionTemplate.text
             .replaceAll('[নাম]', selectedReg.name)
-            .replaceAll('[Hostel Name]', userBranch)
+            .replaceAll('[Hostel Name]', hostelDisplayName)
             .replaceAll('[রুম]', rNum)
-            .replaceAll('[সিট]', sNum);
+            .replaceAll('[সিট]', sNum)
+            .replaceAll('[তারিখ]', approvalForm.billingStartDate);
           
           await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
         }

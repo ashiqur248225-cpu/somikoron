@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -188,6 +189,13 @@ export default function IncomeHistoryPage() {
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
+  const currentDueForSMS = useMemo(() => {
+    if (!selectedStudent) return 0;
+    // Simple calculation for SMS purpose
+    const histDues = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0;
+    return histDues;
+  }, [selectedStudent]);
+
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver || !selectedStudent) return
     setIsSubmitting(true)
@@ -217,15 +225,18 @@ export default function IncomeHistoryPage() {
           updatedAt: serverTimestamp()
         })
         
-        // Real SMS Integration
+        // Dynamic SMS Mapping for Payment
         if (apiConfig?.apikey && templatesData?.templates) {
           const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
           if (paymentTemplate) {
+            const hostelDisplayName = templatesData.hostelName || userBranch;
             let msg = paymentTemplate.text
               .replaceAll('[নাম]', selectedStudent.name)
               .replaceAll('[পরিমাণ]', totalAmt.toString())
+              .replaceAll('[বকেয়া]', (currentDueForSMS - totalAmt).toString())
               .replaceAll('[মাস]', formData.month)
-              .replaceAll('[Hostel Name]', userBranch);
+              .replaceAll('[খাত]', selectedStudent.paymentSystem === 'package' ? 'প্যাকেজ ভাড়া' : 'ভাড়া/খাবার')
+              .replaceAll('[Hostel Name]', hostelDisplayName);
             
             await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
           }
@@ -398,14 +409,20 @@ export default function IncomeHistoryPage() {
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
               <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Collection Amounts</Label>
               {selectedStudent?.paymentSystem === 'package' ? (
-                <div className="space-y-2"><Label className="text-xs">Amount Received (৳)</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} /></div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Amount Received (৳)</Label>
+                  <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
+                </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} /></div>
-                  <div className="space-y-2"><Label className="text-xs">Food Deposit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} /></div>
+                  <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} placeholder="0.00" /></div>
+                  <div className="space-y-2"><Label className="text-xs">Food Deposit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} placeholder="0.00" /></div>
                 </div>
               )}
-              <div className="space-y-2"><Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} /></div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label>
+                <Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} placeholder="0.00" />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={v => setFormData({...formData, method: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
