@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -27,7 +26,8 @@ import {
   XCircle,
   Key,
   ShieldCheck,
-  Globe
+  Globe,
+  Wallet
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { sendSMS, getSMSBalance } from "@/app/actions/sms"
 
 const DEFAULT_TEMPLATES = [
   { id: "admission", label: "Admission Success", text: "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], সিট: [সিট]। আমাদের সাথে থাকার জন্য ধন্যবাদ।" },
@@ -62,6 +63,8 @@ export default function SMSPanelPage() {
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [smsBalance, setSmsBalance] = useState<string | null>(null)
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false)
 
   // API Config States
   const [apiConfig, setApiConfig] = useState({
@@ -106,8 +109,20 @@ export default function SMSPanelPage() {
         apikey: storedApiConfig.apikey || "",
         senderid: storedApiConfig.senderid || ""
       })
+      fetchBalance(storedApiConfig.apikey)
     }
   }, [storedApiConfig])
+
+  const fetchBalance = async (key?: string) => {
+    const k = key || apiConfig.apikey
+    if (!k) return
+    setIsRefreshingBalance(true)
+    const result = await getSMSBalance(k)
+    if (result.error === 0) {
+      setSmsBalance(result.data.balance)
+    }
+    setIsRefreshingBalance(false)
+  }
 
   // Student Query
   const studentsQuery = useMemoFirebase(() => {
@@ -144,6 +159,7 @@ export default function SMSPanelPage() {
         updatedBy: userName
       })
       toast({ title: "API Config Saved", description: "Alpha Net BD API settings updated." })
+      fetchBalance(apiConfig.apikey)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -179,18 +195,26 @@ export default function SMSPanelPage() {
     }
 
     setIsSubmitting(true)
+    let successCount = 0
     try {
-      // Logic would call Alpha Net API here via backend or fetch
-      console.log(`Sending SMS using API Key: ${apiConfig.apikey}`)
-      console.log(`Sending to ${selectedStudents.length} recipients: ${customMessage}`)
+      const selectedPhones = students?.filter(s => selectedStudents.includes(s.id)).map(s => s.phone) || []
       
-      toast({ 
-        title: "Broadcast Sent", 
-        description: `SMS queue started via Alpha Net for ${selectedStudents.length} students.`,
-        action: <CheckCircle2 className="text-success" />
-      })
-      setSelectedStudents([])
-      setCustomMessage("")
+      // Alpha Net allows comma separated numbers for campaign
+      const toNumbers = selectedPhones.join(',')
+      const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, toNumbers, customMessage)
+
+      if (result.error === 0) {
+        toast({ 
+          title: "Broadcast Sent", 
+          description: `Message successfully queued for ${selectedPhones.length} recipients.`,
+          action: <CheckCircle2 className="text-success" />
+        })
+        setSelectedStudents([])
+        setCustomMessage("")
+        fetchBalance()
+      } else {
+        toast({ variant: "destructive", title: "Gateway Error", description: result.msg })
+      }
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -208,6 +232,7 @@ export default function SMSPanelPage() {
       
       const winners = students.filter(s => {
         if (!s.dob) return false
+        // Assumes dob format is YYYY-MM-DD or similar where last 5 chars are MM-DD
         return s.dob.endsWith(todayStr)
       })
       
@@ -233,13 +258,14 @@ export default function SMSPanelPage() {
     try {
       const bTemplate = localTemplates.find(t => t.id === 'birthday')?.text || ""
       
-      birthdayStudents.forEach(s => {
+      for (const s of birthdayStudents) {
         const msg = bTemplate.replace('[নাম]', s.name).replace('[Hostel Name]', userBranch)
-        console.log(`Sending Birthday SMS via API to ${s.phone}: ${msg}`)
-      })
+        await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg)
+      }
 
       toast({ title: "Wishes Sent!", description: `Successfully sent birthday SMS to ${birthdayStudents.length} students.` })
       setBirthdayStudents([])
+      fetchBalance()
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -270,6 +296,20 @@ export default function SMSPanelPage() {
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">SMS Panel</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Manage notifications and broadcasts for <span className="text-foreground font-bold">{userBranch}</span>.</p>
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-primary/5 rounded-xl border border-primary/10">
+            <Wallet size={14} className="text-primary" />
+            <div className="flex flex-col">
+              <span className="text-[8px] font-bold uppercase text-muted-foreground">Gateway Balance</span>
+              <span className="text-xs font-black text-primary">
+                {smsBalance !== null ? `৳${Number(smsBalance).toFixed(2)}` : 'N/A'}
+              </span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6 ml-1" onClick={() => fetchBalance()} disabled={isRefreshingBalance}>
+              <RefreshCw size={12} className={cn(isRefreshingBalance && "animate-spin")} />
+            </Button>
           </div>
         </div>
       </div>
@@ -310,9 +350,9 @@ export default function SMSPanelPage() {
                 </div>
                 <div className="relative mt-4">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input 
+                  <input 
                     placeholder="Search by name or phone..." 
-                    className="pl-8 bg-white border-none shadow-inner h-10"
+                    className="flex h-10 w-full rounded-md border-none bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 shadow-inner"
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                   />

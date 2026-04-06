@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -14,8 +13,8 @@ import {
   Receipt, HandCoins
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
+import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where, getDoc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -32,6 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026"];
@@ -80,6 +80,14 @@ export default function RegistrationsPage() {
   const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffQuery)
 
+  // API Config Logic for SMS
+  const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
+  const { data: apiConfig } = useDoc(apiConfigRef)
+
+  // SMS Template Logic
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
+
   const [approvalForm, setApprovalForm] = useState({
     monthlyRent: "",
     serviceCharge: "0",
@@ -99,7 +107,6 @@ export default function RegistrationsPage() {
 
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
-  // ENHANCED AUTO-FILL LOGIC
   useEffect(() => {
     if (isDetailOpen && selectedReg && buildings) {
       const regBName = selectedReg.buildingName || "";
@@ -239,7 +246,7 @@ export default function RegistrationsPage() {
         occupation: selectedReg.occupation || "student",
         phone: selectedReg.phone,
         parentPhone: selectedReg.parentPhone,
-        dob: selectedReg.dob || "", // IMPORTANT: Save DOB for SMS scanner
+        dob: selectedReg.dob || "",
         address: `${selectedReg.village}, ${selectedReg.postOffice}, ${selectedReg.upazila}, ${selectedReg.district}`,
         buildingId: bId,
         buildingName: selectedBuilding?.name || "Unknown",
@@ -289,9 +296,19 @@ export default function RegistrationsPage() {
         })
       }
 
-      // SMS Simulation Logic
-      const smsText = `প্রিয় ${selectedReg.name}, ${userBranch}-এ আপনার admission সফল হয়েছে। রুম: ${rNum}, সিট: ${sNum}। আমাদের সাথে থাকার জন্য ধন্যবাদ। Somikoron`
-      console.log(`Sending SMS to ${selectedReg.phone}: ${smsText}`)
+      // SMS Integration Logic
+      if (apiConfig?.apikey && templatesData?.templates) {
+        const admissionTemplate = templatesData.templates.find((t: any) => t.id === 'admission')
+        if (admissionTemplate) {
+          let msg = admissionTemplate.text
+            .replaceAll('[নাম]', selectedReg.name)
+            .replaceAll('[Hostel Name]', userBranch)
+            .replaceAll('[রুম]', rNum)
+            .replaceAll('[সিট]', sNum);
+          
+          await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
+        }
+      }
 
       await deleteDoc(doc(db, "registrations", selectedReg.id))
       

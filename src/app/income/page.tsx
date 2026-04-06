@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -16,8 +15,8 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Calculator, ArrowUpCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, limit, where } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
+import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, limit, where, getDoc } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -27,6 +26,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ReceiptDialog } from "@/components/receipt-dialog"
+import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -110,6 +110,14 @@ export default function IncomeHistoryPage() {
     return query(collection(db, "payments"), where("branch", "==", userBranch), limit(1000))
   }, [db, userBranch])
   const { data: rawPayments, isLoading: paymentsLoading } = useCollection(incomeQuery)
+
+  // API Config Logic for SMS
+  const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
+  const { data: apiConfig } = useDoc(apiConfigRef)
+
+  // SMS Template Logic
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
 
   // Advanced Filtering Logic
   const filteredPayments = useMemo(() => {
@@ -209,10 +217,21 @@ export default function IncomeHistoryPage() {
           updatedAt: serverTimestamp()
         })
         
-        // SMS Simulation
-        console.log(`Sending SMS to ${selectedStudent.phone}: প্রিয় ${selectedStudent.name}, আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳${totalAmt}। ধন্যবাদ। Somikoron`)
+        // Real SMS Integration
+        if (apiConfig?.apikey && templatesData?.templates) {
+          const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
+          if (paymentTemplate) {
+            let msg = paymentTemplate.text
+              .replaceAll('[নাম]', selectedStudent.name)
+              .replaceAll('[পরিমাণ]', totalAmt.toString())
+              .replaceAll('[মাস]', formData.month)
+              .replaceAll('[Hostel Name]', userBranch);
+            
+            await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
+          }
+        }
         
-        toast({ title: "Success", description: "Payment recorded." })
+        toast({ title: "Success", description: "Payment recorded and SMS sent." })
         
         // Trigger Receipt
         setLastPayment(pRecord)
