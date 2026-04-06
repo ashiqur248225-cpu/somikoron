@@ -28,7 +28,8 @@ import {
   Banknote,
   Wind,
   Construction,
-  Bath
+  Bath,
+  Sparkles
 } from "lucide-react"
 import {
   Dialog,
@@ -101,6 +102,7 @@ export default function BuildingsPage() {
   const [filterBuilding, setBuildingFilter] = useState("all")
   const [filterRoomType, setRoomTypeFilter] = useState("all") 
   const [filterAvailability, setAvailabilityFilter] = useState("all")
+  const [filterFacility, setFacilityFilter] = useState("all")
 
   const [newBuilding, setNewBuilding] = useState({ 
     name: "", 
@@ -123,7 +125,7 @@ export default function BuildingsPage() {
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
   }, [db, userBranch])
   
-  const { data: buildings, isLoading } = useCollection(buildingsQuery)
+  const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
 
   // Initialize building branch based on context when opening dialog
   useEffect(() => {
@@ -169,12 +171,14 @@ export default function BuildingsPage() {
       if (filterRoomType === "multiple") matchesRoomType = room.totalSeats >= 3
 
       const matchesAvailability = filterAvailability === "all" || (filterAvailability === "empty_only" && room.emptyCount > 0)
+      
+      const matchesFacility = filterFacility === "all" || room.facilities?.includes(filterFacility)
 
-      return matchesSearch && matchesBuilding && matchesRoomType && matchesAvailability
+      return matchesSearch && matchesBuilding && matchesRoomType && matchesAvailability && matchesFacility
     })
-  }, [allFlattenedRooms, searchTerm, filterBuilding, filterRoomType, filterAvailability])
+  }, [allFlattenedRooms, searchTerm, filterBuilding, filterRoomType, filterAvailability, filterFacility])
 
-  const isFiltering = searchTerm !== "" || filterBuilding !== "all" || filterRoomType !== "all" || filterAvailability !== "all"
+  const isFiltering = searchTerm !== "" || filterBuilding !== "all" || filterRoomType !== "all" || filterAvailability !== "all" || filterFacility !== "all"
 
   // Create Building Logic
   const addApartment = () => {
@@ -450,7 +454,7 @@ export default function BuildingsPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={handleCreate} className="w-full h-12 text-lg">Save Building Configuration</Button>
+                <Button onClick={handleCreate} className="w-full h-12 text-lg font-bold">Save Building Configuration</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -466,13 +470,13 @@ export default function BuildingsPage() {
       </div>
 
       {/* Advanced Filter Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
-        <div className="space-y-1.5 lg:col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
+        <div className="space-y-1.5 lg:col-span-1">
           <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-            <Search size={10} /> Search Building or Room
+            <Search size={10} /> Search
           </Label>
           <Input 
-            placeholder="Search room no..." 
+            placeholder="Room no..." 
             value={searchTerm} 
             onChange={e => setSearchTerm(e.target.value)} 
           />
@@ -515,6 +519,20 @@ export default function BuildingsPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+            <Sparkles size={10} /> Facilities
+          </Label>
+          <Select value={filterFacility} onValueChange={setFacilityFilter}>
+            <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any</SelectItem>
+              <SelectItem value="AC">AC</SelectItem>
+              <SelectItem value="Balcony">Balcony</SelectItem>
+              <SelectItem value="Attached Washroom">Attached Washroom</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         {isFiltering && (
           <Button 
             variant="ghost" 
@@ -524,6 +542,7 @@ export default function BuildingsPage() {
               setBuildingFilter("all")
               setRoomTypeFilter("all")
               setAvailabilityFilter("all")
+              setFacilityFilter("all")
             }}
           >
             <XCircle size={14} /> Clear
@@ -531,7 +550,7 @@ export default function BuildingsPage() {
         )}
       </div>
 
-      {isLoading ? (
+      {buildingsLoading ? (
         <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
       ) : isFiltering ? (
         // Detailed Search Result View
