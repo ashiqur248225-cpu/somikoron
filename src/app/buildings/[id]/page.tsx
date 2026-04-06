@@ -5,7 +5,7 @@ import * as React from "react"
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, updateDoc, deleteDoc, serverTimestamp, collection, query, where } from "firebase/firestore"
+import { doc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, increment, getDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,7 +16,8 @@ import {
   UserMinus, Trash2, Edit, Loader2, Plus, CheckCircle2, 
   XCircle, Zap, LayoutGrid, Calculator, TrendingUp, TrendingDown,
   ArrowUpRight, ArrowDownRight, Banknote, Calendar, BarChart3,
-  CircleDollarSign, Percent, ChevronLeft, MoreVertical, ChevronDown, ChevronUp
+  CircleDollarSign, Percent, ChevronLeft, MoreVertical, ChevronDown, ChevronUp,
+  HandCoins
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -130,6 +131,7 @@ export default function BuildingDetailsPage({
       thisMonthCollected: 0,
       last30DaysCollected: 0,
       last7DaysCollected: 0,
+      totalLifetimeCollected: 0,
       netProfit: 0,
       roomRevenueList: []
     }
@@ -169,14 +171,24 @@ export default function BuildingDetailsPage({
     let thisMonthCollected = 0
     let last30DaysCollected = 0
     let last7DaysCollected = 0
+    let totalLifetimeCollected = 0
 
     payments?.forEach(p => {
-      const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
-      const amount = Number(p.amount || 0)
+      let pDate: Date | null = null
+      if (p.date?.toDate) {
+        pDate = p.date.toDate()
+      } else if (p.date) {
+        pDate = new Date(p.date)
+      }
       
-      if (pDate >= startOfMonth) thisMonthCollected += amount
-      if (pDate >= thirtyDaysAgo) last30DaysCollected += amount
-      if (pDate >= sevenDaysAgo) last7DaysCollected += amount
+      const amount = Number(p.amount || 0)
+      totalLifetimeCollected += amount
+
+      if (pDate) {
+        if (pDate >= startOfMonth) thisMonthCollected += amount
+        if (pDate >= thirtyDaysAgo) last30DaysCollected += amount
+        if (pDate >= sevenDaysAgo) last7DaysCollected += amount
+      }
     })
 
     const efficiency = expectedIncome > 0 ? (occupiedRevenue / expectedIncome) * 100 : 0
@@ -189,6 +201,7 @@ export default function BuildingDetailsPage({
       thisMonthCollected, 
       last30DaysCollected, 
       last7DaysCollected, 
+      totalLifetimeCollected,
       netProfit,
       roomRevenueList
     }
@@ -496,7 +509,7 @@ export default function BuildingDetailsPage({
         </DialogContent>
       </Dialog>
 
-      {/* Summary Analytics Cards - Arranged 3 then 2 */}
+      {/* Summary Analytics Cards - Arranged 3 then 3 */}
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl">
@@ -536,12 +549,24 @@ export default function BuildingDetailsPage({
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-indigo-500 rounded-2xl">
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1"><HandCoins size={10}/> Total Building Collection</p>
+                  <p className="text-xl font-black mt-1 text-indigo-700">৳{revenueStats.totalLifetimeCollected.toLocaleString()}</p>
+                </div>
+                <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><HandCoins size={20} /></div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl">
             <CardContent className="pt-6">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Recent Collect</p>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Recent Collect (30d)</p>
                   <p className="text-xl font-bold mt-1 text-success">৳{revenueStats.last30DaysCollected.toLocaleString()}</p>
                 </div>
                 <div className="bg-success/5 p-2 rounded-lg text-success"><CircleDollarSign size={20} /></div>
@@ -556,7 +581,7 @@ export default function BuildingDetailsPage({
             <CardContent className="pt-6">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Net Profit/Loss</p>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Net Profit/Loss (30d)</p>
                   <p className={cn(
                     "text-xl font-bold mt-1",
                     revenueStats.netProfit >= 0 ? "text-success" : "text-destructive"
