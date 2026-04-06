@@ -62,6 +62,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
@@ -83,6 +89,7 @@ export default function StudentDetailsPage({
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isLogMealDialogOpen, setIsLogMealDialogOpen] = useState(false)
   const [isExitDialogOpen, setIsExitDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   
   const [paymentData, setPaymentData] = useState({ 
     month: MONTHS[new Date().getMonth()], 
@@ -390,6 +397,20 @@ export default function StudentDetailsPage({
     }
   }
 
+  const handleDeleteStudent = async () => {
+    if (!studentRef) return
+    setIsUpdating(true)
+    try {
+      await deleteDoc(studentRef)
+      toast({ title: "Deleted", description: "Student record removed permanently." })
+      router.push("/students")
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
   if (!student) return <div className="text-center p-20">Student not found.</div>
 
@@ -404,11 +425,26 @@ export default function StudentDetailsPage({
           <h1 className="text-lg font-bold truncate">{student.name}</h1>
         </div>
         <div className="flex items-center gap-1">
-          {student.isActive && (
-            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setIsExitDialogOpen(true)}>
-              <UserMinus size={20} />
-            </Button>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreVertical size={20} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 rounded-xl">
+              <DropdownMenuItem className="gap-2 font-medium">
+                <Edit size={16} /> Edit Profile
+              </DropdownMenuItem>
+              {student.isActive && (
+                <DropdownMenuItem onClick={() => setIsExitDialogOpen(true)} className="gap-2 font-medium text-destructive">
+                  <UserMinus size={16} /> Mark as Left
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => setIsDeleteDialogOpen(true)} className="gap-2 font-medium text-destructive">
+                <Trash2 size={16} /> Delete Record
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -425,11 +461,35 @@ export default function StudentDetailsPage({
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          {student.isActive && (
-            <Button variant="destructive" className="flex gap-2" onClick={() => setIsExitDialogOpen(true)} disabled={isUpdating}>
-              <UserMinus size={18} /> Mark as Left
-            </Button>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <MoreVertical size={18} /> Actions
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-xl border-slate-100">
+              <DropdownMenuItem className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-slate-50 font-bold text-slate-700">
+                <Edit size={18} className="text-primary" />
+                <span>Edit Profile</span>
+              </DropdownMenuItem>
+              {student.isActive && (
+                <DropdownMenuItem 
+                  onClick={() => setIsExitDialogOpen(true)}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-destructive/5 text-destructive font-bold"
+                >
+                  <UserMinus size={18} />
+                  <span>Mark as Left</span>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem 
+                onClick={() => setIsDeleteDialogOpen(true)}
+                className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-destructive/5 text-destructive font-bold"
+              >
+                <Trash2 size={18} />
+                <span>Delete Record</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="ghost" onClick={() => router.push("/students")}>Back</Button>
         </div>
       </div>
@@ -899,6 +959,26 @@ export default function StudentDetailsPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle size={20} /> Delete Student Record?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete <b>{student.name}</b>'s profile? This will remove all their payment history and personal data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteStudent} className="bg-destructive hover:bg-destructive/90 font-bold">
+              {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <Trash2 size={16} className="mr-2" />}
+              Delete Permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
