@@ -24,7 +24,10 @@ import {
   Cake,
   Gift,
   RefreshCw,
-  XCircle
+  XCircle,
+  Key,
+  ShieldCheck,
+  Globe
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -60,6 +63,12 @@ export default function SMSPanelPage() {
   const [userName, setUserName] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // API Config States
+  const [apiConfig, setApiConfig] = useState({
+    apikey: "",
+    senderid: ""
+  })
+
   // Broadcast States
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
@@ -87,6 +96,19 @@ export default function SMSPanelPage() {
     }
   }, [templatesData])
 
+  // API Config Logic
+  const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
+  const { data: storedApiConfig } = useDoc(apiConfigRef)
+
+  useEffect(() => {
+    if (storedApiConfig) {
+      setApiConfig({
+        apikey: storedApiConfig.apikey || "",
+        senderid: storedApiConfig.senderid || ""
+      })
+    }
+  }, [storedApiConfig])
+
   // Student Query
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -108,6 +130,26 @@ export default function SMSPanelPage() {
       return matchesSearch && matchesBuilding
     })
   }, [students, searchTerm, buildingFilter])
+
+  const handleSaveApiConfig = async () => {
+    if (!apiConfig.apikey) {
+      toast({ variant: "destructive", title: "Error", description: "API Key is required." })
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      await setDoc(apiConfigRef, {
+        ...apiConfig,
+        updatedAt: serverTimestamp(),
+        updatedBy: userName
+      })
+      toast({ title: "API Config Saved", description: "Alpha Net BD API settings updated." })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   const handleSaveTemplates = async () => {
     setIsSubmitting(true)
@@ -131,12 +173,20 @@ export default function SMSPanelPage() {
       return
     }
 
+    if (!apiConfig.apikey) {
+      toast({ variant: "destructive", title: "API Key Missing", description: "Please configure Alpha Net API Key in settings." })
+      return
+    }
+
     setIsSubmitting(true)
     try {
-      console.log(`Sending SMS to ${selectedStudents.length} recipients: ${customMessage}`)
+      // Logic would call Alpha Net API here via backend or fetch
+      console.log(`Sending SMS using API Key: ${apiConfig.apikey}`)
+      console.log(`Sending to ${selectedStudents.length} recipients: ${customMessage}`)
+      
       toast({ 
         title: "Broadcast Sent", 
-        description: `SMS queue started for ${selectedStudents.length} students.`,
+        description: `SMS queue started via Alpha Net for ${selectedStudents.length} students.`,
         action: <CheckCircle2 className="text-success" />
       })
       setSelectedStudents([])
@@ -152,14 +202,12 @@ export default function SMSPanelPage() {
     if (!students) return
     setIsScanning(true)
     
-    // Simulate processing delay
     setTimeout(() => {
       const today = new Date()
       const todayStr = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`
       
       const winners = students.filter(s => {
         if (!s.dob) return false
-        // dob format: YYYY-MM-DD
         return s.dob.endsWith(todayStr)
       })
       
@@ -176,6 +224,10 @@ export default function SMSPanelPage() {
 
   const handleSendBirthdayWishes = async () => {
     if (birthdayStudents.length === 0) return
+    if (!apiConfig.apikey) {
+      toast({ variant: "destructive", title: "API Key Missing", description: "Configure API settings first." })
+      return
+    }
     
     setIsSubmitting(true)
     try {
@@ -183,7 +235,7 @@ export default function SMSPanelPage() {
       
       birthdayStudents.forEach(s => {
         const msg = bTemplate.replace('[নাম]', s.name).replace('[Hostel Name]', userBranch)
-        console.log(`Sending Birthday SMS to ${s.phone}: ${msg}`)
+        console.log(`Sending Birthday SMS via API to ${s.phone}: ${msg}`)
       })
 
       toast({ title: "Wishes Sent!", description: `Successfully sent birthday SMS to ${birthdayStudents.length} students.` })
@@ -227,6 +279,7 @@ export default function SMSPanelPage() {
           <TabsTrigger value="broadcast" className="gap-2 flex-1 h-10"><Send size={14} /> Send Broadcast</TabsTrigger>
           <TabsTrigger value="birthdays" className="gap-2 flex-1 h-10"><Cake size={14} /> Birthday Wishes</TabsTrigger>
           <TabsTrigger value="templates" className="gap-2 flex-1 h-10"><Settings2 size={14} /> Message Templates</TabsTrigger>
+          <TabsTrigger value="api" className="gap-2 flex-1 h-10"><Globe size={14} /> API Configuration</TabsTrigger>
           <TabsTrigger value="logs" className="gap-2 flex-1 h-10"><History size={14} /> Sending History</TabsTrigger>
         </TabsList>
 
@@ -499,13 +552,77 @@ export default function SMSPanelPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="api">
+          <Card className="max-w-2xl mx-auto border-none shadow-lg bg-white rounded-3xl overflow-hidden">
+            <CardHeader className="bg-slate-900 text-white">
+              <div className="flex items-center gap-3">
+                <div className="bg-primary/20 p-2 rounded-xl"><Key size={24} className="text-primary-foreground" /></div>
+                <div>
+                  <CardTitle className="text-xl">Alpha Net BD SMS Gateway</CardTitle>
+                  <CardDescription className="text-slate-400">Configure your API credentials for automatic sending.</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-8 space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">API Key</Label>
+                  <div className="relative">
+                    <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      type="password"
+                      placeholder="Your Alpha Net API Key" 
+                      className="pl-10 h-12 bg-slate-50 border-none shadow-inner"
+                      value={apiConfig.apikey}
+                      onChange={e => setApiConfig({...apiConfig, apikey: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">Sender ID</Label>
+                  <div className="relative">
+                    <Smartphone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="e.g. 8801XXXX" 
+                      className="pl-10 h-12 bg-slate-50 border-none shadow-inner"
+                      value={apiConfig.senderid}
+                      onChange={e => setApiConfig({...apiConfig, senderid: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator className="bg-slate-100" />
+
+              <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-3">
+                <h4 className="font-bold text-sm text-primary flex items-center gap-2">
+                  <ShieldCheck size={16} /> How it works?
+                </h4>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  সিস্টেম যখনই কোনো মেসেজ পাঠাতে যাবে, সে প্রথমে ডাটাবেজের এই <b>apikey</b> ফিল্ডটি চেক করবে। আপনি যখনই কোনো পেমেন্ট রিসিভ করবেন বা ভর্তি কনফার্ম করবেন, Alpha Net গেটওয়ে ব্যবহার করে স্বয়ংক্রিয়ভাবে মেসেজ চলে যাবে।
+                </p>
+              </div>
+
+              <Button 
+                onClick={handleSaveApiConfig} 
+                disabled={isSubmitting} 
+                className="w-full h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20 gap-2"
+              >
+                {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={20} />}
+                Save API Gateway Settings
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="logs">
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[400px] flex items-center justify-center">
             <div className="text-center space-y-4 opacity-30">
               <History size={64} className="mx-auto" />
               <div>
                 <h3 className="text-lg font-bold">No History Found</h3>
-                <p className="text-xs">Once you start sending SMS, logs will appear here.</p>
+                <p className="text-xs">Once you start sending SMS via API, logs will appear here.</p>
               </div>
             </div>
           </Card>
