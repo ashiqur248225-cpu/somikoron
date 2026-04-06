@@ -356,76 +356,80 @@ export default function BuildingDetailsPage({
         </div>
       </div>
 
-      {/* Summary Analytics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Building Rent</p>
-                <p className="text-xl font-bold mt-1">৳{(building.buildingRentCost || 0).toLocaleString()}</p>
+      {/* Summary Analytics Cards - Arranged 3 then 2 */}
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500">
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Building Rent</p>
+                  <p className="text-xl font-bold mt-1">৳{(building.buildingRentCost || 0).toLocaleString()}</p>
+                </div>
+                <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Banknote size={20} /></div>
               </div>
-              <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Banknote size={20} /></div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="border-none shadow-sm bg-white border-l-4 border-l-primary">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Expected Rev.</p>
-                <p className="text-xl font-bold mt-1">৳{revenueStats.expectedIncome.toLocaleString()}</p>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-primary">
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Expected Rev.</p>
+                  <p className="text-xl font-bold mt-1">৳{revenueStats.expectedIncome.toLocaleString()}</p>
+                </div>
+                <div className="bg-primary/5 p-2 rounded-lg text-primary"><TrendingUp size={20} /></div>
               </div>
-              <div className="bg-primary/5 p-2 rounded-lg text-primary"><TrendingUp size={20} /></div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Occupied Rev.</p>
-                <p className="text-xl font-bold mt-1">৳{revenueStats.occupiedRevenue.toLocaleString()}</p>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500">
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Occupied Rev.</p>
+                  <p className="text-xl font-bold mt-1">৳{revenueStats.occupiedRevenue.toLocaleString()}</p>
+                </div>
+                <div className="bg-orange-50 p-2 rounded-lg text-orange-600"><Users size={20} /></div>
               </div>
-              <div className="bg-orange-50 p-2 rounded-lg text-orange-600"><Users size={20} /></div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
 
-        <Card className="border-none shadow-sm bg-white border-l-4 border-l-success">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Recent Collect</p>
-                <p className="text-xl font-bold mt-1 text-success">৳{revenueStats.last30DaysCollected.toLocaleString()}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-success">
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Recent Collect</p>
+                  <p className="text-xl font-bold mt-1 text-success">৳{revenueStats.last30DaysCollected.toLocaleString()}</p>
+                </div>
+                <div className="bg-success/5 p-2 rounded-lg text-success"><CircleDollarSign size={20} /></div>
               </div>
-              <div className="bg-success/5 p-2 rounded-lg text-success"><CircleDollarSign size={20} /></div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className={cn(
-          "border-none shadow-sm bg-white border-l-4",
-          revenueStats.netProfit >= 0 ? "border-l-success" : "border-l-destructive"
-        )}>
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Net Profit/Loss</p>
-                <p className={cn(
-                  "text-xl font-bold mt-1",
-                  revenueStats.netProfit >= 0 ? "text-success" : "text-destructive"
-                )}>৳{revenueStats.netProfit.toLocaleString()}</p>
+          <Card className={cn(
+            "border-none shadow-sm bg-white border-l-4",
+            revenueStats.netProfit >= 0 ? "border-l-success" : "border-l-destructive"
+          )}>
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Net Profit/Loss</p>
+                  <p className={cn(
+                    "text-xl font-bold mt-1",
+                    revenueStats.netProfit >= 0 ? "text-success" : "text-destructive"
+                  )}>৳{revenueStats.netProfit.toLocaleString()}</p>
+                </div>
+                <div className={cn(
+                  "p-2 rounded-lg",
+                  revenueStats.netProfit >= 0 ? "bg-success/5 text-success" : "bg-destructive/5 text-destructive"
+                )}>{revenueStats.netProfit >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div>
               </div>
-              <div className={cn(
-                "p-2 rounded-lg",
-                revenueStats.netProfit >= 0 ? "bg-success/5 text-success" : "bg-destructive/5 text-destructive"
-              )}>{revenueStats.netProfit >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
