@@ -101,29 +101,36 @@ export default function RegistrationsPage() {
   // CRITICAL: ROBUST AUTO-FILL LOGIC FOR OLD STUDENTS
   useEffect(() => {
     if (isDetailOpen && selectedReg && buildings && selectedReg.id !== initializedId) {
-      // 1. Find Building ID from Name provided in registration
-      let targetBuilding = buildings.find(b => b.id === selectedReg.buildingId);
+      // 1. Find Building from Database based on provided ID or Name
+      let targetBuilding = null;
+      if (selectedReg.buildingId) {
+        targetBuilding = buildings.find(b => b.id === selectedReg.buildingId);
+      }
       if (!targetBuilding && selectedReg.buildingName) {
         targetBuilding = buildings.find(b => b.name === selectedReg.buildingName);
       }
 
-      // 2. Find Room Rent from Database
+      // 2. Identify Room and Seat from registration data
+      const rNum = selectedReg.roomNumber || "";
+      const sNum = selectedReg.seatNumber || "";
+
+      // 3. Find Room Rent from Building Data
       let autoRent = "";
-      if (targetBuilding && selectedReg.roomNumber) {
+      if (targetBuilding && rNum) {
         targetBuilding.apartmentsDetail?.forEach((apt: any) => {
           apt.rooms?.forEach((room: any) => {
-            if (room.roomNo === selectedReg.roomNumber && room.rentPerSeat) {
+            if (room.roomNo === rNum && room.rentPerSeat) {
               autoRent = room.rentPerSeat.toString();
             }
           });
         });
       }
 
-      // 3. Update the form with registration data
+      // 4. Update the form with registration data
       setApprovalForm({
         buildingId: targetBuilding?.id || (userRole === 'Building Manager' ? assignedBuildingId : ""),
-        roomNumber: selectedReg.roomNumber || "",
-        seatNumber: selectedReg.seatNumber || "",
+        roomNumber: rNum,
+        seatNumber: sNum,
         paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
         monthlyRent: autoRent || "", 
         serviceCharge: "0",
@@ -152,13 +159,6 @@ export default function RegistrationsPage() {
 
   const selectedRoom = roomsInBuilding.find((r: any) => r.roomNo === approvalForm.roomNumber)
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
-
-  // FALLBACK AUTO-FILL RENT (When admin manually changes room)
-  useEffect(() => {
-    if (selectedRoom?.rentPerSeat) {
-      setApprovalForm(prev => ({ ...prev, monthlyRent: selectedRoom.rentPerSeat.toString() }))
-    }
-  }, [selectedRoom])
 
   const addDueRow = () => {
     setHistoricalDues([...historicalDues, { month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: "" }])
@@ -191,7 +191,7 @@ export default function RegistrationsPage() {
       const bId = approvalForm.buildingId
       const rNum = approvalForm.roomNumber
       const sNum = approvalForm.seatNumber
-      const aptName = selectedRoom?.aptName || "General"
+      const aptName = selectedRoom?.aptName || selectedReg.apartmentName || "General"
 
       const isOld = selectedReg.type === 'old'
       const monthlyRent = Number(approvalForm.monthlyRent)
@@ -476,7 +476,7 @@ export default function RegistrationsPage() {
                     </div>
                     {selectedReg.type === 'old' && (
                       <p className="text-[9px] text-primary font-bold italic flex items-center gap-1">
-                        <CheckCircle2 size={10} /> স্টুডেন্টের ফর্মে দেওয়া বিল্ডিং, রুম ও সিট সরাসরি ডাটাবেজ থেকে অটো-ফিল করা হয়েছে।
+                        <CheckCircle2 size={10} /> স্টুডেন্টের দেওয়া লোকেশন ও সিট ডাটাবেজ থেকে অটো-ফিল করা হয়েছে।
                       </p>
                     )}
                   </div>
