@@ -98,39 +98,46 @@ export default function RegistrationsPage() {
 
   const [historicalDues, setHistoricalDues] = useState<{month: string, year: string, amount: string}[]>([])
 
-  // ROBUST AUTO-FILL LOGIC: Always priorities data from registration record
+  // ENHANCED AUTO-FILL LOGIC (Fixed based on user guidelines)
   useEffect(() => {
     if (isDetailOpen && selectedReg && buildings && selectedReg.id !== initializedId) {
-      // 1. Resolve Building: ID is preferred, then Name
-      const regBId = selectedReg.buildingId || "";
-      const regBName = selectedReg.buildingName || "";
+      console.log("Auto-filling for:", selectedReg.name);
+      
+      // Fix #2: Resolving Building with fallbacks
+      const regBId = selectedReg.buildingId || selectedReg.building?.id || "";
+      const regBName = selectedReg.buildingName || selectedReg.building?.name || "";
       
       const targetBuilding = buildings.find(b => 
         (regBId && b.id === regBId) || 
         (regBName && b.name === regBName)
       );
 
-      // 2. Identify Room and Seat
-      const rNum = selectedReg.roomNumber || "";
-      const sNum = selectedReg.seatNumber || "";
+      // Fix #3: Room and Seat with fallbacks
+      const rNum = selectedReg.roomNumber || selectedReg.roomNo || "";
+      const sNum = selectedReg.seatNumber || selectedReg.seatNo || "";
 
-      // 3. Find Room Rent from Building hierarchy
+      // Fix #4: Rent filling with type mismatch protection and early exit
       let autoRent = "";
       if (targetBuilding && rNum) {
-        targetBuilding.apartmentsDetail?.forEach((apt: any) => {
-          apt.rooms?.forEach((room: any) => {
-            if (room.roomNo === rNum && room.rentPerSeat) {
-              autoRent = room.rentPerSeat.toString();
+        for (const apt of targetBuilding.apartmentsDetail || []) {
+          for (const room of apt.rooms || []) {
+            // String comparison to avoid type mismatch
+            if (String(room.roomNo) === String(rNum) && room.rentPerSeat) {
+              autoRent = String(room.rentPerSeat);
+              break;
             }
-          });
-        });
+          }
+          if (autoRent) break;
+        }
       }
+
+      console.log("Matched Building:", targetBuilding?.name, "Room:", rNum, "Found Rent:", autoRent);
 
       // 4. Set state
       setApprovalForm({
         buildingId: targetBuilding?.id || (userRole === 'Building Manager' ? assignedBuildingId : ""),
-        roomNumber: rNum,
-        seatNumber: sNum,
+        roomNumber: String(rNum),
+        seatNumber: String(sNum),
         paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
         monthlyRent: autoRent || "", 
         serviceCharge: "0",
@@ -157,7 +164,7 @@ export default function RegistrationsPage() {
     ) || []
   }, [selectedBuilding])
 
-  const selectedRoom = roomsInBuilding.find((r: any) => r.roomNo === approvalForm.roomNumber)
+  const selectedRoom = roomsInBuilding.find((r: any) => String(r.roomNo) === String(approvalForm.roomNumber))
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
   const addDueRow = () => {
@@ -273,7 +280,7 @@ export default function RegistrationsPage() {
             return {
               ...apt,
               rooms: apt.rooms.map((room: any) => {
-                if (room.roomNo === rNum) {
+                if (String(room.roomNo) === String(rNum)) {
                   return {
                     ...room,
                     seats: room.seats.map((seat: any) => seat.seatNo === sNum ? { ...seat, status: 'occupied' } : seat)
@@ -372,7 +379,7 @@ export default function RegistrationsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}>
+                        <Button variant="outline" size="sm" onClick={() => { setInitializedId(null); setSelectedReg(reg); setIsDetailOpen(true); }}>
                           <Eye size={14} className="mr-1" /> Review
                         </Button>
                       </TableCell>
@@ -407,7 +414,7 @@ export default function RegistrationsPage() {
                     <span className="font-bold text-muted-foreground">Requested:</span>
                     <span className="font-black text-slate-700">{reg.buildingName} • Room {reg.roomNumber || 'Any'}</span>
                   </div>
-                  <Button className="w-full h-10 rounded-xl font-bold gap-2" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}>
+                  <Button className="w-full h-10 rounded-xl font-bold gap-2" onClick={() => { setInitializedId(null); setSelectedReg(reg); setIsDetailOpen(true); }}>
                     <Eye size={16} /> Process Application
                   </Button>
                 </CardContent>
@@ -457,9 +464,23 @@ export default function RegistrationsPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                           <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room</Label>
-                          <Select disabled={!approvalForm.buildingId} value={approvalForm.roomNumber} onValueChange={val => setApprovalForm({...approvalForm, roomNumber: val, seatNumber: ""})}>
+                          <Select disabled={!approvalForm.buildingId} value={approvalForm.roomNumber} onValueChange={val => {
+                            let autoRent = approvalForm.monthlyRent;
+                            if (selectedBuilding) {
+                              for (const apt of selectedBuilding.apartmentsDetail || []) {
+                                for (const room of apt.rooms || []) {
+                                  if (String(room.roomNo) === String(val) && room.rentPerSeat) {
+                                    autoRent = String(room.rentPerSeat);
+                                    break;
+                                  }
+                                }
+                                if (autoRent !== approvalForm.monthlyRent) break;
+                              }
+                            }
+                            setApprovalForm({...approvalForm, roomNumber: val, seatNumber: "", monthlyRent: autoRent});
+                          }}>
                             <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Room" /></SelectTrigger>
-                            <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`room-${idx}`} value={r.roomNo}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
+                            <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`room-${idx}`} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-1">
@@ -469,7 +490,7 @@ export default function RegistrationsPage() {
                             <SelectContent>
                               {emptySeats.map((s: any) => <SelectItem key={`seat-${s.seatNo}`} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}
                               {approvalForm.seatNumber && !emptySeats.find(s => s.seatNo === approvalForm.seatNumber) && (
-                                <SelectItem value={approvalForm.seatNumber}>Seat {approvalForm.seatNumber} (Form Choice)</SelectItem>
+                                <SelectItem value={approvalForm.seatNumber}>Seat {approvalForm.seatNumber} (Current)</SelectItem>
                               )}
                             </SelectContent>
                           </Select>
