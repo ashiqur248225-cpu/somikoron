@@ -79,13 +79,14 @@ import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { sendSMS } from "@/app/actions/sms"
-import { ReceiptDialog } from "@/components/receipt-dialog"
+import { useRouter } from "next/navigation"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function DashboardPage() {
   const db = useFirestore()
   const { toast } = useToast()
+  const router = useRouter()
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
   const [userBranch, setUserBranch] = useState("")
@@ -102,11 +103,6 @@ export default function DashboardPage() {
   const [isMealLogSelectorOpen, setIsMealLogSelectorOpen] = useState(false)
   const [isBulkMealEntryOpen, setIsBulkMealEntryOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  // Receipt Modal Logic
-  const [isReceiptOpen, setIsReceiptOpen] = useState(false)
-  const [lastPayment, setLastPayment] = useState<any>(null)
-  const [targetStudent, setTargetStudent] = useState<any>(null)
 
   // Meal Log Flow State
   const [mealLogFilter, setMealLogFilter] = useState({
@@ -132,23 +128,6 @@ export default function DashboardPage() {
     method: "cash",
     receiver: "",
     description: ""
-  })
-
-  const [expenseFormData, setExpenseFormData] = useState({
-    category: "others",
-    buildingId: "none",
-    apartmentName: "",
-    roomNumber: "",
-    meterNo: "",
-    amount: "",
-    totalMeals: "",
-    method: "cash",
-    expensePartyName: "",
-    receiver: "",
-    month: MONTHS[new Date().getMonth()],
-    year: new Date().getFullYear().toString(),
-    description: "",
-    expenseDate: new Date().toISOString().split('T')[0]
   })
 
   useEffect(() => {
@@ -333,7 +312,6 @@ export default function DashboardPage() {
         
         const totalPayableAfter = rentDueAfter + Math.max(0, -foodBalanceAfter)
 
-        // CRITICAL FIX: Removed serverTimestamp() from arrayUnion
         await updateDoc(doc(db, "students", selectedStudent.id), { 
           paymentsHistory: arrayUnion(pRecord), 
           advanceAmount: increment(Number(formData.addAdvanceAmount)), 
@@ -363,9 +341,7 @@ export default function DashboardPage() {
           }
         }
         
-        setLastPayment({ ...pRecord, date: new Date() })
-        setTargetStudent({ ...selectedStudent, totalDue: totalPayableAfter })
-        setIsReceiptOpen(true)
+        router.push(`/receipts/${pId}`)
       }
       setIsIncomeDialogOpen(false)
     } catch (e: any) { 
@@ -388,7 +364,6 @@ export default function DashboardPage() {
         if (!s) return
         const countNum = Number(count); const cost = countNum * currentMealRate
         
-        // CRITICAL FIX: Removed serverTimestamp() from arrayUnion
         await updateDoc(doc(db, "students", sId), { 
           mealsHistory: arrayUnion({ 
             month: monthLabel, 
@@ -440,8 +415,6 @@ export default function DashboardPage() {
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
-
-      <ReceiptDialog isOpen={isReceiptOpen} onClose={() => setIsReceiptOpen(false)} payment={lastPayment} student={targetStudent} />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="pb-2"><CardTitle className="text-[10px] uppercase text-success">Income</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">৳{stats.income.toLocaleString()}</div></CardContent></Card>

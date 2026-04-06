@@ -33,22 +33,17 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { sendSMS } from "@/app/actions/sms"
-import { ReceiptDialog } from "@/components/receipt-dialog"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function RegistrationsPage() {
   const { toast } = useToast()
   const db = useFirestore()
+  const router = useRouter()
   const [selectedReg, setSelectedReg] = useState<any>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   
-  // Receipt Modal Logic
-  const [isReceiptOpen, setIsReceiptOpen] = useState(false)
-  const [lastPayment, setLastPayment] = useState<any>(null)
-  const [targetStudent, setTargetStudent] = useState<any>(null)
-
   const [userRole, setUserRole] = useState("Manager")
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
@@ -165,7 +160,7 @@ export default function RegistrationsPage() {
       const svcCharge = Number(approvalForm.serviceCharge)
       const advAmount = Number(approvalForm.advanceAmount)
       
-      let finalPRecord = null;
+      let createdPaymentId = null;
       if (!isOld) {
         const rentPaid = Number(approvalForm.initialRentPayment)
         const foodPaid = Number(approvalForm.initialFoodPayment)
@@ -196,7 +191,7 @@ export default function RegistrationsPage() {
             createdAt: serverTimestamp()
           }
           await setDoc(doc(db, "payments", pId), pRecord)
-          finalPRecord = { ...pRecord, date: new Date() }
+          createdPaymentId = pId;
         }
       }
 
@@ -284,14 +279,12 @@ export default function RegistrationsPage() {
       await deleteDoc(doc(db, "registrations", selectedReg.id))
       toast({ title: "Approved Successfully" })
       
-      if (finalPRecord) {
-        setLastPayment(finalPRecord)
-        setTargetStudent({ name: selectedReg.name, phone: selectedReg.phone, buildingName: selectedBuilding?.name, roomNumber: rNum, paymentSystem: approvalForm.paymentSystem, branch: userBranch })
-        setIsReceiptOpen(true)
+      if (createdPaymentId) {
+        router.push(`/receipts/${createdPaymentId}`)
+      } else {
+        setIsDetailOpen(false)
+        setSelectedReg(null)
       }
-
-      setIsDetailOpen(false)
-      setSelectedReg(null)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -314,8 +307,6 @@ export default function RegistrationsPage() {
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
-
-      <ReceiptDialog isOpen={isReceiptOpen} onClose={() => setIsReceiptOpen(false)} payment={lastPayment} student={targetStudent} />
 
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>

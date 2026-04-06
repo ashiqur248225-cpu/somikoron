@@ -26,8 +26,8 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ReceiptDialog } from "@/components/receipt-dialog"
 import { sendSMS } from "@/app/actions/sms"
+import { useRouter } from "next/navigation"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -40,6 +40,7 @@ const formatCompactDate = (date: any) => {
 export default function IncomeHistoryPage() {
   const { toast } = useToast()
   const db = useFirestore()
+  const router = useRouter()
   
   // App Context
   const [userBranch, setUserBranch] = useState("")
@@ -58,11 +59,6 @@ export default function IncomeHistoryPage() {
   const [isEntryOpen, setIsEntryOpen] = useState(false)
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  // Receipt Modal Logic
-  const [isReceiptOpen, setIsReceiptOpen] = useState(false)
-  const [lastPayment, setLastPayment] = useState<any>(null)
-  const [targetStudent, setTargetStudent] = useState<any>(null)
 
   // Entry Form Specific Filters
   const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
@@ -248,7 +244,6 @@ export default function IncomeHistoryPage() {
         
         const totalPayableAfter = rentDueAfter + Math.max(0, -foodBalanceAfter)
 
-        // CRITICAL FIX: Removed serverTimestamp() from arrayUnion
         await updateDoc(doc(db, "students", selectedStudent.id), {
           paymentsHistory: arrayUnion(pRecord),
           advanceAmount: increment(Number(formData.addAdvanceAmount)),
@@ -278,18 +273,12 @@ export default function IncomeHistoryPage() {
               toast({ title: "SMS Sent", description: `মেসেজ: ${msg.substring(0, 50)}...` })
             } else if (result.error === 417) {
               toast({ variant: "destructive", title: "ব্যালেন্স নেই", description: "আপনার পর্যাপ্ত ব্যালেন্স নেই, দয়া করে রিচার্জ করুন।" })
-            } else {
-              toast({ variant: "destructive", title: "SMS Failed", description: result.msg })
             }
           }
         }
         
         toast({ title: "Success", description: "Payment recorded." })
-        
-        // Trigger Receipt
-        setLastPayment({ ...pRecord, date: new Date() })
-        setTargetStudent({ ...selectedStudent, totalDue: totalPayableAfter })
-        setIsReceiptOpen(true)
+        router.push(`/receipts/${pId}`)
       }
       setIsEntryOpen(false)
     } catch (e: any) { 
@@ -317,13 +306,6 @@ export default function IncomeHistoryPage() {
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
-
-      <ReceiptDialog 
-        isOpen={isReceiptOpen} 
-        onClose={() => setIsReceiptOpen(false)} 
-        payment={lastPayment} 
-        student={targetStudent}
-      />
 
       {/* GLOBAL FILTER BAR (Desktop) */}
       <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
