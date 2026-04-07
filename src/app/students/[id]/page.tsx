@@ -5,7 +5,7 @@ import * as React from "react"
 import { useState, useMemo, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, serverTimestamp, updateDoc, setDoc, getDoc, arrayUnion, increment, collection, deleteDoc, query, where } from "firebase/firestore"
+import { doc, serverTimestamp, updateDoc, setDoc, arrayUnion, increment, collection, query, where } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -15,14 +15,13 @@ import {
   UserCircle, Phone, Building2, 
   Loader2, Calculator,
   Plus, UserMinus, Wallet,
-  AlertCircle, History, Edit, Trash2,
+  AlertCircle, History, Edit,
   Calendar, ChevronLeft,
   Info, ShieldCheck, HandCoins,
-  MapPin, GraduationCap, Briefcase,
-  Users, Home, Receipt, CircleDollarSign,
-  Printer, FileText, Send, MoreVertical,
-  Utensils, LayoutGrid, CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight,
-  ExternalLink, UserCheck, Zap, Clock
+  MapPin, GraduationCap,
+  LayoutGrid, CheckCircle2, 
+  MoreVertical, Utensils, Clock,
+  Smartphone, User, Zap, CircleDollarSign
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -38,17 +37,6 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import {
   Select,
   SelectContent,
@@ -80,6 +68,7 @@ export default function StudentDetailsPage() {
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isExitDialogOpen, setIsExitDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
@@ -124,7 +113,6 @@ export default function StudentDetailsPage() {
     }
   }, [student])
 
-  // Calculation Logic
   const stats = useMemo(() => {
     if (!student) return null
     
@@ -282,7 +270,7 @@ export default function StudentDetailsPage() {
         </div>
       </div>
 
-      {/* Desktop Header Header */}
+      {/* Header */}
       <div className="hidden md:flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-6">
           <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
@@ -308,66 +296,120 @@ export default function StudentDetailsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <Card className="border-none shadow-sm rounded-3xl p-6 bg-white space-y-6">
-          <h2 className="text-xl font-bold text-slate-800">Contact & Location</h2>
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 text-slate-600">
-              <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Phone size={18}/></div>
-              <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Mobile</p><p className="font-bold">{student.phone}</p></div>
-            </div>
-            <div className="flex items-center gap-4 text-slate-600">
-              <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Building2 size={18}/></div>
-              <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Building</p><p className="font-bold">{student.buildingName}</p></div>
-            </div>
-            <div className="flex items-center gap-4 text-slate-600">
-              <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><LayoutGrid size={18}/></div>
-              <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Unit</p><p className="font-bold">Room {student.roomNumber} | Seat {student.seatNumber}</p></div>
-            </div>
-            <div className="flex items-center gap-4 text-slate-600">
-              <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Calendar size={18}/></div>
-              <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Billing Start</p><p className="font-bold">{student.billingStartDate}</p></div>
+        {/* Contact & Location Div */}
+        <Card className="border-none shadow-sm rounded-3xl p-6 bg-white flex flex-col justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 mb-6">Contact & Location</h2>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 text-slate-600">
+                <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Phone size={18}/></div>
+                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Mobile</p><p className="font-bold">{student.phone}</p></div>
+              </div>
+              <div className="flex items-center gap-4 text-slate-600">
+                <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Building2 size={18}/></div>
+                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Building</p><p className="font-bold">{student.buildingName}</p></div>
+              </div>
+              <div className="flex items-center gap-4 text-slate-600">
+                <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><LayoutGrid size={18}/></div>
+                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Unit</p><p className="font-bold">Room {student.roomNumber} | Seat {student.seatNumber}</p></div>
+              </div>
+              <div className="flex items-center gap-4 text-slate-600">
+                <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Calendar size={18}/></div>
+                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Billing Start</p><p className="font-bold">{student.billingStartDate}</p></div>
+              </div>
             </div>
           </div>
+          <Button 
+            variant="secondary" 
+            className="w-full mt-8 rounded-xl font-bold gap-2 text-xs uppercase"
+            onClick={() => setIsDetailsDialogOpen(true)}
+          >
+            <Info size={14} /> View All Information
+          </Button>
         </Card>
 
-        <Card className="lg:col-span-2 border-none shadow-sm rounded-3xl p-6 bg-white space-y-6">
-          <h2 className="text-xl font-bold text-slate-800">Financial Overview</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-5 rounded-2xl bg-orange-50/50 border border-orange-100 flex flex-col items-center text-center space-y-1">
-              <p className="text-[9px] font-black uppercase text-orange-600 tracking-widest">Monthly Rent</p>
-              <p className="text-2xl font-black text-orange-700">৳{student.monthlyRent}</p>
-            </div>
-            <div className="p-5 rounded-2xl bg-blue-50/50 border border-blue-100 flex flex-col items-center text-center space-y-1">
-              <p className="text-[9px] font-black uppercase text-blue-600 tracking-widest">Advance Pool</p>
-              <p className="text-2xl font-black text-blue-700">৳{student.advanceAmount}</p>
-            </div>
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center text-center space-y-1">
-              <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Service Charge</p>
-              <p className="text-2xl font-black text-slate-700">৳{student.serviceCharge}</p>
-            </div>
-            <div className="p-5 rounded-2xl bg-destructive/5 border border-destructive/10 flex flex-col items-center text-center space-y-1">
-              <p className="text-[9px] font-black uppercase text-destructive tracking-widest">Total Rent Due</p>
-              <p className="text-2xl font-black text-destructive">৳{stats?.rentDue.toLocaleString()}</p>
-            </div>
-          </div>
-        </Card>
+        {/* Financial Overview Cards */}
+        <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-4">
+          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
+            <div className="bg-orange-50 p-2 rounded-lg text-orange-600 mb-1"><CircleDollarSign size={20}/></div>
+            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Monthly Rent</p>
+            <p className="text-xl font-black text-slate-800">৳{student.monthlyRent}</p>
+          </Card>
+          
+          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
+            <div className="bg-blue-50 p-2 rounded-lg text-blue-600 mb-1"><ShieldCheck size={20}/></div>
+            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Advance Pool</p>
+            <p className="text-xl font-black text-slate-800">৳{student.advanceAmount}</p>
+          </Card>
+
+          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
+            <div className="bg-green-50 p-2 rounded-lg text-green-600 mb-1"><HandCoins size={20}/></div>
+            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Total Received</p>
+            <p className="text-xl font-black text-slate-800">৳{stats?.totalReceived.toLocaleString()}</p>
+          </Card>
+
+          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
+            <div className="bg-red-50 p-2 rounded-lg text-red-600 mb-1"><AlertCircle size={20}/></div>
+            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Remaining Due</p>
+            <p className="text-xl font-black text-destructive">৳{stats?.totalDue.toLocaleString()}</p>
+          </Card>
+
+          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
+            <div className="bg-purple-50 p-2 rounded-lg text-purple-600 mb-1"><Zap size={20}/></div>
+            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Service Charge</p>
+            <p className="text-xl font-black text-slate-800">৳{student.serviceCharge}</p>
+          </Card>
+
+          {student.paymentSystem === 'non-package' && (
+            <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
+              <div className={cn("p-2 rounded-lg mb-1", stats?.foodBalance >= 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600")}>
+                <Utensils size={20}/>
+              </div>
+              <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Food Balance</p>
+              <p className={cn("text-xl font-black", stats?.foodBalance >= 0 ? "text-green-700" : "text-destructive")}>
+                ৳{stats?.foodBalance.toLocaleString()}
+              </p>
+            </Card>
+          )}
+        </div>
       </div>
 
       <Tabs defaultValue="payments" className="w-full">
         <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl">
-          <TabsTrigger value="payments" className="rounded-xl gap-2 h-10 px-6 font-bold"><Wallet size={14}/> Payments</TabsTrigger>
+          <TabsTrigger value="payments" className="rounded-xl gap-2 h-10 px-6 font-bold"><Wallet size={14}/> Finance History</TabsTrigger>
           <TabsTrigger value="dues" className="rounded-xl gap-2 h-10 px-6 font-bold"><Clock size={14}/> Dues Breakdown</TabsTrigger>
+          {student.paymentSystem === 'non-package' && (
+            <TabsTrigger value="meals" className="rounded-xl gap-2 h-10 px-6 font-bold"><Utensils size={14}/> Food Log</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="payments">
-          <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+          {/* Responsive View for Payments */}
+          <div className="md:hidden space-y-4">
+            {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
+              <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p>
+                    <h4 className="font-bold text-slate-800">{p.month} {p.year}</h4>
+                  </div>
+                  <Badge className="bg-green-50 text-green-700 hover:bg-green-100 border-none font-black">৳{p.amount.toLocaleString()}</Badge>
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-muted-foreground font-bold uppercase">
+                  <span>Method: {p.method}</span>
+                  <span>Received By: {p.receiver}</span>
+                </div>
+              </Card>
+            ))}
+          </div>
+          <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Period</TableHead>
                   <TableHead>Method</TableHead>
-                  <TableHead>Purpose</TableHead>
+                  <TableHead>Receiver</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
               </TableHeader>
@@ -377,7 +419,7 @@ export default function StudentDetailsPage() {
                     <TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
                     <TableCell className="font-bold">{p.month} {p.year}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{p.description || "N/A"}</TableCell>
+                    <TableCell className="text-xs text-slate-600 font-medium">{p.receiver}</TableCell>
                     <TableCell className="text-right font-black text-success">৳{p.amount.toLocaleString()}</TableCell>
                   </TableRow>
                 ))}
@@ -387,7 +429,19 @@ export default function StudentDetailsPage() {
         </TabsContent>
 
         <TabsContent value="dues">
-          <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+          {/* Responsive View for Dues */}
+          <div className="md:hidden space-y-4">
+            {stats?.dueBreakdownList.map((d, i) => (
+              <Card key={i} className="p-4 border-none shadow-sm rounded-2xl flex justify-between items-center">
+                <div>
+                  <h4 className="font-bold text-slate-800">{d.month}</h4>
+                  <Badge variant="outline" className="text-[8px] text-destructive border-destructive mt-1 uppercase">Pending</Badge>
+                </div>
+                <p className="text-lg font-black text-destructive">৳{d.amount.toLocaleString()}</p>
+              </Card>
+            ))}
+          </div>
+          <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
                 <TableRow>
@@ -402,9 +456,9 @@ export default function StudentDetailsPage() {
                   <TableRow key={i}>
                     <TableCell className="font-bold">{d.month}</TableCell>
                     <TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive">Unpaid</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive uppercase">Unpaid</Badge></TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => setIsPaymentDialogOpen(true)}>Pay</Button>
+                      <Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => setIsPaymentDialogOpen(true)}>Record Pay</Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -412,6 +466,47 @@ export default function StudentDetailsPage() {
             </Table>
           </Card>
         </TabsContent>
+
+        {student.paymentSystem === 'non-package' && (
+          <TabsContent value="meals">
+            <div className="md:hidden space-y-4">
+              {student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
+                <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-2">
+                  <div className="flex justify-between items-start">
+                    <h4 className="font-bold text-slate-800">{m.month}</h4>
+                    <p className="text-lg font-black text-slate-800">৳{m.totalCost.toLocaleString()}</p>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold text-muted-foreground uppercase">
+                    <span>Count: {m.totalMeals} Meals</span>
+                    <span>Rate: ৳{m.perMealCost}</span>
+                  </div>
+                </Card>
+              ))}
+            </div>
+            <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead>Month</TableHead>
+                    <TableHead>Meal Count</TableHead>
+                    <TableHead>Rate</TableHead>
+                    <TableHead className="text-right">Total Cost</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
+                    <TableRow key={idx}>
+                      <TableCell className="font-bold">{m.month}</TableCell>
+                      <TableCell>{m.totalMeals} Meals</TableCell>
+                      <TableCell>৳{m.perMealCost}</TableCell>
+                      <TableCell className="text-right font-black">৳{m.totalCost.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       <div className="fixed bottom-8 right-8 z-50">
@@ -419,6 +514,58 @@ export default function StudentDetailsPage() {
           <Plus size={32} />
         </Button>
       </div>
+
+      {/* View All Information Dialog */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="max-w-2xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black">Personal Dossier</DialogTitle>
+            <DialogDescription>Full archival data for {student.name}.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Parents Info</Label>
+                <div className="p-4 bg-slate-50 rounded-2xl space-y-2 border">
+                  <p className="text-sm"><b>Father:</b> {student.fatherName || 'N/A'}</p>
+                  <p className="text-sm"><b>Mother:</b> {student.motherName || 'N/A'}</p>
+                  <p className="text-sm"><b>Parent Phone:</b> {student.parentPhone || 'N/A'}</p>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Location Origin</Label>
+                <div className="p-4 bg-slate-50 rounded-2xl space-y-2 border">
+                  <p className="text-sm"><b>Village:</b> {student.village || 'N/A'}</p>
+                  <p className="text-sm"><b>P.O:</b> {student.postOffice || 'N/A'}</p>
+                  <p className="text-sm"><b>Upazila:</b> {student.upazila || 'N/A'}</p>
+                  <p className="text-sm"><b>District:</b> {student.district || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Vital Stats</Label>
+                <div className="p-4 bg-slate-50 rounded-2xl space-y-2 border">
+                  <p className="text-sm"><b>Date of Birth:</b> {student.dob || 'N/A'}</p>
+                  <p className="text-sm"><b>Blood Group:</b> {student.bloodGroup || 'N/A'}</p>
+                  <p className="text-sm"><b>Guardian No:</b> {student.guardianPhone || 'N/A'}</p>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Institution Info</Label>
+                <div className="p-4 bg-slate-50 rounded-2xl space-y-2 border">
+                  <p className="text-sm"><b>Institute:</b> {student.collegeUniversity || 'N/A'}</p>
+                  <p className="text-sm"><b>Dept/Role:</b> {student.department || 'N/A'}</p>
+                  <p className="text-sm"><b>Status:</b> {student.occupation || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="w-full h-12 rounded-xl font-bold" onClick={() => setIsDetailsDialogOpen(false)}>Close Dossier</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
