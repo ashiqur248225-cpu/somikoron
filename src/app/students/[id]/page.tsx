@@ -21,7 +21,7 @@ import {
   MapPin, GraduationCap,
   LayoutGrid, CheckCircle2, 
   MoreVertical, Utensils, Clock,
-  Smartphone, User, Zap, CircleDollarSign
+  Smartphone, User, Zap, CircleDollarSign, Home, Trash2
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -270,7 +270,7 @@ export default function StudentDetailsPage() {
         </div>
       </div>
 
-      {/* Header */}
+      {/* Header Desktop */}
       <div className="hidden md:flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-6">
           <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
@@ -328,63 +328,75 @@ export default function StudentDetailsPage() {
           </Button>
         </Card>
 
-        {/* Financial Overview Cards */}
-        <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-4">
-          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
-            <div className="bg-orange-50 p-2 rounded-lg text-orange-600 mb-1"><CircleDollarSign size={20}/></div>
-            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Monthly Rent</p>
-            <p className="text-xl font-black text-slate-800">৳{student.monthlyRent}</p>
+        {/* Financial Overview Cards - 2 Column Long Format */}
+        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="bg-blue-50 p-3 rounded-xl text-blue-600 shrink-0"><ShieldCheck size={24}/></div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Advance Balance</p>
+              <p className="text-xl font-black text-slate-800">৳{student.advanceAmount}</p>
+            </div>
+          </Card>
+
+          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="bg-purple-50 p-3 rounded-xl text-purple-600 shrink-0"><Zap size={24}/></div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Service Charge</p>
+              <p className="text-xl font-black text-slate-800">৳{student.serviceCharge}</p>
+            </div>
           </Card>
           
-          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
-            <div className="bg-blue-50 p-2 rounded-lg text-blue-600 mb-1"><ShieldCheck size={20}/></div>
-            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Advance Pool</p>
-            <p className="text-xl font-black text-slate-800">৳{student.advanceAmount}</p>
+          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="bg-orange-50 p-3 rounded-xl text-orange-600 shrink-0"><Home size={24}/></div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Monthly Rent</p>
+              <p className="text-xl font-black text-slate-800">৳{student.monthlyRent}</p>
+            </div>
           </Card>
 
-          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
-            <div className="bg-green-50 p-2 rounded-lg text-green-600 mb-1"><HandCoins size={20}/></div>
-            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Total Received</p>
-            <p className="text-xl font-black text-slate-800">৳{stats?.totalReceived.toLocaleString()}</p>
+          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="bg-green-50 p-3 rounded-xl text-green-600 shrink-0"><HandCoins size={24}/></div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Total Received</p>
+              <p className="text-xl font-black text-slate-800">৳{stats?.totalReceived.toLocaleString()}</p>
+            </div>
           </Card>
 
-          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
-            <div className="bg-red-50 p-2 rounded-lg text-red-600 mb-1"><AlertCircle size={20}/></div>
-            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Remaining Due</p>
-            <p className="text-xl font-black text-destructive">৳{stats?.totalDue.toLocaleString()}</p>
-          </Card>
-
-          <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
-            <div className="bg-purple-50 p-2 rounded-lg text-purple-600 mb-1"><Zap size={20}/></div>
-            <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Service Charge</p>
-            <p className="text-xl font-black text-slate-800">৳{student.serviceCharge}</p>
+          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="bg-red-50 p-3 rounded-xl text-red-600 shrink-0"><AlertCircle size={24}/></div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Rent Due</p>
+              <p className="text-xl font-black text-destructive">৳{stats?.rentDue.toLocaleString()}</p>
+            </div>
           </Card>
 
           {student.paymentSystem === 'non-package' && (
-            <Card className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex flex-col items-center text-center space-y-1">
-              <div className={cn("p-2 rounded-lg mb-1", stats?.foodBalance >= 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600")}>
-                <Utensils size={20}/>
+            <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
+              <div className={cn("p-3 rounded-xl shrink-0", stats?.foodBalance >= 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600")}>
+                <Utensils size={24}/>
               </div>
-              <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Food Balance</p>
-              <p className={cn("text-xl font-black", stats?.foodBalance >= 0 ? "text-green-700" : "text-destructive")}>
-                ৳{stats?.foodBalance.toLocaleString()}
-              </p>
+              <div>
+                <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Food Balance</p>
+                <p className={cn("text-xl font-black", stats?.foodBalance >= 0 ? "text-green-700" : "text-destructive")}>
+                  ৳{stats?.foodBalance.toLocaleString()}
+                </p>
+              </div>
             </Card>
           )}
         </div>
       </div>
 
       <Tabs defaultValue="payments" className="w-full">
-        <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl">
-          <TabsTrigger value="payments" className="rounded-xl gap-2 h-10 px-6 font-bold"><Wallet size={14}/> Finance History</TabsTrigger>
-          <TabsTrigger value="dues" className="rounded-xl gap-2 h-10 px-6 font-bold"><Clock size={14}/> Dues Breakdown</TabsTrigger>
+        <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl overflow-x-auto h-auto flex">
+          <TabsTrigger value="payments" className="rounded-xl gap-2 h-10 px-6 font-bold flex-1"><Wallet size={14}/> Finance History</TabsTrigger>
+          <TabsTrigger value="dues" className="rounded-xl gap-2 h-10 px-6 font-bold flex-1"><Clock size={14}/> Dues Breakdown</TabsTrigger>
           {student.paymentSystem === 'non-package' && (
-            <TabsTrigger value="meals" className="rounded-xl gap-2 h-10 px-6 font-bold"><Utensils size={14}/> Food Log</TabsTrigger>
+            <TabsTrigger value="meals" className="rounded-xl gap-2 h-10 px-6 font-bold flex-1"><Utensils size={14}/> Food Log</TabsTrigger>
           )}
         </TabsList>
 
         <TabsContent value="payments">
-          {/* Responsive View for Payments */}
+          {/* Mobile Card View for Payments */}
           <div className="md:hidden space-y-4">
             {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
               <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
@@ -401,16 +413,21 @@ export default function StudentDetailsPage() {
                 </div>
               </Card>
             ))}
+            {student.paymentsHistory?.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No payment history.</div>}
           </div>
+          {/* Desktop Table View for Payments */}
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Period</TableHead>
+                  <TableHead>Seat Amt</TableHead>
+                  <TableHead>Food Amt</TableHead>
+                  <TableHead>Advance</TableHead>
                   <TableHead>Method</TableHead>
                   <TableHead>Receiver</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Total Amount</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -418,18 +435,24 @@ export default function StudentDetailsPage() {
                   <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
                     <TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
                     <TableCell className="font-bold">{p.month} {p.year}</TableCell>
+                    <TableCell>৳{p.seatAmount || 0}</TableCell>
+                    <TableCell>৳{p.foodAmount || 0}</TableCell>
+                    <TableCell>৳{p.advanceAmount || 0}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell>
                     <TableCell className="text-xs text-slate-600 font-medium">{p.receiver}</TableCell>
                     <TableCell className="text-right font-black text-success">৳{p.amount.toLocaleString()}</TableCell>
                   </TableRow>
                 ))}
+                {student.paymentsHistory?.length === 0 && (
+                  <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground italic">No payment history found.</TableCell></TableRow>
+                )}
               </TableBody>
             </Table>
           </Card>
         </TabsContent>
 
         <TabsContent value="dues">
-          {/* Responsive View for Dues */}
+          {/* Mobile Card View for Dues */}
           <div className="md:hidden space-y-4">
             {stats?.dueBreakdownList.map((d, i) => (
               <Card key={i} className="p-4 border-none shadow-sm rounded-2xl flex justify-between items-center">
@@ -440,7 +463,9 @@ export default function StudentDetailsPage() {
                 <p className="text-lg font-black text-destructive">৳{d.amount.toLocaleString()}</p>
               </Card>
             ))}
+            {stats?.dueBreakdownList.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No outstanding dues.</div>}
           </div>
+          {/* Desktop Table View for Dues */}
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
@@ -462,6 +487,9 @@ export default function StudentDetailsPage() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {stats?.dueBreakdownList.length === 0 && (
+                  <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">Clear account - No dues found.</TableCell></TableRow>
+                )}
               </TableBody>
             </Table>
           </Card>
