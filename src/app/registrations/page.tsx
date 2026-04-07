@@ -43,7 +43,7 @@ export default function RegistrationsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
-  const [selectedReq, setSelectedReq] = useState<any>(null)
+  const [selectedReg, setSelectedReg] = useState<any>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   
@@ -184,6 +184,8 @@ export default function RegistrationsPage() {
       toast({ variant: "destructive", title: "Error", description: "Monthly Rent and Location are required." })
       return
     }
+
+    if (!selectedReg) return
 
     setIsProcessing(true)
     try {
@@ -636,7 +638,7 @@ export default function RegistrationsPage() {
           )}
           
           <DialogFooter className="p-8 bg-slate-100 border-t flex flex-col md:flex-row gap-4">
-            <Button variant="outline" className="flex-1 h-14 rounded-2xl border-destructive text-destructive font-black uppercase hover:bg-destructive/5" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject Enrollment</Button>
+            <Button variant="outline" className="flex-1 h-14 rounded-2xl border-destructive text-destructive font-black uppercase hover:bg-destructive/5" onClick={() => { selectedReg && deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject Enrollment</Button>
             <Button className="flex-[2] h-14 rounded-2xl bg-success hover:bg-success/90 font-black text-lg shadow-xl shadow-success/20" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="mr-2" />} Approve & Sync Resident</Button>
           </DialogFooter>
         </DialogContent>
