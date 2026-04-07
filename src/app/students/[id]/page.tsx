@@ -22,7 +22,7 @@ import {
   Users, Home, Receipt, CircleDollarSign,
   Printer, FileText, Send, MoreVertical,
   Utensils, LayoutGrid, CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight,
-  ExternalLink, UserCheck
+  ExternalLink, UserCheck, Zap, Clock
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -82,12 +82,10 @@ export default function StudentDetailsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   
-  // UI Control States
   const [isUpdating, setIsUpdating] = useState(false)
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isExitDialogOpen, setIsExitDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [showFullDetails, setShowFullDetails] = useState(false)
   
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
@@ -97,7 +95,6 @@ export default function StudentDetailsPage() {
     setUserName(localStorage.getItem("user_name") || "User")
   }, [])
 
-  // Firebase Data Hooks
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
@@ -113,7 +110,6 @@ export default function StudentDetailsPage() {
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
 
-  // Forms State
   const [paymentData, setPaymentData] = useState({
     month: MONTHS[new Date().getMonth()],
     year: new Date().getFullYear().toString(),
@@ -128,14 +124,12 @@ export default function StudentDetailsPage() {
 
   const [editForm, setEditForm] = useState<any>(null)
 
-  // Initialize Edit Form
   useEffect(() => {
     if (student) {
       setEditForm({ ...student })
     }
   }, [student])
 
-  // Advanced Financial Logic
   const stats = useMemo(() => {
     if (!student) return null
     
@@ -143,7 +137,6 @@ export default function StudentDetailsPage() {
     const now = new Date()
     const endDate = student.isActive ? now : (student.leftAt?.toDate?.() || now)
     
-    // 1. Rent Calculation
     const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
     const totalMonths = Math.max(0, monthsElapsed + 1)
     const generatedRent = totalMonths * (student.monthlyRent || 0)
@@ -152,17 +145,14 @@ export default function StudentDetailsPage() {
     const historicalRentDue = student.duesBreakdown ? Object.values(student.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
     const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
 
-    // 2. Food Calculation
     const historicalFoodDue = Number(student.foodDueAmount) || 0
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
     const totalFoodPaid = (student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0)
     const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
 
-    // 3. Collection Summary
     const totalReceivedNew = (student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0) || 0)
     const totalReceived = (student.historicalTotalReceived || 0) + totalReceivedNew
 
-    // 4. Monthly Breakdown for display
     const dueBreakdownList = []
     for (let i = 0; i < totalMonths; i++) {
       const d = new Date(billingStart.getFullYear(), billingStart.getMonth() + i, 1)
@@ -181,7 +171,6 @@ export default function StudentDetailsPage() {
     }
   }, [student])
 
-  // Handlers
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
     setIsUpdating(true)
@@ -206,7 +195,6 @@ export default function StudentDetailsPage() {
         updatedAt: serverTimestamp() 
       })
       
-      // SMS Logic with Mapping
       if (apiConfig?.apikey && templatesData?.templates) {
         const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
         if (paymentTemplate) {
@@ -233,7 +221,6 @@ export default function StudentDetailsPage() {
     if (!studentRef || !editForm) return
     setIsUpdating(true)
     try {
-      // Find new building name if ID changed
       const newBuilding = buildings?.find(b => b.id === editForm.buildingId)
       await updateDoc(studentRef, { 
         ...editForm, 
@@ -305,7 +292,6 @@ export default function StudentDetailsPage() {
             <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-xl border-slate-100">
               <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)} className="gap-2 font-bold cursor-pointer p-3 rounded-lg"><Edit size={16} className="text-primary"/> Edit Profile</DropdownMenuItem>
               <DropdownMenuItem onClick={() => window.print()} className="gap-2 font-bold cursor-pointer p-3 rounded-lg"><Printer size={16} className="text-primary"/> Print Profile</DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 font-bold cursor-pointer p-3 rounded-lg"><FileText size={16} className="text-primary"/> Payment PDF</DropdownMenuItem>
               <Separator className="my-2" />
               {student.isActive && (
                 <DropdownMenuItem onClick={() => setIsExitDialogOpen(true)} className="gap-2 font-bold text-destructive cursor-pointer p-3 rounded-lg"><UserMinus size={16}/> Process Exit</DropdownMenuItem>
@@ -342,7 +328,6 @@ export default function StudentDetailsPage() {
 
       {/* SECTION 3 & 4: TABLES & HISTORY */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Tables */}
         <div className="lg:col-span-2 space-y-8">
           <Tabs defaultValue="payments" className="w-full">
             <TabsList className="bg-secondary/50 p-1 mb-4 rounded-2xl w-full flex overflow-x-auto h-auto">
@@ -356,7 +341,6 @@ export default function StudentDetailsPage() {
             <TabsContent value="payments">
               <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[400px]">
                 <CardContent className="p-0">
-                  {/* Desktop Table */}
                   <div className="hidden md:block">
                     <Table>
                       <TableHeader className="bg-slate-50/50">
@@ -389,7 +373,6 @@ export default function StudentDetailsPage() {
                       </TableBody>
                     </Table>
                   </div>
-                  {/* Mobile Cards */}
                   <div className="md:hidden space-y-4 p-4">
                     {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
                       <div key={idx} className="p-4 border rounded-2xl space-y-3 bg-slate-50/50" onClick={() => router.push(`/receipts/${p.id}`)}>
@@ -499,7 +482,6 @@ export default function StudentDetailsPage() {
           </Tabs>
         </div>
 
-        {/* Right Column: Actions & Details */}
         <div className="space-y-6">
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden">
             <CardHeader className="bg-primary/5 pb-4">
@@ -607,9 +589,6 @@ export default function StudentDetailsPage() {
         </div>
       </div>
 
-      {/* DIALOGS */}
-
-      {/* 1. Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
@@ -691,7 +670,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 2. Exit Settlement Dialog */}
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
@@ -731,7 +709,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 3. Edit Profile Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl">
           <DialogHeader>
