@@ -115,7 +115,7 @@ export default function LedgerPage() {
   }, [typeFilter, startDate, endDate])
 
   return (
-    <div className="space-y-8 pb-20 print:p-0">
+    <div className="space-y-8 pb-20 print:p-0 w-full overflow-hidden">
       {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
@@ -181,15 +181,15 @@ export default function LedgerPage() {
       </div>
 
       {/* GLOBAL FILTER BAR (Desktop) */}
-      <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
-        <div className="flex-1 space-y-1.5">
+      <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
+        <div className="space-y-1.5 flex-1">
           <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Search Entries</Label>
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Student, category, source..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
         </div>
-        <div className="w-[150px] space-y-1.5">
+        <div className="space-y-1.5">
           <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Tx Type</Label>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
@@ -200,14 +200,14 @@ export default function LedgerPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="w-[280px] space-y-1.5">
+        <div className="space-y-1.5">
           <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label>
           <div className="flex gap-2">
             <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 bg-white" />
             <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" />
           </div>
         </div>
-        <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setSearchTerm(""); setTypeFilter("all"); setStartDate(""); setEndDate(""); }}>Reset</Button>
+        <Button variant="ghost" className="h-10 text-xs font-bold uppercase w-full" onClick={() => { setSearchTerm(""); setTypeFilter("all"); setStartDate(""); setEndDate(""); }}>Reset</Button>
       </div>
 
       {/* MOBILE FILTER PANEL */}
@@ -292,7 +292,7 @@ export default function LedgerPage() {
         <>
           {/* DESKTOP TABLE VIEW */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader className="bg-slate-50/50">
                   <TableRow>
