@@ -37,7 +37,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const YEARS = ["2024", "2025", "2026", "2027"];
 
 export default function RegistrationsPage() {
   const { toast } = useToast()
@@ -105,7 +104,6 @@ export default function RegistrationsPage() {
     seatNumber: "",
     duesBreakdown: {} as Record<string, number>,
     tempDueMonth: MONTHS[new Date().getMonth()],
-    tempDueYear: new Date().getFullYear().toString(),
     tempDueAmount: "",
     duesEntryMode: "monthly", // "monthly" or "total"
     singleTotalDue: "0"
@@ -155,14 +153,16 @@ export default function RegistrationsPage() {
         foodDueAmount: "0",
         duesBreakdown: {},
         duesEntryMode: "monthly",
-        singleTotalDue: "0"
+        singleTotalDue: "0",
+        tempDueMonth: MONTHS[new Date().getMonth()],
+        tempDueAmount: ""
       }))
     }
   }, [isDetailOpen, selectedReg, buildings])
 
   const handleAddDueMonth = () => {
     if (!approvalForm.tempDueAmount || isNaN(Number(approvalForm.tempDueAmount))) return
-    const label = `${approvalForm.tempDueMonth} ${approvalForm.tempDueYear}`
+    const label = approvalForm.tempDueMonth
     setApprovalForm(prev => ({
       ...prev,
       duesBreakdown: {
@@ -174,9 +174,11 @@ export default function RegistrationsPage() {
   }
 
   const removeDueMonth = (label: string) => {
-    const updated = { ...approvalForm.duesBreakdown }
-    delete updated[label]
-    setApprovalForm(prev => ({ ...prev, duesBreakdown: updated }))
+    setApprovalForm(prev => {
+      const updated = { ...prev.duesBreakdown }
+      delete updated[label]
+      return { ...prev, duesBreakdown: updated }
+    })
   }
 
   const handleApprove = async () => {
@@ -462,21 +464,21 @@ export default function RegistrationsPage() {
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <Label className="text-[10px] uppercase font-black ml-1">Building</Label>
-                      <Select value={approvalForm.buildingId} onValueChange={val => setApprovalForm({...approvalForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
+                      <Select value={approvalForm.buildingId} onValueChange={val => setApprovalForm(prev => ({...prev, buildingId: val, roomNumber: "", seatNumber: ""}))}>
                         <SelectTrigger className="bg-white rounded-xl h-11 shadow-sm"><SelectValue placeholder="সিলেক্ট বিল্ডিং"/></SelectTrigger>
                         <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[10px] uppercase font-black ml-1">Room No.</Label>
-                      <Select disabled={!approvalForm.buildingId} value={approvalForm.roomNumber} onValueChange={val => setApprovalForm({...approvalForm, roomNumber: val, seatNumber: ""})}>
+                      <Select disabled={!approvalForm.buildingId} value={approvalForm.roomNumber} onValueChange={val => setApprovalForm(prev => ({...prev, roomNumber: val, seatNumber: ""}))}>
                         <SelectTrigger className="bg-white rounded-xl h-11 shadow-sm"><SelectValue placeholder="রুম সিলেক্ট করুন"/></SelectTrigger>
                         <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={idx} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[10px] uppercase font-black ml-1">Seat No.</Label>
-                      <Select disabled={!approvalForm.roomNumber} value={approvalForm.seatNumber} onValueChange={val => setApprovalForm({...approvalForm, seatNumber: val})}>
+                      <Select disabled={!approvalForm.roomNumber} value={approvalForm.seatNumber} onValueChange={val => setApprovalForm(prev => ({...prev, seatNumber: val}))}>
                         <SelectTrigger className="bg-white rounded-xl h-11 shadow-sm"><SelectValue placeholder="সিট সিলেক্ট করুন"/></SelectTrigger>
                         <SelectContent>{emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
                       </Select>
@@ -495,11 +497,11 @@ export default function RegistrationsPage() {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <Label className="text-[10px] uppercase font-black">Monthly Rent</Label>
-                            <Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800" value={approvalForm.monthlyRent} onChange={e => setApprovalForm({...approvalForm, monthlyRent: e.target.value})} />
+                            <Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800" value={approvalForm.monthlyRent} onChange={e => setApprovalForm(prev => ({...prev, monthlyRent: e.target.value}))} />
                           </div>
                           <div className="space-y-1.5">
                             <Label className="text-[10px] uppercase font-black">Plan</Label>
-                            <Select value={approvalForm.paymentSystem} onValueChange={v => setApprovalForm({...approvalForm, paymentSystem: v})}>
+                            <Select value={approvalForm.paymentSystem} onValueChange={v => setApprovalForm(prev => ({...prev, paymentSystem: v}))}>
                               <SelectTrigger className="bg-white h-11 rounded-xl"><SelectValue/></SelectTrigger>
                               <SelectContent><SelectItem value="package">Package</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent>
                             </Select>
@@ -507,11 +509,11 @@ export default function RegistrationsPage() {
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-[10px] uppercase font-black">Billing Start Date</Label>
-                          <Input type="date" className="h-11 rounded-xl bg-white" value={approvalForm.billingStartDate} onChange={e => setApprovalForm({...approvalForm, billingStartDate: e.target.value})} />
+                          <Input type="date" className="h-11 rounded-xl bg-white" value={approvalForm.billingStartDate} onChange={e => setApprovalForm(prev => ({...prev, billingStartDate: e.target.value}))} />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Service Charge</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.serviceCharge} onChange={e => setApprovalForm({...approvalForm, serviceCharge: e.target.value})} /></div>
-                          <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Security Advance</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.advanceAmount} onChange={e => setApprovalForm({...approvalForm, advanceAmount: e.target.value})} /></div>
+                          <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Service Charge</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.serviceCharge} onChange={e => setApprovalForm(prev => ({...prev, serviceCharge: e.target.value}))} /></div>
+                          <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Security Advance</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.advanceAmount} onChange={e => setApprovalForm(prev => ({...prev, advanceAmount: e.target.value}))} /></div>
                         </div>
                       </div>
                     </div>
@@ -519,14 +521,14 @@ export default function RegistrationsPage() {
                     <div className="p-5 bg-slate-50 border rounded-3xl space-y-4">
                       <div className="space-y-1.5">
                         <Label className="text-[10px] uppercase font-black ml-1 text-muted-foreground">Admission Receiver (Staff)</Label>
-                        <Select value={approvalForm.receiver} onValueChange={v => setApprovalForm({...approvalForm, receiver: v})}>
+                        <Select value={approvalForm.receiver} onValueChange={v => setApprovalForm(prev => ({...prev, receiver: v}))}>
                           <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Select Staff"/></SelectTrigger>
                           <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-[10px] uppercase font-black ml-1 text-muted-foreground">Payment Method</Label>
-                        <Select value={approvalForm.method} onValueChange={v => setApprovalForm({...approvalForm, method: v})}>
+                        <Select value={approvalForm.method} onValueChange={v => setApprovalForm(prev => ({...prev, method: v}))}>
                           <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue/></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="cash">Cash</SelectItem>
@@ -549,14 +551,14 @@ export default function RegistrationsPage() {
                             <Label className="text-[10px] uppercase font-black flex justify-between">
                               Lifetime Total Received <Info size={10} className="text-orange-400" />
                             </Label>
-                            <Input type="number" className="h-11 rounded-xl bg-white font-black" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} />
+                            <Input type="number" className="h-11 rounded-xl bg-white font-black" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm(prev => ({...prev, historicalTotalReceived: e.target.value}))} />
                             <p className="text-[8px] text-muted-foreground italic">* মোট যত টাকা আজ পর্যন্ত কালেক্ট করেছেন (ভাড়া/খাবার সহ)</p>
                           </div>
 
                           {approvalForm.paymentSystem === 'non-package' && (
                             <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1">
                               <Label className="text-[10px] uppercase font-black">Food Balance (+/-)</Label>
-                              <Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="0.00" />
+                              <Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm(prev => ({...prev, foodDueAmount: e.target.value}))} placeholder="0.00" />
                             </div>
                           )}
                           
@@ -568,7 +570,7 @@ export default function RegistrationsPage() {
                               <Badge variant="outline" className="bg-white text-[8px]">MIGRATION MODE</Badge>
                             </div>
 
-                            <Tabs value={approvalForm.duesEntryMode} onValueChange={v => setApprovalForm({...approvalForm, duesEntryMode: v})} className="w-full">
+                            <Tabs value={approvalForm.duesEntryMode} onValueChange={v => setApprovalForm(prev => ({...prev, duesEntryMode: v}))} className="w-full">
                               <TabsList className="grid w-full grid-cols-2 h-8 bg-orange-100/50 p-1">
                                 <TabsTrigger value="monthly" className="text-[9px] font-bold h-6 uppercase">Monthly List</TabsTrigger>
                                 <TabsTrigger value="total" className="text-[9px] font-bold h-6 uppercase">Single Total</TabsTrigger>
@@ -576,15 +578,11 @@ export default function RegistrationsPage() {
                               
                               <TabsContent value="monthly" className="space-y-3 mt-3">
                                 <div className="flex gap-2">
-                                  <Select value={approvalForm.tempDueMonth} onValueChange={v => setApprovalForm({...approvalForm, tempDueMonth: v})}>
+                                  <Select value={approvalForm.tempDueMonth} onValueChange={v => setApprovalForm(prev => ({...prev, tempDueMonth: v}))}>
                                     <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200"><SelectValue /></SelectTrigger>
                                     <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                                   </Select>
-                                  <Select value={approvalForm.tempDueYear} onValueChange={v => setApprovalForm({...approvalForm, tempDueYear: v})}>
-                                    <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200"><SelectValue /></SelectTrigger>
-                                    <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                                  </Select>
-                                  <Input type="number" placeholder="Amt" className="h-9 w-20 text-xs bg-white border-orange-200" value={approvalForm.tempDueAmount} onChange={e => setApprovalForm({...approvalForm, tempDueAmount: e.target.value})} />
+                                  <Input type="number" placeholder="Amt" className="h-9 w-24 text-xs bg-white border-orange-200" value={approvalForm.tempDueAmount} onChange={e => setApprovalForm(prev => ({...prev, tempDueAmount: e.target.value}))} />
                                   <Button type="button" size="icon" className="h-9 w-9 shrink-0 bg-orange-500 hover:bg-orange-600" onClick={handleAddDueMonth}><Plus size={14}/></Button>
                                 </div>
                                 <div className="bg-white/50 rounded-2xl p-3 border border-dashed border-orange-300 space-y-2 max-h-[120px] overflow-y-auto">
@@ -606,7 +604,7 @@ export default function RegistrationsPage() {
                                   <Label className="text-[9px] uppercase font-black text-orange-700">Total Oustanding Balance (৳)</Label>
                                   <div className="relative">
                                     <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-orange-400" />
-                                    <Input type="number" className="h-10 rounded-xl pl-9 bg-white border-orange-200 font-black text-destructive" value={approvalForm.singleTotalDue} onChange={e => setApprovalForm({...approvalForm, singleTotalDue: e.target.value})} />
+                                    <Input type="number" className="h-10 rounded-xl pl-9 bg-white border-orange-200 font-black text-destructive" value={approvalForm.singleTotalDue} onChange={e => setApprovalForm(prev => ({...prev, singleTotalDue: e.target.value}))} />
                                   </div>
                                   <p className="text-[8px] text-muted-foreground italic leading-tight">এটি পুরাতন সকল বকেয়া (ভাড়া + খাবার) এর এককালীন টোটাল অ্যামাউন্ট।</p>
                                 </div>
@@ -619,9 +617,9 @@ export default function RegistrationsPage() {
                       <div className="p-5 border-2 border-success/20 bg-success/5 rounded-3xl space-y-5 shadow-sm">
                         <h3 className="text-[10px] font-black uppercase text-success tracking-widest flex items-center gap-2"><Wallet size={14}/> Admission Collection</h3>
                         <div className="space-y-4">
-                          <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Initial Rent (Current Month)</Label><Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800 shadow-inner" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} /></div>
+                          <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Initial Rent (Current Month)</Label><Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800 shadow-inner" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm(prev => ({...prev, initialRentPayment: e.target.value}))} /></div>
                           {approvalForm.paymentSystem === 'non-package' && (
-                            <div className="space-y-1.5 animate-in fade-in"><Label className="text-[10px] uppercase font-black">Initial Food Deposit</Label><Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800 shadow-inner" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} /></div>
+                            <div className="space-y-1.5 animate-in fade-in"><Label className="text-[10px] uppercase font-black">Initial Food Deposit</Label><Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800 shadow-inner" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm(prev => ({...prev, initialFoodPayment: e.target.value}))} /></div>
                           )}
                           <div className="mt-4 p-5 bg-white/80 rounded-2xl border-2 border-dashed border-success/20">
                             <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Immediate Income Log:</p>
