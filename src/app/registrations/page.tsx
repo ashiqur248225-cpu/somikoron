@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -37,6 +37,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+interface DueEntry {
+  id: string;
+  month: string;
+  amount: string;
+}
 
 export default function RegistrationsPage() {
   const { toast } = useToast()
@@ -102,12 +108,38 @@ export default function RegistrationsPage() {
     buildingId: "",
     roomNumber: "",
     seatNumber: "",
-    duesBreakdown: {} as Record<string, number>,
-    tempDueMonth: MONTHS[new Date().getMonth()],
-    tempDueAmount: "",
-    duesEntryMode: "monthly", // "monthly" or "total"
+    duesBreakdown: [] as DueEntry[],
+    duesEntryMode: "monthly",
     singleTotalDue: "0"
   })
+
+  // Ref to prevent re-initialization of form while it's already open
+  const prevIsDetailOpen = useRef(false);
+
+  useEffect(() => {
+    if (isDetailOpen && !prevIsDetailOpen.current && selectedReg && buildings) {
+      const targetB = buildings.find(b => b.name === selectedReg.buildingName)
+      setApprovalForm({
+        buildingId: targetB?.id || "",
+        roomNumber: String(selectedReg.roomNumber || ""),
+        seatNumber: String(selectedReg.seatNumber || ""),
+        paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
+        monthlyRent: "",
+        initialRentPayment: "0",
+        advanceAmount: "0",
+        serviceCharge: "0",
+        historicalTotalReceived: "0",
+        foodDueAmount: "0",
+        duesBreakdown: [],
+        duesEntryMode: "monthly",
+        singleTotalDue: "0",
+        billingStartDate: new Date().toISOString().split('T')[0],
+        receiver: "",
+        method: "cash"
+      });
+    }
+    prevIsDetailOpen.current = isDetailOpen;
+  }, [isDetailOpen, selectedReg, buildings]);
 
   const selectedBuilding = useMemo(() => buildings?.find(b => b.id === approvalForm.buildingId), [buildings, approvalForm.buildingId])
   
@@ -121,7 +153,7 @@ export default function RegistrationsPage() {
   const selectedRoom = useMemo(() => roomsInBuilding.find((r: any) => String(r.roomNo) === String(approvalForm.roomNumber)), [roomsInBuilding, approvalForm.roomNumber])
   const emptySeats = useMemo(() => selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || [], [selectedRoom])
 
-  // EFFECT: Auto-fill rent and initial payments when room is selected
+  // EFFECT: Auto-fill rent when room is selected
   useEffect(() => {
     if (selectedRoom) {
       const rent = Number(selectedRoom.rentPerSeat || 0)
@@ -130,55 +162,37 @@ export default function RegistrationsPage() {
         monthlyRent: rent.toString(),
         initialRentPayment: rent.toString(),
         advanceAmount: rent.toString(),
-        seatNumber: "" 
+        seatNumber: prev.seatNumber // Keep current seat if any
       }))
     }
   }, [selectedRoom])
 
-  // EFFECT: Initialize form when detail dialog opens
-  useEffect(() => {
-    if (isDetailOpen && selectedReg && buildings) {
-      const targetB = buildings.find(b => b.name === selectedReg.buildingName)
-      setApprovalForm(prev => ({
-        ...prev,
-        buildingId: targetB?.id || "",
-        roomNumber: String(selectedReg.roomNumber || ""),
-        seatNumber: String(selectedReg.seatNumber || ""),
-        paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
-        monthlyRent: "",
-        initialRentPayment: "0",
-        advanceAmount: "0",
-        serviceCharge: "0",
-        historicalTotalReceived: "0",
-        foodDueAmount: "0",
-        duesBreakdown: {},
-        duesEntryMode: "monthly",
-        singleTotalDue: "0",
-        tempDueMonth: MONTHS[new Date().getMonth()],
-        tempDueAmount: ""
-      }))
-    }
-  }, [isDetailOpen, selectedReg, buildings])
-
   const handleAddDueMonth = () => {
-    if (!approvalForm.tempDueAmount || isNaN(Number(approvalForm.tempDueAmount))) return
-    const label = approvalForm.tempDueMonth
+    const newEntry: DueEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      month: MONTHS[new Date().getMonth()],
+      amount: ""
+    };
     setApprovalForm(prev => ({
       ...prev,
-      duesBreakdown: {
-        ...prev.duesBreakdown,
-        [label]: Number(prev.tempDueAmount)
-      },
-      tempDueAmount: ""
-    }))
+      duesBreakdown: [...prev.duesBreakdown, newEntry]
+    }));
   }
 
-  const removeDueMonth = (label: string) => {
-    setApprovalForm(prev => {
-      const updated = { ...prev.duesBreakdown }
-      delete updated[label]
-      return { ...prev, duesBreakdown: updated }
-    })
+  const updateDueEntry = (id: string, field: keyof DueEntry, value: string) => {
+    setApprovalForm(prev => ({
+      ...prev,
+      duesBreakdown: prev.duesBreakdown.map(entry => 
+        entry.id === id ? { ...entry, [field]: value } : entry
+      )
+    }));
+  }
+
+  const removeDueEntry = (id: string) => {
+    setApprovalForm(prev => ({
+      ...prev,
+      duesBreakdown: prev.duesBreakdown.filter(entry => entry.id !== id)
+    }));
   }
 
   const handleApprove = async () => {
@@ -239,9 +253,18 @@ export default function RegistrationsPage() {
       }
 
       // Handle Dues Breakdown based on mode
-      const finalDuesBreakdown = approvalForm.duesEntryMode === 'monthly' 
-        ? approvalForm.duesBreakdown 
-        : { "Historical Balance": Number(approvalForm.singleTotalDue) };
+      const finalDuesBreakdown: Record<string, number> = {}
+      if (isOld) {
+        if (approvalForm.duesEntryMode === 'monthly') {
+          approvalForm.duesBreakdown.forEach(d => {
+            if (d.month && d.amount) {
+              finalDuesBreakdown[d.month] = (finalDuesBreakdown[d.month] || 0) + Number(d.amount);
+            }
+          });
+        } else {
+          finalDuesBreakdown["Historical Balance"] = Number(approvalForm.singleTotalDue);
+        }
+      }
 
       // Save the Student Record
       await setDoc(doc(db, "students", studentId), {
@@ -278,7 +301,7 @@ export default function RegistrationsPage() {
         paymentsHistory: [], 
         mealsHistory: [],
         historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : 0,
-        duesBreakdown: isOld ? finalDuesBreakdown : {},
+        duesBreakdown: finalDuesBreakdown,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -363,7 +386,6 @@ export default function RegistrationsPage() {
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
         <>
-          {/* DESKTOP TABLE VIEW */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-3xl">
             <CardContent className="p-0">
               <Table>
@@ -389,7 +411,6 @@ export default function RegistrationsPage() {
             </CardContent>
           </Card>
 
-          {/* MOBILE CARD VIEW */}
           <div className="md:hidden space-y-4">
             {registrations?.map((reg) => (
               <Card key={reg.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
@@ -572,30 +593,39 @@ export default function RegistrationsPage() {
 
                             <Tabs value={approvalForm.duesEntryMode} onValueChange={v => setApprovalForm(prev => ({...prev, duesEntryMode: v}))} className="w-full">
                               <TabsList className="grid w-full grid-cols-2 h-8 bg-orange-100/50 p-1">
-                                <TabsTrigger value="monthly" className="text-[9px] font-bold h-6 uppercase">Monthly List</TabsTrigger>
+                                <TabsTrigger value="monthly" className="text-[9px] font-bold h-6 uppercase">Monthly Boxes</TabsTrigger>
                                 <TabsTrigger value="total" className="text-[9px] font-bold h-6 uppercase">Single Total</TabsTrigger>
                               </TabsList>
                               
                               <TabsContent value="monthly" className="space-y-3 mt-3">
-                                <div className="flex gap-2">
-                                  <Select value={approvalForm.tempDueMonth} onValueChange={v => setApprovalForm(prev => ({...prev, tempDueMonth: v}))}>
-                                    <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200"><SelectValue /></SelectTrigger>
-                                    <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                                  </Select>
-                                  <Input type="number" placeholder="Amt" className="h-9 w-24 text-xs bg-white border-orange-200" value={approvalForm.tempDueAmount} onChange={e => setApprovalForm(prev => ({...prev, tempDueAmount: e.target.value}))} />
-                                  <Button type="button" size="icon" className="h-9 w-9 shrink-0 bg-orange-500 hover:bg-orange-600" onClick={handleAddDueMonth}><Plus size={14}/></Button>
-                                </div>
-                                <div className="bg-white/50 rounded-2xl p-3 border border-dashed border-orange-300 space-y-2 max-h-[120px] overflow-y-auto">
-                                  {Object.entries(approvalForm.duesBreakdown).map(([label, amount]) => (
-                                    <div key={label} className="flex justify-between items-center text-[10px]">
-                                      <span className="font-bold text-slate-600 flex items-center gap-1"><Calendar size={10}/> {label}</span>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-destructive font-black">৳{amount}</span>
-                                        <XCircle size={14} className="text-muted-foreground cursor-pointer hover:text-destructive" onClick={() => removeDueMonth(label)} />
-                                      </div>
+                                <Button type="button" onClick={handleAddDueMonth} size="sm" variant="outline" className="w-full h-9 gap-2 border-orange-300 text-orange-700 bg-white">
+                                  <Plus size={14}/> Add Month Box
+                                </Button>
+                                
+                                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
+                                  {approvalForm.duesBreakdown.map((entry) => (
+                                    <div key={entry.id} className="flex gap-2 items-center p-2 bg-white rounded-xl border border-orange-100 shadow-sm animate-in slide-in-from-top-1 duration-200">
+                                      <Select value={entry.month} onValueChange={v => updateDueEntry(entry.id, 'month', v)}>
+                                        <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200 flex-1"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                                      </Select>
+                                      <Input 
+                                        type="number" 
+                                        placeholder="Amt" 
+                                        className="h-9 w-24 text-xs bg-white border-orange-200" 
+                                        value={entry.amount} 
+                                        onChange={e => updateDueEntry(entry.id, 'amount', e.target.value)} 
+                                      />
+                                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeDueEntry(entry.id)}>
+                                        <Trash2 size={14} />
+                                      </Button>
                                     </div>
                                   ))}
-                                  {Object.keys(approvalForm.duesBreakdown).length === 0 && <p className="text-[10px] italic text-muted-foreground text-center">মাস ভিত্তিক বকেয়া নেই।</p>}
+                                  {approvalForm.duesBreakdown.length === 0 && (
+                                    <p className="text-[10px] italic text-muted-foreground text-center py-4 bg-white/50 rounded-xl border border-dashed border-orange-200">
+                                      বকেয়া থাকলে "Add Month Box" বাটনে ক্লিক করুন।
+                                    </p>
+                                  )}
                                 </div>
                               </TabsContent>
 
