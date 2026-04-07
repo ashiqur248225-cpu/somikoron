@@ -43,7 +43,7 @@ export default function RegistrationsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
-  const [selectedReg, setSelectedReg] = useState<any>(null)
+  const [selectedReq, setSelectedReq] = useState<any>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   
@@ -351,7 +351,7 @@ export default function RegistrationsPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
+          <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
@@ -514,12 +514,26 @@ export default function RegistrationsPage() {
                       </div>
                     </div>
                     
-                    <div className="p-5 bg-slate-50 border rounded-3xl space-y-3">
-                      <Label className="text-[10px] uppercase font-black ml-1 text-muted-foreground">Admission Receiver (Staff)</Label>
-                      <Select value={approvalForm.receiver} onValueChange={v => setApprovalForm({...approvalForm, receiver: v})}>
-                        <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Select Staff"/></SelectTrigger>
-                        <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                      </Select>
+                    <div className="p-5 bg-slate-50 border rounded-3xl space-y-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase font-black ml-1 text-muted-foreground">Admission Receiver (Staff)</Label>
+                        <Select value={approvalForm.receiver} onValueChange={v => setApprovalForm({...approvalForm, receiver: v})}>
+                          <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Select Staff"/></SelectTrigger>
+                          <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase font-black ml-1 text-muted-foreground">Payment Method</Label>
+                        <Select value={approvalForm.method} onValueChange={v => setApprovalForm({...approvalForm, method: v})}>
+                          <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue/></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="bkash">Bkash</SelectItem>
+                            <SelectItem value="nagad">Nagad</SelectItem>
+                            <SelectItem value="bank">Bank</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>
 
@@ -607,13 +621,6 @@ export default function RegistrationsPage() {
                           {approvalForm.paymentSystem === 'non-package' && (
                             <div className="space-y-1.5 animate-in fade-in"><Label className="text-[10px] uppercase font-black">Initial Food Deposit</Label><Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800 shadow-inner" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} /></div>
                           )}
-                          <div className="space-y-1.5 pt-4">
-                            <Label className="text-[10px] uppercase font-black">Payment Method</Label>
-                            <Select value={approvalForm.method} onValueChange={v => setApprovalForm({...approvalForm, method: v})}>
-                              <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue/></SelectTrigger>
-                              <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
-                            </Select>
-                          </div>
                           <div className="mt-4 p-5 bg-white/80 rounded-2xl border-2 border-dashed border-success/20">
                             <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Immediate Income Log:</p>
                             <p className="text-3xl font-black text-success mt-1">৳{(Number(approvalForm.initialRentPayment) + Number(approvalForm.initialFoodPayment) + Number(approvalForm.advanceAmount) + Number(approvalForm.serviceCharge)).toLocaleString()}</p>
