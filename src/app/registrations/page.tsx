@@ -120,7 +120,7 @@ export default function RegistrationsPage() {
 
   useEffect(() => {
     if (isDetailOpen && !prevIsDetailOpen.current && selectedReg && buildings) {
-      const targetB = buildings.find(b => b.name === selectedReg.buildingName)
+      const targetB = buildings.find(b => b.name === selectedReg.buildingName || b.id === selectedReg.buildingId)
       setApprovalForm({
         buildingId: targetB?.id || "",
         roomNumber: String(selectedReg.roomNumber || ""),
@@ -128,6 +128,7 @@ export default function RegistrationsPage() {
         paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
         monthlyRent: "",
         initialRentPayment: "0",
+        initialFoodPayment: "0",
         advanceAmount: "0",
         serviceCharge: "0",
         historicalTotalReceived: "0",
@@ -212,7 +213,9 @@ export default function RegistrationsPage() {
       const bId = approvalForm.buildingId
       const rNum = approvalForm.roomNumber
       const sNum = approvalForm.seatNumber
-      const aptName = selectedRoom?.aptName || selectedReg.apartmentName || "General"
+      
+      // Get APT name correctly from selected room
+      const aptName = selectedRoom?.aptName || "General"
 
       const isOld = selectedReg.type === 'old'
       const monthlyRent = Number(approvalForm.monthlyRent)
@@ -324,30 +327,32 @@ export default function RegistrationsPage() {
         updatedAt: serverTimestamp(),
       })
 
-      // Sync Seat Occupancy in Building
+      // Sync Seat Occupancy in Building - Robust Array Update
       if (selectedBuilding) {
+        let occCount = 0;
+        let totalCount = 0;
+
         const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
-          if (apt.name === aptName) {
-            return {
-              ...apt,
-              rooms: apt.rooms.map((room: any) => {
-                if (String(room.roomNo) === String(rNum)) {
-                  return {
-                    ...room,
-                    seats: room.seats.map((seat: any) => seat.seatNo === sNum ? { ...seat, status: 'occupied' } : seat)
-                  }
-                }
-                return room
-              })
-            }
-          }
-          return apt
-        })
+          const newRooms = apt.rooms.map((room: any) => {
+            const newSeats = room.seats.map((seat: any) => {
+              totalCount++;
+              // Check if this is the target seat
+              if (apt.name === aptName && String(room.roomNo) === String(rNum) && String(seat.seatNo) === String(sNum)) {
+                occCount++;
+                return { ...seat, status: 'occupied' };
+              }
+              if (seat.status === 'occupied') occCount++;
+              return seat;
+            });
+            return { ...room, seats: newSeats };
+          });
+          return { ...apt, rooms: newRooms };
+        });
         
         await updateDoc(doc(db, "buildings", bId), {
           apartmentsDetail: updatedApts,
-          occupiedSeats: increment(1),
-          emptySeats: increment(-1),
+          occupiedSeats: occCount,
+          emptySeats: totalCount - occCount,
           updatedAt: serverTimestamp()
         })
       }
