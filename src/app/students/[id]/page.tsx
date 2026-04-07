@@ -118,7 +118,7 @@ export default function StudentDetailsPage() {
   const stats = useMemo(() => {
     if (!student) return null
     
-    // totalDue is the direct source of truth calculated from duesBreakdown
+    // totalDue is calculated directly from current breakdown values
     const breakdownSum = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b || 0), 0);
     const rentDue = breakdownSum;
 
@@ -201,13 +201,14 @@ export default function StudentDetailsPage() {
     if (!student || !studentRef) return
     setIsUpdating(true)
     try {
-      const seatPaid = student.paymentSystem === 'package' ? Number(paymentData.amount) : Number(paymentData.seatAmount)
-      const foodPaid = student.paymentSystem === 'non-package' ? Number(paymentData.foodAmount) : 0
-      const totalAmt = seatPaid + foodPaid + Number(paymentData.addAdvanceAmount)
+      const seatPaid = student.paymentSystem === 'package' ? Number(paymentData.amount || 0) : Number(paymentData.seatAmount || 0)
+      const foodPaid = student.paymentSystem === 'non-package' ? Number(paymentData.foodAmount || 0) : 0
+      const extraAdvance = Number(paymentData.addAdvanceAmount || 0)
+      const totalAmt = seatPaid + foodPaid + extraAdvance
       
       const pId = doc(collection(db, "payments")).id
       const pRecord = { 
-        id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: Number(paymentData.addAdvanceAmount),
+        id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
         studentId: student.id, studentName: student.name, buildingId: student.buildingId,
         buildingName: student.buildingName, roomNumber: student.roomNumber, branch: student.branch, 
         method: paymentData.method, receiver: paymentData.receiver, month: paymentData.month,
@@ -218,8 +219,9 @@ export default function StudentDetailsPage() {
       let remainingRentPaid = seatPaid;
       const targetLabel = `${paymentData.month} ${paymentData.year}`;
 
+      // Specific month match removal
       if (currentDues[targetLabel] && remainingRentPaid > 0) {
-        const dueAmt = currentDues[targetLabel];
+        const dueAmt = Number(currentDues[targetLabel]);
         if (remainingRentPaid >= dueAmt) {
           remainingRentPaid -= dueAmt;
           delete currentDues[targetLabel];
@@ -229,6 +231,7 @@ export default function StudentDetailsPage() {
         }
       }
 
+      // Oldest months cascade removal
       if (remainingRentPaid > 0) {
         const dueMonths = Object.keys(currentDues).sort((a, b) => {
           const [mA, yA] = a.split(' ');
@@ -239,7 +242,7 @@ export default function StudentDetailsPage() {
 
         for (const month of dueMonths) {
           if (remainingRentPaid <= 0) break;
-          const dueAmt = currentDues[month];
+          const dueAmt = Number(currentDues[month]);
           if (remainingRentPaid >= dueAmt) {
             remainingRentPaid -= dueAmt;
             delete currentDues[month];
@@ -250,13 +253,14 @@ export default function StudentDetailsPage() {
         }
       }
 
-      const finalBreakdownSum = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b || 0), 0);
+      // Live recalculation of totalDue
+      const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b || 0), 0);
 
       await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       await updateDoc(studentRef, { 
         paymentsHistory: arrayUnion(pRecord), 
-        advanceAmount: increment(Number(paymentData.addAdvanceAmount)), 
-        totalDue: finalBreakdownSum,
+        advanceAmount: increment(extraAdvance), 
+        totalDue: finalTotalDue,
         duesBreakdown: currentDues,
         historicalTotalReceived: increment(totalAmt),
         updatedAt: serverTimestamp() 
@@ -269,7 +273,7 @@ export default function StudentDetailsPage() {
           let msg = paymentTemplate.text
             .replaceAll('[নাম]', student.name)
             .replaceAll('[পরিমাণ]', totalAmt.toString())
-            .replaceAll('[total_payable]', finalBreakdownSum.toString())
+            .replaceAll('[total_payable]', finalTotalDue.toString())
             .replaceAll('[Hostel Name]', hostelDisplayName);
           await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
         }

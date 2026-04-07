@@ -172,14 +172,16 @@ export default function DashboardPage() {
         if (!s.isActive) return;
         
         const dues = { ...(s.duesBreakdown || {}) };
-        // Strictly check if month already exists to avoid duplication
         if (dues[currentMonthLabel] === undefined) {
           const rent = Number(s.monthlyRent || 0);
           dues[currentMonthLabel] = rent;
           
+          // Recalculate totalDue
+          const total = Object.values(dues).reduce((a: any, b: any) => a + Number(b || 0), 0);
+
           batch.update(doc(db, "students", s.id), {
             duesBreakdown: dues,
-            totalDue: increment(rent),
+            totalDue: total,
             updatedAt: serverTimestamp()
           });
           updatesCount++;
@@ -306,10 +308,7 @@ export default function DashboardPage() {
 
   const studentFinancials = useMemo(() => {
     if (!selectedStudent) return null;
-    // Dues breakdown sum is the Rent Due
-    const breakdownSum = Object.values(selectedStudent.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b || 0), 0);
-    const rentDue = breakdownSum;
-
+    const rentDue = Object.values(selectedStudent.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b || 0), 0);
     const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0;
     const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0;
     const totalFoodPaid = (selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0);
@@ -323,12 +322,13 @@ export default function DashboardPage() {
     setIsSubmitting(true)
     try {
       const pId = doc(collection(db, "payments")).id
-      const seatPaid = selectedStudent.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
-      const foodPaid = selectedStudent.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
-      const totalAmt = seatPaid + foodPaid + Number(formData.addAdvanceAmount)
+      const seatPaid = selectedStudent.paymentSystem === 'package' ? Number(formData.amount || 0) : Number(formData.seatAmount || 0)
+      const foodPaid = selectedStudent.paymentSystem === 'non-package' ? Number(formData.foodAmount || 0) : 0
+      const extraAdvance = Number(formData.addAdvanceAmount || 0)
+      const totalAmt = seatPaid + foodPaid + extraAdvance
       
       const pRecord = {
-        id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: Number(formData.addAdvanceAmount),
+        id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
         studentName: selectedStudent.name, studentId: selectedStudent.id, buildingId: selectedStudent.buildingId,
         buildingName: selectedStudent.buildingName, roomNumber: selectedStudent.roomNumber, branch: userBranch,
         type: "income", month: formData.month, year: formData.year, method: formData.method, receiver: formData.receiver,
@@ -346,8 +346,9 @@ export default function DashboardPage() {
         let remainingRentPaid = seatPaid;
         const targetLabel = `${formData.month} ${formData.year}`;
 
+        // 1. Specific month removal
         if (currentDues[targetLabel] && remainingRentPaid > 0) {
-          const dueAmt = currentDues[targetLabel];
+          const dueAmt = Number(currentDues[targetLabel]);
           if (remainingRentPaid >= dueAmt) {
             remainingRentPaid -= dueAmt;
             delete currentDues[targetLabel];
@@ -357,11 +358,17 @@ export default function DashboardPage() {
           }
         }
 
+        // 2. Cascade surplus to oldest
         if (remainingRentPaid > 0) {
-          const dueMonths = Object.keys(currentDues).sort((a, b) => MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]));
+          const dueMonths = Object.keys(currentDues).sort((a, b) => {
+            const [mA, yA] = a.split(' ');
+            const [mB, yB] = b.split(' ');
+            if (yA !== yB) return Number(yA) - Number(yB);
+            return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
+          });
           for (const month of dueMonths) {
             if (remainingRentPaid <= 0) break;
-            const dueAmt = currentDues[month];
+            const dueAmt = Number(currentDues[month]);
             if (remainingRentPaid >= dueAmt) {
               remainingRentPaid -= dueAmt;
               delete currentDues[month];
@@ -372,12 +379,13 @@ export default function DashboardPage() {
           }
         }
 
-        const finalBreakdownSum = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b || 0), 0);
+        // Final recalculation of totalDue
+        const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b || 0), 0);
 
         await updateDoc(doc(db, "students", selectedStudent.id), { 
           paymentsHistory: arrayUnion(pRecord), 
-          advanceAmount: increment(Number(formData.addAdvanceAmount)), 
-          totalDue: finalBreakdownSum,
+          advanceAmount: increment(extraAdvance), 
+          totalDue: finalTotalDue,
           duesBreakdown: currentDues,
           historicalTotalReceived: increment(totalAmt),
           updatedAt: serverTimestamp() 
@@ -390,7 +398,7 @@ export default function DashboardPage() {
             let msg = paymentTemplate.text
               .replaceAll('[নাম]', selectedStudent.name)
               .replaceAll('[পরিমাণ]', totalAmt.toString())
-              .replaceAll('[total_payable]', finalBreakdownSum.toString())
+              .replaceAll('[total_payable]', finalTotalDue.toString())
               .replaceAll('[Hostel Name]', hostelDisplayName);
             await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
           }

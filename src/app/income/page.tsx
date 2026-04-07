@@ -177,7 +177,7 @@ export default function IncomeHistoryPage() {
 
   const studentFinancials = useMemo(() => {
     if (!selectedStudent) return null;
-    const rentDue = selectedStudent.totalDue || 0;
+    const rentDue = Object.values(selectedStudent.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b || 0), 0);
     const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0;
     const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0;
     const totalFoodPaid = (selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0);
@@ -191,14 +191,15 @@ export default function IncomeHistoryPage() {
     setIsSubmitting(true)
     try {
       const pId = doc(collection(db, "payments")).id
-      const seatPaid = selectedStudent.paymentSystem === 'package' ? Number(formData.amount) : Number(formData.seatAmount)
-      const foodPaid = selectedStudent.paymentSystem === 'non-package' ? Number(formData.foodAmount) : 0
-      const totalAmt = seatPaid + foodPaid + Number(formData.addAdvanceAmount)
+      const seatPaid = selectedStudent.paymentSystem === 'package' ? Number(formData.amount || 0) : Number(formData.seatAmount || 0)
+      const foodPaid = selectedStudent.paymentSystem === 'non-package' ? Number(formData.foodAmount || 0) : 0
+      const extraAdvance = Number(formData.addAdvanceAmount || 0)
+      const totalAmt = seatPaid + foodPaid + extraAdvance
       
       const pRecord = {
         id: pId, amount: totalAmt, 
         seatAmount: seatPaid,
-        foodAmount: foodPaid, advanceAmount: Number(formData.addAdvanceAmount),
+        foodAmount: foodPaid, advanceAmount: extraAdvance,
         studentName: selectedStudent.name, studentId: selectedStudent.id, buildingId: selectedStudent.buildingId,
         buildingName: selectedStudent.buildingName, roomNumber: selectedStudent.roomNumber, branch: userBranch,
         type: "income", month: formData.month, year: formData.year, method: formData.method, receiver: formData.receiver,
@@ -212,15 +213,13 @@ export default function IncomeHistoryPage() {
       } else {
         await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
         
-        // Update Dues Breakdown logic: Selective Allocation
         const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
         let remainingRentPaid = seatPaid;
-        
         const targetLabel = `${formData.month} ${formData.year}`;
         
         // 1. Target the selected month first
         if (currentDues[targetLabel] && remainingRentPaid > 0) {
-          const dueAmt = currentDues[targetLabel];
+          const dueAmt = Number(currentDues[targetLabel]);
           if (remainingRentPaid >= dueAmt) {
             remainingRentPaid -= dueAmt;
             delete currentDues[targetLabel];
@@ -233,12 +232,15 @@ export default function IncomeHistoryPage() {
         // 2. If surplus remains, pay oldest months
         if (remainingRentPaid > 0) {
           const remainingMonths = Object.keys(currentDues).sort((a, b) => {
-            return MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]);
+            const [mA, yA] = a.split(' ');
+            const [mB, yB] = b.split(' ');
+            if (yA !== yB) return Number(yA) - Number(yB);
+            return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
           });
 
           for (const month of remainingMonths) {
             if (remainingRentPaid <= 0) break;
-            const dueAmt = currentDues[month];
+            const dueAmt = Number(currentDues[month]);
             if (remainingRentPaid >= dueAmt) {
               remainingRentPaid -= dueAmt;
               delete currentDues[month];
@@ -249,11 +251,12 @@ export default function IncomeHistoryPage() {
           }
         }
 
-        const finalTotalDue = Math.max(0, (selectedStudent.totalDue || 0) - (seatPaid + foodPaid));
+        // Calculate final totalDue from breakdown
+        const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b || 0), 0);
 
         await updateDoc(doc(db, "students", selectedStudent.id), {
           paymentsHistory: arrayUnion(pRecord),
-          advanceAmount: increment(Number(formData.addAdvanceAmount)),
+          advanceAmount: increment(extraAdvance),
           totalDue: finalTotalDue,
           duesBreakdown: currentDues,
           historicalTotalReceived: increment(totalAmt),
