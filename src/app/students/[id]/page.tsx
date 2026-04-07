@@ -56,6 +56,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -247,8 +253,37 @@ export default function StudentDetailsPage() {
   if (!student) return <div className="text-center p-20">Resident not found.</div>
 
   return (
-    <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4">
-      <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+    <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 relative">
+      {/* Mobile App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
+          <ChevronLeft size={24} />
+        </Button>
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-bold truncate">{student.name}</h1>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">{student.buildingName} • R-{student.roomNumber}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreVertical size={20} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
+              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                <Edit size={16} className="text-primary" /> Edit Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsExitDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
+                <UserMinus size={16} /> Mark as Left
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Desktop Header Header */}
+      <div className="hidden md:flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-6">
           <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
             <UserCircle size={48} strokeWidth={1.5} />
