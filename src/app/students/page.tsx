@@ -65,21 +65,15 @@ export default function StudentsPage() {
   const processedStudents = useMemo(() => {
     if (!students) return []
     return students.map(s => {
-      const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
-      const now = new Date()
-      const endDate = s.isActive ? now : (s.leftAt?.toDate?.() || now)
-      const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
-      const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (s.monthlyRent || 0)
-      const historicalRentDue = s.duesBreakdown ? Object.values(s.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
-      const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || 0), 0) || 0
-      const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+      // Directly use the totalDue from DB (Admin-dependent)
+      const rentDue = s.totalDue || 0;
 
       const historicalFoodDue = Number(s.foodDueAmount) || 0
       const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-      const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+      const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0
       const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
       
-      const totalReceived = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0) || 0
+      const totalReceived = s.historicalTotalReceived || 0
       const totalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
 
       return { ...s, rentDue, foodBalance, totalDue, totalReceived }
@@ -127,14 +121,6 @@ export default function StudentsPage() {
     } catch (e) { toast({ variant: "destructive", title: "Export Failed" }) }
   }
 
-  const activeFilterChips = useMemo(() => {
-    const chips = []
-    if (buildingFilter !== "all") chips.push({ id: "building", label: buildings?.find(b => b.id === buildingFilter)?.name })
-    if (statusFilter !== "active") chips.push({ id: "status", label: statusFilter === "all" ? "All Status" : "Ex-Residents" })
-    if (planFilter !== "all") chips.push({ id: "plan", label: planFilter.toUpperCase() })
-    return chips
-  }, [buildingFilter, statusFilter, planFilter, buildings])
-
   return (
     <div className="space-y-8 pb-20 print:p-0">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
@@ -156,7 +142,6 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* FILTER DIALOG */}
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
@@ -215,7 +200,6 @@ export default function StudentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MASTER PDF PRINT DESIGN */}
       <div className="print-only print-report-container">
         <div className="report-header">
           <h1>{templatesData?.hostelName || "SOMIKORON HOSTEL"}</h1>

@@ -118,8 +118,9 @@ export default function StudentDetailsPage() {
   const stats = useMemo(() => {
     if (!student) return null
     
-    // totalDue is the direct source of truth
-    const rentDue = student.totalDue || 0;
+    // totalDue is the direct source of truth calculated from duesBreakdown
+    const breakdownSum = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b || 0), 0);
+    const rentDue = breakdownSum;
 
     const historicalFoodDue = Number(student.foodDueAmount) || 0
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
@@ -133,7 +134,6 @@ export default function StudentDetailsPage() {
       amount: Number(amount),
       status: 'Unpaid'
     })).sort((a, b) => {
-      // Sort by year then month index
       const [mA, yA] = a.month.split(' ');
       const [mB, yB] = b.month.split(' ');
       if (yA !== yB) return Number(yB) - Number(yA);
@@ -143,7 +143,7 @@ export default function StudentDetailsPage() {
     return { 
       rentDue, 
       foodBalance, 
-      totalDue: rentDue, // This already includes negative food balance logic from backend
+      totalDue: rentDue,
       totalReceived,
       advanceRemaining: student.advanceAmount || 0,
       currentMonthDue: student.monthlyRent,
@@ -214,12 +214,10 @@ export default function StudentDetailsPage() {
         year: paymentData.year, description: paymentData.description, date: new Date().toISOString()
       }
       
-      // Update Dues Breakdown with Selective Allocation
       const currentDues = { ...(student.duesBreakdown || {}) };
       let remainingRentPaid = seatPaid;
       const targetLabel = `${paymentData.month} ${paymentData.year}`;
 
-      // 1. Target selected month
       if (currentDues[targetLabel] && remainingRentPaid > 0) {
         const dueAmt = currentDues[targetLabel];
         if (remainingRentPaid >= dueAmt) {
@@ -231,7 +229,6 @@ export default function StudentDetailsPage() {
         }
       }
 
-      // 2. Surplus pays oldest remaining
       if (remainingRentPaid > 0) {
         const dueMonths = Object.keys(currentDues).sort((a, b) => {
           const [mA, yA] = a.split(' ');
@@ -253,13 +250,13 @@ export default function StudentDetailsPage() {
         }
       }
 
-      const finalTotalDue = Math.max(0, (student.totalDue || 0) - (seatPaid + foodPaid));
+      const finalBreakdownSum = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b || 0), 0);
 
       await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       await updateDoc(studentRef, { 
         paymentsHistory: arrayUnion(pRecord), 
         advanceAmount: increment(Number(paymentData.addAdvanceAmount)), 
-        totalDue: finalTotalDue,
+        totalDue: finalBreakdownSum,
         duesBreakdown: currentDues,
         historicalTotalReceived: increment(totalAmt),
         updatedAt: serverTimestamp() 
@@ -272,7 +269,7 @@ export default function StudentDetailsPage() {
           let msg = paymentTemplate.text
             .replaceAll('[নাম]', student.name)
             .replaceAll('[পরিমাণ]', totalAmt.toString())
-            .replaceAll('[total_payable]', finalTotalDue.toString())
+            .replaceAll('[total_payable]', finalBreakdownSum.toString())
             .replaceAll('[Hostel Name]', hostelDisplayName);
           await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
         }
@@ -324,7 +321,6 @@ export default function StudentDetailsPage() {
             emptySeats: increment(1),
             updatedAt: serverTimestamp()
           })
-         OldBuildingRef.update
         }
 
         const newBuildingRef = doc(db, "buildings", editForm.buildingId)
@@ -381,8 +377,8 @@ export default function StudentDetailsPage() {
     if (!studentRef || !student) return
     setIsUpdating(true)
     try {
-      const buildingRef = doc(db, "buildings", student.buildingId)
-      const buildingSnap = await getDoc(buildingRef)
+      const bRef = doc(db, "buildings", student.buildingId)
+      const buildingSnap = await getDoc(bRef)
       if (buildingSnap.exists()) {
         const bData = buildingSnap.data()
         const updatedApts = bData.apartmentsDetail.map((apt: any) => {
@@ -404,7 +400,7 @@ export default function StudentDetailsPage() {
           }
           return apt
         })
-        await updateDoc(buildingRef, {
+        await updateDoc(bRef, {
           apartmentsDetail: updatedApts,
           occupiedSeats: increment(-1),
           emptySeats: increment(1),
@@ -445,13 +441,12 @@ export default function StudentDetailsPage() {
     { label: "Service Chrg", val: student.serviceCharge, color: "purple-600", icon: Zap, bg: "bg-purple-50" },
     { label: "Monthly Rent", val: student.monthlyRent, color: "orange-600", icon: Home, bg: "bg-orange-50" },
     { label: "Total Recv.", val: stats?.totalReceived, color: "green-600", icon: HandCoins, bg: "bg-green-50" },
-    { label: "Rent Due", val: student.totalDue || 0, color: "red-600", icon: AlertCircle, bg: "bg-red-50" },
+    { label: "Rent Due", val: stats?.rentDue || 0, color: "red-600", icon: AlertCircle, bg: "bg-red-50" },
     { label: "Food Bal.", val: stats?.foodBalance, color: (stats?.foodBalance ?? 0) >= 0 ? "success" : "red-600", icon: Utensils, bg: (stats?.foodBalance ?? 0) >= 0 ? "bg-success/5" : "bg-red-50" },
   ].filter(c => c.label !== 'Food Bal.' || student.paymentSystem === 'non-package');
 
   return (
     <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 relative">
-      {/* Mobile App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
           <ChevronLeft size={24} />
@@ -482,7 +477,6 @@ export default function StudentDetailsPage() {
         </div>
       </div>
 
-      {/* Header Desktop */}
       <div className="hidden md:flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-6">
           <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
@@ -508,7 +502,6 @@ export default function StudentDetailsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Contact & Location Div */}
         <Card className="border-none shadow-sm rounded-3xl p-6 bg-white flex flex-col justify-between">
           <div>
             <h2 className="text-xl font-bold text-slate-800 mb-6">Contact & Location</h2>
@@ -540,7 +533,6 @@ export default function StudentDetailsPage() {
           </Button>
         </Card>
 
-        {/* Financial Overview Cards - Horizontal Grid */}
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {financialCards.map((card, idx) => (
             <Card key={idx} className={cn("p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 bg-white")}>
@@ -564,7 +556,6 @@ export default function StudentDetailsPage() {
         </TabsList>
 
         <TabsContent value="payments">
-          {/* Mobile View: Cards */}
           <div className="md:hidden space-y-4">
             {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
               <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-3 cursor-pointer" onClick={() => router.push(`/receipts/${p.id}`)}>
@@ -583,7 +574,6 @@ export default function StudentDetailsPage() {
             ))}
             {student.paymentsHistory?.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No payment history.</div>}
           </div>
-          {/* Desktop View: Table */}
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
@@ -620,7 +610,6 @@ export default function StudentDetailsPage() {
         </TabsContent>
 
         <TabsContent value="dues">
-          {/* Mobile View: Cards */}
           <div className="md:hidden space-y-4">
             {stats?.dueBreakdownList.map((d, i) => (
               <Card key={i} className="p-4 border-none shadow-sm rounded-2xl flex justify-between items-center">
@@ -633,7 +622,6 @@ export default function StudentDetailsPage() {
             ))}
             {stats?.dueBreakdownList.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No outstanding dues.</div>}
           </div>
-          {/* Desktop View: Table */}
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
@@ -705,14 +693,12 @@ export default function StudentDetailsPage() {
         )}
       </Tabs>
 
-      {/* Floating Action Button */}
       <div className="fixed bottom-8 right-8 z-50">
         <Button size="icon" className="h-14 w-14 rounded-full shadow-2xl bg-primary border-4 border-white" onClick={() => setIsPaymentDialogOpen(true)}>
           <Plus size={32} />
         </Button>
       </div>
 
-      {/* View All Information Dialog */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -764,14 +750,13 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
             <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-3 shadow-xl">
               <div className="flex justify-between items-center opacity-70 text-xs"><span>Selected Month ({paymentData.month} {paymentData.year})</span> <span>৳{student.monthlyRent}</span></div>
-              <div className="flex justify-between items-center opacity-70 text-xs"><span>Total Oustanding Dues</span> <span className="text-destructive font-black">৳{student.totalDue || 0}</span></div>
+              <div className="flex justify-between items-center opacity-70 text-xs"><span>Total Oustanding Dues</span> <span className="text-destructive font-black">৳{stats?.rentDue || 0}</span></div>
               <Separator className="bg-white/10" />
               
               {student.duesBreakdown && Object.keys(student.duesBreakdown).length > 0 && (
@@ -815,7 +800,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Profile Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -889,7 +873,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Exit & Settlement Dialog */}
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
         <DialogContent className="max-w-lg rounded-3xl p-0 max-h-[90vh] overflow-y-auto">
           <div className="h-2 bg-destructive w-full" />
@@ -899,7 +882,6 @@ export default function StudentDetailsPage() {
           </DialogHeader>
           
           <div className="px-8 py-6 space-y-6">
-            {/* Financial Summary Grid */}
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Monthly Rent</p>
@@ -907,7 +889,7 @@ export default function StudentDetailsPage() {
               </div>
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Rent Due</p>
-                <p className="text-lg font-bold text-destructive">৳{(student.totalDue || 0).toLocaleString()}</p>
+                <p className="text-lg font-bold text-destructive">৳{(stats?.rentDue || 0).toLocaleString()}</p>
               </div>
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Food Balance</p>
@@ -921,7 +903,6 @@ export default function StudentDetailsPage() {
               </div>
             </div>
 
-            {/* Calculated Result */}
             <div className={cn(
               "p-6 rounded-3xl border-2 text-center space-y-2 shadow-inner",
               settlementCalculation?.isRefund ? "bg-success/5 border-success/20" : "bg-destructive/5 border-destructive/20"
@@ -935,7 +916,6 @@ export default function StudentDetailsPage() {
               </p>
             </div>
 
-            {/* Final Adjustment Input */}
             <div className="space-y-2">
               <Label className="text-xs font-bold uppercase text-slate-500">Final Settlement Amount (৳)</Label>
               <div className="relative">

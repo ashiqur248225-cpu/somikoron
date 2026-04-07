@@ -100,7 +100,6 @@ export default function DashboardPage() {
 
   // Dialog States
   const [isIncomeDialogOpen, setIsIncomeDialogOpen] = useState(false)
-  const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false)
   const [isMealLogSelectorOpen, setIsMealLogSelectorOpen] = useState(false)
   const [isBulkMealEntryOpen, setIsBulkMealEntryOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -140,7 +139,6 @@ export default function DashboardPage() {
     setCanRequestExpense(localStorage.getItem("can_request_expense") === "true")
   }, [])
 
-  // 1. Fetch Buildings
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -150,7 +148,6 @@ export default function DashboardPage() {
   }, [db, userRole, userBranch, assignedBuildingId])
   const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
 
-  // 2. Fetch Students
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     let q = query(collection(db, "students"), where("branch", "==", userBranch))
@@ -174,9 +171,9 @@ export default function DashboardPage() {
       students.forEach(s => {
         if (!s.isActive) return;
         
-        const dues = s.duesBreakdown || {};
-        // Only generate if it doesn't already exist in the breakdown
-        if (!dues[currentMonthLabel]) {
+        const dues = { ...(s.duesBreakdown || {}) };
+        // Strictly check if month already exists to avoid duplication
+        if (dues[currentMonthLabel] === undefined) {
           const rent = Number(s.monthlyRent || 0);
           dues[currentMonthLabel] = rent;
           
@@ -192,9 +189,9 @@ export default function DashboardPage() {
       if (updatesCount > 0) {
         try {
           await batch.commit();
-          console.log(`Auto-generated rent for ${updatesCount} students for ${currentMonthLabel}.`);
+          console.log(`Auto-generated rent for ${updatesCount} students.`);
         } catch (e) {
-          console.error("Auto-rent generation failed:", e);
+          console.error("Auto-rent failed:", e);
         }
       }
     };
@@ -246,30 +243,18 @@ export default function DashboardPage() {
     const now = new Date()
     const isWithinRange = (date: Date, range: string) => {
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      
       if (range === 'today') return date >= startOfToday
-      
       if (range === 'yesterday') {
-        const yesterday = new Date(startOfToday)
-        yesterday.setDate(yesterday.getDate() - 1)
+        const yesterday = new Date(startOfToday); yesterday.setDate(yesterday.getDate() - 1)
         return date >= yesterday && date < startOfToday
       }
-      
       if (range === 'this_week') {
-        const startOfWeek = new Date(startOfToday)
-        startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay())
+        const startOfWeek = new Date(startOfToday); startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay())
         return date >= startOfWeek
       }
-      
-      if (range === 'this_month') {
-        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-      }
-      
-      if (range === 'this_year') {
-        return date.getFullYear() === now.getFullYear()
-      }
-      
-      return true // all_time
+      if (range === 'this_month') return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+      if (range === 'this_year') return date.getFullYear() === now.getFullYear()
+      return true
     }
 
     const filteredPayments = (allPayments || []).filter(p => isWithinRange(p.date?.toDate ? p.date.toDate() : new Date(p.date), timeRange))
@@ -321,7 +306,10 @@ export default function DashboardPage() {
 
   const studentFinancials = useMemo(() => {
     if (!selectedStudent) return null;
-    const rentDue = selectedStudent.totalDue || 0;
+    // Dues breakdown sum is the Rent Due
+    const breakdownSum = Object.values(selectedStudent.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b || 0), 0);
+    const rentDue = breakdownSum;
+
     const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0;
     const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0;
     const totalFoodPaid = (selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0);
@@ -354,12 +342,10 @@ export default function DashboardPage() {
       } else {
         await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
         
-        // Selective Dues Allocation Logic
         const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
         let remainingRentPaid = seatPaid;
         const targetLabel = `${formData.month} ${formData.year}`;
 
-        // 1. Target the selected month/year first
         if (currentDues[targetLabel] && remainingRentPaid > 0) {
           const dueAmt = currentDues[targetLabel];
           if (remainingRentPaid >= dueAmt) {
@@ -371,7 +357,6 @@ export default function DashboardPage() {
           }
         }
 
-        // 2. Surplus pays oldest
         if (remainingRentPaid > 0) {
           const dueMonths = Object.keys(currentDues).sort((a, b) => MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]));
           for (const month of dueMonths) {
@@ -387,12 +372,12 @@ export default function DashboardPage() {
           }
         }
 
-        const finalTotalDue = Math.max(0, (selectedStudent.totalDue || 0) - (seatPaid + foodPaid));
+        const finalBreakdownSum = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b || 0), 0);
 
         await updateDoc(doc(db, "students", selectedStudent.id), { 
           paymentsHistory: arrayUnion(pRecord), 
           advanceAmount: increment(Number(formData.addAdvanceAmount)), 
-          totalDue: finalTotalDue,
+          totalDue: finalBreakdownSum,
           duesBreakdown: currentDues,
           historicalTotalReceived: increment(totalAmt),
           updatedAt: serverTimestamp() 
@@ -405,18 +390,15 @@ export default function DashboardPage() {
             let msg = paymentTemplate.text
               .replaceAll('[নাম]', selectedStudent.name)
               .replaceAll('[পরিমাণ]', totalAmt.toString())
-              .replaceAll('[total_payable]', finalTotalDue.toString())
+              .replaceAll('[total_payable]', finalBreakdownSum.toString())
               .replaceAll('[Hostel Name]', hostelDisplayName);
             await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
           }
         }
-        
         router.push(`/receipts/${pId}`)
       }
       setIsIncomeDialogOpen(false)
-    } catch (e: any) { 
-      toast({ variant: "destructive", title: "Error", description: e.message }) 
-    }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
     finally { setIsSubmitting(false) }
   }
 
@@ -448,35 +430,22 @@ export default function DashboardPage() {
         }
 
         await updateDoc(doc(db, "students", sId), { 
-          mealsHistory: arrayUnion({ 
-            month: monthLabel, 
-            totalMeals: countNum, 
-            perMealCost: currentMealRate, 
-            totalCost: cost, 
-            date: new Date().toISOString() 
-          }),
+          mealsHistory: arrayUnion({ month: monthLabel, totalMeals: countNum, perMealCost: currentMealRate, totalCost: cost, date: new Date().toISOString() }),
           totalDue: increment(dueAdjustment),
           updatedAt: serverTimestamp() 
         })
 
         if (apiConfig?.apikey && mealTemplate) {
           let msg = mealTemplate.text
-            .replaceAll('[নাম]', s.name)
-            .replaceAll('[মাস]', monthLabel)
-            .replaceAll('[meal_count]', count)
-            .replaceAll('[meal_bill]', cost.toString())
-            .replaceAll('[food_balance]', Math.max(0, newFoodBalance).toString())
-            .replaceAll('[food_due]', Math.max(0, -newFoodBalance).toString())
+            .replaceAll('[নাম]', s.name).replaceAll('[মাস]', monthLabel).replaceAll('[meal_count]', count).replaceAll('[meal_bill]', cost.toString())
+            .replaceAll('[food_balance]', Math.max(0, newFoodBalance).toString()).replaceAll('[food_due]', Math.max(0, -newFoodBalance).toString())
             .replaceAll('[Hostel Name]', hostelDisplayName);
           await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg);
         }
       })
       await Promise.all(promises)
-      toast({ title: "Meal Logs Submitted" })
-      setIsBulkMealEntryOpen(false); setMealLogInputs({})
-    } catch (e: any) { 
-      toast({ variant: "destructive", title: "Error", description: e.message }) 
-    }
+      toast({ title: "Meal Logs Submitted" }); setIsBulkMealEntryOpen(false); setMealLogInputs({})
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
     finally { setIsSubmitting(false) }
   }
 
@@ -484,25 +453,21 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 pb-24 relative">
-      {/* Header */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2"><SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mr-2 h-4 md:hidden" /><div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Dashboard</h1></div></div>
         <div className="ml-auto flex items-center gap-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2 h-10 px-4 bg-white border-slate-200 rounded-xl font-bold text-slate-700">
-                <CalendarIcon size={16} className="text-primary" />
-                <span className="hidden sm:inline capitalize">{timeRange.replace('_', ' ')}</span>
-                <ChevronDown size={14} className="text-muted-foreground" />
+                <CalendarIcon size={16} className="text-primary" /><span className="hidden sm:inline capitalize">{timeRange.replace('_', ' ')}</span><ChevronDown size={14} className="text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
-              <DropdownMenuItem onClick={() => setTimeRange('today')} className="p-3 cursor-pointer rounded-lg font-medium">Today</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTimeRange('yesterday')} className="p-3 cursor-pointer rounded-lg font-medium">Yesterday</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTimeRange('this_week')} className="p-3 cursor-pointer rounded-lg font-medium">This Week</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTimeRange('this_month')} className="p-3 cursor-pointer rounded-lg font-medium">This Month</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTimeRange('this_year')} className="p-3 cursor-pointer rounded-lg font-medium">This Year</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTimeRange('all_time')} className="p-3 cursor-pointer rounded-lg font-medium">All Time</DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl">
+              <DropdownMenuItem onClick={() => setTimeRange('today')} className="p-3 cursor-pointer">Today</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimeRange('yesterday')} className="p-3 cursor-pointer">Yesterday</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimeRange('this_week')} className="p-3 cursor-pointer">This Week</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimeRange('this_month')} className="p-3 cursor-pointer">This Month</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimeRange('all_time')} className="p-3 cursor-pointer">All Time</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
@@ -588,16 +553,12 @@ export default function DashboardPage() {
                 {selectedStudent?.paymentSystem === 'non-package' && (
                   <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Food Balance</span> <span className={studentFinancials.foodBalance < 0 ? "text-destructive" : "text-success"}>৳{studentFinancials.foodBalance.toLocaleString()}</span></div>
                 )}
-                
                 {selectedStudent?.duesBreakdown && Object.keys(selectedStudent.duesBreakdown).length > 0 && (
                   <div className="pt-2 border-t border-white/10">
                     <p className="text-[8px] font-black uppercase text-primary mb-2">Detailed Dues List:</p>
-                    <div className="grid grid-cols-2 gap-2 max-h-[80px] overflow-y-auto pr-1 scrollbar-hide">
+                    <div className="grid grid-cols-2 gap-2 max-h-[80px] overflow-y-auto pr-1">
                       {Object.entries(selectedStudent.duesBreakdown).map(([label, amount]: any) => (
-                        <div key={label} className="bg-white/5 p-1.5 rounded flex justify-between items-center">
-                          <span className="text-[8px] font-medium">{label}</span>
-                          <span className="text-[9px] font-black text-destructive">৳{amount}</span>
-                        </div>
+                        <div key={label} className="bg-white/5 p-1.5 rounded flex justify-between items-center"><span className="text-[8px] font-medium">{label}</span><span className="text-[9px] font-black text-destructive">৳{amount}</span></div>
                       ))}
                     </div>
                   </div>
