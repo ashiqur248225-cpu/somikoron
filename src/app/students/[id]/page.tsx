@@ -21,7 +21,7 @@ import {
   MapPin, GraduationCap,
   LayoutGrid, CheckCircle2, 
   MoreVertical, Utensils, Clock,
-  Smartphone, User, Zap, CircleDollarSign, Home, Trash2
+  Smartphone, User, Zap, CircleDollarSign, Home, Trash2, Scale, Receipt, Printer, Send, FileText
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -72,6 +72,7 @@ export default function StudentDetailsPage() {
   
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
+  const [settlementInput, setSettlementInput] = useState("")
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
@@ -146,7 +147,7 @@ export default function StudentDetailsPage() {
     return { 
       rentDue, 
       foodBalance, 
-      totalDue: rentDue + Math.max(0, -foodBalance),
+      totalDue: rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0),
       totalReceived,
       advanceRemaining: student.advanceAmount || 0,
       currentMonthDue: student.monthlyRent,
@@ -154,9 +155,31 @@ export default function StudentDetailsPage() {
     }
   }, [student])
 
-  const settlementAmount = stats ? (stats.totalDue - stats.advanceRemaining) : 0
+  const settlementCalculation = useMemo(() => {
+    if (!stats || !student) return null;
+    const pendingRent = stats.rentDue;
+    const foodDue = stats.foodBalance < 0 ? Math.abs(stats.foodBalance) : 0;
+    const advance = student.advanceAmount || 0;
+    
+    // Logic: (Rent Due + Food Due) - Advance Remaining
+    const netResult = (pendingRent + foodDue) - advance;
+    
+    return {
+      pendingRent,
+      foodDue,
+      advance,
+      netResult,
+      isRefund: netResult < 0,
+      absResult: Math.abs(netResult)
+    };
+  }, [stats, student]);
 
-  // Logic: Sync rent when room changes in Edit Dialog
+  useEffect(() => {
+    if (isExitDialogOpen && settlementCalculation) {
+      setSettlementInput(settlementCalculation.absResult.toString());
+    }
+  }, [isExitDialogOpen, settlementCalculation]);
+
   const editBuildingData = buildings?.find(b => b.id === editForm?.buildingId)
   const editRoomsList = useMemo(() => {
     if (!editBuildingData) return []
@@ -232,7 +255,6 @@ export default function StudentDetailsPage() {
         editForm.seatNumber !== student.seatNumber
 
       if (isLocationChanged) {
-        // 1. Release Old Seat
         const oldBuildingRef = doc(db, "buildings", student.buildingId)
         const oldBuildingSnap = await getDoc(oldBuildingRef)
         if (oldBuildingSnap.exists()) {
@@ -264,7 +286,6 @@ export default function StudentDetailsPage() {
           })
         }
 
-        // 2. Occupy New Seat
         const newBuildingRef = doc(db, "buildings", editForm.buildingId)
         const newBuildingSnap = await getDoc(newBuildingRef)
         if (newBuildingSnap.exists()) {
@@ -298,7 +319,6 @@ export default function StudentDetailsPage() {
         }
       }
 
-      // 3. Final Profile Update
       const finalBuilding = buildings?.find(b => b.id === editForm.buildingId)
       await updateDoc(studentRef, { 
         ...editForm, 
@@ -317,11 +337,62 @@ export default function StudentDetailsPage() {
   }
 
   const handleConfirmExit = async () => {
-    if (!studentRef) return
+    if (!studentRef || !student) return
     setIsUpdating(true)
     try {
-      await updateDoc(studentRef, { isActive: false, leftAt: serverTimestamp(), updatedAt: serverTimestamp() })
-      toast({ title: "Resident Released" })
+      // 1. Release the seat
+      const buildingRef = doc(db, "buildings", student.buildingId)
+      const buildingSnap = await getDoc(buildingRef)
+      if (buildingSnap.exists()) {
+        const bData = buildingSnap.data()
+        const updatedApts = bData.apartmentsDetail.map((apt: any) => {
+          if (apt.name === student.apartmentName) {
+            return {
+              ...apt,
+              rooms: apt.rooms.map((room: any) => {
+                if (String(room.roomNo) === String(student.roomNumber)) {
+                  return {
+                    ...room,
+                    seats: room.seats.map((seat: any) => 
+                      seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat
+                    )
+                  }
+                }
+                return room
+              })
+            }
+          }
+          return apt
+        })
+        await updateDoc(buildingRef, {
+          apartmentsDetail: updatedApts,
+          occupiedSeats: increment(-1),
+          emptySeats: increment(1),
+          updatedAt: serverTimestamp()
+        })
+      }
+
+      // 2. Mark student as left
+      await updateDoc(studentRef, { 
+        isActive: false, 
+        leftAt: serverTimestamp(), 
+        finalSettlementAmount: Number(settlementInput),
+        updatedAt: serverTimestamp() 
+      })
+
+      // 3. Send Exit SMS
+      if (apiConfig?.apikey && templatesData?.templates) {
+        const exitTemplate = templatesData.templates.find((t: any) => t.id === 'exit')
+        if (exitTemplate) {
+          const hostelDisplayName = templatesData.hostelName || student.branch;
+          let msg = exitTemplate.text
+            .replaceAll('[নাম]', student.name)
+            .replaceAll('[Hostel Name]', hostelDisplayName);
+          await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
+        }
+      }
+
+      toast({ title: "Resident Released", description: "Seat is now empty and settlement recorded." })
       setIsExitDialogOpen(false)
       router.push("/students")
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
@@ -330,6 +401,15 @@ export default function StudentDetailsPage() {
 
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
   if (!student) return <div className="text-center p-20">Resident not found.</div>
+
+  const financialCards = [
+    { label: "Advance", val: student.advanceAmount, color: "blue-600", icon: ShieldCheck, bg: "bg-blue-50" },
+    { label: "Service Chrg", val: student.serviceCharge, color: "purple-600", icon: Zap, bg: "bg-purple-50" },
+    { label: "Monthly Rent", val: student.monthlyRent, color: "orange-600", icon: Home, bg: "bg-orange-50" },
+    { label: "Total Recv.", val: stats?.totalReceived, color: "green-600", icon: HandCoins, bg: "bg-green-50" },
+    { label: "Rent Due", val: stats?.rentDue, color: "red-600", icon: AlertCircle, bg: "bg-red-50" },
+    { label: "Food Bal.", val: stats?.foodBalance, color: stats?.foodBalance >= 0 ? "success" : "red-600", icon: Utensils, bg: stats?.foodBalance >= 0 ? "bg-success/5" : "bg-red-50" },
+  ].filter(c => c.label !== 'Food Bal.' || student.paymentSystem === 'non-package');
 
   return (
     <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 relative">
@@ -349,12 +429,15 @@ export default function StudentDetailsPage() {
                 <MoreVertical size={20} />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
+            <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-xl border-slate-100">
               <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
                 <Edit size={16} className="text-primary" /> Edit Profile
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setIsExitDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
-                <UserMinus size={16} /> Mark as Left
+                <Scale size={16} /> Process Exit & Settlement
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                <Printer size={16} /> Print Profile
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -380,7 +463,7 @@ export default function StudentDetailsPage() {
             <Edit size={18} className="mr-2"/> Edit Profile
           </Button>
           <Button variant="destructive" className="rounded-xl h-11 px-6 font-bold gap-2 shadow-lg shadow-destructive/10" onClick={() => setIsExitDialogOpen(true)}>
-            <UserMinus size={18} /> Mark as Left
+            <Scale size={18} /> Process Exit & Settlement
           </Button>
           <Button variant="ghost" className="rounded-xl h-11 px-6 font-bold" onClick={() => router.back()}>Back</Button>
         </div>
@@ -394,15 +477,15 @@ export default function StudentDetailsPage() {
             <div className="space-y-4">
               <div className="flex items-center gap-4 text-slate-600">
                 <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Phone size={18}/></div>
-                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Mobile</p><p className="font-bold">{student.phone}</p></div>
+                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Personal Mobile</p><p className="font-bold">{student.phone}</p></div>
+              </div>
+              <div className="flex items-center gap-4 text-slate-600">
+                <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Smartphone size={18}/></div>
+                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Parent Mobile</p><p className="font-bold">{student.parentPhone || 'N/A'}</p></div>
               </div>
               <div className="flex items-center gap-4 text-slate-600">
                 <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Building2 size={18}/></div>
-                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Building</p><p className="font-bold">{student.buildingName}</p></div>
-              </div>
-              <div className="flex items-center gap-4 text-slate-600">
-                <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><LayoutGrid size={18}/></div>
-                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Unit</p><p className="font-bold">Room {student.roomNumber} | Seat {student.seatNumber}</p></div>
+                <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Location</p><p className="font-bold">{student.buildingName} • R-{student.roomNumber} | S-{student.seatNumber}</p></div>
               </div>
               <div className="flex items-center gap-4 text-slate-600">
                 <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Calendar size={18}/></div>
@@ -419,61 +502,17 @@ export default function StudentDetailsPage() {
           </Button>
         </Card>
 
-        {/* Financial Overview Cards */}
+        {/* Financial Overview Cards - Horizontal Grid */}
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="bg-blue-50 p-3 rounded-xl text-blue-600 shrink-0"><ShieldCheck size={24}/></div>
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Advance Balance</p>
-              <p className="text-xl font-black text-slate-800">৳{student.advanceAmount}</p>
-            </div>
-          </Card>
-
-          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="bg-purple-50 p-3 rounded-xl text-purple-600 shrink-0"><Zap size={24}/></div>
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Service Charge</p>
-              <p className="text-xl font-black text-slate-800">৳{student.serviceCharge}</p>
-            </div>
-          </Card>
-          
-          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="bg-orange-50 p-3 rounded-xl text-orange-600 shrink-0"><Home size={24}/></div>
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Monthly Rent</p>
-              <p className="text-xl font-black text-slate-800">৳{student.monthlyRent}</p>
-            </div>
-          </Card>
-
-          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="bg-green-50 p-3 rounded-xl text-green-600 shrink-0"><HandCoins size={24}/></div>
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Total Received</p>
-              <p className="text-xl font-black text-slate-800">৳{stats?.totalReceived.toLocaleString()}</p>
-            </div>
-          </Card>
-
-          <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="bg-red-50 p-3 rounded-xl text-red-600 shrink-0"><AlertCircle size={24}/></div>
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Rent Due</p>
-              <p className="text-xl font-black text-destructive">৳{stats?.rentDue.toLocaleString()}</p>
-            </div>
-          </Card>
-
-          {student.paymentSystem === 'non-package' && (
-            <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
-              <div className={cn("p-3 rounded-xl shrink-0", stats?.foodBalance >= 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600")}>
-                <Utensils size={24}/>
-              </div>
+          {financialCards.map((card, idx) => (
+            <Card key={idx} className={cn("p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 bg-white")}>
+              <div className={cn("p-3 rounded-xl shrink-0", card.bg, `text-${card.color}`)}><card.icon size={24}/></div>
               <div>
-                <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Food Balance</p>
-                <p className={cn("text-xl font-black", stats?.foodBalance >= 0 ? "text-green-700" : "text-destructive")}>
-                  ৳{stats?.foodBalance.toLocaleString()}
-                </p>
+                <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{card.label}</p>
+                <p className={cn("text-xl font-black text-slate-800", card.label === 'Rent Due' && "text-destructive")}>৳{card.val?.toLocaleString()}</p>
               </div>
             </Card>
-          )}
+          ))}
         </div>
       </div>
 
@@ -487,6 +526,7 @@ export default function StudentDetailsPage() {
         </TabsList>
 
         <TabsContent value="payments">
+          {/* Mobile View: Cards */}
           <div className="md:hidden space-y-4">
             {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
               <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
@@ -499,12 +539,13 @@ export default function StudentDetailsPage() {
                 </div>
                 <div className="flex justify-between items-center text-[10px] text-muted-foreground font-bold uppercase">
                   <span>Method: {p.method}</span>
-                  <span>Received By: {p.receiver}</span>
+                  <span>Receiver: {p.receiver}</span>
                 </div>
               </Card>
             ))}
             {student.paymentsHistory?.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No payment history.</div>}
           </div>
+          {/* Desktop View: Table */}
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
@@ -541,6 +582,7 @@ export default function StudentDetailsPage() {
         </TabsContent>
 
         <TabsContent value="dues">
+          {/* Mobile View: Cards */}
           <div className="md:hidden space-y-4">
             {stats?.dueBreakdownList.map((d, i) => (
               <Card key={i} className="p-4 border-none shadow-sm rounded-2xl flex justify-between items-center">
@@ -553,6 +595,7 @@ export default function StudentDetailsPage() {
             ))}
             {stats?.dueBreakdownList.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No outstanding dues.</div>}
           </div>
+          {/* Desktop View: Table */}
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
@@ -798,25 +841,74 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Exit Dialog */}
+      {/* Exit & Settlement Dialog */}
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader><DialogTitle className="text-destructive">Process Final Exit</DialogTitle></DialogHeader>
-          <div className="py-6 space-y-6">
-            <div className="p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 text-center space-y-2 shadow-inner">
-              <p className="text-xs font-bold text-muted-foreground uppercase">Settlement Amount</p>
-              <p className="text-4xl font-black text-slate-800">৳{settlementAmount.toLocaleString()}</p>
-              <p className="text-[10px] font-black uppercase text-primary tracking-widest mt-2">
-                {settlementAmount >= 0 ? "STUDENT PAYS TO HOSTEL" : "HOSTEL REFUNDS TO STUDENT"}
+        <DialogContent className="max-w-lg rounded-3xl p-0 overflow-hidden">
+          <div className="h-2 bg-destructive w-full" />
+          <DialogHeader className="px-8 pt-6">
+            <DialogTitle className="text-2xl font-black text-slate-800">Process Exit & Settlement</DialogTitle>
+            <DialogDescription>Review final balances before releasing resident and seat.</DialogDescription>
+          </DialogHeader>
+          
+          <div className="px-8 py-6 space-y-6">
+            {/* Financial Summary Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Monthly Rent</p>
+                <p className="text-lg font-bold text-slate-700">৳{student.monthlyRent}</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Rent Due</p>
+                <p className="text-lg font-bold text-destructive">৳{stats?.rentDue.toLocaleString()}</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Food Balance</p>
+                <p className={cn("text-lg font-bold", stats?.foodBalance >= 0 ? "text-success" : "text-destructive")}>
+                  ৳{stats?.foodBalance.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Advance Deposit</p>
+                <p className="text-lg font-bold text-primary">৳{student.advanceAmount}</p>
+              </div>
+            </div>
+
+            {/* Calculated Result */}
+            <div className={cn(
+              "p-6 rounded-3xl border-2 text-center space-y-2 shadow-inner",
+              settlementCalculation?.isRefund ? "bg-success/5 border-success/20" : "bg-destructive/5 border-destructive/20"
+            )}>
+              <p className="text-xs font-bold text-muted-foreground uppercase">Suggested Settlement</p>
+              <p className={cn("text-4xl font-black", settlementCalculation?.isRefund ? "text-success" : "text-destructive")}>
+                ৳{settlementCalculation?.absResult.toLocaleString()}
+              </p>
+              <p className="text-[10px] font-black uppercase tracking-widest mt-2">
+                {settlementCalculation?.isRefund ? "HOSTEL REFUNDS TO STUDENT" : "STUDENT PAYS TO HOSTEL"}
               </p>
             </div>
-            <p className="text-xs text-slate-500 text-center italic">
-              Note: Settlement = (Pending Rent + Food Debt) - Security Advance. Confirming this will release seat {student.seatNumber}.
-            </p>
+
+            {/* Final Adjustment Input */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase text-slate-500">Final Settlement Amount (৳)</Label>
+              <div className="relative">
+                <Wallet className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                <Input 
+                  type="number" 
+                  className="pl-10 h-12 text-lg font-bold rounded-xl" 
+                  value={settlementInput}
+                  onChange={(e) => setSettlementInput(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground italic">* Confirming this will permanently mark the student as 'Left' and release seat {student.seatNumber}.</p>
+            </div>
           </div>
-          <DialogFooter className="grid grid-cols-2 gap-4">
-            <Button variant="outline" className="rounded-2xl" onClick={() => setIsExitDialogOpen(false)}>Cancel</Button>
-            <Button className="bg-destructive hover:bg-destructive/90 rounded-2xl font-black" onClick={handleConfirmExit} disabled={isUpdating}>Confirm Release</Button>
+
+          <DialogFooter className="p-8 bg-slate-50 border-t grid grid-cols-2 gap-4">
+            <Button variant="outline" className="h-14 rounded-2xl font-bold" onClick={() => setIsExitDialogOpen(false)}>Cancel</Button>
+            <Button className="h-14 bg-destructive hover:bg-destructive/90 rounded-2xl font-black text-lg shadow-xl shadow-destructive/20" onClick={handleConfirmExit} disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="animate-spin" /> : <UserMinus className="mr-2" />} Confirm Exit
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
