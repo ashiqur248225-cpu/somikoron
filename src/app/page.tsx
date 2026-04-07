@@ -82,6 +82,7 @@ import { sendSMS } from "@/app/actions/sms"
 import { useRouter } from "next/navigation"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const YEARS = ["2024", "2025", "2026", "2027", "2028"];
 
 export default function DashboardPage() {
   const db = useFirestore()
@@ -174,6 +175,7 @@ export default function DashboardPage() {
         if (!s.isActive) return;
         
         const dues = s.duesBreakdown || {};
+        // Only generate if it doesn't already exist in the breakdown
         if (!dues[currentMonthLabel]) {
           const rent = Number(s.monthlyRent || 0);
           dues[currentMonthLabel] = rent;
@@ -190,7 +192,7 @@ export default function DashboardPage() {
       if (updatesCount > 0) {
         try {
           await batch.commit();
-          console.log(`Auto-generated rent for ${updatesCount} students.`);
+          console.log(`Auto-generated rent for ${updatesCount} students for ${currentMonthLabel}.`);
         } catch (e) {
           console.error("Auto-rent generation failed:", e);
         }
@@ -317,6 +319,17 @@ export default function DashboardPage() {
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
+  const studentFinancials = useMemo(() => {
+    if (!selectedStudent) return null;
+    const rentDue = selectedStudent.totalDue || 0;
+    const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0;
+    const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0;
+    const totalFoodPaid = (selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0);
+    const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost);
+    
+    return { rentDue, foodBalance, advance: selectedStudent.advanceAmount || 0 };
+  }, [selectedStudent]);
+
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver || !selectedStudent) return
     setIsSubmitting(true)
@@ -341,20 +354,36 @@ export default function DashboardPage() {
       } else {
         await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
         
-        // Update Dues
+        // Selective Dues Allocation Logic
         const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
         let remainingRentPaid = seatPaid;
-        const dueMonths = Object.keys(currentDues).sort((a, b) => MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]));
+        const targetLabel = `${formData.month} ${formData.year}`;
 
-        for (const month of dueMonths) {
-          if (remainingRentPaid <= 0) break;
-          const dueAmt = currentDues[month];
+        // 1. Target the selected month/year first
+        if (currentDues[targetLabel] && remainingRentPaid > 0) {
+          const dueAmt = currentDues[targetLabel];
           if (remainingRentPaid >= dueAmt) {
             remainingRentPaid -= dueAmt;
-            delete currentDues[month];
+            delete currentDues[targetLabel];
           } else {
-            currentDues[month] = dueAmt - remainingRentPaid;
+            currentDues[targetLabel] = dueAmt - remainingRentPaid;
             remainingRentPaid = 0;
+          }
+        }
+
+        // 2. Surplus pays oldest
+        if (remainingRentPaid > 0) {
+          const dueMonths = Object.keys(currentDues).sort((a, b) => MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]));
+          for (const month of dueMonths) {
+            if (remainingRentPaid <= 0) break;
+            const dueAmt = currentDues[month];
+            if (remainingRentPaid >= dueAmt) {
+              remainingRentPaid -= dueAmt;
+              delete currentDues[month];
+            } else {
+              currentDues[month] = dueAmt - remainingRentPaid;
+              remainingRentPaid = 0;
+            }
           }
         }
 
@@ -365,10 +394,10 @@ export default function DashboardPage() {
           advanceAmount: increment(Number(formData.addAdvanceAmount)), 
           totalDue: finalTotalDue,
           duesBreakdown: currentDues,
+          historicalTotalReceived: increment(totalAmt),
           updatedAt: serverTimestamp() 
         })
         
-        // SMS Logic
         if (apiConfig?.apikey && templatesData?.templates) {
           const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
           if (paymentTemplate) {
@@ -405,7 +434,6 @@ export default function DashboardPage() {
         if (!s) return
         const countNum = Number(count); const cost = countNum * currentMealRate
         
-        // Also update totalDue if food balance goes negative
         const historicalFoodDue = Number(s.foodDueAmount) || 0
         const generatedFoodCostPrev = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
         const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || (s.paymentSystem === 'non-package' ? curr.amount : 0)), 0) || 0
@@ -528,7 +556,7 @@ export default function DashboardPage() {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Month</Label><Select value={mealLogFilter.month} onValueChange={val => setMealLogFilter({...mealLogFilter, month: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Year</Label><Select value={mealLogFilter.year} onValueChange={val => setMealLogFilter({...mealLogFilter, year: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Year</Label><Select value={mealLogFilter.year} onValueChange={val => setMealLogFilter({...mealLogFilter, year: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="space-y-2"><Label>Building</Label><Select value={mealLogFilter.buildingId} onValueChange={val => setMealLogFilter({...mealLogFilter, buildingId: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
           </div>
@@ -553,9 +581,33 @@ export default function DashboardPage() {
               <div className="space-y-1"><Label className="text-[10px] font-bold">Room</Label><Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}><SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRooms.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="space-y-2"><Label>Select Resident</Label><Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}><SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger><SelectContent>{filteredStudentsForEntry.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}</SelectContent></Select></div>
+            
+            {studentFinancials && (
+              <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3 shadow-inner border border-slate-800">
+                <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Current Total Dues</span> <span className="text-destructive font-black">৳{studentFinancials.rentDue.toLocaleString()}</span></div>
+                {selectedStudent?.paymentSystem === 'non-package' && (
+                  <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Food Balance</span> <span className={studentFinancials.foodBalance < 0 ? "text-destructive" : "text-success"}>৳{studentFinancials.foodBalance.toLocaleString()}</span></div>
+                )}
+                
+                {selectedStudent?.duesBreakdown && Object.keys(selectedStudent.duesBreakdown).length > 0 && (
+                  <div className="pt-2 border-t border-white/10">
+                    <p className="text-[8px] font-black uppercase text-primary mb-2">Detailed Dues List:</p>
+                    <div className="grid grid-cols-2 gap-2 max-h-[80px] overflow-y-auto pr-1 scrollbar-hide">
+                      {Object.entries(selectedStudent.duesBreakdown).map(([label, amount]: any) => (
+                        <div key={label} className="bg-white/5 p-1.5 rounded flex justify-between items-center">
+                          <span className="text-[8px] font-medium">{label}</span>
+                          <span className="text-[9px] font-black text-destructive">৳{amount}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Month</Label><Select value={formData.month} onValueChange={val => setFormData({...formData, month: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Year</Label><Select value={formData.year} onValueChange={val => setFormData({...formData, year: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Year</Label><Select value={formData.year} onValueChange={val => setFormData({...formData, year: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
               {selectedStudent?.paymentSystem === 'package' ? (

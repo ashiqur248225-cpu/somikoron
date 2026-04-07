@@ -37,10 +37,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const YEARS = ["2024", "2025", "2026", "2027", "2028"];
 
 interface DueEntry {
   id: string;
   month: string;
+  year: string;
   amount: string;
 }
 
@@ -171,6 +173,7 @@ export default function RegistrationsPage() {
     const newEntry: DueEntry = {
       id: Math.random().toString(36).substr(2, 9),
       month: MONTHS[new Date().getMonth()],
+      year: new Date().getFullYear().toString(),
       amount: ""
     };
     setApprovalForm(prev => ({
@@ -217,12 +220,13 @@ export default function RegistrationsPage() {
       const advAmount = Number(approvalForm.advanceAmount)
       
       let createdPaymentId = null;
+      let totalNewReceived = 0;
 
       // Logic for NEW Student: Advance, Svc Charge, Rent -> Log to Income/Payments
       if (!isOld) {
         const rentPaid = Number(approvalForm.initialRentPayment)
         const foodPaid = Number(approvalForm.initialFoodPayment)
-        const totalNewReceived = rentPaid + advAmount + svcCharge + foodPaid
+        totalNewReceived = rentPaid + advAmount + svcCharge + foodPaid
 
         if (totalNewReceived > 0) {
           const pId = doc(collection(db, "payments")).id
@@ -259,9 +263,10 @@ export default function RegistrationsPage() {
       if (isOld) {
         if (approvalForm.duesEntryMode === 'monthly') {
           approvalForm.duesBreakdown.forEach(d => {
-            if (d.month && d.amount) {
+            if (d.month && d.year && d.amount) {
+              const label = `${d.month} ${d.year}`;
               const amt = Number(d.amount);
-              finalDuesBreakdown[d.month] = (finalDuesBreakdown[d.month] || 0) + amt;
+              finalDuesBreakdown[label] = (finalDuesBreakdown[label] || 0) + amt;
               initialTotalDue += amt;
             }
           });
@@ -271,15 +276,11 @@ export default function RegistrationsPage() {
           initialTotalDue = total;
         }
         
-        // Add food due if negative
+        // Add food due if negative balance
         const foodDue = Number(approvalForm.foodDueAmount);
         if (foodDue < 0) {
           initialTotalDue += Math.abs(foodDue);
         }
-      } else {
-        // For new students, we don't auto-calculate joining dues. 
-        // Admin manually handles initial payments above.
-        initialTotalDue = 0;
       }
 
       // Save the Student Record
@@ -316,9 +317,9 @@ export default function RegistrationsPage() {
         branch: userBranch,
         paymentsHistory: [], 
         mealsHistory: [],
-        historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : 0,
+        historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : totalNewReceived,
         duesBreakdown: finalDuesBreakdown,
-        totalDue: initialTotalDue, // New Field
+        totalDue: initialTotalDue,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -626,10 +627,14 @@ export default function RegistrationsPage() {
                                         <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200 flex-1"><SelectValue /></SelectTrigger>
                                         <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                                       </Select>
+                                      <Select value={entry.year} onValueChange={v => updateDueEntry(entry.id, 'year', v)}>
+                                        <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200 w-20"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                                      </Select>
                                       <Input 
                                         type="number" 
                                         placeholder="Amt" 
-                                        className="h-9 w-24 text-xs bg-white border-orange-200" 
+                                        className="h-9 w-20 text-xs bg-white border-orange-200" 
                                         value={entry.amount} 
                                         onChange={e => updateDueEntry(entry.id, 'amount', e.target.value)} 
                                       />

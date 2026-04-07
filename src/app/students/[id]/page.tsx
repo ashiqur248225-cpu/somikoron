@@ -56,6 +56,7 @@ import { cn } from "@/lib/utils"
 import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const YEARS = ["2024", "2025", "2026", "2027", "2028"];
 
 export default function StudentDetailsPage() {
   const params = useParams()
@@ -117,8 +118,7 @@ export default function StudentDetailsPage() {
   const stats = useMemo(() => {
     if (!student) return null
     
-    // totalDue is now a persistent field in the DB.
-    // We only calculate display stats here.
+    // totalDue is the direct source of truth
     const rentDue = student.totalDue || 0;
 
     const historicalFoodDue = Number(student.foodDueAmount) || 0
@@ -126,21 +126,24 @@ export default function StudentDetailsPage() {
     const totalFoodPaid = (student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0)
     const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
 
-    const totalReceivedNew = (student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0) || 0)
-    const totalReceived = (student.historicalTotalReceived || 0) + totalReceivedNew
+    const totalReceived = student.historicalTotalReceived || 0
 
     const dueBreakdownList = Object.entries(student.duesBreakdown || {}).map(([month, amount]) => ({
       month,
       amount: Number(amount),
       status: 'Unpaid'
     })).sort((a, b) => {
-      return MONTHS.indexOf(b.month.split(' ')[0]) - MONTHS.indexOf(a.month.split(' ')[0]);
+      // Sort by year then month index
+      const [mA, yA] = a.month.split(' ');
+      const [mB, yB] = b.month.split(' ');
+      if (yA !== yB) return Number(yB) - Number(yA);
+      return MONTHS.indexOf(mB) - MONTHS.indexOf(mA);
     });
 
     return { 
       rentDue, 
       foodBalance, 
-      totalDue: rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0),
+      totalDue: rentDue, // This already includes negative food balance logic from backend
       totalReceived,
       advanceRemaining: student.advanceAmount || 0,
       currentMonthDue: student.monthlyRent,
@@ -211,20 +214,42 @@ export default function StudentDetailsPage() {
         year: paymentData.year, description: paymentData.description, date: new Date().toISOString()
       }
       
-      // Update Dues Breakdown
+      // Update Dues Breakdown with Selective Allocation
       const currentDues = { ...(student.duesBreakdown || {}) };
       let remainingRentPaid = seatPaid;
-      const dueMonths = Object.keys(currentDues).sort((a, b) => MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]));
+      const targetLabel = `${paymentData.month} ${paymentData.year}`;
 
-      for (const month of dueMonths) {
-        if (remainingRentPaid <= 0) break;
-        const dueAmt = currentDues[month];
+      // 1. Target selected month
+      if (currentDues[targetLabel] && remainingRentPaid > 0) {
+        const dueAmt = currentDues[targetLabel];
         if (remainingRentPaid >= dueAmt) {
           remainingRentPaid -= dueAmt;
-          delete currentDues[month];
+          delete currentDues[targetLabel];
         } else {
-          currentDues[month] = dueAmt - remainingRentPaid;
+          currentDues[targetLabel] = dueAmt - remainingRentPaid;
           remainingRentPaid = 0;
+        }
+      }
+
+      // 2. Surplus pays oldest remaining
+      if (remainingRentPaid > 0) {
+        const dueMonths = Object.keys(currentDues).sort((a, b) => {
+          const [mA, yA] = a.split(' ');
+          const [mB, yB] = b.split(' ');
+          if (yA !== yB) return Number(yA) - Number(yB);
+          return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
+        });
+
+        for (const month of dueMonths) {
+          if (remainingRentPaid <= 0) break;
+          const dueAmt = currentDues[month];
+          if (remainingRentPaid >= dueAmt) {
+            remainingRentPaid -= dueAmt;
+            delete currentDues[month];
+          } else {
+            currentDues[month] = dueAmt - remainingRentPaid;
+            remainingRentPaid = 0;
+          }
         }
       }
 
@@ -236,6 +261,7 @@ export default function StudentDetailsPage() {
         advanceAmount: increment(Number(paymentData.addAdvanceAmount)), 
         totalDue: finalTotalDue,
         duesBreakdown: currentDues,
+        historicalTotalReceived: increment(totalAmt),
         updatedAt: serverTimestamp() 
       })
       
@@ -298,6 +324,7 @@ export default function StudentDetailsPage() {
             emptySeats: increment(1),
             updatedAt: serverTimestamp()
           })
+         OldBuildingRef.update
         }
 
         const newBuildingRef = doc(db, "buildings", editForm.buildingId)
@@ -540,7 +567,7 @@ export default function StudentDetailsPage() {
           {/* Mobile View: Cards */}
           <div className="md:hidden space-y-4">
             {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
-              <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
+              <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-3 cursor-pointer" onClick={() => router.push(`/receipts/${p.id}`)}>
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p>
@@ -743,18 +770,28 @@ export default function StudentDetailsPage() {
           <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
             <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-3 shadow-xl">
-              <div className="flex justify-between items-center opacity-70 text-xs"><span>Current Month ({paymentData.month})</span> <span>৳{student.monthlyRent}</span></div>
-              <div className="flex justify-between items-center opacity-70 text-xs"><span>Existing Arrears/Dues</span> <span>৳{student.totalDue || 0}</span></div>
+              <div className="flex justify-between items-center opacity-70 text-xs"><span>Selected Month ({paymentData.month} {paymentData.year})</span> <span>৳{student.monthlyRent}</span></div>
+              <div className="flex justify-between items-center opacity-70 text-xs"><span>Total Oustanding Dues</span> <span className="text-destructive font-black">৳{student.totalDue || 0}</span></div>
               <Separator className="bg-white/10" />
-              <div className="flex justify-between items-center font-black">
-                <span className="text-xs uppercase tracking-widest text-primary">Total Recommendation</span>
-                <span className="text-2xl">৳{(student.monthlyRent + (student.totalDue || 0)).toLocaleString()}</span>
-              </div>
+              
+              {student.duesBreakdown && Object.keys(student.duesBreakdown).length > 0 && (
+                <div className="space-y-2 py-2">
+                  <p className="text-[8px] font-black uppercase text-primary">Pending Months:</p>
+                  <div className="grid grid-cols-2 gap-2 max-h-[100px] overflow-y-auto pr-1">
+                    {Object.entries(student.duesBreakdown).map(([label, amount]: any) => (
+                      <div key={label} className="bg-white/10 p-1.5 rounded flex justify-between items-center border border-white/5">
+                        <span className="text-[8px] font-medium">{label}</span>
+                        <span className="text-[9px] font-black text-destructive">৳{amount}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1"><Label>Month</Label><Select value={paymentData.month} onValueChange={v => setPaymentData({...paymentData, month: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-1"><Label>Year</Label><Select value={paymentData.year} onValueChange={v => setPaymentData({...paymentData, year: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{"2024,2025,2026".split(',').map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1"><Label>Year</Label><Select value={paymentData.year} onValueChange={v => setPaymentData({...paymentData, year: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
             </div>
 
             <div className="space-y-4">
@@ -770,7 +807,7 @@ export default function StudentDetailsPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1"><Label>Method</Label><Select value={paymentData.method} onValueChange={v => setPaymentData({...paymentData, method: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1"><Label>Method</Label><Select value={paymentData.method} onValueChange={v => setPaymentData({...paymentData, method: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
               <div className="space-y-1"><Label>Receiver</Label><Select value={paymentData.receiver} onValueChange={v => setPaymentData({...paymentData, receiver: v})}><SelectTrigger><SelectValue placeholder="Staff"/></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
           </div>

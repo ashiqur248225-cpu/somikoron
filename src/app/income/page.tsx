@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Calculator, ArrowUpCircle, RotateCcw } from "lucide-react"
+import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Calculator, ArrowUpCircle, RotateCcw, Clock, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, limit, where, getDoc } from "firebase/firestore"
@@ -30,6 +30,7 @@ import { sendSMS } from "@/app/actions/sms"
 import { useRouter } from "next/navigation"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const YEARS = ["2024", "2025", "2026", "2027", "2028"];
 
 const formatCompactDate = (date: any) => {
   if (!date) return 'N/A'
@@ -174,6 +175,17 @@ export default function IncomeHistoryPage() {
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
+  const studentFinancials = useMemo(() => {
+    if (!selectedStudent) return null;
+    const rentDue = selectedStudent.totalDue || 0;
+    const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0;
+    const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0;
+    const totalFoodPaid = (selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0);
+    const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost);
+    
+    return { rentDue, foodBalance, advance: selectedStudent.advanceAmount || 0 };
+  }, [selectedStudent]);
+
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver || !selectedStudent) return
     setIsSubmitting(true)
@@ -200,30 +212,43 @@ export default function IncomeHistoryPage() {
       } else {
         await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
         
-        // Update Dues Breakdown logic: Subtract from oldest months
+        // Update Dues Breakdown logic: Selective Allocation
         const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
         let remainingRentPaid = seatPaid;
         
-        // Sort months to pay the oldest first
-        const dueMonths = Object.keys(currentDues).sort((a, b) => {
-          // This is a simple sort, assuming months are from the same year for simplicity
-          // In a real app, you'd want a more robust date sorting
-          return MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]);
-        });
-
-        for (const month of dueMonths) {
-          if (remainingRentPaid <= 0) break;
-          const dueAmt = currentDues[month];
+        const targetLabel = `${formData.month} ${formData.year}`;
+        
+        // 1. Target the selected month first
+        if (currentDues[targetLabel] && remainingRentPaid > 0) {
+          const dueAmt = currentDues[targetLabel];
           if (remainingRentPaid >= dueAmt) {
             remainingRentPaid -= dueAmt;
-            delete currentDues[month];
+            delete currentDues[targetLabel];
           } else {
-            currentDues[month] = dueAmt - remainingRentPaid;
+            currentDues[targetLabel] = dueAmt - remainingRentPaid;
             remainingRentPaid = 0;
           }
         }
 
-        // Also subtract food paid from totalDue if applicable
+        // 2. If surplus remains, pay oldest months
+        if (remainingRentPaid > 0) {
+          const remainingMonths = Object.keys(currentDues).sort((a, b) => {
+            return MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]);
+          });
+
+          for (const month of remainingMonths) {
+            if (remainingRentPaid <= 0) break;
+            const dueAmt = currentDues[month];
+            if (remainingRentPaid >= dueAmt) {
+              remainingRentPaid -= dueAmt;
+              delete currentDues[month];
+            } else {
+              currentDues[month] = dueAmt - remainingRentPaid;
+              remainingRentPaid = 0;
+            }
+          }
+        }
+
         const finalTotalDue = Math.max(0, (selectedStudent.totalDue || 0) - (seatPaid + foodPaid));
 
         await updateDoc(doc(db, "students", selectedStudent.id), {
@@ -231,6 +256,7 @@ export default function IncomeHistoryPage() {
           advanceAmount: increment(Number(formData.addAdvanceAmount)),
           totalDue: finalTotalDue,
           duesBreakdown: currentDues,
+          historicalTotalReceived: increment(totalAmt),
           updatedAt: serverTimestamp()
         })
         
@@ -451,11 +477,38 @@ export default function IncomeHistoryPage() {
               <div className="space-y-1"><Label className="text-[10px] font-bold">Building</Label><Select value={entryBuildingFilter} onValueChange={val => { setEntryBuildingFilter(val); setEntryRoomFilter("all"); }}><SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-1"><Label className="text-[10px] font-bold">Room</Label><Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}><SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForEntry.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
             </div>
+            
             <div className="space-y-2"><Label>Select Resident</Label><Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}><SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger><SelectContent>{filteredStudentsForEntry.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}</SelectContent></Select></div>
+            
+            {studentFinancials && (
+              <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3 shadow-inner border border-slate-800">
+                <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Total Outstanding Dues</span> <span className="text-destructive font-black">৳{studentFinancials.rentDue.toLocaleString()}</span></div>
+                <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Advance Pool</span> <span className="text-primary font-black">৳{studentFinancials.advance.toLocaleString()}</span></div>
+                {selectedStudent?.paymentSystem === 'non-package' && (
+                  <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Food Balance</span> <span className={studentFinancials.foodBalance < 0 ? "text-destructive" : "text-success"}>৳{studentFinancials.foodBalance.toLocaleString()}</span></div>
+                )}
+                
+                {selectedStudent?.duesBreakdown && Object.keys(selectedStudent.duesBreakdown).length > 0 && (
+                  <div className="pt-2 border-t border-white/10">
+                    <p className="text-[8px] font-black uppercase text-primary mb-2">Pending Dues History:</p>
+                    <div className="grid grid-cols-2 gap-2 max-h-[80px] overflow-y-auto pr-1 scrollbar-hide">
+                      {Object.entries(selectedStudent.duesBreakdown).map(([label, amount]: any) => (
+                        <div key={label} className="bg-white/5 p-1.5 rounded flex justify-between items-center">
+                          <span className="text-[8px] font-medium">{label}</span>
+                          <span className="text-[9px] font-black text-destructive">৳{amount}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{"2024,2025,2026".split(',').map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
             </div>
+
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
               <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Collection Amounts</Label>
               {selectedStudent?.paymentSystem === 'package' ? (
