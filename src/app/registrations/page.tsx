@@ -11,7 +11,7 @@ import {
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
   AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2,
-  Receipt, HandCoins, ShieldCheck, DollarSign
+  Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -84,27 +84,11 @@ export default function RegistrationsPage() {
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
 
-  const logSMSToDatabase = async (to: string, msg: string, status: 'Success' | 'Failed', errorMsg?: string) => {
-    try {
-      const logId = doc(collection(db, "smsLogs")).id
-      await setDoc(doc(db, "smsLogs", logId), {
-        id: logId,
-        to,
-        message: msg,
-        status,
-        error: errorMsg || null,
-        branch: userBranch,
-        sentBy: userName,
-        createdAt: serverTimestamp()
-      })
-    } catch (e) {}
-  }
-
   const [approvalForm, setApprovalForm] = useState({
     monthlyRent: "",
     serviceCharge: "0",
     advanceAmount: "0",
-    foodDueAmount: "0", // For old students (balance)
+    foodDueAmount: "0", 
     historicalTotalReceived: "0", 
     initialRentPayment: "0", 
     initialFoodPayment: "0", 
@@ -115,10 +99,9 @@ export default function RegistrationsPage() {
     buildingId: "",
     roomNumber: "",
     seatNumber: "",
-    duesBreakdown: "" // Manual text breakdown for old students
+    duesBreakdown: "" 
   })
 
-  // Helper to get rooms when building changes
   const selectedBuilding = useMemo(() => buildings?.find(b => b.id === approvalForm.buildingId), [buildings, approvalForm.buildingId])
   
   const roomsInBuilding = useMemo(() => {
@@ -140,7 +123,7 @@ export default function RegistrationsPage() {
         monthlyRent: rent.toString(),
         initialRentPayment: rent.toString(),
         advanceAmount: rent.toString(),
-        seatNumber: "" // Reset seat when room changes
+        seatNumber: "" 
       }))
     }
   }, [selectedRoom])
@@ -204,15 +187,14 @@ export default function RegistrationsPage() {
             roomNumber: rNum,
             branch: userBranch,
             type: "income",
-            month: new Date().toLocaleString('default', { month: 'long' }),
+            month: MONTHS[new Date().getMonth()],
             year: new Date().getFullYear().toString(),
             method: approvalForm.method,
             receiver: approvalForm.receiver,
             description: "Admission initial payment",
-            date: new Date().toISOString(),
-            createdAt: new Date().toISOString()
+            date: new Date().toISOString()
           }
-          await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() })
+          await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
           createdPaymentId = pId;
         }
       }
@@ -250,11 +232,10 @@ export default function RegistrationsPage() {
         branch: userBranch,
         paymentsHistory: [], 
         mealsHistory: [],
+        historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : 0,
+        historicalDuesNote: isOld ? approvalForm.duesBreakdown : "",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        // Fields for old students
-        historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : 0,
-        historicalDuesNote: isOld ? approvalForm.duesBreakdown : ""
       })
 
       if (selectedBuilding) {
@@ -296,7 +277,6 @@ export default function RegistrationsPage() {
             .replaceAll('[সিট]', sNum);
           
           const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
-          await logSMSToDatabase(selectedReg.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
         }
       }
 
@@ -323,8 +303,8 @@ export default function RegistrationsPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Admission Requests</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Review student applications for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Enrollments</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Approving students for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -341,8 +321,8 @@ export default function RegistrationsPage() {
               <TableHeader className="bg-secondary/30">
                 <TableRow>
                   <TableHead>Student</TableHead>
-                  <TableHead>Type & Info</TableHead>
-                  <TableHead>Requested Room</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Req. Location</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -350,13 +330,13 @@ export default function RegistrationsPage() {
                 {registrations?.map((reg) => (
                   <TableRow key={reg.id}>
                     <TableCell><div className="flex flex-col"><span className="font-bold">{reg.name}</span><span className="text-xs text-muted-foreground">{reg.phone}</span></div></TableCell>
-                    <TableCell><div className="flex flex-col gap-1"><Badge variant="outline" className={reg.type === 'old' ? 'border-primary text-primary w-fit' : 'border-orange-500 text-orange-500 w-fit'}>{reg.type === 'old' ? 'Existing' : 'New Admission'}</Badge><span className="text-[10px] font-bold uppercase text-muted-foreground">{reg.occupation?.replace('_', ' ') || 'Student'}</span></div></TableCell>
-                    <TableCell><div className="text-xs text-muted-foreground font-medium">{reg.buildingName} • Room {reg.roomNumber || 'Not Specified'}</div></TableCell>
-                    <TableCell className="text-right"><Button variant="outline" size="sm" className="rounded-xl font-bold" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}><Eye size={14} className="mr-1" /> Review</Button></TableCell>
+                    <TableCell><div className="flex flex-col gap-1"><Badge variant="outline" className={reg.type === 'old' ? 'border-primary text-primary w-fit' : 'border-orange-500 text-orange-500 w-fit'}>{reg.type === 'old' ? 'Existing' : 'New'}</Badge><span className="text-[10px] font-bold uppercase text-muted-foreground">{reg.occupation?.replace('_', ' ') || 'Student'}</span></div></TableCell>
+                    <TableCell><div className="text-xs text-muted-foreground font-medium">{reg.buildingName} • Room {reg.roomNumber || 'Any'}</div></TableCell>
+                    <TableCell className="text-right"><Button variant="outline" size="sm" className="rounded-xl font-bold" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}><Eye size={14} className="mr-1" /> Verify</Button></TableCell>
                   </TableRow>
                 ))}
                 {registrations.length === 0 && (
-                  <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic">No pending admission requests.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic">No admission requests.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -368,21 +348,20 @@ export default function RegistrationsPage() {
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl p-0">
           <div className="h-2 bg-primary w-full" />
           <DialogHeader className="px-8 pt-6">
-            <DialogTitle className="text-2xl font-black">Verify Enrollment: {selectedReg?.name}</DialogTitle>
-            <DialogDescription>Assign room and set financial parameters for this branch.</DialogDescription>
+            <DialogTitle className="text-2xl font-black">Approval Dashboard: {selectedReg?.name}</DialogTitle>
+            <DialogDescription>Assign unit and configure financials.</DialogDescription>
           </DialogHeader>
           
           {selectedReg && (
             <div className="p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Left Column: Profile & Location */}
+              {/* Profile Side */}
               <div className="lg:col-span-1 space-y-6">
                 <div className="p-5 bg-secondary/30 rounded-3xl border-2 border-secondary space-y-4">
-                  <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><UserCircle size={14}/> Applicant Summary</h3>
+                  <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><UserCircle size={14}/> Applicant Info</h3>
                   <div className="grid grid-cols-2 gap-y-3 text-xs">
-                    <span className="text-muted-foreground">Type:</span> <Badge variant="secondary" className="w-fit h-5 text-[9px] capitalize">{selectedReg.type} Resident</Badge>
-                    <span className="text-muted-foreground">Occupation:</span> <span className="font-bold text-slate-700 capitalize">{selectedReg.occupation?.replace('_', ' ')}</span>
+                    <span className="text-muted-foreground">Type:</span> <Badge variant="secondary" className="w-fit h-5 text-[9px] capitalize">{selectedReg.type}</Badge>
                     <span className="text-muted-foreground">Mobile:</span> <span className="font-mono font-bold">{selectedReg.phone}</span>
-                    <span className="text-muted-foreground">Location:</span> <span className="font-bold text-slate-700">{selectedReg.district}</span>
+                    <span className="text-muted-foreground">District:</span> <span className="font-bold">{selectedReg.district}</span>
                   </div>
                 </div>
 
@@ -390,7 +369,7 @@ export default function RegistrationsPage() {
                   <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Building2 size={14}/> Unit Allocation</h3>
                   <div className="space-y-4">
                     <div className="space-y-1.5">
-                      <Label className="text-[10px] uppercase font-black ml-1">Select Building</Label>
+                      <Label className="text-[10px] uppercase font-black ml-1">Building</Label>
                       <Select value={approvalForm.buildingId} onValueChange={val => setApprovalForm({...approvalForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
                         <SelectTrigger className="bg-white rounded-xl h-11"><SelectValue/></SelectTrigger>
                         <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
@@ -414,17 +393,15 @@ export default function RegistrationsPage() {
                 </div>
               </div>
 
-              {/* Middle & Right Column: Financials */}
+              {/* Financial Section */}
               <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Billing Configuration */}
                 <div className="space-y-6">
                   <div className="p-5 border-2 border-primary/20 bg-primary/5 rounded-3xl space-y-5">
                     <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Calculator size={14}/> Financial Parameters</h3>
-                    
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-black">Monthly Rent (৳)</Label>
+                          <Label className="text-[10px] uppercase font-black">Monthly Rent</Label>
                           <Input type="number" className="h-11 rounded-xl bg-white font-bold" value={approvalForm.monthlyRent} onChange={e => setApprovalForm({...approvalForm, monthlyRent: e.target.value})} />
                         </div>
                         <div className="space-y-1.5">
@@ -435,70 +412,45 @@ export default function RegistrationsPage() {
                           </Select>
                         </div>
                       </div>
-
                       <div className="space-y-1.5">
                         <Label className="text-[10px] uppercase font-black">Billing Start Date</Label>
                         <Input type="date" className="h-11 rounded-xl bg-white" value={approvalForm.billingStartDate} onChange={e => setApprovalForm({...approvalForm, billingStartDate: e.target.value})} />
                       </div>
-
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-black">Service Charge</Label>
-                          <Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.serviceCharge} onChange={e => setApprovalForm({...approvalForm, serviceCharge: e.target.value})} />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-black">Security Advance</Label>
-                          <Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.advanceAmount} onChange={e => setApprovalForm({...approvalForm, advanceAmount: e.target.value})} />
-                        </div>
+                        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Service Charge</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.serviceCharge} onChange={e => setApprovalForm({...approvalForm, serviceCharge: e.target.value})} /></div>
+                        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Advance</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.advanceAmount} onChange={e => setApprovalForm({...approvalForm, advanceAmount: e.target.value})} /></div>
                       </div>
                     </div>
                   </div>
-
                   <div className="p-5 bg-slate-50 border rounded-3xl space-y-3">
-                    <Label className="text-[10px] uppercase font-black ml-1">Admission Personnel</Label>
+                    <Label className="text-[10px] uppercase font-black ml-1">Admission Staff</Label>
                     <Select value={approvalForm.receiver} onValueChange={v => setApprovalForm({...approvalForm, receiver: v})}>
-                      <SelectTrigger className="bg-white h-11 rounded-xl"><SelectValue placeholder="Verified By"/></SelectTrigger>
+                      <SelectTrigger className="bg-white h-11 rounded-xl"><SelectValue placeholder="Select Staff"/></SelectTrigger>
                       <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>
 
-                {/* Initial Payment or Historical Data */}
                 <div className="space-y-6">
                   {selectedReg.type === 'old' ? (
                     <div className="p-5 border-2 border-orange-200 bg-orange-50/50 rounded-3xl space-y-5">
-                      <h3 className="text-[10px] font-black uppercase text-orange-600 tracking-widest flex items-center gap-2"><History size={14}/> Historical Records (Old Student)</h3>
+                      <h3 className="text-[10px] font-black uppercase text-orange-600 tracking-widest flex items-center gap-2"><History size={14}/> Historical Data</h3>
                       <div className="space-y-4">
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-black">Total Lifetime Received (৳)</Label>
-                          <Input type="number" className="h-11 rounded-xl bg-white" placeholder="0.00" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-black">Current Food Balance (৳)</Label>
-                          <Input type="number" className="h-11 rounded-xl bg-white" placeholder="Positive = Credit, Negative = Loan" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-black">Dues Breakdown / Note</Label>
-                          <Textarea className="bg-white rounded-xl resize-none" placeholder="e.g. Feb: 2000, Jan: 500" value={approvalForm.duesBreakdown} onChange={e => setApprovalForm({...approvalForm, duesBreakdown: e.target.value})} />
-                        </div>
+                        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Lifetime Collected</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} /></div>
+                        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Food Balance</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} /></div>
+                        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Dues Note</Label><Textarea className="bg-white rounded-xl h-20" placeholder="e.g. Feb Due: 2000" value={approvalForm.duesBreakdown} onChange={e => setApprovalForm({...approvalForm, duesBreakdown: e.target.value})} /></div>
                       </div>
                     </div>
                   ) : (
                     <div className="p-5 border-2 border-success/20 bg-success/5 rounded-3xl space-y-5">
-                      <h3 className="text-[10px] font-black uppercase text-success tracking-widest flex items-center gap-2"><Wallet size={14}/> Initial Collection</h3>
+                      <h3 className="text-[10px] font-black uppercase text-success tracking-widest flex items-center gap-2"><Wallet size={14}/> Initial Payment</h3>
                       <div className="space-y-4">
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-black">Rent Collection (৳)</Label>
-                          <Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} />
-                        </div>
+                        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Rent Received</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} /></div>
                         {approvalForm.paymentSystem === 'non-package' && (
-                          <div className="space-y-1.5">
-                            <Label className="text-[10px] uppercase font-black">Food Collection (৳)</Label>
-                            <Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} />
-                          </div>
+                          <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Food Deposit</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} /></div>
                         )}
                         <div className="space-y-1.5 pt-4">
-                          <Label className="text-[10px] uppercase font-black">Payment Method</Label>
+                          <Label className="text-[10px] uppercase font-black">Method</Label>
                           <Select value={approvalForm.method} onValueChange={v => setApprovalForm({...approvalForm, method: v})}>
                             <SelectTrigger className="bg-white h-11 rounded-xl"><SelectValue/></SelectTrigger>
                             <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
@@ -513,8 +465,8 @@ export default function RegistrationsPage() {
           )}
           
           <DialogFooter className="p-8 bg-slate-50 border-t flex flex-col md:flex-row gap-4">
-            <Button variant="outline" className="flex-1 h-14 rounded-2xl border-destructive text-destructive font-black uppercase text-xs" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject Application</Button>
-            <Button className="flex-[2] h-14 rounded-2xl bg-success hover:bg-success/90 font-black text-lg shadow-xl shadow-success/20" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="mr-2" />} Approve & Admit Resident</Button>
+            <Button variant="outline" className="flex-1 h-14 rounded-2xl border-destructive text-destructive font-black uppercase" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject Request</Button>
+            <Button className="flex-[2] h-14 rounded-2xl bg-success hover:bg-success/90 font-black text-lg shadow-xl shadow-success/20" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="mr-2" />} Approve & Admit</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
