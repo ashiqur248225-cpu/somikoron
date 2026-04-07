@@ -161,7 +161,6 @@ export default function StudentDetailsPage() {
     const foodDue = stats.foodBalance < 0 ? Math.abs(stats.foodBalance) : 0;
     const advance = student.advanceAmount || 0;
     
-    // Logic: (Rent Due + Food Due) - Advance Remaining
     const netResult = (pendingRent + foodDue) - advance;
     
     return {
@@ -340,7 +339,6 @@ export default function StudentDetailsPage() {
     if (!studentRef || !student) return
     setIsUpdating(true)
     try {
-      // 1. Release the seat
       const buildingRef = doc(db, "buildings", student.buildingId)
       const buildingSnap = await getDoc(buildingRef)
       if (buildingSnap.exists()) {
@@ -372,7 +370,6 @@ export default function StudentDetailsPage() {
         })
       }
 
-      // 2. Mark student as left
       await updateDoc(studentRef, { 
         isActive: false, 
         leftAt: serverTimestamp(), 
@@ -380,7 +377,6 @@ export default function StudentDetailsPage() {
         updatedAt: serverTimestamp() 
       })
 
-      // 3. Send Exit SMS
       if (apiConfig?.apikey && templatesData?.templates) {
         const exitTemplate = templatesData.templates.find((t: any) => t.id === 'exit')
         if (exitTemplate) {
@@ -408,7 +404,7 @@ export default function StudentDetailsPage() {
     { label: "Monthly Rent", val: student.monthlyRent, color: "orange-600", icon: Home, bg: "bg-orange-50" },
     { label: "Total Recv.", val: stats?.totalReceived, color: "green-600", icon: HandCoins, bg: "bg-green-50" },
     { label: "Rent Due", val: stats?.rentDue, color: "red-600", icon: AlertCircle, bg: "bg-red-50" },
-    { label: "Food Bal.", val: stats?.foodBalance, color: stats?.foodBalance >= 0 ? "success" : "red-600", icon: Utensils, bg: stats?.foodBalance >= 0 ? "bg-success/5" : "bg-red-50" },
+    { label: "Food Bal.", val: stats?.foodBalance, color: (stats?.foodBalance ?? 0) >= 0 ? "success" : "red-600", icon: Utensils, bg: (stats?.foodBalance ?? 0) >= 0 ? "bg-success/5" : "bg-red-50" },
   ].filter(c => c.label !== 'Food Bal.' || student.paymentSystem === 'non-package');
 
   return (
@@ -676,7 +672,7 @@ export default function StudentDetailsPage() {
 
       {/* View All Information Dialog */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="max-w-2xl rounded-3xl">
+        <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black">Personal Dossier</DialogTitle>
             <DialogDescription>Full archival data for {student.name}.</DialogDescription>
@@ -728,7 +724,7 @@ export default function StudentDetailsPage() {
 
       {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
+        <DialogContent className="max-w-md rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
             <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-3 shadow-xl">
@@ -843,7 +839,7 @@ export default function StudentDetailsPage() {
 
       {/* Exit & Settlement Dialog */}
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
-        <DialogContent className="max-w-lg rounded-3xl p-0 overflow-hidden">
+        <DialogContent className="max-w-lg rounded-3xl p-0 max-h-[90vh] overflow-y-auto">
           <div className="h-2 bg-destructive w-full" />
           <DialogHeader className="px-8 pt-6">
             <DialogTitle className="text-2xl font-black text-slate-800">Process Exit & Settlement</DialogTitle>
@@ -863,7 +859,7 @@ export default function StudentDetailsPage() {
               </div>
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Food Balance</p>
-                <p className={cn("text-lg font-bold", stats?.foodBalance >= 0 ? "text-success" : "text-destructive")}>
+                <p className={cn("text-lg font-bold", (stats?.foodBalance ?? 0) >= 0 ? "text-success" : "text-destructive")}>
                   ৳{stats?.foodBalance.toLocaleString()}
                 </p>
               </div>
