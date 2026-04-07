@@ -219,9 +219,30 @@ export default function DashboardPage() {
     const now = new Date()
     const isWithinRange = (date: Date, range: string) => {
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      
       if (range === 'today') return date >= startOfToday
-      if (range === 'this_month') return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-      return true
+      
+      if (range === 'yesterday') {
+        const yesterday = new Date(startOfToday)
+        yesterday.setDate(yesterday.getDate() - 1)
+        return date >= yesterday && date < startOfToday
+      }
+      
+      if (range === 'this_week') {
+        const startOfWeek = new Date(startOfToday)
+        startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay())
+        return date >= startOfWeek
+      }
+      
+      if (range === 'this_month') {
+        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+      }
+      
+      if (range === 'this_year') {
+        return date.getFullYear() === now.getFullYear()
+      }
+      
+      return true // all_time
     }
 
     const filteredPayments = (allPayments || []).filter(p => isWithinRange(p.date?.toDate ? p.date.toDate() : new Date(p.date), timeRange))
@@ -411,7 +432,23 @@ export default function DashboardPage() {
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2"><SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mr-2 h-4 md:hidden" /><div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Dashboard</h1></div></div>
         <div className="ml-auto flex items-center gap-3">
-          <Select value={timeRange} onValueChange={setTimeRange}><SelectTrigger className="w-32 h-10 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="today">Today</SelectItem><SelectItem value="this_month">This Month</SelectItem></SelectContent></Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2 h-10 px-4 bg-white border-slate-200 rounded-xl font-bold text-slate-700">
+                <CalendarIcon size={16} className="text-primary" />
+                <span className="hidden sm:inline capitalize">{timeRange.replace('_', ' ')}</span>
+                <ChevronDown size={14} className="text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
+              <DropdownMenuItem onClick={() => setTimeRange('today')} className="p-3 cursor-pointer rounded-lg font-medium">Today</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimeRange('yesterday')} className="p-3 cursor-pointer rounded-lg font-medium">Yesterday</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimeRange('this_week')} className="p-3 cursor-pointer rounded-lg font-medium">This Week</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimeRange('this_month')} className="p-3 cursor-pointer rounded-lg font-medium">This Month</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimeRange('this_year')} className="p-3 cursor-pointer rounded-lg font-medium">This Year</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimeRange('all_time')} className="p-3 cursor-pointer rounded-lg font-medium">All Time</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
