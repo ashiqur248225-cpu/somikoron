@@ -693,12 +693,6 @@ export default function StudentDetailsPage() {
         )}
       </Tabs>
 
-      <div className="fixed bottom-8 right-8 z-50">
-        <Button size="icon" className="h-14 w-14 rounded-full shadow-2xl bg-primary border-4 border-white" onClick={() => setIsPaymentDialogOpen(true)}>
-          <Plus size={32} />
-        </Button>
-      </div>
-
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
