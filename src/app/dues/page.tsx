@@ -8,14 +8,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Building2, DoorOpen, Loader2, Eye, CircleAlert, XCircle, Printer, TrendingUp, UserCheck, UserMinus, FileSpreadsheet, Phone, Filter } from "lucide-react"
+import { Users, Search, Building2, DoorOpen, Loader2, Eye, CircleAlert, XCircle, Printer, TrendingUp, UserCheck, UserMinus, FileSpreadsheet, Phone, Filter, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -33,10 +33,10 @@ export default function DuesPage() {
   const { toast } = useToast()
   
   // States
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [roomFilter, setRoomFilter] = useState("all")
-  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
@@ -77,7 +77,7 @@ export default function DuesPage() {
 
       return { ...s, rentDue, foodBalance, totalDue: rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0), isPaid: (rentDue <= 0 && foodBalance >= 0) }
     }).filter(s => {
-      if (!s.isActive) return false // Due only for active by default
+      if (!s.isActive) return false 
       const search = searchTerm.toLowerCase()
       const matchesSearch = s.name.toLowerCase().includes(search) || (s.phone || "").includes(search)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
@@ -125,7 +125,6 @@ export default function DuesPage() {
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -133,11 +132,61 @@ export default function DuesPage() {
           <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Due</h1><p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Outstanding receivables for <span className="font-bold text-foreground">{userBranch}</span>.</p></div>
         </div>
         <div className="ml-auto flex items-center gap-3">
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsFilterDialogOpen(true)}>
+            <Filter size={16} /> <span className="hidden sm:inline">Filter</span>
+          </Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
+
+      {/* FILTER DIALOG */}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Dues</DialogTitle>
+            <DialogDescription>Locate specific debts by student or property.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Name or phone..." className="pl-8 bg-slate-50" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
+                <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}>
+                  <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Buildings</SelectItem>
+                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room</Label>
+                <Select value={roomFilter} onValueChange={setRoomFilter}>
+                  <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Rooms</SelectItem>
+                    {availableRooms.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 sm:justify-between">
+            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); }}>
+              <RotateCcw size={14}/> Reset
+            </Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Official Ledger Print Format */}
       <div className="print-only print-report-container">
@@ -183,32 +232,6 @@ export default function DuesPage() {
         </div>
       </div>
 
-      {/* GLOBAL FILTER BAR (Desktop) */}
-      <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
-        <div className="flex-1 space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Search Student</Label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input placeholder="Name or phone..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div></div>
-        <div className="w-[180px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Room</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRooms.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
-        <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); }}>Reset</Button>
-      </div>
-
-      {/* MOBILE FILTER PANEL */}
-      <div className="md:hidden space-y-4 print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." className="pl-9 h-9 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-          <Dialog open={isMobileFilterOpen} onOpenChange={setIsMobileFilterOpen}>
-            <DialogTrigger asChild><Button variant="outline" size="sm" className="h-9 gap-2"><Filter size={14} /> Filter</Button></DialogTrigger>
-            <DialogContent className="max-w-[90vw] rounded-2xl">
-              <DialogHeader><DialogTitle>Due Filters</DialogTitle></DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2"><Label>Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Room</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRooms.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
-              </div>
-              <DialogFooter className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setIsMobileFilterOpen(false); }}>Reset</Button><Button onClick={() => setIsMobileFilterOpen(false)}>Apply</Button></DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
       <div className="grid gap-6 grid-cols-1 md:grid-cols-3 print:hidden">
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Outstanding</CardTitle><TrendingUp className="h-4 w-4 text-destructive" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">৳{stats.totalDue.toLocaleString()}</div><p className="text-[10px] text-muted-foreground">Across {stats.count} accounts</p></CardContent></Card>
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-success">Low Dues</CardTitle><UserCheck className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">{processedData.filter(s => s.totalDue < 1000).length}</div></CardContent></Card>
@@ -219,7 +242,6 @@ export default function DuesPage() {
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
         <>
-          {/* DESKTOP TABLE VIEW */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
             <CardContent className="p-0">
               <Table>
@@ -229,7 +251,6 @@ export default function DuesPage() {
             </CardContent>
           </Card>
 
-          {/* MOBILE CARD VIEW */}
           <div className="md:hidden space-y-4 print:hidden">
             {processedData.map((s: any) => (
               <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">

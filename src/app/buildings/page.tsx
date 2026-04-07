@@ -30,7 +30,8 @@ import {
   Construction,
   Bath,
   Sparkles,
-  ChevronDown
+  ChevronDown,
+  RotateCcw
 } from "lucide-react"
 import {
   Dialog,
@@ -94,6 +95,7 @@ export default function BuildingsPage() {
   const router = useRouter()
   const db = useFirestore()
   const [open, setOpen] = useState(false)
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   
   // User Context
   const [userRole, setUserRole] = useState("")
@@ -137,16 +139,6 @@ export default function BuildingsPage() {
   }, [db, userBranch])
   
   const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
-
-  // Initialize building branch based on context when opening dialog
-  useEffect(() => {
-    if (open) {
-      setNewBuilding(prev => ({
-        ...prev,
-        branch: userBranch // System auto-selects active branch
-      }))
-    }
-  }, [open, userBranch])
 
   // Derived state: Flattened Rooms
   const allFlattenedRooms = useMemo(() => {
@@ -272,8 +264,8 @@ export default function BuildingsPage() {
   }, [apartments])
 
   const handleCreate = () => {
-    if (!newBuilding.name || !newBuilding.address || !newBuilding.branch) {
-      toast({ variant: "destructive", title: "Error", description: "Name, Address, and Branch are required." })
+    if (!newBuilding.name || !newBuilding.address || !userBranch) {
+      toast({ variant: "destructive", title: "Error", description: "Name and Address are required." })
       return
     }
 
@@ -285,6 +277,7 @@ export default function BuildingsPage() {
 
     addDocumentNonBlocking(collection(db, "buildings"), {
       ...newBuilding,
+      branch: userBranch,
       buildingRentCost: Number(newBuilding.buildingRentCost || 0),
       apartmentsCount: validApts.length,
       apartmentsDetail: validApts.map(apt => ({
@@ -307,9 +300,9 @@ export default function BuildingsPage() {
     })
 
     setOpen(false)
-    setNewBuilding({ name: "", address: "", branch: "", buildingRentCost: "0" })
+    setNewBuilding({ name: "", address: "", branch: userBranch, buildingRentCost: "0" })
     setApartments([{ name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] }])
-    toast({ title: "Building Created", description: `Hierarchy saved under branch: ${newBuilding.branch}` })
+    toast({ title: "Building Created" })
   }
 
   const toggleFacilityFilter = (facility: string) => {
@@ -322,7 +315,6 @@ export default function BuildingsPage() {
 
   return (
     <div className="space-y-8 pb-20">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -336,6 +328,9 @@ export default function BuildingsPage() {
         </div>
         
         <div className="ml-auto flex items-center gap-3">
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsFilterDialogOpen(true)}>
+            <Filter size={16} /> <span className="hidden sm:inline">Filter</span>
+          </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="flex gap-2">
@@ -488,106 +483,95 @@ export default function BuildingsPage() {
         </div>
       </div>
 
-      {/* Advanced Filter Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 bg-secondary/20 p-4 rounded-xl border items-end">
-        <div className="space-y-1.5 lg:col-span-1">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-            <Search size={10} /> Search
-          </Label>
-          <Input 
-            placeholder="Room no..." 
-            value={searchTerm} 
-            onChange={e => setSearchTerm(e.target.value)} 
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-            <Building2 size={10} /> Building
-          </Label>
-          <Select value={filterBuilding} onValueChange={setBuildingFilter}>
-            <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Buildings</SelectItem>
-              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-            <Bed size={10} /> Room Type
-          </Label>
-          <Select value={filterRoomType} onValueChange={setRoomTypeFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Any Bed</SelectItem>
-              <SelectItem value="single">Single Bed</SelectItem>
-              <SelectItem value="double">Double Bed</SelectItem>
-              <SelectItem value="multiple">Multiple (3+)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-            <UserCheck size={10} /> Availability
-          </Label>
-          <Select value={filterAvailability} onValueChange={setAvailabilityFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Rooms</SelectItem>
-              <SelectItem value="empty_only">Has Empty Seats</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-            <Sparkles size={10} /> Facilities
-          </Label>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full justify-between h-10 px-3 py-2 text-sm font-normal">
-                <span className="truncate">
-                  {filterFacilities.length === 0 ? "Any" : `${filterFacilities.length} Selected`}
-                </span>
-                <ChevronDown className="h-4 w-4 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56">
-              <DropdownMenuLabel>Filter by Facilities</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {AVAILABLE_FACILITIES.map((fac) => (
-                <DropdownMenuCheckboxItem
-                  key={fac}
-                  checked={filterFacilities.includes(fac)}
-                  onCheckedChange={() => toggleFacilityFilter(fac)}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {fac}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        {isFiltering && (
-          <Button 
-            variant="ghost" 
-            className="h-10 text-xs gap-1" 
-            onClick={() => {
-              setSearchTerm("")
-              setBuildingFilter("all")
-              setRoomTypeFilter("all")
-              setAvailabilityFilter("all")
-              setFilterFacilities([])
-            }}
-          >
-            <XCircle size={14} /> Clear
-          </Button>
-        )}
-      </div>
+      {/* FILTER DIALOG */}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Buildings & Rooms</DialogTitle>
+            <DialogDescription>Search for specific rooms or infrastructure.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Room no or building name..." className="pl-8 bg-slate-50" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
+                <Select value={filterBuilding} onValueChange={setBuildingFilter}>
+                  <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Buildings</SelectItem>
+                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room Type</Label>
+                <Select value={filterRoomType} onValueChange={setRoomTypeFilter}>
+                  <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Any Bed</SelectItem>
+                    <SelectItem value="single">Single Bed</SelectItem>
+                    <SelectItem value="double">Double Bed</SelectItem>
+                    <SelectItem value="multiple">Multiple (3+)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Availability</Label>
+              <Select value={filterAvailability} onValueChange={setAvailabilityFilter}>
+                <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Rooms</SelectItem>
+                  <SelectItem value="empty_only">Has Empty Seats</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Facilities</Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between h-10 px-3 py-2 text-sm font-normal bg-slate-50">
+                    <span className="truncate">
+                      {filterFacilities.length === 0 ? "Any Facility" : `${filterFacilities.length} Selected`}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56">
+                  <DropdownMenuLabel>Filter by Facilities</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {AVAILABLE_FACILITIES.map((fac) => (
+                    <DropdownMenuCheckboxItem
+                      key={fac}
+                      checked={filterFacilities.includes(fac)}
+                      onCheckedChange={() => toggleFacilityFilter(fac)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      {fac}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 sm:justify-between">
+            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomTypeFilter("all"); setAvailabilityFilter("all"); setFilterFacilities([]); }}>
+              <RotateCcw size={14}/> Reset
+            </Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {buildingsLoading ? (
         <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
       ) : isFiltering ? (
-        // Detailed Search Result View
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-muted-foreground mb-2">
             <Filter size={16} />
@@ -648,16 +632,9 @@ export default function BuildingsPage() {
                 </CardFooter>
               </Card>
             ))}
-            {filteredRooms.length === 0 && (
-              <div className="col-span-full py-20 text-center bg-secondary/10 rounded-xl border border-dashed">
-                <Search size={48} className="mx-auto text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground">No rooms found matching your specific filters.</p>
-              </div>
-            )}
           </div>
         </div>
       ) : (
-        // Default Building Overview View
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {buildings?.map((building: any) => (
             <Card key={building.id} className="border-none shadow-sm rounded-2xl overflow-hidden group hover:shadow-md transition-all">

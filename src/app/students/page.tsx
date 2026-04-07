@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Building2, DoorOpen, Loader2, Eye, XCircle, Printer, FileSpreadsheet, Filter, CheckCircle2, UserMinus, UserCheck, LayoutGrid, Bed } from "lucide-react"
+import { Users, Search, Building2, DoorOpen, Loader2, Eye, XCircle, Printer, FileSpreadsheet, Filter, CheckCircle2, UserMinus, UserCheck, LayoutGrid, Bed, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
@@ -15,7 +15,7 @@ import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase
 import { collection, query, where, doc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -33,11 +33,11 @@ export default function StudentsPage() {
   const db = useFirestore()
   
   // States
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
   const [planFilter, setPlanFilter] = useState("all")
-  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
@@ -62,11 +62,9 @@ export default function StudentsPage() {
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
 
-  // Advanced Processing for Reporting
   const processedStudents = useMemo(() => {
     if (!students) return []
     return students.map(s => {
-      // Logic for dues calculation consistent with other pages
       const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
       const now = new Date()
       const endDate = s.isActive ? now : (s.leftAt?.toDate?.() || now)
@@ -101,7 +99,6 @@ export default function StudentsPage() {
     }).sort((a, b) => a.name.localeCompare(b.name))
   }, [students, searchTerm, buildingFilter, statusFilter, planFilter])
 
-  // Summary Stats for Print
   const printStats = useMemo(() => {
     return {
       totalCount: processedStudents.length,
@@ -140,7 +137,6 @@ export default function StudentsPage() {
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -151,15 +147,76 @@ export default function StudentsPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsFilterDialogOpen(true)}>
+            <Filter size={16} /> <span className="hidden sm:inline">Filter</span>
+          </Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
-      {/* MASTER PDF PRINT DESIGN (Fixed Pattern Rule) */}
+      {/* FILTER DIALOG */}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Residents</DialogTitle>
+            <DialogDescription>Search and filter your hostel members.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Name, phone, room..." className="pl-8 bg-slate-50" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
+              <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Buildings</SelectItem>
+                  {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Plan</Label>
+                <Select value={planFilter} onValueChange={setPlanFilter}>
+                  <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Plans</SelectItem>
+                    <SelectItem value="package">Package</SelectItem>
+                    <SelectItem value="non-package">Non-Package</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Status</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Staying</SelectItem>
+                    <SelectItem value="left">Left Hostel</SelectItem>
+                    <SelectItem value="all">All Records</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 sm:justify-between">
+            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setStatusFilter("active"); setPlanFilter("all"); }}>
+              <RotateCcw size={14}/> Reset
+            </Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MASTER PDF PRINT DESIGN */}
       <div className="print-only print-report-container">
-        {/* FIRST PAGE HEADER */}
         <div className="report-header">
           <h1>{templatesData?.hostelName || "SOMIKORON HOSTEL"}</h1>
           <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Resident Directory Report</p>
@@ -175,7 +232,6 @@ export default function StudentsPage() {
           </div>
         </div>
 
-        {/* SUMMARY PATTERN */}
         <div className="summary-section grid grid-cols-4 gap-4 mb-8">
           <div className="summary-box">
             <p className="text-[7pt] font-black uppercase text-muted-foreground mb-1">Total Residents</p>
@@ -195,7 +251,6 @@ export default function StudentsPage() {
           </div>
         </div>
 
-        {/* MAIN DATA PATTERN - TABLE */}
         <table className="w-full border-collapse">
           <thead>
             <tr>
@@ -232,7 +287,6 @@ export default function StudentsPage() {
           </tfoot>
         </table>
 
-        {/* FOOTER PATTERN */}
         <div className="print-footer">
           <div className="signature-box">Accountant Signature</div>
           <div className="text-center">
@@ -242,127 +296,10 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* GLOBAL FILTER BAR (Desktop) */}
-      <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
-        <div className="flex-1 space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Search Resident</Label>
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Name, phone, room..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-          </div>
-        </div>
-        <div className="w-[180px] space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label>
-          <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-            <SelectTrigger className="bg-white h-10"><SelectValue placeholder="All" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Buildings</SelectItem>
-              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="w-[150px] space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Plan</Label>
-          <Select value={planFilter} onValueChange={setPlanFilter}>
-            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Plans</SelectItem>
-              <SelectItem value="package">Package</SelectItem>
-              <SelectItem value="non-package">Non-Package</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="w-[150px] space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Status</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Staying</SelectItem>
-              <SelectItem value="left">Left Hostel</SelectItem>
-              <SelectItem value="all">All Records</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setStatusFilter("active"); setPlanFilter("all"); }}>
-          Reset
-        </Button>
-      </div>
-
-      {/* MOBILE FILTER PANEL */}
-      <div className="md:hidden space-y-4 print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search..." className="pl-9 h-9 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-          </div>
-          <Dialog open={isMobileFilterOpen} onOpenChange={setIsMobileFilterOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-2"><Filter size={14} /> Filter</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-[90vw] rounded-2xl">
-              <DialogHeader><DialogTitle>Filter Residents</DialogTitle></DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Building</Label>
-                  <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-                    <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Buildings</SelectItem>
-                      {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Payment Plan</Label>
-                  <Select value={planFilter} onValueChange={setPlanFilter}>
-                    <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Plans</SelectItem>
-                      <SelectItem value="package">Package</SelectItem>
-                      <SelectItem value="non-package">Non-Package</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Resident Status</Label>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Currently Staying</SelectItem>
-                      <SelectItem value="left">Left Hostel</SelectItem>
-                      <SelectItem value="all">All Records</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setStatusFilter("active"); setPlanFilter("all"); setIsMobileFilterOpen(false); }}>Reset</Button>
-                <Button onClick={() => setIsMobileFilterOpen(false)}>Apply Filter</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-        {activeFilterChips.length > 0 && (
-          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
-            {activeFilterChips.map((chip, idx) => (
-              <Badge key={idx} variant="secondary" className="px-2 py-1 gap-1 text-[10px] font-bold uppercase bg-primary/10 text-primary border-none">
-                {chip.label}
-                <XCircle size={12} className="cursor-pointer" onClick={() => {
-                  if (chip.id === 'building') setBuildingFilter("all")
-                  if (chip.id === 'status') setStatusFilter("active")
-                  if (chip.id === 'plan') setPlanFilter("all")
-                }} />
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
         <>
-          {/* DESKTOP TABLE VIEW */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
             <CardContent className="p-0">
               <Table>
@@ -397,7 +334,6 @@ export default function StudentsPage() {
             </CardContent>
           </Card>
 
-          {/* MOBILE CARD VIEW */}
           <div className="md:hidden space-y-4 print:hidden">
             {processedStudents.map((s: any) => (
               <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/students/${s.id}`)}>

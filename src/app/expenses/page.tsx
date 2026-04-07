@@ -39,7 +39,8 @@ import {
   Eye,
   UserCheck,
   Filter,
-  Apple
+  Apple,
+  RotateCcw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -89,6 +90,7 @@ export default function ExpenseHistoryPage() {
   const [userName, setUserName] = useState("")
   const [userRole, setUserRole] = useState("")
 
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [spentByFilter, setSpentByFilter] = useState("all")
@@ -140,9 +142,6 @@ export default function ExpenseHistoryPage() {
   }, [db, userBranch])
   const { data: rawExpenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
-  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
-  const { data: templatesData } = useDoc(templatesRef)
-
   const filteredExpenses = useMemo(() => {
     if (!rawExpenses) return []
     return rawExpenses.filter(e => {
@@ -192,17 +191,6 @@ export default function ExpenseHistoryPage() {
     finally { setIsSubmitting(false) }
   }
 
-  const selectedExpBuilding = buildings?.find(b => b.id === formData.buildingId)
-  const apartmentList = selectedExpBuilding?.apartmentsDetail || []
-  const roomList = (() => {
-    if (!selectedExpBuilding) return []
-    const rooms: string[] = []
-    selectedExpBuilding.apartmentsDetail?.forEach((apt: any) => {
-      apt.rooms?.forEach((room: any) => { if (room.roomNo && !rooms.includes(room.roomNo)) rooms.push(room.roomNo) })
-    })
-    return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-  })()
-
   return (
     <div className="space-y-8 pb-20 print:p-0 w-full overflow-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
@@ -212,86 +200,77 @@ export default function ExpenseHistoryPage() {
           <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Expense</h1><p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Spending for <span className="font-bold text-foreground">{userBranch}</span>.</p></div>
         </div>
         <div className="ml-auto flex items-center gap-3">
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsFilterDialogOpen(true)}>
+            <Filter size={16} /> <span className="hidden sm:inline">Filter</span>
+          </Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
-      {/* MASTER PDF PRINT DESIGN (Fixed Pattern Rule) */}
-      <div className="print-only print-report-container">
-        <div className="report-header">
-          <h1 className="font-black uppercase">{templatesData?.hostelName || "SOMIKORON HOSTEL"}</h1>
-          <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Official Expense Ledger</p>
-          <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[9pt]">
-            <div>
-              <p><b>Filter Building:</b> {buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
-              <p><b>Category:</b> {categoryFilter.toUpperCase()}</p>
+      {/* FILTER DIALOG */}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Expenses</DialogTitle>
+            <DialogDescription>Search and filter spending records.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Note or staff name..." className="pl-8 bg-slate-50" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
             </div>
-            <div className="text-right">
-              <p><b>Period:</b> {startDate || 'N/A'} to {endDate || 'N/A'}</p>
-              <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Category</Label>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
+                <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                  <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Buildings</SelectItem>
+                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Spent By</Label>
+              <Select value={spentByFilter} onValueChange={setSpentByFilter}>
+                <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All Staff" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Staff</SelectItem>
+                  {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Date Range</Label>
+              <div className="flex gap-2">
+                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50" />
+                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50" />
+              </div>
             </div>
           </div>
-        </div>
-
-        <div className="summary-section">
-          <div className="summary-box">
-            <p className="text-[8pt] font-black uppercase text-muted-foreground">Total Entries</p>
-            <p className="text-lg font-black">{stats.count}</p>
-          </div>
-          <div className="summary-box">
-            <p className="text-[8pt] font-black uppercase text-destructive">Total Expenditure</p>
-            <p className="text-lg font-black text-destructive">৳{stats.total.toLocaleString()}</p>
-          </div>
-        </div>
-
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className="w-[12%]">Date</th>
-              <th className="w-[15%]">Category</th>
-              <th className="w-[20%]">Details</th>
-              <th className="w-[18%]">Building/Unit</th>
-              <th className="w-[15%]">Spent By</th>
-              <th className="w-[10%]">Method</th>
-              <th className="w-[10%] text-right">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredExpenses.map((e: any) => (
-              <tr key={e.id}>
-                <td className="text-[8pt]">{formatCompactDate(e.expenseDate)}</td>
-                <td className="capitalize font-bold">{e.category}</td>
-                <td className="text-[8pt] italic">{e.description || e.receiver || 'N/A'}</td>
-                <td className="text-[8pt]">{e.buildingName} {e.roomNumber ? `- R${e.roomNumber}` : ''}</td>
-                <td className="text-[8pt]">{e.expensePartyName}</td>
-                <td className="uppercase text-[8pt]">{e.method}</td>
-                <td className="text-right font-black">৳{e.amount?.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-slate-900 text-white font-black">
-              <td colSpan={6} className="text-right uppercase p-3">Grand Total</td>
-              <td className="text-right p-3">৳{stats.total.toLocaleString()}</td>
-            </tr>
-          </tfoot>
-        </table>
-
-        <div className="print-footer">
-          <div className="signature-box">Accountant Signature</div>
-          <div className="text-xs text-slate-400">Page <span className="page-number"></span></div>
-          <div className="signature-box">Manager Signature</div>
-        </div>
-      </div>
-
-      <div className="hidden md:grid md:grid-cols-3 xl:grid-cols-5 bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Spent By</Label><Select value={spentByFilter} onValueChange={setSpentByFilter}><SelectTrigger className="bg-white h-10"><SelectValue placeholder="All Staff" /></SelectTrigger><SelectContent><SelectItem value="all">All Staff</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 bg-white" /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" /></div></div>
-        <Button variant="ghost" className="h-10 text-xs font-bold uppercase w-full" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setSpentByFilter("all"); setSearchTerm(""); setStartDate(""); setEndDate(""); }}>Reset</Button>
-      </div>
+          <DialogFooter className="flex gap-2 sm:justify-between">
+            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setSpentByFilter("all"); setSearchTerm(""); setStartDate(""); setEndDate(""); }}>
+              <RotateCcw size={14}/> Reset
+            </Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden print:hidden">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-xs font-bold uppercase text-destructive">Total Filtered Expense</CardTitle><ArrowDownCircle className="h-4 w-4 text-destructive" /></CardHeader>
