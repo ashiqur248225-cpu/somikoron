@@ -19,7 +19,8 @@ import {
   MapPin,
   BellRing,
   ChevronRight,
-  MessageSquareQuote
+  MessageSquareQuote,
+  ScrollText
 } from "lucide-react"
 import {
   Sidebar,
@@ -87,6 +88,7 @@ export function AppSidebar() {
     { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
     { title: "Manager Requests", url: "/manager-requests", icon: BellRing, roles: ["Admin", "Branch Manager"] },
     { title: "Income", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Receipts", url: "/receipts", icon: ScrollText, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },

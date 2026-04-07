@@ -38,7 +38,7 @@ export default function ReceiptPage() {
     <div className="max-w-3xl mx-auto space-y-6 pb-20 pt-4 px-4 print:p-0 print:m-0">
       <div className="flex items-center justify-between print:hidden">
         <Button variant="ghost" className="gap-2 hover:bg-primary/5 text-muted-foreground" onClick={() => router.back()}>
-          <ChevronLeft size={16} /> Back to Dashboard
+          <ChevronLeft size={16} /> Back
         </Button>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2 font-bold border-primary/20 text-primary" onClick={handlePrint}>
@@ -67,8 +67,8 @@ export default function ReceiptPage() {
             </div>
           </div>
 
-          {/* Student Info Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 rounded-3xl border-2 border-slate-50 bg-slate-50/30 print:p-4 print:gap-4 print:rounded-2xl">
+          {/* Student Info Grid - Side by side in print */}
+          <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-8 p-8 rounded-3xl border-2 border-slate-50 bg-slate-50/30 print:p-4 print:gap-4 print:rounded-2xl">
             <div className="space-y-4 print:space-y-2">
               <div className="flex items-center gap-4">
                 <div className="h-10 w-10 rounded-xl bg-white border flex items-center justify-center text-primary shadow-sm print:h-8 print:w-8"><User size={20}/></div>
@@ -105,7 +105,7 @@ export default function ReceiptPage() {
               <tbody className="divide-y">
                 {payment.seatAmount > 0 && (
                   <tr>
-                    <td className="p-4 font-bold text-slate-700 print:p-2 print:text-xs">Seat Rent / Monthly Charge</td>
+                    <td className="p-4 font-bold text-slate-700 print:p-2 print:text-xs">Rent</td>
                     <td className="p-4 text-center text-xs text-muted-foreground print:p-2 print:text-[10px]">{payment.month} {payment.year}</td>
                     <td className="p-4 text-right uppercase text-[11px] font-bold text-slate-600 print:p-2 print:text-[9px]">{payment.method}</td>
                     <td className="p-4 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.seatAmount.toLocaleString()}</td>
@@ -113,7 +113,7 @@ export default function ReceiptPage() {
                 )}
                 {payment.foodAmount > 0 && (
                   <tr>
-                    <td className="p-4 font-bold text-slate-700 print:p-2 print:text-xs">Food Bill / Deposit</td>
+                    <td className="p-4 font-bold text-slate-700 print:p-2 print:text-xs">Food Deposit</td>
                     <td className="p-4 text-center text-xs text-muted-foreground print:p-2 print:text-[10px]">{payment.month} {payment.year}</td>
                     <td className="p-4 text-right uppercase text-[11px] font-bold text-slate-600 print:p-2 print:text-[9px]">{payment.method}</td>
                     <td className="p-4 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.foodAmount.toLocaleString()}</td>
@@ -121,7 +121,7 @@ export default function ReceiptPage() {
                 )}
                 {payment.advanceAmount > 0 && (
                   <tr>
-                    <td className="p-4 font-bold text-primary print:p-2 print:text-xs">Security / Advance Addition</td>
+                    <td className="p-4 font-bold text-primary print:p-2 print:text-xs">Advance</td>
                     <td className="p-4 text-center text-xs text-muted-foreground print:p-2 print:text-[10px]">{payment.month} {payment.year}</td>
                     <td className="p-4 text-right uppercase text-[11px] font-bold text-primary print:p-2 print:text-[9px]">{payment.method}</td>
                     <td className="p-4 text-right font-black text-primary print:p-2 print:text-sm">৳{payment.advanceAmount.toLocaleString()}</td>
@@ -129,7 +129,7 @@ export default function ReceiptPage() {
                 )}
                 {payment.serviceCharge > 0 && (
                   <tr>
-                    <td className="p-4 font-bold text-slate-700 print:p-2 print:text-xs">Admission / Service Charge</td>
+                    <td className="p-4 font-bold text-slate-700 print:p-2 print:text-xs">Service Charge</td>
                     <td className="p-4 text-center text-xs text-muted-foreground print:p-2 print:text-[10px]">One-time</td>
                     <td className="p-4 text-right uppercase text-[11px] font-bold text-slate-600 print:p-2 print:text-[9px]">{payment.method}</td>
                     <td className="p-4 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.serviceCharge.toLocaleString()}</td>
@@ -168,18 +168,11 @@ export default function ReceiptPage() {
               </div>
             </div>
 
-            {/* Signature Area */}
-            <div className="grid grid-cols-2 gap-12 pt-12 print:pt-8">
+            {/* Signature Area - Only Resident Signature as requested */}
+            <div className="grid grid-cols-1 pt-12 print:pt-8">
               <div className="text-center space-y-2">
                 <div className="border-t border-slate-900 pt-2 w-48 mx-auto print:w-32">
                   <p className="text-[10px] font-black uppercase print:text-[8px]">Resident Signature</p>
-                </div>
-              </div>
-
-              <div className="text-center space-y-2">
-                <div className="border-t border-slate-900 pt-2 w-48 mx-auto print:w-32">
-                  <p className="text-[10px] font-black uppercase print:text-[8px]">Authorized Signature</p>
-                  <p className="text-[8px] text-muted-foreground italic print:text-[7px]">({payment.receiver})</p>
                 </div>
               </div>
             </div>
