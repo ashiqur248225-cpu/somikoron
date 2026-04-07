@@ -26,7 +26,6 @@
     --ring: 211 63% 43%;
     --radius: 0.75rem;
 
-    /* Success/Income Color */
     --success: 122 39% 49%;
     --success-foreground: 0 0% 100%;
 
@@ -45,123 +44,105 @@
     --sidebar-border: 214.3 31.8% 91.4%;
     --sidebar-ring: 211 63% 43%;
   }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-  }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground font-body;
-  }
-  
-  /* Remove spinners from number inputs globally */
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground font-body; }
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
   }
-  input[type="number"] {
-    -moz-appearance: textfield;
-  }
+  input[type="number"] { -moz-appearance: textfield; }
 }
 
-.text-income {
-  color: hsl(var(--success));
-}
+.text-income { color: hsl(var(--success)); }
+.text-expense { color: hsl(var(--destructive)); }
+.bg-income { background-color: hsl(var(--success)); }
+.bg-expense { background-color: hsl(var(--destructive)); }
 
-.text-expense {
-  color: hsl(var(--destructive));
-}
-
-.bg-income {
-  background-color: hsl(var(--success));
-}
-
-.bg-expense {
-  background-color: hsl(var(--destructive));
-}
-
-/* Professional Print Styles */
+/* FIXED PATTERN PRINT STYLES */
 @media print {
   @page {
     size: A4;
-    margin: 0mm; /* Minimal margin to handle manually in layout */
+    margin: 15mm;
   }
 
   html, body {
-    height: 100%;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden;
     background-color: white !important;
     color: black !important;
     font-size: 10pt !important;
-    -webkit-print-color-adjust: exact;
+    overflow: visible !important;
+    height: auto !important;
   }
 
-  /* Hide UI elements */
+  /* Hide Web UI components */
   [data-sidebar="sidebar"],
   .sidebar-trigger,
   button,
   .print-hidden,
   nav,
-  header {
+  header,
+  .fixed,
+  .dialog-overlay,
+  aside {
     display: none !important;
   }
 
-  .sidebar-inset, 
-  main {
+  .sidebar-inset, main {
     padding: 0 !important;
     margin: 0 !important;
     display: block !important;
     width: 100% !important;
   }
 
-  #receipt-print-area {
+  /* Show Print Only content */
+  .print-only {
     display: block !important;
+    visibility: visible !important;
+  }
+
+  .print-report-container {
     width: 100% !important;
-    max-width: 210mm !important; /* A4 width */
-    height: auto !important;
-    max-height: 297mm !important; /* A4 height */
-    padding: 10mm !important;
-    margin: 0 auto !important;
-    box-shadow: none !important;
-    border: none !important;
-    break-inside: avoid;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   table {
     width: 100% !important;
     border-collapse: collapse !important;
+    margin-bottom: 20px !important;
+    page-break-inside: auto;
   }
 
+  tr { page-break-inside: avoid; page-break-after: auto; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+
   th, td {
-    border: 0.5pt solid #ccc !important;
-    padding: 4px !important;
+    border: 0.5pt solid #ddd !important;
+    padding: 6px 8px !important;
+    text-align: left;
   }
+
+  th { background-color: #f8fafc !important; font-weight: bold !important; color: #000 !important; }
+
+  .report-header { margin-bottom: 30px; text-align: center; border-bottom: 2px solid #296EB3; padding-bottom: 15px; }
+  .report-header h1 { font-size: 24pt; margin: 0; color: #296EB3; }
+  
+  .summary-section { margin-bottom: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .summary-box { padding: 10px; border: 1px solid #ddd; border-radius: 8px; text-align: center; background-color: #f9fafb; }
+  
+  .print-footer { 
+    margin-top: 50px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: flex-end; 
+    page-break-inside: avoid;
+  }
+  .signature-box { border-top: 1pt solid #000; width: 180px; text-align: center; padding-top: 5px; font-weight: bold; font-size: 9pt; }
 }
 
 /* Hidden in screen, visible in print */

@@ -42,12 +42,10 @@ export default function IncomeHistoryPage() {
   const db = useFirestore()
   const router = useRouter()
   
-  // App Context
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
   const [userRole, setUserRole] = useState("")
 
-  // Filtering States
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [roomFilter, setRoomFilter] = useState("all")
   const [methodFilter, setMethodFilter] = useState("all")
@@ -55,12 +53,9 @@ export default function IncomeHistoryPage() {
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   
-  // UI States
   const [isEntryOpen, setIsEntryOpen] = useState(false)
-  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Entry Form Specific Filters
   const [entryBuildingFilter, setEntryBuildingFilter] = useState("all")
   const [entryRoomFilter, setEntryRoomFilter] = useState("all")
 
@@ -83,7 +78,6 @@ export default function IncomeHistoryPage() {
     description: ""
   })
 
-  // Queries
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
@@ -108,11 +102,9 @@ export default function IncomeHistoryPage() {
   }, [db, userBranch])
   const { data: rawPayments, isLoading: paymentsLoading } = useCollection(incomeQuery)
 
-  // API Config Logic for SMS
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
-  // SMS Template Logic
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
 
@@ -132,19 +124,16 @@ export default function IncomeHistoryPage() {
     } catch (e) {}
   }
 
-  // Advanced Filtering Logic
   const filteredPayments = useMemo(() => {
     if (!rawPayments) return []
     return rawPayments.filter(p => {
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
       const matchesStartDate = !startDate || pDate >= new Date(startDate)
       const matchesEndDate = !endDate || pDate <= new Date(new Date(endDate).setHours(23, 59, 59))
-      
       const matchesBuilding = buildingFilter === "all" || p.buildingId === buildingFilter
       const matchesRoom = roomFilter === "all" || p.roomNumber === roomFilter
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
       const matchesReceiver = receiverFilter === "all" || p.receiver === receiverFilter
-      
       return matchesStartDate && matchesEndDate && matchesBuilding && matchesRoom && matchesMethod && matchesReceiver
     }).sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date)
@@ -173,7 +162,6 @@ export default function IncomeHistoryPage() {
     return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
   }, [buildings, buildingFilter])
 
-  // Entry Modal Logic
   const availableRoomsForEntry = useMemo(() => {
     if (!buildings) return []
     let rooms: string[] = []
@@ -223,34 +211,15 @@ export default function IncomeHistoryPage() {
       if (userRole === 'Building Manager') {
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), { ...pRecord, id: reqId, requestType: "income", requestedBy: localStorage.getItem("somikoron_auth_id"), requestedByName: userName, createdAt: serverTimestamp() })
-        toast({ title: "Request Sent", description: "Payment is waiting for approval." })
+        toast({ title: "Request Sent" })
       } else {
         await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
-        
-        // Calculate totals for SMS mapping
-        const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
-        const now = new Date()
-        const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
-        const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (selectedStudent.monthlyRent || 0)
-        
-        const totalRentPaidPrev = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.seatAmount || (selectedStudent.paymentSystem === 'package' ? curr.amount : 0)), 0) || 0
-        const historicalRentDue = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
-        const rentDueAfter = Math.max(0, (historicalRentDue + generatedRent) - (totalRentPaidPrev + seatPaid))
-
-        const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0
-        const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-        const totalFoodPaidPrev = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || (selectedStudent.paymentSystem === 'non-package' ? curr.amount : 0)), 0) || 0
-        const foodBalanceAfter = (totalFoodPaidPrev + foodPaid) - (historicalFoodDue + generatedFoodCost)
-        
-        const totalPayableAfter = rentDueAfter + Math.max(0, -foodBalanceAfter)
-
         await updateDoc(doc(db, "students", selectedStudent.id), {
           paymentsHistory: arrayUnion(pRecord),
           advanceAmount: increment(Number(formData.addAdvanceAmount)),
           updatedAt: serverTimestamp()
         })
         
-        // Dynamic SMS Mapping
         if (apiConfig?.apikey && templatesData?.templates) {
           const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
           if (paymentTemplate) {
@@ -258,32 +227,14 @@ export default function IncomeHistoryPage() {
             let msg = paymentTemplate.text
               .replaceAll('[নাম]', selectedStudent.name)
               .replaceAll('[পরিমাণ]', totalAmt.toString())
-              .replaceAll('[বকেয়া]', totalPayableAfter.toString())
-              .replaceAll('[total_payable]', totalPayableAfter.toString())
-              .replaceAll('[food_balance]', Math.max(0, foodBalanceAfter).toString())
-              .replaceAll('[food_due]', Math.max(0, -foodBalanceAfter).toString())
-              .replaceAll('[মাস]', formData.month)
-              .replaceAll('[খাত]', selectedStudent.paymentSystem === 'package' ? 'প্যাকেজ ভাড়া' : 'ভাড়া/খাবার')
               .replaceAll('[Hostel Name]', hostelDisplayName);
-            
-            const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
-            await logSMSToDatabase(selectedStudent.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
-            
-            if (result.error === 0) {
-              toast({ title: "SMS Sent", description: `মেসেজ: ${msg.substring(0, 50)}...` })
-            } else if (result.error === 417) {
-              toast({ variant: "destructive", title: "ব্যালেন্স নেই", description: "আপনার পর্যাপ্ত ব্যালেন্স নেই, দয়া করে রিচার্জ করুন।" })
-            }
+            await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
           }
         }
-        
-        toast({ title: "Success", description: "Payment recorded." })
         router.push(`/receipts/${pId}`)
       }
       setIsEntryOpen(false)
-    } catch (e: any) { 
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
     finally { setIsSubmitting(false) }
   }
 
@@ -291,7 +242,6 @@ export default function IncomeHistoryPage() {
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -307,55 +257,77 @@ export default function IncomeHistoryPage() {
         </div>
       </div>
 
-      {/* GLOBAL FILTER BAR (Desktop) */}
-      <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
-        <div className="w-[150px] space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label>
-          <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}>
-            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Buildings</SelectItem>
-              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="w-[120px] space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Room</Label>
-          <Select value={roomFilter} onValueChange={setRoomFilter}>
-            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              {availableRoomsForFilter.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="w-[180px] space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Received By</Label>
-          <Select value={receiverFilter} onValueChange={setReceiverFilter}>
-            <SelectTrigger className="bg-white h-10"><SelectValue placeholder="All Staff" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Staff</SelectItem>
-              {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="w-[150px] space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Method</Label>
-          <Select value={methodFilter} onValueChange={setMethodFilter}>
-            <SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="w-[280px] space-y-1.5">
-          <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label>
-          <div className="flex gap-2">
-            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 bg-white" />
-            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" />
+      {/* MASTER PDF PRINT DESIGN (Fixed Pattern Rule) */}
+      <div className="print-only print-report-container">
+        <div className="report-header">
+          <h1 className="font-black uppercase">{templatesData?.hostelName || "SOMIKORON HOSTEL"}</h1>
+          <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Income Ledger Report</p>
+          <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[9pt]">
+            <div>
+              <p><b>Filter:</b> {buildingFilter === 'all' ? 'All Buildings' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+              <p><b>Date Range:</b> {startDate || 'Start'} to {endDate || 'Today'}</p>
+            </div>
+            <div className="text-right">
+              <p><b>Generated By:</b> {userName}</p>
+              <p><b>Time:</b> {new Date().toLocaleString()}</p>
+            </div>
           </div>
         </div>
+
+        <div className="summary-section">
+          <div className="summary-box">
+            <p className="text-[8pt] font-black uppercase text-muted-foreground">Total Entries</p>
+            <p className="text-lg font-black">{stats.count}</p>
+          </div>
+          <div className="summary-box">
+            <p className="text-[8pt] font-black uppercase text-success">Total Collection</p>
+            <p className="text-lg font-black">৳{stats.total.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className="w-[15%]">Date</th>
+              <th className="w-[25%]">Student Name</th>
+              <th className="w-[20%]">Location</th>
+              <th className="w-[15%]">Method</th>
+              <th className="w-[25%] text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredPayments.map((p: any) => (
+              <tr key={p.id}>
+                <td className="text-[8pt]">{formatCompactDate(p.date)}</td>
+                <td className="font-bold">{p.studentName}</td>
+                <td className="text-[8pt]">{p.buildingName} • R-{p.roomNumber}</td>
+                <td className="uppercase text-[8pt]">{p.method}</td>
+                <td className="text-right font-black">৳{p.amount?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-900 text-white font-black">
+              <td colSpan={4} className="text-right uppercase p-3">Grand Total</td>
+              <td className="text-right p-3">৳{stats.total.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div className="print-footer">
+          <div className="signature-box">Accountant Signature</div>
+          <div className="text-xs text-slate-400">Page <span className="page-number"></span></div>
+          <div className="signature-box">Manager Signature</div>
+        </div>
+      </div>
+
+      {/* GLOBAL FILTER BAR (Desktop) */}
+      <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
+        <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="w-[120px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Room</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForFilter.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
+        <div className="w-[180px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Received By</Label><Select value={receiverFilter} onValueChange={setReceiverFilter}><SelectTrigger className="bg-white h-10"><SelectValue placeholder="All Staff" /></SelectTrigger><SelectContent><SelectItem value="all">All Staff</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
+        <div className="w-[280px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 bg-white" /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" /></div></div>
         <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setStartDate(""); setEndDate(""); }}>Reset</Button>
       </div>
 
@@ -368,56 +340,29 @@ export default function IncomeHistoryPage() {
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
         <>
-          {/* DESKTOP TABLE VIEW */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
             <CardContent className="p-0">
               <Table>
-                <TableHeader className="bg-secondary/30">
-                  <TableRow><TableHead>Date</TableHead><TableHead>Student</TableHead><TableHead>Location</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Amount</TableHead></TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPayments.map((p: any) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(p.date)}</TableCell>
-                      <TableCell className="font-black text-slate-800">{p.studentName}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{p.buildingName} • R-{p.roomNumber}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell>
-                      <TableCell className="text-right font-black text-income">৳{p.amount?.toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
+                <TableHeader className="bg-secondary/30"><TableRow><TableHead>Date</TableHead><TableHead>Student</TableHead><TableHead>Location</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+                <TableBody>{filteredPayments.map((p: any) => (<TableRow key={p.id}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(p.date)}</TableCell><TableCell className="font-black text-slate-800">{p.studentName}</TableCell><TableCell className="text-xs text-muted-foreground">{p.buildingName} • R-{p.roomNumber}</TableCell><TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell><TableCell className="text-right font-black text-income">৳{p.amount?.toLocaleString()}</TableCell></TableRow>))}</TableBody>
               </Table>
             </CardContent>
           </Card>
-
-          {/* MOBILE CARD VIEW */}
           <div className="md:hidden space-y-4 print:hidden">
             {filteredPayments.map((p: any) => (
               <Card key={p.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
                 <CardContent className="p-4 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(p.date)}</p><h3 className="font-black text-slate-800 text-lg mt-1">{p.studentName}</h3></div>
-                    <Badge variant="outline" className="uppercase font-bold text-[9px]">{p.method}</Badge>
-                  </div>
-                  <div className="bg-secondary/30 p-3 rounded-xl border border-secondary flex justify-between items-center">
-                    <div className="space-y-1"><p className="text-[10px] font-bold text-muted-foreground uppercase">Location</p><p className="text-xs font-bold text-slate-700">{p.buildingName} • R-{p.roomNumber}</p></div>
-                    <div className="text-right"><p className="text-[10px] font-bold text-muted-foreground uppercase">Collected</p><p className="text-xl font-black text-income">৳{p.amount?.toLocaleString()}</p></div>
-                  </div>
-                  <div className="text-[10px] text-muted-foreground italic flex items-center gap-1.5"><UserCheck size={12} className="text-primary"/><span>Received by <b>{p.receiver}</b></span></div>
+                  <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(p.date)}</p><h3 className="font-black text-slate-800 text-lg mt-1">{p.studentName}</h3></div><Badge variant="outline" className="uppercase font-bold text-[9px]">{p.method}</Badge></div>
+                  <div className="bg-secondary/30 p-3 rounded-xl border border-secondary flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-bold text-muted-foreground uppercase">Location</p><p className="text-xs font-bold text-slate-700">{p.buildingName} • R-{p.roomNumber}</p></div><div className="text-right"><p className="text-[10px] font-bold text-muted-foreground uppercase">Collected</p><p className="text-xl font-black text-income">৳{p.amount?.toLocaleString()}</p></div></div>
                 </CardContent>
               </Card>
             ))}
-            {filteredPayments.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No entries found.</div>}
           </div>
         </>
       )}
 
-      {/* FIXED ACTION BUTTON */}
-      <div className="fixed bottom-8 right-8 z-50 print:hidden">
-        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-income"><Plus size={32} className="text-white" /></Button>
-      </div>
+      <div className="fixed bottom-8 right-8 z-50 print:hidden"><Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-income"><Plus size={32} className="text-white" /></Button></div>
 
-      {/* NEW INCOME DIALOG */}
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>New Income Entry</DialogTitle></DialogHeader>
@@ -427,7 +372,6 @@ export default function IncomeHistoryPage() {
               <div className="space-y-1"><Label className="text-[10px] font-bold">Room</Label><Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}><SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForEntry.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="space-y-2"><Label>Select Resident</Label><Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}><SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger><SelectContent>{filteredStudentsForEntry.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}</SelectContent></Select></div>
-            
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{"2024,2025,2026".split(',').map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
@@ -435,20 +379,14 @@ export default function IncomeHistoryPage() {
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
               <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Collection Amounts</Label>
               {selectedStudent?.paymentSystem === 'package' ? (
-                <div className="space-y-2">
-                  <Label className="text-xs">Amount Received (৳)</Label>
-                  <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
-                </div>
+                <div className="space-y-2"><Label className="text-xs">Amount Received (৳)</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" /></div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} placeholder="0.00" /></div>
                   <div className="space-y-2"><Label className="text-xs">Food Deposit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} placeholder="0.00" /></div>
                 </div>
               )}
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label>
-                <Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} placeholder="0.00" />
-              </div>
+              <div className="space-y-2"><Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} placeholder="0.00" /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={v => setFormData({...formData, method: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>

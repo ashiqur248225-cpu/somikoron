@@ -51,7 +51,7 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, query, limit, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
@@ -85,12 +85,10 @@ export default function ExpenseHistoryPage() {
   const router = useRouter()
   const db = useFirestore()
   
-  // App Context
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
   const [userRole, setUserRole] = useState("")
 
-  // Filter States
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [spentByFilter, setSpentByFilter] = useState("all")
@@ -98,9 +96,7 @@ export default function ExpenseHistoryPage() {
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   
-  // UI States
   const [isEntryOpen, setIsEntryOpen] = useState(false)
-  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -110,7 +106,7 @@ export default function ExpenseHistoryPage() {
     roomNumber: "",
     meterNo: "",
     amount: "",
-    totalMeals: "", // New optional field for Food category
+    totalMeals: "",
     method: "cash",
     expensePartyName: "",
     receiver: "",
@@ -126,7 +122,6 @@ export default function ExpenseHistoryPage() {
     setUserRole(localStorage.getItem("user_role") || "Manager")
   }, [])
 
-  // Queries
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
@@ -145,6 +140,9 @@ export default function ExpenseHistoryPage() {
   }, [db, userBranch])
   const { data: rawExpenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
+
   const filteredExpenses = useMemo(() => {
     if (!rawExpenses) return []
     return rawExpenses.filter(e => {
@@ -152,11 +150,9 @@ export default function ExpenseHistoryPage() {
       const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
       const matchesSpentBy = spentByFilter === "all" || e.expensePartyName === spentByFilter
       const matchesSearch = (e.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) || (e.description || "").toLowerCase().includes(searchTerm.toLowerCase())
-      
       const eDate = new Date(e.expenseDate)
       const matchesStartDate = !startDate || eDate >= new Date(startDate)
       const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
-      
       return matchesCategory && matchesBuilding && matchesSpentBy && matchesSearch && matchesStartDate && matchesEndDate
     }).sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime())
   }, [rawExpenses, categoryFilter, buildingFilter, spentByFilter, searchTerm, startDate, endDate])
@@ -167,23 +163,6 @@ export default function ExpenseHistoryPage() {
   }, [filteredExpenses])
 
   const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
-
-  const handleExportCSV = () => {
-    try {
-      const headers = ["Date", "Category", "Details", "Building - Room", "Spent By", "Method", "Amount"];
-      const rows = filteredExpenses.map(e => [
-        formatCompactDate(e.expenseDate), e.category, e.description?.replace(/,/g, ' '), `${e.buildingName} ${e.roomNumber || ''}`, e.expensePartyName, e.method, e.amount
-      ]);
-      const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute("download", `expense_report_${new Date().getTime()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e) { toast({ variant: "destructive", title: "Export Failed" }) }
-  }
 
   const handleCreateExpense = async () => {
     if (!formData.amount || !formData.expensePartyName) return
@@ -206,57 +185,13 @@ export default function ExpenseHistoryPage() {
         toast({ title: "Request Sent" })
       } else {
         await setDoc(doc(db, "expenses", expenseId), { ...expenseData, id: expenseId, createdAt: serverTimestamp() })
-        
-        // If Category is FOOD, also log to Breakdown collection
-        if (formData.category === 'food') {
-          const breakdownId = doc(collection(db, "foodCostBreakdown")).id
-          await setDoc(doc(db, "foodCostBreakdown", breakdownId), {
-            id: breakdownId,
-            expenseId: expenseId,
-            branch: userBranch,
-            branchName: userBranch,
-            date: formData.expenseDate,
-            amount: Number(formData.amount),
-            totalMeals: Number(formData.totalMeals || 0),
-            createdBy: localStorage.getItem("somikoron_auth_id"),
-            createdByName: userName,
-            createdAt: serverTimestamp()
-          })
-        }
-        
         toast({ title: "Success" })
       }
       setIsEntryOpen(false)
-      setFormData({
-        category: "others",
-        buildingId: "none",
-        apartmentName: "",
-        roomNumber: "",
-        meterNo: "",
-        amount: "",
-        totalMeals: "",
-        method: "cash",
-        expensePartyName: "",
-        receiver: "",
-        month: MONTHS[new Date().getMonth()],
-        year: new Date().getFullYear().toString(),
-        description: "",
-        expenseDate: new Date().toISOString().split('T')[0]
-      })
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
     finally { setIsSubmitting(false) }
   }
 
-  const activeFilterChips = useMemo(() => {
-    const chips = []
-    if (categoryFilter !== "all") chips.push({ id: "category", label: categoryFilter.toUpperCase() })
-    if (buildingFilter !== "all") chips.push({ id: "building", label: buildings?.find(b => b.id === buildingFilter)?.name })
-    if (spentByFilter !== "all") chips.push({ id: "spentBy", label: spentByFilter })
-    if (startDate || endDate) chips.push({ id: "date", label: "Date Applied" })
-    return chips
-  }, [categoryFilter, buildingFilter, spentByFilter, startDate, endDate, buildings])
-
-  // Helpers for dynamic entry
   const selectedExpBuilding = buildings?.find(b => b.id === formData.buildingId)
   const apartmentList = selectedExpBuilding?.apartmentsDetail || []
   const roomList = (() => {
@@ -270,7 +205,6 @@ export default function ExpenseHistoryPage() {
 
   return (
     <div className="space-y-8 pb-20 print:p-0">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -278,80 +212,85 @@ export default function ExpenseHistoryPage() {
           <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Expense</h1><p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Spending for <span className="font-bold text-foreground">{userBranch}</span>.</p></div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Button size="sm" variant="outline" className="gap-2" onClick={handleExportCSV}><FileSpreadsheet size={16} /> <span className="hidden sm:inline">Export CSV</span></Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
-      {/* Official Ledger Print Format */}
+      {/* MASTER PDF PRINT DESIGN (Fixed Pattern Rule) */}
       <div className="print-only print-report-container">
-        <div className="report-header text-center">
-          <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
-          <p className="text-sm font-bold">{userBranch} Branch • Official Expense Ledger</p>
-          <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[10pt]">
-            <div><p><b>Filter:</b> {buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}</p><p><b>Category:</b> {categoryFilter === 'all' ? 'All Categories' : categoryFilter}</p></div>
-            <div className="text-right"><p><b>Period:</b> {startDate || 'N/A'} to {endDate || 'N/A'}</p><p><b>Report Date:</b> {new Date().toLocaleString()}</p></div>
+        <div className="report-header">
+          <h1 className="font-black uppercase">{templatesData?.hostelName || "SOMIKORON HOSTEL"}</h1>
+          <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Official Expense Ledger</p>
+          <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[9pt]">
+            <div>
+              <p><b>Filter Building:</b> {buildingFilter === 'all' ? 'All Properties' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+              <p><b>Category:</b> {categoryFilter.toUpperCase()}</p>
+            </div>
+            <div className="text-right">
+              <p><b>Period:</b> {startDate || 'N/A'} to {endDate || 'N/A'}</p>
+              <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
+            </div>
           </div>
         </div>
-        <table>
-          <thead>
-            <TableRow><TableHead className="w-[12%]">Date</TableHead><TableHead className="w-[15%]">Category</TableHead><TableHead className="w-[20%]">Details</TableHead><TableHead className="w-[18%]">Building/Unit</TableHead><TableHead className="w-[15%]">Spent By</TableHead><TableHead className="w-[10%]">Method</TableHead><TableHead className="w-[10%] text-right">Amount</TableHead></TableRow>
-          </thead>
-          <TableBody>
-            {filteredExpenses.map((e: any) => (
-              <TableRow key={e.id}>
-                <TableCell>{formatCompactDate(e.expenseDate)}</TableCell><TableCell className="capitalize">{e.category}</TableCell><TableCell className="text-[8pt] italic">{e.description || e.receiver || 'N/A'}</TableCell><TableCell>{e.buildingName} {e.apartmentName ? `(${e.apartmentName})` : ''} {e.roomNumber ? `- R${e.roomNumber}` : ''}</TableCell><TableCell>{e.expensePartyName}</TableCell><TableCell className="uppercase">{e.method}</TableCell><TableCell className="text-right font-bold">৳{e.amount?.toLocaleString()}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </table>
+
         <div className="summary-section">
-          <div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-2 gap-4">
-            <div><h3 className="font-bold uppercase text-primary text-xs mb-2">Final Summary</h3><p className="text-sm">Total Entries: <b>{stats.count} Items</b></p></div>
-            <div className="text-right"><p className="text-xs uppercase font-bold text-muted-foreground">Total Expenditure</p><p className="text-2xl font-black text-destructive">৳{stats.total.toLocaleString()}</p></div>
+          <div className="summary-box">
+            <p className="text-[8pt] font-black uppercase text-muted-foreground">Total Entries</p>
+            <p className="text-lg font-black">{stats.count}</p>
           </div>
-          <div className="print-footer mt-10"><div className="signature-box">Accountant Signature</div><div className="text-center self-end print-page-number"></div><div className="signature-box">Manager Signature</div></div>
+          <div className="summary-box">
+            <p className="text-[8pt] font-black uppercase text-destructive">Total Expenditure</p>
+            <p className="text-lg font-black text-destructive">৳{stats.total.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className="w-[12%]">Date</th>
+              <th className="w-[15%]">Category</th>
+              <th className="w-[20%]">Details</th>
+              <th className="w-[18%]">Building/Unit</th>
+              <th className="w-[15%]">Spent By</th>
+              <th className="w-[10%]">Method</th>
+              <th className="w-[10%] text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredExpenses.map((e: any) => (
+              <tr key={e.id}>
+                <td className="text-[8pt]">{formatCompactDate(e.expenseDate)}</td>
+                <td className="capitalize font-bold">{e.category}</td>
+                <td className="text-[8pt] italic">{e.description || e.receiver || 'N/A'}</td>
+                <td className="text-[8pt]">{e.buildingName} {e.roomNumber ? `- R${e.roomNumber}` : ''}</td>
+                <td className="text-[8pt]">{e.expensePartyName}</td>
+                <td className="uppercase text-[8pt]">{e.method}</td>
+                <td className="text-right font-black">৳{e.amount?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-900 text-white font-black">
+              <td colSpan={6} className="text-right uppercase p-3">Grand Total</td>
+              <td className="text-right p-3">৳{stats.total.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div className="print-footer">
+          <div className="signature-box">Accountant Signature</div>
+          <div className="text-xs text-slate-400">Page <span className="page-number"></span></div>
+          <div className="signature-box">Manager Signature</div>
         </div>
       </div>
 
-      {/* GLOBAL FILTER BAR (Desktop) */}
       <div className="hidden md:flex bg-secondary/20 p-4 rounded-xl border items-end gap-4 print:hidden">
         <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent></Select></div>
         <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="w-[150px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Spent By</Label><Select value={spentByFilter} onValueChange={setSpentByFilter}><SelectTrigger className="bg-white h-10"><SelectValue placeholder="All Staff" /></SelectTrigger><SelectContent><SelectItem value="all">All Staff</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="w-[280px] space-y-1.5"><Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 bg-white" /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 bg-white" /></div></div>
         <Button variant="ghost" className="h-10 text-xs font-bold uppercase" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setSpentByFilter("all"); setSearchTerm(""); setStartDate(""); setEndDate(""); }}>Reset</Button>
-      </div>
-
-      {/* MOBILE FILTER PANEL */}
-      <div className="md:hidden space-y-4 print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." className="pl-9 h-9 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-          <Dialog open={isMobileFilterOpen} onOpenChange={setIsMobileFilterOpen}>
-            <DialogTrigger asChild><Button variant="outline" size="sm" className="h-9 gap-2"><Filter size={14} /> Filter</Button></DialogTrigger>
-            <DialogContent className="max-w-[90vw] rounded-2xl">
-              <DialogHeader><DialogTitle>Expense Filters</DialogTitle></DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2"><Label>Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Spent By</Label><Select value={spentByFilter} onValueChange={setSpentByFilter}><SelectTrigger className="bg-white"><SelectValue placeholder="All Staff" /></SelectTrigger><SelectContent><SelectItem value="all">All Staff</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Date Range</Label><div className="grid grid-cols-2 gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
-              </div>
-              <DialogFooter className="grid grid-cols-2 gap-2"><Button variant="outline" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setSpentByFilter("all"); setStartDate(""); setEndDate(""); setIsMobileFilterOpen(false); }}>Reset</Button><Button onClick={() => setIsMobileFilterOpen(false)}>Apply</Button></DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-        {activeFilterChips.length > 0 && (
-          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
-            {activeFilterChips.map((chip, idx) => (
-              <Badge key={idx} variant="secondary" className="px-2 py-1 gap-1 text-[10px] font-bold uppercase bg-destructive/10 text-destructive border-none">
-                {chip.label}
-                <XCircle size={12} className="cursor-pointer" onClick={() => { if (chip.id === 'category') setCategoryFilter("all"); if (chip.id === 'building') setBuildingFilter("all"); if (chip.id === 'spentBy') setSpentByFilter("all"); if (chip.id === 'date') { setStartDate(""); setEndDate(""); } }} />
-              </Badge>
-            ))}
-          </div>
-        )}
       </div>
 
       <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden print:hidden">
@@ -363,42 +302,27 @@ export default function ExpenseHistoryPage() {
         <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
       ) : (
         <>
-          {/* DESKTOP TABLE VIEW */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
             <CardContent className="p-0">
               <Table>
-                <TableHeader className="bg-secondary/30">
-                  <TableRow><TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Spent By</TableHead><TableHead className="text-right">Amount</TableHead></TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredExpenses.map((e: any) => (
-                    <TableRow key={e.id} className="cursor-pointer" onClick={() => router.push(`/expenses/${e.id}`)}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(e.expenseDate)}</TableCell><TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell><TableCell className="font-bold text-slate-700">{e.expensePartyName}</TableCell><TableCell className="text-right font-black text-expense">৳{e.amount?.toLocaleString()}</TableCell></TableRow>
-                  ))}
-                </TableBody>
+                <TableHeader className="bg-secondary/30"><TableRow><TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Spent By</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+                <TableBody>{filteredExpenses.map((e: any) => (<TableRow key={e.id} className="cursor-pointer" onClick={() => router.push(`/expenses/${e.id}`)}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(e.expenseDate)}</TableCell><TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell><TableCell className="font-bold text-slate-700">{e.expensePartyName}</TableCell><TableCell className="text-right font-black text-expense">৳{e.amount?.toLocaleString()}</TableCell></TableRow>))}</TableBody>
               </Table>
             </CardContent>
           </Card>
-
-          {/* MOBILE CARD VIEW */}
           <div className="md:hidden space-y-4 print:hidden">
             {filteredExpenses.map((e: any) => (
               <Card key={e.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/expenses/${e.id}`)}>
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(e.expenseDate)}</p><Badge variant="secondary" className="capitalize text-[10px] font-bold mt-1">{e.category}</Badge></div><div className="text-right"><p className="text-xl font-black text-expense">৳{e.amount?.toLocaleString()}</p></div></div>
-                  <div className="space-y-1"><p className="text-sm font-bold text-slate-700">{e.expensePartyName}</p>{e.description && <p className="text-xs text-muted-foreground line-clamp-1 italic">{e.description}</p>}</div>
-                  <div className="pt-2 border-t flex justify-between items-center text-[10px] text-muted-foreground font-bold uppercase"><span className="flex items-center gap-1"><Building2 size={10}/> {e.buildingName}</span><Badge variant="outline" className="text-[8px] h-4 uppercase font-bold">{e.method}</Badge></div>
                 </CardContent>
               </Card>
             ))}
-            {filteredExpenses.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No expense records found.</div>}
           </div>
         </>
       )}
 
-      {/* FIXED ACTION BUTTON */}
-      <div className="fixed bottom-8 right-8 z-50 print:hidden">
-        <Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-expense"><Plus size={32} className="text-white" /></Button>
-      </div>
+      <div className="fixed bottom-8 right-8 z-50 print:hidden"><Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-expense"><Plus size={32} className="text-white" /></Button></div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
@@ -407,30 +331,6 @@ export default function ExpenseHistoryPage() {
             <div className="space-y-4">
               <div className="space-y-2"><Label>Category</Label><Select value={formData.category} onValueChange={val => setFormData({...formData, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: '', totalMeals: '', month: MONTHS[new Date().getMonth()]})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label>Spent By</Label><Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}><SelectTrigger><SelectValue placeholder="Who spent?" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-            </div>
-            <Separator />
-            <div className="space-y-4">
-              {['rent', 'electricity', 'water', 'maintenance', 'internet', 'others'].includes(formData.category) && (
-                <div className="space-y-4">
-                  <div className="space-y-2"><Label>Building</Label><Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val, apartmentName: "", roomNumber: ""})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">General</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-                  {formData.buildingId !== 'none' && apartmentList.length > 0 && <div className="space-y-2"><Label>Apartment</Label><Select value={formData.apartmentName} onValueChange={val => { const apt = apartmentList.find((a: any) => a.name === val); setFormData({...formData, apartmentName: val, meterNo: apt?.meterNo || ""}); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{apartmentList.map((apt: any) => <SelectItem key={apt.name} value={apt.name}>{apt.name}</SelectItem>)}</SelectContent></Select></div>}
-                  {formData.category === 'maintenance' && formData.buildingId !== 'none' && <div className="space-y-2"><Label>Room Number</Label><Select value={formData.roomNumber} onValueChange={val => setFormData({...formData, roomNumber: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{roomList.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>}
-                  {formData.category === 'electricity' && <div className="space-y-2"><Label>Meter No.</Label><Input value={formData.meterNo} onChange={e => setFormData({...formData, meterNo: e.target.value})} /></div>}
-                </div>
-              )}
-              {formData.category === 'market' && <div className="p-4 bg-orange-50 rounded-xl space-y-4"><Label>Market Received By</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Receiver" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>}
-              
-              {formData.category === 'food' && (
-                <div className="p-4 bg-orange-50 rounded-xl space-y-4 border border-orange-200">
-                  <h4 className="text-xs font-bold uppercase text-orange-700">Food Tracking Details</h4>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Total Meals Running Today (Optional)</Label>
-                    <Input type="number" placeholder="e.g. 120" value={formData.totalMeals} onChange={e => setFormData({...formData, totalMeals: e.target.value})} className="bg-white" />
-                  </div>
-                </div>
-              )}
-
-              {formData.category === 'salary' && <div className="p-4 bg-primary/5 rounded-xl space-y-4"><Label>Staff Salary</Label><Select value={formData.receiver} onValueChange={val => { const s = staffList?.find(st => st.name === val); setFormData({...formData, receiver: val, amount: s?.monthlySalary?.toString() || ""}); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>}
             </div>
             <Separator />
             <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Amount</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} /></div><div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div></div>
