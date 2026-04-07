@@ -5,7 +5,7 @@ import * as React from "react"
 import { useState, useMemo, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, serverTimestamp, updateDoc, setDoc, arrayUnion, increment, collection, query, where } from "firebase/firestore"
+import { doc, serverTimestamp, updateDoc, setDoc, arrayUnion, increment, collection, query, where, getDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -156,6 +156,29 @@ export default function StudentDetailsPage() {
 
   const settlementAmount = stats ? (stats.totalDue - stats.advanceRemaining) : 0
 
+  // Logic: Sync rent when room changes in Edit Dialog
+  const editBuildingData = buildings?.find(b => b.id === editForm?.buildingId)
+  const editRoomsList = useMemo(() => {
+    if (!editBuildingData) return []
+    return editBuildingData.apartmentsDetail?.flatMap((apt: any) => 
+      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
+    ) || []
+  }, [editBuildingData])
+
+  const editRoomData = editRoomsList.find((r: any) => String(r.roomNo) === String(editForm?.roomNumber))
+  const editSeatsList = editRoomData?.seats || []
+
+  useEffect(() => {
+    if (editRoomData && editForm) {
+      if (Number(editForm.monthlyRent) !== Number(editRoomData.rentPerSeat)) {
+        setEditForm((prev: any) => ({
+          ...prev,
+          monthlyRent: Number(editRoomData.rentPerSeat)
+        }))
+      }
+    }
+  }, [editRoomData])
+
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
     setIsUpdating(true)
@@ -199,19 +222,98 @@ export default function StudentDetailsPage() {
   }
 
   const handleUpdateProfile = async () => {
-    if (!studentRef || !editForm) return
+    if (!studentRef || !editForm || !student) return
     setIsUpdating(true)
+    
     try {
-      const newBuilding = buildings?.find(b => b.id === editForm.buildingId)
+      const isLocationChanged = 
+        editForm.buildingId !== student.buildingId || 
+        editForm.roomNumber !== student.roomNumber || 
+        editForm.seatNumber !== student.seatNumber
+
+      if (isLocationChanged) {
+        // 1. Release Old Seat
+        const oldBuildingRef = doc(db, "buildings", student.buildingId)
+        const oldBuildingSnap = await getDoc(oldBuildingRef)
+        if (oldBuildingSnap.exists()) {
+          const oldB = oldBuildingSnap.data()
+          const updatedOldApts = oldB.apartmentsDetail.map((apt: any) => {
+            if (apt.name === student.apartmentName) {
+              return {
+                ...apt,
+                rooms: apt.rooms.map((room: any) => {
+                  if (String(room.roomNo) === String(student.roomNumber)) {
+                    return {
+                      ...room,
+                      seats: room.seats.map((seat: any) => 
+                        seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat
+                      )
+                    }
+                  }
+                  return room
+                })
+              }
+            }
+            return apt
+          })
+          await updateDoc(oldBuildingRef, {
+            apartmentsDetail: updatedOldApts,
+            occupiedSeats: increment(-1),
+            emptySeats: increment(1),
+            updatedAt: serverTimestamp()
+          })
+        }
+
+        // 2. Occupy New Seat
+        const newBuildingRef = doc(db, "buildings", editForm.buildingId)
+        const newBuildingSnap = await getDoc(newBuildingRef)
+        if (newBuildingSnap.exists()) {
+          const newB = newBuildingSnap.data()
+          const newAptName = editRoomData?.aptName || "General"
+          const updatedNewApts = newB.apartmentsDetail.map((apt: any) => {
+            if (apt.name === newAptName) {
+              return {
+                ...apt,
+                rooms: apt.rooms.map((room: any) => {
+                  if (String(room.roomNo) === String(editForm.roomNumber)) {
+                    return {
+                      ...room,
+                      seats: room.seats.map((seat: any) => 
+                        seat.seatNo === editForm.seatNumber ? { ...seat, status: 'occupied' } : seat
+                      )
+                    }
+                  }
+                  return room
+                })
+              }
+            }
+            return apt
+          })
+          await updateDoc(newBuildingRef, {
+            apartmentsDetail: updatedNewApts,
+            occupiedSeats: increment(1),
+            emptySeats: increment(-1),
+            updatedAt: serverTimestamp()
+          })
+        }
+      }
+
+      // 3. Final Profile Update
+      const finalBuilding = buildings?.find(b => b.id === editForm.buildingId)
       await updateDoc(studentRef, { 
         ...editForm, 
-        buildingName: newBuilding?.name || student.buildingName,
+        buildingName: finalBuilding?.name || student.buildingName,
+        apartmentName: editRoomData?.aptName || student.apartmentName,
         updatedAt: serverTimestamp() 
       })
+
       setIsEditDialogOpen(false)
-      toast({ title: "Profile Updated" })
-    } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
-    finally { setIsUpdating(false) }
+      toast({ title: "Profile Updated", description: "Identity and allocation synced successfully." })
+    } catch (e: any) { 
+      toast({ variant: "destructive", title: "Update Failed", description: e.message }) 
+    } finally { 
+      setIsUpdating(false) 
+    }
   }
 
   const handleConfirmExit = async () => {
@@ -225,17 +327,6 @@ export default function StudentDetailsPage() {
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
     finally { setIsUpdating(false) }
   }
-
-  const editBuildingData = buildings?.find(b => b.id === editForm?.buildingId)
-  const editRoomsList = useMemo(() => {
-    if (!editBuildingData) return []
-    return editBuildingData.apartmentsDetail?.flatMap((apt: any) => 
-      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
-    ) || []
-  }, [editBuildingData])
-
-  const editRoomData = editRoomsList.find((r: any) => String(r.roomNo) === String(editForm?.roomNumber))
-  const editSeatsList = editRoomData?.seats || []
 
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
   if (!student) return <div className="text-center p-20">Resident not found.</div>
@@ -328,7 +419,7 @@ export default function StudentDetailsPage() {
           </Button>
         </Card>
 
-        {/* Financial Overview Cards - 2 Column Long Format */}
+        {/* Financial Overview Cards */}
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-4">
             <div className="bg-blue-50 p-3 rounded-xl text-blue-600 shrink-0"><ShieldCheck size={24}/></div>
@@ -396,7 +487,6 @@ export default function StudentDetailsPage() {
         </TabsList>
 
         <TabsContent value="payments">
-          {/* Mobile Card View for Payments */}
           <div className="md:hidden space-y-4">
             {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
               <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
@@ -415,7 +505,6 @@ export default function StudentDetailsPage() {
             ))}
             {student.paymentsHistory?.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No payment history.</div>}
           </div>
-          {/* Desktop Table View for Payments */}
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
@@ -452,7 +541,6 @@ export default function StudentDetailsPage() {
         </TabsContent>
 
         <TabsContent value="dues">
-          {/* Mobile Card View for Dues */}
           <div className="md:hidden space-y-4">
             {stats?.dueBreakdownList.map((d, i) => (
               <Card key={i} className="p-4 border-none shadow-sm rounded-2xl flex justify-between items-center">
@@ -465,7 +553,6 @@ export default function StudentDetailsPage() {
             ))}
             {stats?.dueBreakdownList.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No outstanding dues.</div>}
           </div>
-          {/* Desktop Table View for Dues */}
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50">
@@ -537,6 +624,7 @@ export default function StudentDetailsPage() {
         )}
       </Tabs>
 
+      {/* Floating Action Button */}
       <div className="fixed bottom-8 right-8 z-50">
         <Button size="icon" className="h-14 w-14 rounded-full shadow-2xl bg-primary border-4 border-white" onClick={() => setIsPaymentDialogOpen(true)}>
           <Plus size={32} />
@@ -595,6 +683,7 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
@@ -635,37 +724,42 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Profile Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Update Profile & Allocation</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Update Profile & Allocation</DialogTitle>
+            <DialogDescription>Modify identity, contact, and housing details.</DialogDescription>
+          </DialogHeader>
           {editForm && (
             <div className="space-y-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5"><Label>Full Name</Label><Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
                 <div className="space-y-1.5"><Label>Phone Number</Label><Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} /></div>
+                <div className="space-y-1.5"><Label>Parent Phone</Label><Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} /></div>
               </div>
 
               <div className="p-5 border-2 border-primary/10 rounded-3xl bg-primary/5 space-y-4">
-                <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Re-Allocation (Building/Room/Seat)</h3>
+                <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><LayoutGrid size={12}/> Re-Allocation (Building/Room/Seat)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <Label>Building</Label>
                     <Select value={editForm.buildingId} onValueChange={v => setEditForm({...editForm, buildingId: v, roomNumber: "", seatNumber: ""})}>
-                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select Building"/></SelectTrigger>
+                      <SelectTrigger className="bg-white rounded-xl"><SelectValue placeholder="Select Building"/></SelectTrigger>
                       <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Room No.</Label>
                     <Select disabled={!editForm.buildingId} value={String(editForm.roomNumber)} onValueChange={v => setEditForm({...editForm, roomNumber: v, seatNumber: ""})}>
-                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select Room"/></SelectTrigger>
+                      <SelectTrigger className="bg-white rounded-xl"><SelectValue placeholder="Select Room"/></SelectTrigger>
                       <SelectContent>{editRoomsList.map((r: any, i: number) => <SelectItem key={i} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Seat No.</Label>
                     <Select disabled={!editForm.roomNumber} value={String(editForm.seatNumber)} onValueChange={v => setEditForm({...editForm, seatNumber: v})}>
-                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select Seat"/></SelectTrigger>
+                      <SelectTrigger className="bg-white rounded-xl"><SelectValue placeholder="Select Seat"/></SelectTrigger>
                       <SelectContent>
                         {editSeatsList.map((s: any, i: number) => (
                           (s.status === 'empty' || s.seatNo === student.seatNumber) && 
@@ -675,18 +769,36 @@ export default function StudentDetailsPage() {
                     </Select>
                   </div>
                 </div>
+                <div className="p-3 bg-white/50 border border-dashed border-primary/20 rounded-xl">
+                  <p className="text-[9px] text-primary italic font-medium leading-relaxed">
+                    * Selecting a new room will automatically update the monthly rent field below. Advance amount remains unchanged unless manually edited.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Payment Plan</Label>
+                  <Select value={editForm.paymentSystem} onValueChange={v => setEditForm({...editForm, paymentSystem: v})}>
+                    <SelectTrigger className="rounded-xl"><SelectValue/></SelectTrigger>
+                    <SelectContent><SelectItem value="package">Package</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5"><Label>Monthly Rent (৳)</Label><Input type="number" className="rounded-xl font-bold" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} /></div>
+                <div className="space-y-1.5"><Label>Service Charge (৳)</Label><Input type="number" className="rounded-xl" value={editForm.serviceCharge} onChange={e => setEditForm({...editForm, serviceCharge: Number(e.target.value)})} /></div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5"><Label>Monthly Rent (৳)</Label><Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} /></div>
-                <div className="space-y-1.5"><Label>Advance (৳)</Label><Input type="number" value={editForm.advanceAmount} onChange={e => setEditForm({...editForm, advanceAmount: Number(e.target.value)})} /></div>
+                <div className="space-y-1.5"><Label>Billing Start Date</Label><Input type="date" className="rounded-xl" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} /></div>
+                <div className="space-y-1.5"><Label>Advance Balance (৳)</Label><Input type="number" className="rounded-xl" value={editForm.advanceAmount} onChange={e => setEditForm({...editForm, advanceAmount: Number(e.target.value)})} /></div>
               </div>
             </div>
           )}
-          <DialogFooter><Button className="w-full h-12 rounded-2xl font-bold" onClick={handleUpdateProfile} disabled={isUpdating}>Save Profile Changes</Button></DialogFooter>
+          <DialogFooter><Button className="w-full h-14 rounded-2xl font-black text-lg shadow-xl shadow-primary/20" onClick={handleUpdateProfile} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="mr-2" />} Save & Synchronize Identity</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Exit Dialog */}
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle className="text-destructive">Process Final Exit</DialogTitle></DialogHeader>
