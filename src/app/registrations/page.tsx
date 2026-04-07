@@ -254,16 +254,32 @@ export default function RegistrationsPage() {
 
       // Handle Dues Breakdown based on mode
       const finalDuesBreakdown: Record<string, number> = {}
+      let initialTotalDue = 0;
+      
       if (isOld) {
         if (approvalForm.duesEntryMode === 'monthly') {
           approvalForm.duesBreakdown.forEach(d => {
             if (d.month && d.amount) {
-              finalDuesBreakdown[d.month] = (finalDuesBreakdown[d.month] || 0) + Number(d.amount);
+              const amt = Number(d.amount);
+              finalDuesBreakdown[d.month] = (finalDuesBreakdown[d.month] || 0) + amt;
+              initialTotalDue += amt;
             }
           });
         } else {
-          finalDuesBreakdown["Historical Balance"] = Number(approvalForm.singleTotalDue);
+          const total = Number(approvalForm.singleTotalDue);
+          finalDuesBreakdown["Historical Balance"] = total;
+          initialTotalDue = total;
         }
+        
+        // Add food due if negative
+        const foodDue = Number(approvalForm.foodDueAmount);
+        if (foodDue < 0) {
+          initialTotalDue += Math.abs(foodDue);
+        }
+      } else {
+        // For new students, we don't auto-calculate joining dues. 
+        // Admin manually handles initial payments above.
+        initialTotalDue = 0;
       }
 
       // Save the Student Record
@@ -293,7 +309,7 @@ export default function RegistrationsPage() {
         monthlyRent: monthlyRent,
         serviceCharge: svcCharge,
         advanceAmount: advAmount,
-        foodDueAmount: isOld ? -Number(approvalForm.foodDueAmount || 0) : 0, 
+        foodDueAmount: isOld ? Number(approvalForm.foodDueAmount || 0) : 0, 
         billingStartDate: approvalForm.billingStartDate,
         paymentSystem: approvalForm.paymentSystem,
         isActive: true,
@@ -302,6 +318,7 @@ export default function RegistrationsPage() {
         mealsHistory: [],
         historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : 0,
         duesBreakdown: finalDuesBreakdown,
+        totalDue: initialTotalDue, // New Field
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })

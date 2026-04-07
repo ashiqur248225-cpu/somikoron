@@ -117,17 +117,9 @@ export default function StudentDetailsPage() {
   const stats = useMemo(() => {
     if (!student) return null
     
-    const billingStart = student.billingStartDate ? new Date(student.billingStartDate) : (student.createdAt?.toDate?.() || new Date())
-    const now = new Date()
-    const endDate = student.isActive ? now : (student.leftAt?.toDate?.() || now)
-    
-    const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
-    const totalMonths = Math.max(0, monthsElapsed + 1)
-    const generatedRent = totalMonths * (student.monthlyRent || 0)
-    
-    const totalRentPaid = (student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.seatAmount || 0), 0) || 0)
-    const historicalRentDue = student.duesBreakdown ? Object.values(student.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
-    const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+    // totalDue is now a persistent field in the DB.
+    // We only calculate display stats here.
+    const rentDue = student.totalDue || 0;
 
     const historicalFoodDue = Number(student.foodDueAmount) || 0
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
@@ -137,12 +129,13 @@ export default function StudentDetailsPage() {
     const totalReceivedNew = (student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0) || 0)
     const totalReceived = (student.historicalTotalReceived || 0) + totalReceivedNew
 
-    const dueBreakdownList = []
-    for (let i = 0; i < totalMonths; i++) {
-      const d = new Date(billingStart.getFullYear(), billingStart.getMonth() + i, 1)
-      const monthLabel = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
-      dueBreakdownList.push({ month: monthLabel, amount: student.monthlyRent, status: 'Unpaid' })
-    }
+    const dueBreakdownList = Object.entries(student.duesBreakdown || {}).map(([month, amount]) => ({
+      month,
+      amount: Number(amount),
+      status: 'Unpaid'
+    })).sort((a, b) => {
+      return MONTHS.indexOf(b.month.split(' ')[0]) - MONTHS.indexOf(a.month.split(' ')[0]);
+    });
 
     return { 
       rentDue, 
@@ -151,7 +144,7 @@ export default function StudentDetailsPage() {
       totalReceived,
       advanceRemaining: student.advanceAmount || 0,
       currentMonthDue: student.monthlyRent,
-      dueBreakdownList: dueBreakdownList.reverse()
+      dueBreakdownList
     }
   }, [student])
 
@@ -218,10 +211,31 @@ export default function StudentDetailsPage() {
         year: paymentData.year, description: paymentData.description, date: new Date().toISOString()
       }
       
+      // Update Dues Breakdown
+      const currentDues = { ...(student.duesBreakdown || {}) };
+      let remainingRentPaid = seatPaid;
+      const dueMonths = Object.keys(currentDues).sort((a, b) => MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]));
+
+      for (const month of dueMonths) {
+        if (remainingRentPaid <= 0) break;
+        const dueAmt = currentDues[month];
+        if (remainingRentPaid >= dueAmt) {
+          remainingRentPaid -= dueAmt;
+          delete currentDues[month];
+        } else {
+          currentDues[month] = dueAmt - remainingRentPaid;
+          remainingRentPaid = 0;
+        }
+      }
+
+      const finalTotalDue = Math.max(0, (student.totalDue || 0) - (seatPaid + foodPaid));
+
       await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       await updateDoc(studentRef, { 
         paymentsHistory: arrayUnion(pRecord), 
         advanceAmount: increment(Number(paymentData.addAdvanceAmount)), 
+        totalDue: finalTotalDue,
+        duesBreakdown: currentDues,
         updatedAt: serverTimestamp() 
       })
       
@@ -232,6 +246,7 @@ export default function StudentDetailsPage() {
           let msg = paymentTemplate.text
             .replaceAll('[নাম]', student.name)
             .replaceAll('[পরিমাণ]', totalAmt.toString())
+            .replaceAll('[total_payable]', finalTotalDue.toString())
             .replaceAll('[Hostel Name]', hostelDisplayName);
           await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
         }
@@ -403,7 +418,7 @@ export default function StudentDetailsPage() {
     { label: "Service Chrg", val: student.serviceCharge, color: "purple-600", icon: Zap, bg: "bg-purple-50" },
     { label: "Monthly Rent", val: student.monthlyRent, color: "orange-600", icon: Home, bg: "bg-orange-50" },
     { label: "Total Recv.", val: stats?.totalReceived, color: "green-600", icon: HandCoins, bg: "bg-green-50" },
-    { label: "Rent Due", val: stats?.rentDue, color: "red-600", icon: AlertCircle, bg: "bg-red-50" },
+    { label: "Rent Due", val: student.totalDue || 0, color: "red-600", icon: AlertCircle, bg: "bg-red-50" },
     { label: "Food Bal.", val: stats?.foodBalance, color: (stats?.foodBalance ?? 0) >= 0 ? "success" : "red-600", icon: Utensils, bg: (stats?.foodBalance ?? 0) >= 0 ? "bg-success/5" : "bg-red-50" },
   ].filter(c => c.label !== 'Food Bal.' || student.paymentSystem === 'non-package');
 
@@ -729,11 +744,11 @@ export default function StudentDetailsPage() {
           <div className="space-y-6 py-4">
             <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-3 shadow-xl">
               <div className="flex justify-between items-center opacity-70 text-xs"><span>Current Month ({paymentData.month})</span> <span>৳{student.monthlyRent}</span></div>
-              <div className="flex justify-between items-center opacity-70 text-xs"><span>Existing Arrears/Dues</span> <span>৳{stats?.rentDue}</span></div>
+              <div className="flex justify-between items-center opacity-70 text-xs"><span>Existing Arrears/Dues</span> <span>৳{student.totalDue || 0}</span></div>
               <Separator className="bg-white/10" />
               <div className="flex justify-between items-center font-black">
                 <span className="text-xs uppercase tracking-widest text-primary">Total Recommendation</span>
-                <span className="text-2xl">৳{(student.monthlyRent + (stats?.rentDue || 0)).toLocaleString()}</span>
+                <span className="text-2xl">৳{(student.monthlyRent + (student.totalDue || 0)).toLocaleString()}</span>
               </div>
             </div>
 
@@ -855,7 +870,7 @@ export default function StudentDetailsPage() {
               </div>
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Rent Due</p>
-                <p className="text-lg font-bold text-destructive">৳{stats?.rentDue.toLocaleString()}</p>
+                <p className="text-lg font-bold text-destructive">৳{(student.totalDue || 0).toLocaleString()}</p>
               </div>
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Food Balance</p>

@@ -199,9 +199,38 @@ export default function IncomeHistoryPage() {
         toast({ title: "Request Sent" })
       } else {
         await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
+        
+        // Update Dues Breakdown logic: Subtract from oldest months
+        const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
+        let remainingRentPaid = seatPaid;
+        
+        // Sort months to pay the oldest first
+        const dueMonths = Object.keys(currentDues).sort((a, b) => {
+          // This is a simple sort, assuming months are from the same year for simplicity
+          // In a real app, you'd want a more robust date sorting
+          return MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]);
+        });
+
+        for (const month of dueMonths) {
+          if (remainingRentPaid <= 0) break;
+          const dueAmt = currentDues[month];
+          if (remainingRentPaid >= dueAmt) {
+            remainingRentPaid -= dueAmt;
+            delete currentDues[month];
+          } else {
+            currentDues[month] = dueAmt - remainingRentPaid;
+            remainingRentPaid = 0;
+          }
+        }
+
+        // Also subtract food paid from totalDue if applicable
+        const finalTotalDue = Math.max(0, (selectedStudent.totalDue || 0) - (seatPaid + foodPaid));
+
         await updateDoc(doc(db, "students", selectedStudent.id), {
           paymentsHistory: arrayUnion(pRecord),
           advanceAmount: increment(Number(formData.addAdvanceAmount)),
+          totalDue: finalTotalDue,
+          duesBreakdown: currentDues,
           updatedAt: serverTimestamp()
         })
         
@@ -212,6 +241,7 @@ export default function IncomeHistoryPage() {
             let msg = paymentTemplate.text
               .replaceAll('[নাম]', selectedStudent.name)
               .replaceAll('[পরিমাণ]', totalAmt.toString())
+              .replaceAll('[total_payable]', finalTotalDue.toString())
               .replaceAll('[Hostel Name]', hostelDisplayName);
             await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
           }

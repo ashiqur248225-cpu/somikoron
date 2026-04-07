@@ -61,36 +61,32 @@ export default function DuesPage() {
   const processedData = useMemo(() => {
     if (!students) return []
     return students.map(s => {
-      const billingStart = s.billingStartDate ? new Date(s.billingStartDate) : (s.createdAt?.toDate?.() || new Date())
-      const now = new Date()
-      const endDate = s.isActive ? now : (s.leftAt?.toDate?.() || now)
-      const monthsElapsed = (endDate.getFullYear() - billingStart.getFullYear()) * 12 + (endDate.getMonth() - billingStart.getMonth())
-      const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (s.monthlyRent || 0)
-      const historicalRentDue = s.duesBreakdown ? Object.values(s.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
-      const totalRentPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.seatAmount || 0), 0) || 0
-      const rentDue = Math.max(0, (historicalRentDue + generatedRent) - totalRentPaid)
+      // Use the persistent totalDue field from the DB.
+      const totalDueFromDB = s.totalDue || 0;
 
       const historicalFoodDue = Number(s.foodDueAmount) || 0
       const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-      const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + (curr.foodAmount || 0), 0) || 0
+      const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0
       const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
 
-      return { ...s, rentDue, foodBalance, totalDue: rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0), isPaid: (rentDue <= 0 && foodBalance >= 0) }
+      // The final display due is what's in the DB totalDue plus any new food debt
+      const displayTotalDue = totalDueFromDB + (foodBalance < 0 ? Math.abs(foodBalance) : 0);
+
+      return { ...s, foodBalance, displayTotalDue, isPaid: displayTotalDue <= 0 }
     }).filter(s => {
       if (!s.isActive) return false 
       const search = searchTerm.toLowerCase()
       const matchesSearch = s.name.toLowerCase().includes(search) || (s.phone || "").includes(search)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
       const matchesRoom = roomFilter === "all" || s.roomNumber === roomFilter
-      return matchesSearch && matchesBuilding && matchesRoom
-    }).sort((a, b) => b.totalDue - a.totalDue)
+      return matchesSearch && matchesBuilding && matchesRoom && s.displayTotalDue > 0
+    }).sort((a, b) => b.displayTotalDue - a.displayTotalDue)
   }, [students, searchTerm, buildingFilter, roomFilter])
 
   const stats = useMemo(() => {
-    const totalDue = processedData.reduce((acc, curr) => acc + curr.totalDue, 0)
+    const totalDue = processedData.reduce((acc, curr) => acc + curr.displayTotalDue, 0)
     const negativeFoodTotal = processedData.reduce((acc, curr) => acc + (curr.foodBalance < 0 ? Math.abs(curr.foodBalance) : 0), 0)
-    const pendingRentTotal = processedData.reduce((acc, curr) => acc + curr.rentDue, 0)
-    return { totalDue, negativeFoodTotal, pendingRentTotal, count: processedData.length }
+    return { totalDue, negativeFoodTotal, count: processedData.length }
   }, [processedData])
 
   const availableRooms = useMemo(() => {
@@ -111,7 +107,7 @@ export default function DuesPage() {
   const handleExportCSV = () => {
     try {
       const headers = ["Student Name", "Building & Room", "Total Due", "Food Balance", "Monthly Rent"];
-      const rows = processedData.map(s => [s.name, `${s.buildingName} R${s.roomNumber}`, s.totalDue, s.foodBalance, s.monthlyRent]);
+      const rows = processedData.map(s => [s.name, `${s.buildingName} R${s.roomNumber}`, s.displayTotalDue, s.foodBalance, s.monthlyRent]);
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
@@ -203,9 +199,8 @@ export default function DuesPage() {
             <TableRow className="bg-slate-50">
               <TableHead className="w-[25%] font-bold text-slate-900 border">Student Name</TableHead>
               <TableHead className="w-[20%] font-bold text-slate-900 border">Building & Room</TableHead>
-              <TableHead className="w-[15%] text-right font-bold text-slate-900 border">Rent Due</TableHead>
+              <TableHead className="w-[15%] text-right font-bold text-slate-900 border">Rent</TableHead>
               <TableHead className="w-[15%] text-right font-bold text-slate-900 border">Food Balance</TableHead>
-              <TableHead className="w-[10%] text-right font-bold text-slate-900 border">Rent</TableHead>
               <TableHead className="w-[15%] text-right font-bold text-slate-900 border">Total Due</TableHead>
             </TableRow>
           </TableHeader>
@@ -214,18 +209,15 @@ export default function DuesPage() {
               <TableRow key={s.id}>
                 <TableCell className="font-bold border">{s.name}<br/><span className="text-[7pt] font-normal">{s.phone}</span></TableCell>
                 <TableCell className="border">{s.buildingName} - R{s.roomNumber}</TableCell>
-                <TableCell className="text-right border">৳{s.rentDue.toLocaleString()}</TableCell>
-                <TableCell className={cn("text-right border", s.foodBalance < 0 ? "text-destructive font-bold" : "")}>৳{s.foodBalance.toLocaleString()}</TableCell>
                 <TableCell className="text-right border">৳{s.monthlyRent}</TableCell>
-                <TableCell className="text-right font-black border">৳{s.totalDue.toLocaleString()}</TableCell>
+                <TableCell className={cn("text-right border", s.foodBalance < 0 ? "text-destructive font-bold" : "")}>৳{s.foodBalance.toLocaleString()}</TableCell>
+                <TableCell className="text-right font-black border">৳{s.displayTotalDue.toLocaleString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
         <div className="summary-section">
           <div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-3 gap-4">
-            <div><p className="text-[8pt] uppercase font-bold text-muted-foreground">Pending Rent</p><p className="text-lg font-bold">৳{stats.pendingRentTotal.toLocaleString()}</p></div>
-            <div><p className="text-[8pt] uppercase font-bold text-destructive">Food Receivables</p><p className="text-lg font-bold text-destructive">৳{stats.negativeFoodTotal.toLocaleString()}</p></div>
             <div className="text-right"><p className="text-[8pt] uppercase font-bold text-primary">Total Outstanding</p><p className="text-2xl font-black text-primary">৳{stats.totalDue.toLocaleString()}</p></div>
           </div>
           <div className="print-footer mt-10"><div className="signature-box">Accountant Signature</div><div className="text-center self-end print-page-number"></div><div className="signature-box">Manager Signature</div></div>
@@ -234,8 +226,8 @@ export default function DuesPage() {
 
       <div className="grid gap-6 grid-cols-1 md:grid-cols-3 print:hidden">
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Outstanding</CardTitle><TrendingUp className="h-4 w-4 text-destructive" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">৳{stats.totalDue.toLocaleString()}</div><p className="text-[10px] text-muted-foreground">Across {stats.count} accounts</p></CardContent></Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-success">Low Dues</CardTitle><UserCheck className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">{processedData.filter(s => s.totalDue < 1000).length}</div></CardContent></Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-orange-500 rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-orange-600">High Dues</CardTitle><UserMinus className="h-4 w-4 text-orange-600" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">{processedData.filter(s => s.totalDue >= 5000).length}</div></CardContent></Card>
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-success">Low Dues</CardTitle><UserCheck className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">{processedData.filter(s => s.displayTotalDue < 1000).length}</div></CardContent></Card>
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-orange-500 rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-orange-600">High Dues</CardTitle><UserMinus className="h-4 w-4 text-orange-600" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">{processedData.filter(s => s.displayTotalDue >= 5000).length}</div></CardContent></Card>
       </div>
 
       {studentsLoading ? (
@@ -246,7 +238,7 @@ export default function DuesPage() {
             <CardContent className="p-0">
               <Table>
                 <TableHeader className="bg-secondary/30"><TableRow><TableHead>Resident</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Total Due</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
-                <TableBody>{processedData.map((s: any) => (<TableRow key={s.id}><TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone}</span></TableCell><TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell><TableCell className="text-right font-black text-destructive text-lg">৳{s.totalDue.toLocaleString()}</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button></TableCell></TableRow>))}</TableBody>
+                <TableBody>{processedData.map((s: any) => (<TableRow key={s.id}><TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone}</span></TableCell><TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell><TableCell className="text-right font-black text-destructive text-lg">৳{s.displayTotalDue.toLocaleString()}</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button></TableCell></TableRow>))}</TableBody>
               </Table>
             </CardContent>
           </Card>
@@ -256,8 +248,8 @@ export default function DuesPage() {
               <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start"><div><h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3><p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p></div><Badge variant="destructive" className="text-[10px]">Due</Badge></div>
-                  <div className="bg-secondary/30 p-3 rounded-xl border border-secondary"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold text-muted-foreground uppercase">Property</span><span className="text-xs font-bold text-slate-700">{s.buildingName} • R-{s.roomNumber}</span></div><div className="flex justify-between items-center pt-2 border-t border-white/50"><span className="text-[10px] font-bold text-destructive uppercase">Total Outstanding</span><span className="text-xl font-black text-destructive">৳{s.totalDue.toLocaleString()}</span></div></div>
-                  <div className="grid grid-cols-2 gap-2 text-[10px] font-medium text-slate-500"><p>Rent Due: ৳{s.rentDue.toLocaleString()}</p><p className={cn("text-right", s.foodBalance < 0 ? "text-destructive font-bold" : "")}>Food Bal: ৳{s.foodBalance.toLocaleString()}</p></div>
+                  <div className="bg-secondary/30 p-3 rounded-xl border border-secondary"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold text-muted-foreground uppercase">Property</span><span className="text-xs font-bold text-slate-700">{s.buildingName} • R-{s.roomNumber}</span></div><div className="flex justify-between items-center pt-2 border-t border-white/50"><span className="text-[10px] font-bold text-destructive uppercase">Total Outstanding</span><span className="text-xl font-black text-destructive">৳{s.displayTotalDue.toLocaleString()}</span></div></div>
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-medium text-slate-500"><p>Rent Due: ৳{(s.totalDue || 0).toLocaleString()}</p><p className={cn("text-right", s.foodBalance < 0 ? "text-destructive font-bold" : "")}>Food Bal: ৳{s.foodBalance.toLocaleString()}</p></div>
                   <Button variant="outline" className="w-full h-10 rounded-xl font-bold gap-2 text-xs" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} /> View Full Profile</Button>
                 </CardContent>
               </Card>

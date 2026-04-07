@@ -42,7 +42,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useFirestore, useCollection, useDoc, useMemoFirebase } from "@/firebase"
-import { collection, query, where, doc, serverTimestamp, setDoc, updateDoc, arrayUnion, increment, getDoc } from "firebase/firestore"
+import { collection, query, where, doc, serverTimestamp, setDoc, updateDoc, arrayUnion, increment, getDoc, writeBatch } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Progress } from "@/components/ui/progress"
@@ -160,6 +160,48 @@ export default function DashboardPage() {
   }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
+  // AUTOMATIC MONTHLY RENT GENERATOR
+  useEffect(() => {
+    const generateMonthlyRent = async () => {
+      if (!students || students.length === 0 || !userBranch) return;
+      
+      const now = new Date();
+      const currentMonthLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+      const batch = writeBatch(db);
+      let updatesCount = 0;
+
+      students.forEach(s => {
+        if (!s.isActive) return;
+        
+        const dues = s.duesBreakdown || {};
+        if (!dues[currentMonthLabel]) {
+          const rent = Number(s.monthlyRent || 0);
+          dues[currentMonthLabel] = rent;
+          
+          batch.update(doc(db, "students", s.id), {
+            duesBreakdown: dues,
+            totalDue: increment(rent),
+            updatedAt: serverTimestamp()
+          });
+          updatesCount++;
+        }
+      });
+
+      if (updatesCount > 0) {
+        try {
+          await batch.commit();
+          console.log(`Auto-generated rent for ${updatesCount} students.`);
+        } catch (e) {
+          console.error("Auto-rent generation failed:", e);
+        }
+      }
+    };
+
+    if (userRole === 'Admin' || userRole === 'Branch Manager') {
+      generateMonthlyRent();
+    }
+  }, [students, userBranch, userRole, db]);
+
   const staffQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "staff"), where("branch", "==", userBranch))
@@ -175,23 +217,6 @@ export default function DashboardPage() {
 
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
-
-  // SMS Logger Helper
-  const logSMSToDatabase = async (to: string, msg: string, status: 'Success' | 'Failed', errorMsg?: string) => {
-    try {
-      const logId = doc(collection(db, "smsLogs")).id
-      await setDoc(doc(db, "smsLogs", logId), {
-        id: logId,
-        to,
-        message: msg,
-        status,
-        error: errorMsg || null,
-        branch: userBranch,
-        sentBy: userName,
-        createdAt: serverTimestamp()
-      })
-    } catch (e) {}
-  }
 
   // Summary Logic
   const allPaymentsQuery = useMemoFirebase(() => {
@@ -316,26 +341,30 @@ export default function DashboardPage() {
       } else {
         await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
         
-        // Calculate totals for SMS mapping
-        const billingStart = selectedStudent.billingStartDate ? new Date(selectedStudent.billingStartDate) : (selectedStudent.createdAt?.toDate?.() || new Date())
-        const now = new Date()
-        const monthsElapsed = (now.getFullYear() - billingStart.getFullYear()) * 12 + (now.getMonth() - billingStart.getMonth())
-        const generatedRent = (monthsElapsed >= 0 ? monthsElapsed + 1 : 0) * (selectedStudent.monthlyRent || 0)
-        
-        const totalRentPaidPrev = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.seatAmount || (selectedStudent.paymentSystem === 'package' ? curr.amount : 0)), 0) || 0
-        const historicalRentDue = selectedStudent.duesBreakdown ? Object.values(selectedStudent.duesBreakdown as Record<string, number>).reduce((a, b) => a + b, 0) : 0
-        const rentDueAfter = Math.max(0, (historicalRentDue + generatedRent) - (totalRentPaidPrev + seatPaid))
+        // Update Dues
+        const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
+        let remainingRentPaid = seatPaid;
+        const dueMonths = Object.keys(currentDues).sort((a, b) => MONTHS.indexOf(a.split(' ')[0]) - MONTHS.indexOf(b.split(' ')[0]));
 
-        const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0
-        const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-        const totalFoodPaidPrev = selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || (selectedStudent.paymentSystem === 'non-package' ? curr.amount : 0)), 0) || 0
-        const foodBalanceAfter = (totalFoodPaidPrev + foodPaid) - (historicalFoodDue + generatedFoodCost)
-        
-        const totalPayableAfter = rentDueAfter + Math.max(0, -foodBalanceAfter)
+        for (const month of dueMonths) {
+          if (remainingRentPaid <= 0) break;
+          const dueAmt = currentDues[month];
+          if (remainingRentPaid >= dueAmt) {
+            remainingRentPaid -= dueAmt;
+            delete currentDues[month];
+          } else {
+            currentDues[month] = dueAmt - remainingRentPaid;
+            remainingRentPaid = 0;
+          }
+        }
+
+        const finalTotalDue = Math.max(0, (selectedStudent.totalDue || 0) - (seatPaid + foodPaid));
 
         await updateDoc(doc(db, "students", selectedStudent.id), { 
           paymentsHistory: arrayUnion(pRecord), 
           advanceAmount: increment(Number(formData.addAdvanceAmount)), 
+          totalDue: finalTotalDue,
+          duesBreakdown: currentDues,
           updatedAt: serverTimestamp() 
         })
         
@@ -347,18 +376,9 @@ export default function DashboardPage() {
             let msg = paymentTemplate.text
               .replaceAll('[নাম]', selectedStudent.name)
               .replaceAll('[পরিমাণ]', totalAmt.toString())
-              .replaceAll('[total_payable]', totalPayableAfter.toString())
-              .replaceAll('[food_balance]', Math.max(0, foodBalanceAfter).toString())
-              .replaceAll('[food_due]', Math.max(0, -foodBalanceAfter).toString())
+              .replaceAll('[total_payable]', finalTotalDue.toString())
               .replaceAll('[Hostel Name]', hostelDisplayName);
-            const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
-            await logSMSToDatabase(selectedStudent.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
-            
-            if (result.error === 0) {
-              toast({ title: "SMS Sent", description: `মেসেজ: ${msg.substring(0, 50)}...` })
-            } else if (result.error === 417) {
-              toast({ variant: "destructive", title: "ব্যালেন্স নেই", description: "আপনার পর্যাপ্ত ব্যালেন্স নেই, দয়া করে রিচার্জ করুন।" })
-            }
+            await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
           }
         }
         
@@ -385,6 +405,20 @@ export default function DashboardPage() {
         if (!s) return
         const countNum = Number(count); const cost = countNum * currentMealRate
         
+        // Also update totalDue if food balance goes negative
+        const historicalFoodDue = Number(s.foodDueAmount) || 0
+        const generatedFoodCostPrev = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
+        const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || (s.paymentSystem === 'non-package' ? curr.amount : 0)), 0) || 0
+        
+        const oldFoodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCostPrev)
+        const newFoodBalance = oldFoodBalance - cost
+        
+        let dueAdjustment = 0
+        if (newFoodBalance < 0) {
+          if (oldFoodBalance >= 0) dueAdjustment = Math.abs(newFoodBalance)
+          else dueAdjustment = cost
+        }
+
         await updateDoc(doc(db, "students", sId), { 
           mealsHistory: arrayUnion({ 
             month: monthLabel, 
@@ -392,15 +426,10 @@ export default function DashboardPage() {
             perMealCost: currentMealRate, 
             totalCost: cost, 
             date: new Date().toISOString() 
-          }), 
+          }),
+          totalDue: increment(dueAdjustment),
           updatedAt: serverTimestamp() 
         })
-
-        // Recalculate food balance for SMS
-        const historicalFoodDue = Number(s.foodDueAmount) || 0
-        const generatedFoodCostPrev = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-        const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || (s.paymentSystem === 'non-package' ? curr.amount : 0)), 0) || 0
-        const foodBalanceAfter = totalFoodPaid - (historicalFoodDue + generatedFoodCostPrev + cost)
 
         if (apiConfig?.apikey && mealTemplate) {
           let msg = mealTemplate.text
@@ -408,11 +437,10 @@ export default function DashboardPage() {
             .replaceAll('[মাস]', monthLabel)
             .replaceAll('[meal_count]', count)
             .replaceAll('[meal_bill]', cost.toString())
-            .replaceAll('[food_balance]', Math.max(0, foodBalanceAfter).toString())
-            .replaceAll('[food_due]', Math.max(0, -foodBalanceAfter).toString())
+            .replaceAll('[food_balance]', Math.max(0, newFoodBalance).toString())
+            .replaceAll('[food_due]', Math.max(0, -newFoodBalance).toString())
             .replaceAll('[Hostel Name]', hostelDisplayName);
-          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg);
-          await logSMSToDatabase(s.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
+          await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg);
         }
       })
       await Promise.all(promises)
