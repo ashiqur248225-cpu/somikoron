@@ -11,7 +11,7 @@ import {
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
   AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2,
-  Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft
+  Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft, ListOrdered, Hash
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -105,7 +106,9 @@ export default function RegistrationsPage() {
     duesBreakdown: {} as Record<string, number>,
     tempDueMonth: MONTHS[new Date().getMonth()],
     tempDueYear: new Date().getFullYear().toString(),
-    tempDueAmount: ""
+    tempDueAmount: "",
+    duesEntryMode: "monthly", // "monthly" or "total"
+    singleTotalDue: "0"
   })
 
   const selectedBuilding = useMemo(() => buildings?.find(b => b.id === approvalForm.buildingId), [buildings, approvalForm.buildingId])
@@ -150,7 +153,9 @@ export default function RegistrationsPage() {
         serviceCharge: "0",
         historicalTotalReceived: "0",
         foodDueAmount: "0",
-        duesBreakdown: {}
+        duesBreakdown: {},
+        duesEntryMode: "monthly",
+        singleTotalDue: "0"
       }))
     }
   }, [isDetailOpen, selectedReg, buildings])
@@ -229,7 +234,12 @@ export default function RegistrationsPage() {
         }
       }
 
-      // Save the Student Record (MAPPING CORRECTLY)
+      // Handle Dues Breakdown based on mode
+      const finalDuesBreakdown = approvalForm.duesEntryMode === 'monthly' 
+        ? approvalForm.duesBreakdown 
+        : { "Historical Balance": Number(approvalForm.singleTotalDue) };
+
+      // Save the Student Record
       await setDoc(doc(db, "students", studentId), {
         id: studentId,
         name: selectedReg.name,
@@ -245,8 +255,8 @@ export default function RegistrationsPage() {
         postOffice: selectedReg.postOffice || "",
         upazila: selectedReg.upazila || "",
         district: selectedReg.district || "",
-        collegeUniversity: selectedReg.collegeUniversity || "", // FIXED: Saving institute name
-        department: selectedReg.department || "", // FIXED: Saving group/designation
+        collegeUniversity: selectedReg.collegeUniversity || "",
+        department: selectedReg.department || "", 
         occupation: selectedReg.occupation || "student",
         buildingId: bId,
         buildingName: selectedBuilding?.name || "Unknown",
@@ -264,7 +274,7 @@ export default function RegistrationsPage() {
         paymentsHistory: [], 
         mealsHistory: [],
         historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : 0,
-        duesBreakdown: isOld ? approvalForm.duesBreakdown : {}, // Saved as object for Profile Page calculation
+        duesBreakdown: isOld ? finalDuesBreakdown : {},
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -424,11 +434,24 @@ export default function RegistrationsPage() {
               <div className="lg:col-span-1 space-y-6">
                 <div className="p-5 bg-secondary/30 rounded-3xl border-2 border-secondary space-y-4">
                   <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><UserCircle size={14}/> Applicant Info</h3>
-                  <div className="grid grid-cols-2 gap-y-3 text-xs">
-                    <span className="text-muted-foreground">Type:</span> <Badge variant="secondary" className="w-fit h-5 text-[9px] capitalize">{selectedReg.type}</Badge>
-                    <span className="text-muted-foreground">District:</span> <span className="font-bold">{selectedReg.district}</span>
-                    <span className="text-muted-foreground">Institute:</span> <span className="font-bold">{selectedReg.collegeUniversity || 'N/A'}</span>
-                    <span className="text-muted-foreground">Group/Dept:</span> <span className="font-bold">{selectedReg.department || 'N/A'}</span>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground font-bold">Name:</span> 
+                      <span className="font-black text-slate-800">{selectedReg.name}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground font-bold">Phone:</span> 
+                      <span className="font-black text-slate-800">{selectedReg.phone}</span>
+                    </div>
+                    <Separator className="bg-slate-200" />
+                    <div className="grid grid-cols-2 gap-y-2 text-[10px] uppercase font-black text-muted-foreground">
+                      <span>Type:</span> <Badge variant="secondary" className="w-fit h-4 text-[8px] bg-white border">{selectedReg.type}</Badge>
+                      <span>Origin:</span> <span className="text-slate-700">{selectedReg.district}</span>
+                    </div>
+                    <div className="p-2 bg-white/50 rounded-xl border border-dashed text-[10px] space-y-1">
+                      <p className="flex items-center gap-1"><GraduationCap size={10} className="text-primary"/> {selectedReg.collegeUniversity || 'No Institute'}</p>
+                      <p className="flex items-center gap-1"><Briefcase size={10} className="text-primary"/> {selectedReg.department || 'General'}</p>
+                    </div>
                   </div>
                 </div>
 
@@ -438,21 +461,21 @@ export default function RegistrationsPage() {
                     <div className="space-y-1.5">
                       <Label className="text-[10px] uppercase font-black ml-1">Building</Label>
                       <Select value={approvalForm.buildingId} onValueChange={val => setApprovalForm({...approvalForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
-                        <SelectTrigger className="bg-white rounded-xl h-11"><SelectValue/></SelectTrigger>
+                        <SelectTrigger className="bg-white rounded-xl h-11 shadow-sm"><SelectValue placeholder="সিলেক্ট বিল্ডিং"/></SelectTrigger>
                         <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[10px] uppercase font-black ml-1">Room No.</Label>
                       <Select disabled={!approvalForm.buildingId} value={approvalForm.roomNumber} onValueChange={val => setApprovalForm({...approvalForm, roomNumber: val, seatNumber: ""})}>
-                        <SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="রুম সিলেক্ট করুন"/></SelectTrigger>
+                        <SelectTrigger className="bg-white rounded-xl h-11 shadow-sm"><SelectValue placeholder="রুম সিলেক্ট করুন"/></SelectTrigger>
                         <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={idx} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[10px] uppercase font-black ml-1">Seat No.</Label>
                       <Select disabled={!approvalForm.roomNumber} value={approvalForm.seatNumber} onValueChange={val => setApprovalForm({...approvalForm, seatNumber: val})}>
-                        <SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="সিট সিলেক্ট করুন"/></SelectTrigger>
+                        <SelectTrigger className="bg-white rounded-xl h-11 shadow-sm"><SelectValue placeholder="সিট সিলেক্ট করুন"/></SelectTrigger>
                         <SelectContent>{emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
@@ -464,13 +487,13 @@ export default function RegistrationsPage() {
               <div className="lg:col-span-2 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-6">
-                    <div className="p-5 border-2 border-primary/20 bg-primary/5 rounded-3xl space-y-5">
+                    <div className="p-5 border-2 border-primary/20 bg-primary/5 rounded-3xl space-y-5 shadow-sm">
                       <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Calculator size={14}/> Financial Parameters</h3>
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <Label className="text-[10px] uppercase font-black">Monthly Rent</Label>
-                            <Input type="number" className="h-11 rounded-xl bg-white font-bold" value={approvalForm.monthlyRent} onChange={e => setApprovalForm({...approvalForm, monthlyRent: e.target.value})} />
+                            <Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800" value={approvalForm.monthlyRent} onChange={e => setApprovalForm({...approvalForm, monthlyRent: e.target.value})} />
                           </div>
                           <div className="space-y-1.5">
                             <Label className="text-[10px] uppercase font-black">Plan</Label>
@@ -492,9 +515,9 @@ export default function RegistrationsPage() {
                     </div>
                     
                     <div className="p-5 bg-slate-50 border rounded-3xl space-y-3">
-                      <Label className="text-[10px] uppercase font-black ml-1">Received By (Staff)</Label>
+                      <Label className="text-[10px] uppercase font-black ml-1 text-muted-foreground">Admission Receiver (Staff)</Label>
                       <Select value={approvalForm.receiver} onValueChange={v => setApprovalForm({...approvalForm, receiver: v})}>
-                        <SelectTrigger className="bg-white h-11 rounded-xl"><SelectValue placeholder="Select Staff"/></SelectTrigger>
+                        <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Select Staff"/></SelectTrigger>
                         <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
@@ -503,67 +526,98 @@ export default function RegistrationsPage() {
                   {/* Right Column: Historical vs Initial Pay */}
                   <div className="space-y-6">
                     {selectedReg.type === 'old' ? (
-                      <div className="p-5 border-2 border-orange-200 bg-orange-50/50 rounded-3xl space-y-5">
-                        <h3 className="text-[10px] font-black uppercase text-orange-600 tracking-widest flex items-center gap-2"><History size={14}/> Historical Data (Migration Only)</h3>
+                      <div className="p-5 border-2 border-orange-200 bg-orange-50/50 rounded-3xl space-y-5 shadow-sm">
+                        <h3 className="text-[10px] font-black uppercase text-orange-600 tracking-widest flex items-center gap-2"><History size={14}/> Migration Data (Historical)</h3>
                         <div className="space-y-4">
                           <div className="space-y-1.5">
-                            <Label className="text-[10px] uppercase font-black">Lifetime Collected (Till today)</Label>
-                            <Input type="number" className="h-11 rounded-xl bg-white font-bold" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} />
+                            <Label className="text-[10px] uppercase font-black flex justify-between">
+                              Lifetime Total Received <Info size={10} className="text-orange-400" />
+                            </Label>
+                            <Input type="number" className="h-11 rounded-xl bg-white font-black" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} />
+                            <p className="text-[8px] text-muted-foreground italic">* মোট যত টাকা আজ পর্যন্ত কালেক্ট করেছেন (ভাড়া/খাবার সহ)</p>
                           </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-[10px] uppercase font-black">Food Balance (+/-)</Label>
-                            <Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} />
-                          </div>
+
+                          {approvalForm.paymentSystem === 'non-package' && (
+                            <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1">
+                              <Label className="text-[10px] uppercase font-black">Food Balance (+/-)</Label>
+                              <Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="0.00" />
+                            </div>
+                          )}
                           
                           <Separator className="bg-orange-200" />
                           
                           <div className="space-y-3">
-                            <Label className="text-[10px] uppercase font-black">Monthly Dues Breakdown</Label>
-                            <div className="flex gap-2">
-                              <Select value={approvalForm.tempDueMonth} onValueChange={v => setApprovalForm({...approvalForm, tempDueMonth: v})}>
-                                <SelectTrigger className="h-9 text-xs bg-white"><SelectValue /></SelectTrigger>
-                                <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                              </Select>
-                              <Select value={approvalForm.tempDueYear} onValueChange={v => setApprovalForm({...approvalForm, tempDueYear: v})}>
-                                <SelectTrigger className="h-9 text-xs bg-white"><SelectValue /></SelectTrigger>
-                                <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                              </Select>
-                              <Input type="number" placeholder="Amt" className="h-9 w-20 text-xs" value={approvalForm.tempDueAmount} onChange={e => setApprovalForm({...approvalForm, tempDueAmount: e.target.value})} />
-                              <Button type="button" size="icon" className="h-9 w-9" onClick={handleAddDueMonth}><Plus size={14}/></Button>
+                            <div className="flex justify-between items-center">
+                              <Label className="text-[10px] uppercase font-black">Resident Dues Entry</Label>
+                              <Badge variant="outline" className="bg-white text-[8px]">MIGRATION MODE</Badge>
                             </div>
-                            <div className="bg-white/50 rounded-xl p-3 border border-dashed space-y-2">
-                              {Object.entries(approvalForm.duesBreakdown).map(([label, amount]) => (
-                                <div key={label} className="flex justify-between items-center text-xs">
-                                  <span className="font-bold">{label}</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-destructive font-black">৳{amount}</span>
-                                    <XCircle size={14} className="text-muted-foreground cursor-pointer" onClick={() => removeDueMonth(label)} />
-                                  </div>
+
+                            <Tabs value={approvalForm.duesEntryMode} onValueChange={v => setApprovalForm({...approvalForm, duesEntryMode: v})} className="w-full">
+                              <TabsList className="grid w-full grid-cols-2 h-8 bg-orange-100/50 p-1">
+                                <TabsTrigger value="monthly" className="text-[9px] font-bold h-6 uppercase">Monthly List</TabsTrigger>
+                                <TabsTrigger value="total" className="text-[9px] font-bold h-6 uppercase">Single Total</TabsTrigger>
+                              </TabsList>
+                              
+                              <TabsContent value="monthly" className="space-y-3 mt-3">
+                                <div className="flex gap-2">
+                                  <Select value={approvalForm.tempDueMonth} onValueChange={v => setApprovalForm({...approvalForm, tempDueMonth: v})}>
+                                    <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                                  </Select>
+                                  <Select value={approvalForm.tempDueYear} onValueChange={v => setApprovalForm({...approvalForm, tempDueYear: v})}>
+                                    <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                                  </Select>
+                                  <Input type="number" placeholder="Amt" className="h-9 w-20 text-xs bg-white border-orange-200" value={approvalForm.tempDueAmount} onChange={e => setApprovalForm({...approvalForm, tempDueAmount: e.target.value})} />
+                                  <Button type="button" size="icon" className="h-9 w-9 shrink-0 bg-orange-500 hover:bg-orange-600" onClick={handleAddDueMonth}><Plus size={14}/></Button>
                                 </div>
-                              ))}
-                              {Object.keys(approvalForm.duesBreakdown).length === 0 && <p className="text-[10px] italic text-muted-foreground text-center">No dues added.</p>}
-                            </div>
+                                <div className="bg-white/50 rounded-2xl p-3 border border-dashed border-orange-300 space-y-2 max-h-[120px] overflow-y-auto">
+                                  {Object.entries(approvalForm.duesBreakdown).map(([label, amount]) => (
+                                    <div key={label} className="flex justify-between items-center text-[10px]">
+                                      <span className="font-bold text-slate-600 flex items-center gap-1"><Calendar size={10}/> {label}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-destructive font-black">৳{amount}</span>
+                                        <XCircle size={14} className="text-muted-foreground cursor-pointer hover:text-destructive" onClick={() => removeDueMonth(label)} />
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {Object.keys(approvalForm.duesBreakdown).length === 0 && <p className="text-[10px] italic text-muted-foreground text-center">মাস ভিত্তিক বকেয়া নেই।</p>}
+                                </div>
+                              </TabsContent>
+
+                              <TabsContent value="total" className="mt-3">
+                                <div className="space-y-1.5">
+                                  <Label className="text-[9px] uppercase font-black text-orange-700">Total Oustanding Balance (৳)</Label>
+                                  <div className="relative">
+                                    <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-orange-400" />
+                                    <Input type="number" className="h-10 rounded-xl pl-9 bg-white border-orange-200 font-black text-destructive" value={approvalForm.singleTotalDue} onChange={e => setApprovalForm({...approvalForm, singleTotalDue: e.target.value})} />
+                                  </div>
+                                  <p className="text-[8px] text-muted-foreground italic leading-tight">এটি পুরাতন সকল বকেয়া (ভাড়া + খাবার) এর এককালীন টোটাল অ্যামাউন্ট।</p>
+                                </div>
+                              </TabsContent>
+                            </Tabs>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-5 border-2 border-success/20 bg-success/5 rounded-3xl space-y-5">
+                      <div className="p-5 border-2 border-success/20 bg-success/5 rounded-3xl space-y-5 shadow-sm">
                         <h3 className="text-[10px] font-black uppercase text-success tracking-widest flex items-center gap-2"><Wallet size={14}/> Admission Collection</h3>
                         <div className="space-y-4">
-                          <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Initial Rent (Current Month)</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} /></div>
+                          <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Initial Rent (Current Month)</Label><Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800 shadow-inner" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} /></div>
                           {approvalForm.paymentSystem === 'non-package' && (
-                            <div className="space-y-1.5"><Label className="text-[10px] uppercase font-black">Initial Food Deposit</Label><Input type="number" className="h-11 rounded-xl bg-white" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} /></div>
+                            <div className="space-y-1.5 animate-in fade-in"><Label className="text-[10px] uppercase font-black">Initial Food Deposit</Label><Input type="number" className="h-11 rounded-xl bg-white font-black text-slate-800 shadow-inner" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} /></div>
                           )}
                           <div className="space-y-1.5 pt-4">
                             <Label className="text-[10px] uppercase font-black">Payment Method</Label>
                             <Select value={approvalForm.method} onValueChange={v => setApprovalForm({...approvalForm, method: v})}>
-                              <SelectTrigger className="bg-white h-11 rounded-xl"><SelectValue/></SelectTrigger>
+                              <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue/></SelectTrigger>
                               <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
                             </Select>
                           </div>
-                          <div className="mt-4 p-4 bg-white/50 rounded-2xl border border-dashed">
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase">Total New Income:</p>
-                            <p className="text-2xl font-black text-success">৳{(Number(approvalForm.initialRentPayment) + Number(approvalForm.initialFoodPayment) + Number(approvalForm.advanceAmount) + Number(approvalForm.serviceCharge)).toLocaleString()}</p>
+                          <div className="mt-4 p-5 bg-white/80 rounded-2xl border-2 border-dashed border-success/20">
+                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Immediate Income Log:</p>
+                            <p className="text-3xl font-black text-success mt-1">৳{(Number(approvalForm.initialRentPayment) + Number(approvalForm.initialFoodPayment) + Number(approvalForm.advanceAmount) + Number(approvalForm.serviceCharge)).toLocaleString()}</p>
+                            <p className="text-[8px] text-slate-400 mt-2 italic">* এটি সরাসরি আপনার ইনকাম ও ক্যাশ ব্যালেন্সে যোগ হবে।</p>
                           </div>
                         </div>
                       </div>
@@ -574,9 +628,9 @@ export default function RegistrationsPage() {
             </div>
           )}
           
-          <DialogFooter className="p-8 bg-slate-50 border-t flex flex-col md:flex-row gap-4">
-            <Button variant="outline" className="flex-1 h-14 rounded-2xl border-destructive text-destructive font-black uppercase" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject Request</Button>
-            <Button className="flex-[2] h-14 rounded-2xl bg-success hover:bg-success/90 font-black text-lg shadow-xl shadow-success/20" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="mr-2" />} Approve & Admit Resident</Button>
+          <DialogFooter className="p-8 bg-slate-100 border-t flex flex-col md:flex-row gap-4">
+            <Button variant="outline" className="flex-1 h-14 rounded-2xl border-destructive text-destructive font-black uppercase hover:bg-destructive/5" onClick={() => { deleteDoc(doc(db, "registrations", selectedReg.id)); setIsDetailOpen(false); }}>Reject Enrollment</Button>
+            <Button className="flex-[2] h-14 rounded-2xl bg-success hover:bg-success/90 font-black text-lg shadow-xl shadow-success/20" onClick={handleApprove} disabled={isProcessing}>{isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="mr-2" />} Approve & Sync Resident</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
