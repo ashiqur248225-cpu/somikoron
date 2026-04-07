@@ -11,8 +11,8 @@ import { Users, Search, Building2, DoorOpen, Loader2, Eye, XCircle, Printer, Fil
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, where } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
+import { collection, query, where, doc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
@@ -58,6 +58,9 @@ export default function StudentsPage() {
     return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: students, isLoading } = useCollection(studentsQuery)
+
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
 
   // Advanced Processing for Reporting
   const processedStudents = useMemo(() => {
@@ -157,10 +160,10 @@ export default function StudentsPage() {
       {/* MASTER PDF PRINT DESIGN (Fixed Pattern Rule) */}
       <div className="print-only print-report-container">
         {/* FIRST PAGE HEADER */}
-        <div className="report-header text-center mb-8">
-          <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">SOMIKORON HOSTEL</h1>
+        <div className="report-header">
+          <h1>{templatesData?.hostelName || "SOMIKORON HOSTEL"}</h1>
           <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Resident Directory Report</p>
-          <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[10pt] font-medium">
+          <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[9pt] font-medium">
             <div>
               <p><b>Filter Building:</b> {buildingFilter === 'all' ? 'All Buildings' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
               <p><b>Resident Plan:</b> {planFilter.toUpperCase()}</p>
@@ -174,79 +177,68 @@ export default function StudentsPage() {
 
         {/* SUMMARY PATTERN */}
         <div className="summary-section grid grid-cols-4 gap-4 mb-8">
-          <div className="p-4 bg-slate-50 border rounded-xl text-center">
-            <p className="text-[8pt] font-black uppercase text-muted-foreground mb-1">Total Residents</p>
-            <p className="text-xl font-black text-slate-800">{printStats.totalCount}</p>
+          <div className="summary-box">
+            <p className="text-[7pt] font-black uppercase text-muted-foreground mb-1">Total Residents</p>
+            <p className="text-lg font-black text-slate-800">{printStats.totalCount}</p>
           </div>
-          <div className="p-4 bg-slate-50 border rounded-xl text-center">
-            <p className="text-[8pt] font-black uppercase text-muted-foreground mb-1">Total Monthly Rent</p>
-            <p className="text-xl font-black text-slate-800">৳{printStats.totalRent.toLocaleString()}</p>
+          <div className="summary-box">
+            <p className="text-[7pt] font-black uppercase text-muted-foreground mb-1">Monthly Rent</p>
+            <p className="text-lg font-black text-slate-800">৳{printStats.totalRent.toLocaleString()}</p>
           </div>
-          <div className="p-4 bg-slate-50 border rounded-xl text-center">
-            <p className="text-[8pt] font-black uppercase text-success mb-1">Total Received</p>
-            <p className="text-xl font-black text-success">৳{printStats.totalReceived.toLocaleString()}</p>
+          <div className="summary-box">
+            <p className="text-[7pt] font-black uppercase text-success mb-1">Total Received</p>
+            <p className="text-lg font-black text-success">৳{printStats.totalReceived.toLocaleString()}</p>
           </div>
-          <div className="p-4 bg-slate-50 border rounded-xl text-center">
-            <p className="text-[8pt] font-black uppercase text-destructive mb-1">Total Outstanding</p>
-            <p className="text-xl font-black text-destructive">৳{printStats.totalDue.toLocaleString()}</p>
+          <div className="summary-box">
+            <p className="text-[7pt] font-black uppercase text-destructive mb-1">Total Outstanding</p>
+            <p className="text-lg font-black text-destructive">৳{printStats.totalDue.toLocaleString()}</p>
           </div>
         </div>
 
         {/* MAIN DATA PATTERN - TABLE */}
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-slate-100 border-b-2 border-slate-300">
-              <th className="text-[9pt] font-black p-2 text-left border">Date</th>
-              <th className="text-[9pt] font-black p-2 text-left border">Name</th>
-              <th className="text-[9pt] font-black p-2 text-left border">Location</th>
-              <th className="text-[9pt] font-black p-2 text-right border">Rent</th>
-              <th className="text-[9pt] font-black p-2 text-right border">Food Bal</th>
-              <th className="text-[9pt] font-black p-2 text-right border">Received</th>
-              <th className="text-[9pt] font-black p-2 text-right border">Total Due</th>
+            <tr>
+              <th className="w-[20%]">Name</th>
+              <th className="w-[20%]">Location</th>
+              <th className="w-[15%] text-right">Monthly Rent</th>
+              <th className="w-[15%] text-right">Food Bal</th>
+              <th className="w-[15%] text-right">Received</th>
+              <th className="w-[15%] text-right">Total Due</th>
             </tr>
           </thead>
           <tbody>
             {processedStudents.map((s: any) => (
-              <tr key={s.id} className="border-b break-inside-avoid">
-                <td className="text-[8pt] p-2 border">{formatCompactDate(s.createdAt)}</td>
-                <td className="text-[9pt] p-2 border font-bold">{s.name}</td>
-                <td className="text-[8pt] p-2 border">{s.buildingName} - R{s.roomNumber}</td>
-                <td className="text-[9pt] p-2 border text-right">৳{s.monthlyRent}</td>
-                <td className={cn("text-[9pt] p-2 border text-right", s.foodBalance < 0 && "text-destructive font-bold")}>
+              <tr key={s.id} className="break-inside-avoid">
+                <td className="font-bold">{s.name}</td>
+                <td>{s.buildingName} - R{s.roomNumber}</td>
+                <td className="text-right">৳{s.monthlyRent}</td>
+                <td className={cn("text-right", s.foodBalance < 0 && "text-destructive font-bold")}>
                   {s.paymentSystem === 'package' ? '-' : `৳${s.foodBalance}`}
                 </td>
-                <td className="text-[9pt] p-2 border text-right">৳{s.totalReceived.toLocaleString()}</td>
-                <td className="text-[9pt] p-2 border text-right font-black">৳{s.totalDue.toLocaleString()}</td>
+                <td className="text-right">৳{s.totalReceived.toLocaleString()}</td>
+                <td className="text-right font-black">৳{s.totalDue.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
-          {/* FINAL PAGE TOTALS */}
           <tfoot>
             <tr className="bg-slate-900 text-white font-black">
-              <td colSpan={3} className="p-3 text-[10pt] border uppercase">Grand Total (Filtered List)</td>
-              <td className="p-3 text-right text-[10pt] border">৳{printStats.totalRent.toLocaleString()}</td>
-              <td className="p-3 text-right text-[10pt] border">-</td>
-              <td className="p-3 text-right text-[10pt] border">৳{printStats.totalReceived.toLocaleString()}</td>
-              <td className="p-3 text-right text-[10pt] border">৳{printStats.totalDue.toLocaleString()}</td>
+              <td colSpan={2} className="uppercase p-3">Grand Total</td>
+              <td className="text-right p-3">৳{printStats.totalRent.toLocaleString()}</td>
+              <td className="text-right p-3">-</td>
+              <td className="text-right p-3">৳{printStats.totalReceived.toLocaleString()}</td>
+              <td className="text-right p-3">৳{printStats.totalDue.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
 
         {/* FOOTER PATTERN */}
-        <div className="print-footer mt-20 flex justify-between items-end px-10">
-          <div className="text-center w-48">
-            <div className="border-t border-slate-900 pt-2">
-              <p className="text-[9pt] font-black uppercase">Accountant Signature</p>
-            </div>
-          </div>
+        <div className="print-footer">
+          <div className="signature-box">Accountant Signature</div>
           <div className="text-center">
-            <p className="text-[8pt] font-medium text-slate-400">Page <span className="page-number"></span></p>
+            <p className="text-[7pt] font-medium text-slate-400">Page <span className="page-number"></span></p>
           </div>
-          <div className="text-center w-48">
-            <div className="border-t border-slate-900 pt-2">
-              <p className="text-[9pt] font-black uppercase">Manager Signature</p>
-            </div>
-          </div>
+          <div className="signature-box">Manager Signature</div>
         </div>
       </div>
 
