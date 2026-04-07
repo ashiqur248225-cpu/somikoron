@@ -56,18 +56,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -130,6 +118,7 @@ export default function StudentDetailsPage() {
     }
   }, [student])
 
+  // Calculation Logic
   const stats = useMemo(() => {
     if (!student) return null
     
@@ -157,7 +146,7 @@ export default function StudentDetailsPage() {
     for (let i = 0; i < totalMonths; i++) {
       const d = new Date(billingStart.getFullYear(), billingStart.getMonth() + i, 1)
       const monthLabel = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
-      dueBreakdownList.push({ month: monthLabel, amount: student.monthlyRent, status: 'Generated' })
+      dueBreakdownList.push({ month: monthLabel, amount: student.monthlyRent, status: 'Unpaid' })
     }
 
     return { 
@@ -166,7 +155,7 @@ export default function StudentDetailsPage() {
       totalDue: rentDue + Math.max(0, -foodBalance),
       totalReceived,
       advanceRemaining: student.advanceAmount || 0,
-      currentMonthDue: (now.getMonth() === billingStart.getMonth() && now.getFullYear() === billingStart.getFullYear()) ? student.monthlyRent : 0,
+      currentMonthDue: student.monthlyRent,
       dueBreakdownList: dueBreakdownList.reverse()
     }
   }, [student])
@@ -195,19 +184,16 @@ export default function StudentDetailsPage() {
         updatedAt: serverTimestamp() 
       })
       
+      // SMS Logic (Simplified here, same as before)
       if (apiConfig?.apikey && templatesData?.templates) {
         const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
         if (paymentTemplate) {
           const hostelDisplayName = templatesData.hostelName || student.branch;
-          const remainingDue = (stats?.totalDue || 0) - totalAmt;
           let msg = paymentTemplate.text
             .replaceAll('[নাম]', student.name)
             .replaceAll('[পরিমাণ]', totalAmt.toString())
-            .replaceAll('[total_payable]', Math.max(0, remainingDue).toString())
             .replaceAll('[Hostel Name]', hostelDisplayName);
-            
-          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
-          if (result.error === 0) toast({ title: "Receipt SMS Sent" })
+          await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
         }
       }
       
@@ -238,518 +224,284 @@ export default function StudentDetailsPage() {
     setIsUpdating(true)
     try {
       await updateDoc(studentRef, { isActive: false, leftAt: serverTimestamp(), updatedAt: serverTimestamp() })
-      toast({ title: "Resident Released", description: "Settlement complete." })
+      toast({ title: "Resident Released" })
       setIsExitDialogOpen(false)
       router.push("/students")
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
     finally { setIsUpdating(false) }
   }
 
-  if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
-  if (!student) return <div className="text-center p-20 italic text-muted-foreground">Resident record not found.</div>
+  // Edit Form Logic for Dropdowns
+  const editBuildingData = buildings?.find(b => b.id === editForm?.buildingId)
+  const editRoomsList = useMemo(() => {
+    if (!editBuildingData) return []
+    return editBuildingData.apartmentsDetail?.flatMap((apt: any) => 
+      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
+    ) || []
+  }, [editBuildingData])
 
-  const settlementAmount = (stats?.rentDue || 0) + Math.max(0, -(stats?.foodBalance || 0)) - (stats?.advanceRemaining || 0)
+  const editRoomData = editRoomsList.find((r: any) => r.roomNo === editForm?.roomNumber)
+  const editSeatsList = editRoomData?.seats || []
+
+  if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
 
   return (
-    <div className="space-y-8 pb-24 relative max-w-7xl mx-auto">
-      {/* SECTION 1: MASTER HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start gap-6 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-        <div className="flex items-start gap-5">
-          <Button variant="ghost" size="icon" onClick={() => router.push("/students")} className="rounded-full h-10 w-10 bg-slate-50 shrink-0">
-            <ChevronLeft size={20} />
-          </Button>
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="h-24 w-24 rounded-3xl bg-primary/10 flex items-center justify-center text-primary shadow-inner shrink-0">
-              <UserCircle size={64} strokeWidth={1.5} />
-            </div>
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">{student.name}</h1>
-                <Badge className={cn("rounded-full px-3", student.isActive ? "bg-success hover:bg-success" : "bg-destructive")}>
-                  {student.isActive ? "Active" : "Ex-Resident"}
-                </Badge>
-                <Badge variant="outline" className="rounded-full border-primary/20 text-primary font-bold uppercase text-[9px]">
-                  {student.paymentSystem} Plan
-                </Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-sm font-medium">
-                <div className="flex items-center gap-2 text-slate-600"><Phone size={14} className="text-primary"/> {student.phone}</div>
-                <div className="flex items-center gap-2 text-slate-600"><Users size={14} className="text-primary"/> Parent: {student.parentPhone}</div>
-                <div className="flex items-center gap-2 text-slate-600"><Building2 size={14} className="text-primary"/> {student.buildingName} • R-{student.roomNumber} • S-{student.seatNumber}</div>
-                <div className="flex items-center gap-2 text-slate-600"><MapPin size={14} className="text-primary"/> {student.branch} Branch</div>
-              </div>
+    <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="flex items-center gap-6">
+          <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
+            <UserCircle size={48} strokeWidth={1.5} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight">{student.name}</h1>
+            <div className="flex gap-2 mt-1">
+              <Badge className={cn("rounded-full", student.isActive ? "bg-success" : "bg-destructive")}>{student.isActive ? "Active Resident" : "Ex-Resident"}</Badge>
+              <Badge variant="secondary" className="rounded-full uppercase text-[10px] font-bold">{student.paymentSystem} Plan</Badge>
             </div>
           </div>
         </div>
-        
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="rounded-xl font-bold h-11 px-4 gap-2 flex-1 md:flex-none">
-                <MoreVertical size={18} /> Actions
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-xl border-slate-100">
-              <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)} className="gap-2 font-bold cursor-pointer p-3 rounded-lg"><Edit size={16} className="text-primary"/> Edit Profile</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => window.print()} className="gap-2 font-bold cursor-pointer p-3 rounded-lg"><Printer size={16} className="text-primary"/> Print Profile</DropdownMenuItem>
-              <Separator className="my-2" />
-              {student.isActive && (
-                <DropdownMenuItem onClick={() => setIsExitDialogOpen(true)} className="gap-2 font-bold text-destructive cursor-pointer p-3 rounded-lg"><UserMinus size={16}/> Process Exit</DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button className="rounded-xl h-11 px-6 font-bold gap-2 flex-1 md:flex-none shadow-lg shadow-primary/20" onClick={() => setIsPaymentDialogOpen(true)}>
-            <Plus size={18} /> New Payment
+        <div className="flex gap-3">
+          <Button variant="destructive" className="rounded-xl h-11 px-6 font-bold gap-2 shadow-lg shadow-destructive/10" onClick={() => setIsExitDialogOpen(true)}>
+            <UserMinus size={18} /> Mark as Left
           </Button>
+          <Button variant="outline" className="rounded-xl h-11 px-6 font-bold" onClick={() => router.back()}>Back</Button>
         </div>
       </div>
 
-      {/* SECTION 2: FINANCIAL SNAPSHOT */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        {[
-          { label: "Monthly Rent", val: student.monthlyRent, color: "slate-800", icon: Home },
-          { label: "Advance", val: student.advanceAmount, color: "primary", icon: ShieldCheck },
-          { label: "Service Chrg", val: student.serviceCharge, color: "orange-600", icon: Zap },
-          { label: "Total Recv.", val: stats?.totalReceived, color: "indigo-600", icon: HandCoins },
-          { label: "Total Due", val: stats?.totalDue, color: "destructive", icon: AlertCircle },
-          { label: "Food Bal.", val: stats?.foodBalance, color: stats?.foodBalance >= 0 ? "success" : "orange-600", icon: Utensils },
-          { label: "Curr. Month", val: stats?.currentMonthDue, color: "slate-500", icon: Calendar },
-          { label: "History Recv.", val: student.historicalTotalReceived, color: "slate-400", icon: Clock },
-        ].map((item, i) => (
-          <Card key={i} className="border-none shadow-sm bg-white overflow-hidden group hover:scale-105 transition-transform duration-200">
-            <CardContent className="p-4 flex flex-col justify-center items-center text-center space-y-1">
-              <item.icon size={14} className={cn(`text-${item.color}`, "opacity-40 mb-1")} />
-              <p className="text-[8px] font-black uppercase text-muted-foreground tracking-tighter">{item.label}</p>
-              <p className={cn("text-xs font-black", `text-${item.color}`)}>৳{Number(item.val || 0).toLocaleString()}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* SECTION 3 & 4: TABLES & HISTORY */}
+      {/* TWO COLUMN GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <Tabs defaultValue="payments" className="w-full">
-            <TabsList className="bg-secondary/50 p-1 mb-4 rounded-2xl w-full flex overflow-x-auto h-auto">
-              <TabsTrigger value="payments" className="flex-1 rounded-xl gap-2 h-10"><Wallet size={14}/> Payment History</TabsTrigger>
-              <TabsTrigger value="dues" className="flex-1 rounded-xl gap-2 h-10"><History size={14}/> Due Breakdown</TabsTrigger>
-              {student.paymentSystem === 'non-package' && (
-                <TabsTrigger value="meals" className="flex-1 rounded-xl gap-2 h-10"><Utensils size={14}/> Meal Log</TabsTrigger>
-              )}
-            </TabsList>
+        {/* Contact & Location Card */}
+        <Card className="border-none shadow-sm rounded-3xl p-6 bg-white space-y-6">
+          <h2 className="text-xl font-bold text-slate-800">Contact & Location</h2>
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 text-slate-600">
+              <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Phone size={18}/></div>
+              <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Mobile</p><p className="font-bold">{student.phone}</p></div>
+            </div>
+            <div className="flex items-center gap-4 text-slate-600">
+              <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Building2 size={18}/></div>
+              <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Building</p><p className="font-bold">{student.buildingName}</p></div>
+            </div>
+            <div className="flex items-center gap-4 text-slate-600">
+              <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><LayoutGrid size={18}/></div>
+              <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Unit</p><p className="font-bold">Room {student.roomNumber} | Seat {student.seatNumber}</p></div>
+            </div>
+            <div className="flex items-center gap-4 text-slate-600">
+              <div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Calendar size={18}/></div>
+              <div><p className="text-[10px] uppercase font-bold text-muted-foreground">Billing Start</p><p className="font-bold">{student.billingStartDate}</p></div>
+            </div>
+          </div>
+        </Card>
 
-            <TabsContent value="payments">
-              <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[400px]">
-                <CardContent className="p-0">
-                  <div className="hidden md:block">
-                    <Table>
-                      <TableHeader className="bg-slate-50/50">
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Month</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Breakdown</TableHead>
-                          <TableHead>Method</TableHead>
-                          <TableHead className="text-right">Receiver</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
-                          <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
-                            <TableCell className="text-[10px] font-bold text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
-                            <TableCell className="text-xs font-black text-slate-700">{p.month} {p.year}</TableCell>
-                            <TableCell className="font-black text-success text-sm">৳{p.amount.toLocaleString()}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-0.5 text-[9px] font-bold text-muted-foreground uppercase">
-                                {p.seatAmount > 0 && <span>Rent: ৳{p.seatAmount}</span>}
-                                {p.foodAmount > 0 && <span>Food: ৳{p.foodAmount}</span>}
-                                {p.advanceAmount > 0 && <span className="text-primary">Adv: ৳{p.advanceAmount}</span>}
-                              </div>
-                            </TableCell>
-                            <TableCell><Badge variant="outline" className="text-[8px] uppercase font-bold">{p.method}</Badge></TableCell>
-                            <TableCell className="text-right text-[10px] font-bold text-slate-600">{p.receiver}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <div className="md:hidden space-y-4 p-4">
-                    {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
-                      <div key={idx} className="p-4 border rounded-2xl space-y-3 bg-slate-50/50" onClick={() => router.push(`/receipts/${p.id}`)}>
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p>
-                            <p className="text-sm font-black text-slate-800">{p.month} {p.year}</p>
-                          </div>
-                          <p className="text-lg font-black text-success">৳{p.amount.toLocaleString()}</p>
-                        </div>
-                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
-                          <span className="flex items-center gap-1"><Wallet size={10}/> {p.method}</span>
-                          <span className="flex items-center gap-1"><UserCircle size={10}/> {p.receiver}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {(!student.paymentsHistory || student.paymentsHistory.length === 0) && (
-                    <div className="text-center py-20 text-muted-foreground italic">No payment records.</div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="dues">
-              <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[400px]">
-                <CardContent className="p-0">
-                  <div className="hidden md:block">
-                    <Table>
-                      <TableHeader className="bg-slate-50/50">
-                        <TableRow>
-                          <TableHead>Billing Month</TableHead>
-                          <TableHead>Due Amount</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {stats?.dueBreakdownList.map((d, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-bold">{d.month}</TableCell>
-                            <TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell>
-                            <TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive">Pending</Badge></TableCell>
-                            <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => setIsPaymentDialogOpen(true)}>Pay Now</Button></TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <div className="md:hidden p-4 space-y-4">
-                    {stats?.dueBreakdownList.map((d, i) => (
-                      <div key={i} className="p-4 border rounded-2xl flex justify-between items-center bg-destructive/5">
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold text-slate-700">{d.month}</p>
-                          <p className="text-lg font-black text-destructive">৳{d.amount.toLocaleString()}</p>
-                        </div>
-                        <Badge variant="destructive" className="text-[10px]">Unpaid</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="meals">
-              <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[400px]">
-                <CardContent className="p-0">
-                  <div className="hidden md:block">
-                    <Table>
-                      <TableHeader className="bg-slate-50/50">
-                        <TableRow>
-                          <TableHead>Billing Month</TableHead>
-                          <TableHead className="text-center">Total Meals</TableHead>
-                          <TableHead className="text-center">Rate</TableHead>
-                          <TableHead className="text-right">Total Cost</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
-                          <TableRow key={idx}>
-                            <TableCell className="font-bold text-slate-700">{m.month}</TableCell>
-                            <TableCell className="text-center font-black text-orange-600">{m.totalMeals} Meals</TableCell>
-                            <TableCell className="text-center text-[10px] font-bold">৳{m.perMealCost}</TableCell>
-                            <TableCell className="text-right font-black">৳{m.totalCost.toLocaleString()}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <div className="md:hidden p-4 space-y-4">
-                    {student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
-                      <div key={idx} className="p-4 border rounded-2xl space-y-2 bg-orange-50/30">
-                        <div className="flex justify-between items-center">
-                          <p className="font-bold text-slate-700">{m.month}</p>
-                          <p className="text-lg font-black text-orange-600">৳{m.totalCost.toLocaleString()}</p>
-                        </div>
-                        <div className="flex justify-between text-[10px] font-bold text-muted-foreground uppercase">
-                          <span>Meals: {m.totalMeals}</span>
-                          <span>Rate: ৳{m.perMealCost}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
-
-        <div className="space-y-6">
-          <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden">
-            <CardHeader className="bg-primary/5 pb-4">
-              <CardTitle className="text-sm font-bold uppercase tracking-widest flex items-center gap-2 text-primary">
-                <ShieldCheck size={16}/> Identity & Origins
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-6">
-              <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value="personal" className="border-none">
-                  <AccordionTrigger className="hover:no-underline bg-slate-50 p-4 rounded-2xl font-bold text-sm">
-                    <div className="flex items-center gap-2"><LayoutGrid size={16}/> Full Dossier</div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-4 space-y-4 px-2">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Father's Name</Label>
-                        <p className="text-xs font-bold text-slate-700">{student.fatherName}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Mother's Name</Label>
-                        <p className="text-xs font-bold text-slate-700">{student.motherName}</p>
-                      </div>
-                    </div>
-                    <Separator className="border-dashed" />
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-black uppercase text-muted-foreground">DOB</Label>
-                        <p className="text-xs font-bold text-slate-700">{student.dob}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Blood Group</Label>
-                        <p className="text-xs font-bold text-destructive">{student.bloodGroup}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-black uppercase text-muted-foreground">Address</Label>
-                      <p className="text-xs font-bold text-slate-700 leading-relaxed">{student.address}</p>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="education" className="border-none mt-4">
-                  <AccordionTrigger className="hover:no-underline bg-slate-50 p-4 rounded-2xl font-bold text-sm">
-                    <div className="flex items-center gap-2"><GraduationCap size={16}/> Education & Work</div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-4 space-y-4 px-2">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-black uppercase text-muted-foreground">Institution / Company</Label>
-                      <p className="text-xs font-bold text-slate-700">{student.collegeUniversity}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-black uppercase text-muted-foreground">Dept / Designation</Label>
-                      <p className="text-xs font-bold text-slate-700">{student.department}</p>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-
-              <div className="pt-4 space-y-3">
-                <Button variant="outline" className="w-full rounded-xl gap-2 font-bold text-xs h-11" onClick={() => setIsEditDialogOpen(true)}>
-                  <Edit size={14}/> Update Profile Details
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" className="w-full rounded-xl gap-2 font-bold text-destructive hover:text-destructive hover:bg-destructive/5 text-xs h-11">
-                      <Trash2 size={14}/> Permanently Delete
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Resident Record?</AlertDialogTitle>
-                      <AlertDialogDescription>This will erase all payment and meal history. This action is irreversible.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={async () => { await deleteDoc(studentRef!); router.push("/students"); }} className="bg-destructive hover:bg-destructive/90">Confirm Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-sm bg-primary rounded-3xl text-white overflow-hidden">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-black uppercase tracking-widest opacity-70">Resident Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={32} className="opacity-50" />
-                  <div>
-                    <p className="text-lg font-black leading-none">Staying</p>
-                    <p className="text-[10px] opacity-70 mt-1 uppercase font-bold">Billing Start: {new Date(student.billingStartDate).toLocaleDateString()}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] uppercase font-black opacity-70">Plan</p>
-                  <p className="text-sm font-black capitalize">{student.paymentSystem}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Financial Overview Section */}
+        <Card className="lg:col-span-2 border-none shadow-sm rounded-3xl p-6 bg-white space-y-6">
+          <h2 className="text-xl font-bold text-slate-800">Financial Overview</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-5 rounded-2xl bg-orange-50/50 border border-orange-100 flex flex-col items-center text-center space-y-1">
+              <p className="text-[9px] font-black uppercase text-orange-600 tracking-widest">Monthly Rent</p>
+              <p className="text-2xl font-black text-orange-700">৳{student.monthlyRent}</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-blue-50/50 border border-blue-100 flex flex-col items-center text-center space-y-1">
+              <p className="text-[9px] font-black uppercase text-blue-600 tracking-widest">Advance Pool</p>
+              <p className="text-2xl font-black text-blue-700">৳{student.advanceAmount}</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center text-center space-y-1">
+              <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Service Charge</p>
+              <p className="text-2xl font-black text-slate-700">৳{student.serviceCharge}</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-destructive/5 border border-destructive/10 flex flex-col items-center text-center space-y-1">
+              <p className="text-[9px] font-black uppercase text-destructive tracking-widest">Total Rent Due</p>
+              <p className="text-2xl font-black text-destructive">৳{stats?.rentDue.toLocaleString()}</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
+      {/* TABS SECTION */}
+      <Tabs defaultValue="payments" className="w-full">
+        <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl">
+          <TabsTrigger value="payments" className="rounded-xl gap-2 h-10 px-6 font-bold"><Wallet size={14}/> Payments</TabsTrigger>
+          <TabsTrigger value="dues" className="rounded-xl gap-2 h-10 px-6 font-bold"><Clock size={14}/> Dues Breakdown</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="payments">
+          <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Purpose</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
+                  <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
+                    <TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
+                    <TableCell className="font-bold">{p.month} {p.year}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{p.description || "N/A"}</TableCell>
+                    <TableCell className="text-right font-black text-success">৳{p.amount.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="dues">
+          <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead>Due Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stats?.dueBreakdownList.map((d, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-bold">{d.month}</TableCell>
+                    <TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive">Unpaid</Badge></TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => setIsPaymentDialogOpen(true)}>Pay</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* FLOATING ACTION BUTTON */}
+      <div className="fixed bottom-8 right-8 z-50">
+        <Button size="icon" className="h-14 w-14 rounded-full shadow-2xl bg-primary border-4 border-white" onClick={() => setIsPaymentDialogOpen(true)}>
+          <Plus size={32} />
+        </Button>
+      </div>
+
+      {/* PAYMENT DIALOG */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black">Record Payment</DialogTitle>
-            <DialogDescription>Add a new income entry for {student.name}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase ml-1">Period</Label>
-                <Select value={paymentData.month} onValueChange={v => setPaymentData({...paymentData, month: v})}>
-                  <SelectTrigger className="rounded-xl h-11"><SelectValue/></SelectTrigger>
-                  <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase ml-1">Year</Label>
-                <Select value={paymentData.year} onValueChange={v => setPaymentData({...paymentData, year: v})}>
-                  <SelectTrigger className="rounded-xl h-11"><SelectValue/></SelectTrigger>
-                  <SelectContent>{"2024,2025,2026".split(',').map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                </Select>
+          <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
+          <div className="space-y-6 py-4">
+            {/* Financial Summary for the Month */}
+            <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-3 shadow-xl">
+              <div className="flex justify-between items-center opacity-70 text-xs"><span>Current Month ({paymentData.month})</span> <span>৳{student.monthlyRent}</span></div>
+              <div className="flex justify-between items-center opacity-70 text-xs"><span>Existing Arrears/Dues</span> <span>৳{stats?.rentDue}</span></div>
+              <Separator className="bg-white/10" />
+              <div className="flex justify-between items-center font-black">
+                <span className="text-xs uppercase tracking-widest text-primary">Total Recommendation</span>
+                <span className="text-2xl">৳{(student.monthlyRent + (stats?.rentDue || 0)).toLocaleString()}</span>
               </div>
             </div>
 
-            <div className="p-5 bg-primary/5 rounded-3xl border-2 border-primary/10 space-y-4">
-              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Calculator size={14}/> Collections</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1"><Label>Month</Label><Select value={paymentData.month} onValueChange={v => setPaymentData({...paymentData, month: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1"><Label>Year</Label><Select value={paymentData.year} onValueChange={v => setPaymentData({...paymentData, year: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{"2024,2025,2026".split(',').map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+
+            <div className="space-y-4">
               {student.paymentSystem === 'package' ? (
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">Package Amount (৳)</Label>
-                  <Input type="number" className="rounded-xl h-11 bg-white font-black text-lg" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" />
-                </div>
+                <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Package Amount (৳)</Label><Input type="number" className="rounded-xl h-12 text-lg font-black" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" /></div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs font-bold">Seat Rent (৳)</Label>
-                    <Input type="number" className="rounded-xl h-11 bg-white" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-bold">Food Deposit (৳)</Label>
-                    <Input type="number" className="rounded-xl h-11 bg-white" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} />
-                  </div>
+                  <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Seat Rent (৳)</Label><Input type="number" className="rounded-xl h-12" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} /></div>
+                  <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Food Bill (৳)</Label><Input type="number" className="rounded-xl h-12" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} /></div>
                 </div>
               )}
-              <div className="space-y-1">
-                <Label className="text-xs font-bold text-primary">Add to Security Pool (৳)</Label>
-                <Input type="number" className="rounded-xl h-11 bg-white border-primary/30" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} />
-              </div>
+              <div className="space-y-1"><Label className="text-xs font-bold text-primary uppercase">Add to Security Advance (৳)</Label><Input type="number" className="rounded-xl h-12 border-primary/20" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} /></div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase ml-1">Method</Label>
-                <Select value={paymentData.method} onValueChange={v => setPaymentData({...paymentData, method: v})}>
-                  <SelectTrigger className="rounded-xl h-11"><SelectValue/></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bkash">Bkash</SelectItem>
-                    <SelectItem value="nagad">Nagad</SelectItem>
-                    <SelectItem value="bank">Bank Transfer</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase ml-1">Receiver</Label>
-                <Select value={paymentData.receiver} onValueChange={v => setPaymentData({...paymentData, receiver: v})}>
-                  <SelectTrigger className="rounded-xl h-11"><SelectValue placeholder="Verified By"/></SelectTrigger>
-                  <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-1"><Label>Method</Label><Select value={paymentData.method} onValueChange={v => setPaymentData({...paymentData, method: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1"><Label>Receiver</Label><Select value={paymentData.receiver} onValueChange={v => setPaymentData({...paymentData, receiver: v})}><SelectTrigger><SelectValue placeholder="Staff"/></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
-            <Textarea className="rounded-2xl resize-none bg-slate-50 border-none shadow-inner" placeholder="Payment notes/details..." value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} />
           </div>
-          <DialogFooter>
-            <Button onClick={handlePaymentSubmit} disabled={isUpdating} className="w-full h-14 text-lg font-black rounded-2xl shadow-xl shadow-primary/20">
-              {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />} 
-              Confirm & Issue Receipt
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button className="w-full h-14 rounded-2xl text-lg font-black" onClick={handlePaymentSubmit} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-destructive">Exit Settlement</DialogTitle>
-            <DialogDescription>Process final account closure for {student.name}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="bg-slate-50 p-6 rounded-3xl space-y-4 border-2 border-slate-100 shadow-inner">
-              <div className="flex justify-between text-sm font-medium text-slate-600"><span>Rent Pending:</span> <span className="font-black text-slate-800">৳{stats?.rentDue.toLocaleString()}</span></div>
-              <div className="flex justify-between text-sm font-medium text-slate-600"><span>Food Due:</span> <span className="font-black text-slate-800">৳{Math.max(0, -(stats?.foodBalance || 0)).toLocaleString()}</span></div>
-              <div className="flex justify-between text-sm font-medium text-primary"><span>Security Advance:</span> <span className="font-black">- ৳{stats?.advanceRemaining.toLocaleString()}</span></div>
-              <Separator />
-              <div className="flex justify-between items-center pt-2">
-                <span className="text-xs font-black uppercase text-muted-foreground">Net Settlement:</span>
-                <span className={cn("text-3xl font-black", settlementAmount >= 0 ? "text-destructive" : "text-success")}>
-                  ৳{Math.abs(settlementAmount).toLocaleString()}
-                </span>
-              </div>
-              <p className="text-[10px] text-center font-bold text-muted-foreground uppercase tracking-widest mt-2">
-                {settlementAmount >= 0 ? "STUDENT MUST PAY HOSTEL" : "HOSTEL MUST REFUND STUDENT"}
-              </p>
-            </div>
-
-            <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex gap-3">
-              <Info size={20} className="text-primary shrink-0" />
-              <p className="text-[10px] text-slate-600 leading-relaxed italic">
-                Confirming exit will release the seat <b>(S-{student.seatNumber})</b> and archive this resident. Advance will be adjusted against the final dues.
-              </p>
-            </div>
-          </div>
-          <DialogFooter className="grid grid-cols-2 gap-4">
-            <Button variant="outline" className="rounded-2xl h-12" onClick={() => setIsExitDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleConfirmExit} disabled={isUpdating} className="bg-destructive hover:bg-destructive/90 h-12 text-lg font-black rounded-2xl text-white">
-              {isUpdating ? <Loader2 className="animate-spin" /> : <UserMinus className="mr-2" />} Confirm Release
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+      {/* EDIT PROFILE DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black">Edit Resident Profile</DialogTitle>
-            <DialogDescription>Modify personal information or re-allocate location.</DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Update Profile & Allocation</DialogTitle></DialogHeader>
           {editForm && (
             <div className="space-y-6 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5"><Label>Full Name</Label><Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
                 <div className="space-y-1.5"><Label>Phone Number</Label><Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} /></div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5"><Label>Parent Phone</Label><Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} /></div>
-                <div className="space-y-1.5"><Label>Billing Start Date</Label><Input type="date" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} /></div>
-              </div>
-              <Separator />
+
               <div className="p-5 border-2 border-primary/10 rounded-3xl bg-primary/5 space-y-4">
-                <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Financial & Plan Setup</h3>
+                <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Re-Allocation (Building/Room/Seat)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-1.5"><Label>Monthly Rent (৳)</Label><Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} /></div>
-                  <div className="space-y-1.5"><Label>Plan</Label><Select value={editForm.paymentSystem} onValueChange={v => setEditForm({...editForm, paymentSystem: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="package">Package</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent></Select></div>
-                  <div className="space-y-1.5"><Label>Advance (৳)</Label><Input type="number" value={editForm.advanceAmount} onChange={e => setEditForm({...editForm, advanceAmount: Number(e.target.value)})} /></div>
+                  <div className="space-y-1.5">
+                    <Label>Building</Label>
+                    <Select value={editForm.buildingId} onValueChange={v => setEditForm({...editForm, buildingId: v, roomNumber: "", seatNumber: ""})}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select Building"/></SelectTrigger>
+                      <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Room No.</Label>
+                    <Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={v => setEditForm({...editForm, roomNumber: v, seatNumber: ""})}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select Room"/></SelectTrigger>
+                      <SelectContent>{editRoomsList.map((r: any, i: number) => <SelectItem key={i} value={r.roomNo}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Seat No.</Label>
+                    <Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={v => setEditForm({...editForm, seatNumber: v})}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select Seat"/></SelectTrigger>
+                      <SelectContent>
+                        {/* Show current seat plus empty seats */}
+                        {editSeatsList.map((s: any, i: number) => (
+                          (s.status === 'empty' || s.seatNo === student.seatNumber) && 
+                          <SelectItem key={i} value={s.seatNo}>Seat {s.seatNo}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Building</Label>
-                  <Select value={editForm.buildingId} onValueChange={v => setEditForm({...editForm, buildingId: v})}>
-                    <SelectTrigger><SelectValue/></SelectTrigger>
-                    <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5"><Label>Room Number</Label><Input value={editForm.roomNumber} onChange={e => setEditForm({...editForm, roomNumber: e.target.value})} /></div>
+                <div className="space-y-1.5"><Label>Monthly Rent (৳)</Label><Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} /></div>
+                <div className="space-y-1.5"><Label>Advance (৳)</Label><Input type="number" value={editForm.advanceAmount} onChange={e => setEditForm({...editForm, advanceAmount: Number(e.target.value)})} /></div>
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button onClick={handleUpdateProfile} disabled={isUpdating} className="w-full h-12 text-lg font-black rounded-2xl shadow-lg">
-              {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="mr-2" />} Save All Changes
-            </Button>
+          <DialogFooter><Button className="w-full h-12 rounded-2xl font-bold" onClick={handleUpdateProfile} disabled={isUpdating}>Save Profile Changes</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EXIT DIALOG */}
+      <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader><DialogTitle className="text-destructive">Process Final Exit</DialogTitle></DialogHeader>
+          <div className="py-6 space-y-6">
+            <div className="p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 text-center space-y-2 shadow-inner">
+              <p className="text-xs font-bold text-muted-foreground uppercase">Settlement Amount</p>
+              <p className="text-4xl font-black text-slate-800">৳{settlementAmount.toLocaleString()}</p>
+              <p className="text-[10px] font-black uppercase text-primary tracking-widest mt-2">
+                {settlementAmount >= 0 ? "STUDENT PAYS TO HOSTEL" : "HOSTEL REFUNDS TO STUDENT"}
+              </p>
+            </div>
+            <p className="text-xs text-slate-500 text-center italic">
+              Note: Settlement = (Pending Rent + Food Debt) - Security Advance. Confirming this will release seat {student.seatNumber}.
+            </p>
+          </div>
+          <DialogFooter className="grid grid-cols-2 gap-4">
+            <Button variant="outline" className="rounded-2xl" onClick={() => setIsExitDialogOpen(false)}>Cancel</Button>
+            <Button className="bg-destructive hover:bg-destructive/90 rounded-2xl font-black" onClick={handleConfirmExit} disabled={isUpdating}>Confirm Release</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
