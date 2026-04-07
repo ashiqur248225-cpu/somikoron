@@ -596,7 +596,7 @@ export default function BuildingsPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredRooms.map((room, idx) => (
               <Card key={idx} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all">
-                <div className={cn("h-1.5 w-full", room.emptyCount > 0 ? "bg-success" : "bg-destructive/20")} />
+                <div className={cn("h-1.5 w-full", room.emptyCount > 0 ? "bg-destructive" : "bg-success")} />
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
                     <div>
@@ -613,11 +613,11 @@ export default function BuildingsPage() {
                       </div>
                     </div>
                     {room.emptyCount > 0 ? (
-                      <Badge variant="outline" className="bg-success/10 text-success border-success/20">
+                      <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
                         {room.emptyCount} Empty
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
+                      <Badge variant="outline" className="bg-success/10 text-success border-success/20">
                         Full
                       </Badge>
                     )}
@@ -631,8 +631,8 @@ export default function BuildingsPage() {
                         className={cn(
                           "px-2 py-1 rounded text-[9px] font-bold border flex items-center gap-1",
                           seat.status === 'occupied' 
-                            ? "bg-secondary text-muted-foreground border-secondary" 
-                            : "bg-success/5 text-success border-success/30"
+                            ? "bg-success/5 text-success border-success/30" 
+                            : "bg-destructive/5 text-destructive border-destructive/30"
                         )}
                       >
                         <CircleDot size={8} />
@@ -696,7 +696,7 @@ export default function BuildingsPage() {
                 
                 <div className="mt-4 space-y-1.5">
                   <div className="flex justify-between text-[10px] uppercase font-bold">
-                    <span className="text-success">Empty: {building.emptySeats}</span>
+                    <span className="text-destructive">Empty: {building.emptySeats}</span>
                     <span className="text-muted-foreground">Total: {building.totalSeats}</span>
                   </div>
                   <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden shadow-inner">
