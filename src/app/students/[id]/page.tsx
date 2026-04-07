@@ -160,6 +160,8 @@ export default function StudentDetailsPage() {
     }
   }, [student])
 
+  const settlementAmount = stats ? (stats.totalDue - stats.advanceRemaining) : 0
+
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
     setIsUpdating(true)
@@ -184,7 +186,6 @@ export default function StudentDetailsPage() {
         updatedAt: serverTimestamp() 
       })
       
-      // SMS Logic (Simplified here, same as before)
       if (apiConfig?.apikey && templatesData?.templates) {
         const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
         if (paymentTemplate) {
@@ -231,7 +232,6 @@ export default function StudentDetailsPage() {
     finally { setIsUpdating(false) }
   }
 
-  // Edit Form Logic for Dropdowns
   const editBuildingData = buildings?.find(b => b.id === editForm?.buildingId)
   const editRoomsList = useMemo(() => {
     if (!editBuildingData) return []
@@ -240,14 +240,14 @@ export default function StudentDetailsPage() {
     ) || []
   }, [editBuildingData])
 
-  const editRoomData = editRoomsList.find((r: any) => r.roomNo === editForm?.roomNumber)
+  const editRoomData = editRoomsList.find((r: any) => String(r.roomNo) === String(editForm?.roomNumber))
   const editSeatsList = editRoomData?.seats || []
 
   if (studentLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
+  if (!student) return <div className="text-center p-20">Resident not found.</div>
 
   return (
     <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4">
-      {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-6">
           <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
@@ -262,16 +262,17 @@ export default function StudentDetailsPage() {
           </div>
         </div>
         <div className="flex gap-3">
+          <Button variant="outline" className="rounded-xl h-11 px-6 font-bold" onClick={() => setIsEditDialogOpen(true)}>
+            <Edit size={18} className="mr-2"/> Edit Profile
+          </Button>
           <Button variant="destructive" className="rounded-xl h-11 px-6 font-bold gap-2 shadow-lg shadow-destructive/10" onClick={() => setIsExitDialogOpen(true)}>
             <UserMinus size={18} /> Mark as Left
           </Button>
-          <Button variant="outline" className="rounded-xl h-11 px-6 font-bold" onClick={() => router.back()}>Back</Button>
+          <Button variant="ghost" className="rounded-xl h-11 px-6 font-bold" onClick={() => router.back()}>Back</Button>
         </div>
       </div>
 
-      {/* TWO COLUMN GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Contact & Location Card */}
         <Card className="border-none shadow-sm rounded-3xl p-6 bg-white space-y-6">
           <h2 className="text-xl font-bold text-slate-800">Contact & Location</h2>
           <div className="space-y-4">
@@ -294,7 +295,6 @@ export default function StudentDetailsPage() {
           </div>
         </Card>
 
-        {/* Financial Overview Section */}
         <Card className="lg:col-span-2 border-none shadow-sm rounded-3xl p-6 bg-white space-y-6">
           <h2 className="text-xl font-bold text-slate-800">Financial Overview</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -318,7 +318,6 @@ export default function StudentDetailsPage() {
         </Card>
       </div>
 
-      {/* TABS SECTION */}
       <Tabs defaultValue="payments" className="w-full">
         <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl">
           <TabsTrigger value="payments" className="rounded-xl gap-2 h-10 px-6 font-bold"><Wallet size={14}/> Payments</TabsTrigger>
@@ -380,19 +379,16 @@ export default function StudentDetailsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* FLOATING ACTION BUTTON */}
       <div className="fixed bottom-8 right-8 z-50">
         <Button size="icon" className="h-14 w-14 rounded-full shadow-2xl bg-primary border-4 border-white" onClick={() => setIsPaymentDialogOpen(true)}>
           <Plus size={32} />
         </Button>
       </div>
 
-      {/* PAYMENT DIALOG */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
-            {/* Financial Summary for the Month */}
             <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-3 shadow-xl">
               <div className="flex justify-between items-center opacity-70 text-xs"><span>Current Month ({paymentData.month})</span> <span>৳{student.monthlyRent}</span></div>
               <div className="flex justify-between items-center opacity-70 text-xs"><span>Existing Arrears/Dues</span> <span>৳{stats?.rentDue}</span></div>
@@ -429,7 +425,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* EDIT PROFILE DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Update Profile & Allocation</DialogTitle></DialogHeader>
@@ -452,20 +447,19 @@ export default function StudentDetailsPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label>Room No.</Label>
-                    <Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={v => setEditForm({...editForm, roomNumber: v, seatNumber: ""})}>
+                    <Select disabled={!editForm.buildingId} value={String(editForm.roomNumber)} onValueChange={v => setEditForm({...editForm, roomNumber: v, seatNumber: ""})}>
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Select Room"/></SelectTrigger>
-                      <SelectContent>{editRoomsList.map((r: any, i: number) => <SelectItem key={i} value={r.roomNo}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
+                      <SelectContent>{editRoomsList.map((r: any, i: number) => <SelectItem key={i} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Seat No.</Label>
-                    <Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={v => setEditForm({...editForm, seatNumber: v})}>
+                    <Select disabled={!editForm.roomNumber} value={String(editForm.seatNumber)} onValueChange={v => setEditForm({...editForm, seatNumber: v})}>
                       <SelectTrigger className="bg-white"><SelectValue placeholder="Select Seat"/></SelectTrigger>
                       <SelectContent>
-                        {/* Show current seat plus empty seats */}
                         {editSeatsList.map((s: any, i: number) => (
                           (s.status === 'empty' || s.seatNo === student.seatNumber) && 
-                          <SelectItem key={i} value={s.seatNo}>Seat {s.seatNo}</SelectItem>
+                          <SelectItem key={i} value={String(s.seatNo)}>Seat {s.seatNo}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -483,7 +477,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* EXIT DIALOG */}
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle className="text-destructive">Process Final Exit</DialogTitle></DialogHeader>
