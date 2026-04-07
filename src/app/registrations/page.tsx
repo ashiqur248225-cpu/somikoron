@@ -464,7 +464,7 @@ export default function RegistrationsPage() {
 
       {/* APPROVAL DIALOG */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl p-0">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl p-0">
           <div className="h-2 bg-primary w-full" />
           <DialogHeader className="px-8 pt-6">
             <DialogTitle className="text-2xl font-black">Approval Dashboard: {selectedReg?.name}</DialogTitle>
@@ -622,23 +622,23 @@ export default function RegistrationsPage() {
                                 
                                 <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
                                   {approvalForm.duesBreakdown.map((entry) => (
-                                    <div key={entry.id} className="flex gap-2 items-center p-2 bg-white rounded-xl border border-orange-100 shadow-sm animate-in slide-in-from-top-1 duration-200">
+                                    <div key={entry.id} className="flex gap-1.5 items-center p-2 bg-white rounded-xl border border-orange-100 shadow-sm animate-in slide-in-from-top-1 duration-200">
                                       <Select value={entry.month} onValueChange={v => updateDueEntry(entry.id, 'month', v)}>
                                         <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200 flex-1"><SelectValue /></SelectTrigger>
                                         <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                                       </Select>
                                       <Select value={entry.year} onValueChange={v => updateDueEntry(entry.id, 'year', v)}>
-                                        <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200 w-20"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="h-9 text-[10px] bg-white border-orange-200 w-16"><SelectValue /></SelectTrigger>
                                         <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                                       </Select>
                                       <Input 
                                         type="number" 
                                         placeholder="Amt" 
-                                        className="h-9 w-20 text-xs bg-white border-orange-200" 
+                                        className="h-9 w-16 text-xs bg-white border-orange-200" 
                                         value={entry.amount} 
                                         onChange={e => updateDueEntry(entry.id, 'amount', e.target.value)} 
                                       />
-                                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeDueEntry(entry.id)}>
+                                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => removeDueEntry(entry.id)}>
                                         <Trash2 size={14} />
                                       </Button>
                                     </div>
