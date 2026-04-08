@@ -214,9 +214,7 @@ export default function RegistrationsPage() {
       const rNum = approvalForm.roomNumber
       const sNum = approvalForm.seatNumber
       
-      // Get APT name correctly from selected room
       const aptName = selectedRoom?.aptName || "General"
-
       const isOld = selectedReg.type === 'old'
       const monthlyRent = Number(approvalForm.monthlyRent)
       const svcCharge = Number(approvalForm.serviceCharge)
@@ -225,7 +223,6 @@ export default function RegistrationsPage() {
       let createdPaymentId = null;
       let totalNewReceived = 0;
 
-      // Logic for NEW Student: Advance, Svc Charge, Rent -> Log to Income/Payments
       if (!isOld) {
         const rentPaid = Number(approvalForm.initialRentPayment)
         const foodPaid = Number(approvalForm.initialFoodPayment)
@@ -259,8 +256,8 @@ export default function RegistrationsPage() {
         }
       }
 
-      // Handle Dues Breakdown based on mode
-      const finalDuesBreakdown: Record<string, number> = {}
+      // Updated structured duesBreakdown
+      const finalDuesBreakdown: Record<string, any> = {}
       let initialTotalDue = 0;
       
       if (isOld) {
@@ -269,24 +266,30 @@ export default function RegistrationsPage() {
             if (d.month && d.year && d.amount) {
               const label = `${d.month} ${d.year}`;
               const amt = Number(d.amount);
-              finalDuesBreakdown[label] = (finalDuesBreakdown[label] || 0) + amt;
+              finalDuesBreakdown[label] = {
+                month: d.month,
+                year: d.year,
+                amount: amt
+              };
               initialTotalDue += amt;
             }
           });
         } else {
           const total = Number(approvalForm.singleTotalDue);
-          finalDuesBreakdown["Historical Balance"] = total;
+          finalDuesBreakdown["Historical Balance"] = {
+            month: "Historical",
+            year: "Balance",
+            amount: total
+          };
           initialTotalDue = total;
         }
         
-        // Add food due if negative balance
         const foodDue = Number(approvalForm.foodDueAmount);
         if (foodDue < 0) {
           initialTotalDue += Math.abs(foodDue);
         }
       }
 
-      // Save the Student Record
       await setDoc(doc(db, "students", studentId), {
         id: studentId,
         name: selectedReg.name,
@@ -327,7 +330,6 @@ export default function RegistrationsPage() {
         updatedAt: serverTimestamp(),
       })
 
-      // Sync Seat Occupancy in Building - Robust Array Update
       if (selectedBuilding) {
         let occCount = 0;
         let totalCount = 0;
@@ -336,7 +338,6 @@ export default function RegistrationsPage() {
           const newRooms = apt.rooms.map((room: any) => {
             const newSeats = room.seats.map((seat: any) => {
               totalCount++;
-              // Check if this is the target seat
               if (apt.name === aptName && String(room.roomNo) === String(rNum) && String(seat.seatNo) === String(sNum)) {
                 occCount++;
                 return { ...seat, status: 'occupied' };
@@ -357,7 +358,6 @@ export default function RegistrationsPage() {
         })
       }
 
-      // SMS Notification
       if (apiConfig?.apikey && templatesData?.templates) {
         const admissionTemplate = templatesData.templates.find((t: any) => t.id === 'admission')
         if (admissionTemplate) {
@@ -390,7 +390,6 @@ export default function RegistrationsPage() {
 
   return (
     <div className="space-y-8 pb-20">
-      {/* App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -585,7 +584,7 @@ export default function RegistrationsPage() {
                     </div>
                   </div>
 
-                  {/* Right Column: Historical vs Initial Pay */}
+                  {/* Right Column: Migration Data */}
                   <div className="space-y-6">
                     {selectedReg.type === 'old' ? (
                       <div className="p-5 border-2 border-orange-200 bg-orange-50/50 rounded-3xl space-y-5 shadow-sm">

@@ -177,7 +177,8 @@ export default function IncomeHistoryPage() {
 
   const studentFinancials = useMemo(() => {
     if (!selectedStudent) return null;
-    const rentDue = Object.values(selectedStudent.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b || 0), 0);
+    // Updated summing logic for structured duesBreakdown
+    const rentDue = Object.values(selectedStudent.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
     const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0;
     const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0;
     const totalFoodPaid = (selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0);
@@ -217,19 +218,18 @@ export default function IncomeHistoryPage() {
         let remainingRentPaid = seatPaid;
         const targetLabel = `${formData.month} ${formData.year}`;
         
-        // 1. Target the selected month first
+        // Use amount.amount logic for payment subtraction
         if (currentDues[targetLabel] && remainingRentPaid > 0) {
-          const dueAmt = Number(currentDues[targetLabel]);
+          const dueAmt = Number(currentDues[targetLabel].amount);
           if (remainingRentPaid >= dueAmt) {
             remainingRentPaid -= dueAmt;
             delete currentDues[targetLabel];
           } else {
-            currentDues[targetLabel] = dueAmt - remainingRentPaid;
+            currentDues[targetLabel].amount = dueAmt - remainingRentPaid;
             remainingRentPaid = 0;
           }
         }
 
-        // 2. If surplus remains, pay oldest months
         if (remainingRentPaid > 0) {
           const remainingMonths = Object.keys(currentDues).sort((a, b) => {
             const [mA, yA] = a.split(' ');
@@ -240,19 +240,18 @@ export default function IncomeHistoryPage() {
 
           for (const month of remainingMonths) {
             if (remainingRentPaid <= 0) break;
-            const dueAmt = Number(currentDues[month]);
+            const dueAmt = Number(currentDues[month].amount);
             if (remainingRentPaid >= dueAmt) {
               remainingRentPaid -= dueAmt;
               delete currentDues[month];
             } else {
-              currentDues[month] = dueAmt - remainingRentPaid;
+              currentDues[month].amount = dueAmt - remainingRentPaid;
               remainingRentPaid = 0;
             }
           }
         }
 
-        // Calculate final totalDue from breakdown
-        const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b || 0), 0);
+        const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
         await updateDoc(doc(db, "students", selectedStudent.id), {
           paymentsHistory: arrayUnion(pRecord),
@@ -495,10 +494,10 @@ export default function IncomeHistoryPage() {
                   <div className="pt-2 border-t border-white/10">
                     <p className="text-[8px] font-black uppercase text-primary mb-2">Pending Dues History:</p>
                     <div className="grid grid-cols-2 gap-2 max-h-[80px] overflow-y-auto pr-1 scrollbar-hide">
-                      {Object.entries(selectedStudent.duesBreakdown).map(([label, amount]: any) => (
+                      {Object.entries(selectedStudent.duesBreakdown).map(([label, data]: any) => (
                         <div key={label} className="bg-white/5 p-1.5 rounded flex justify-between items-center">
                           <span className="text-[8px] font-medium">{label}</span>
-                          <span className="text-[9px] font-black text-destructive">৳{amount}</span>
+                          <span className="text-[9px] font-black text-destructive">৳{data.amount}</span>
                         </div>
                       ))}
                     </div>
@@ -517,10 +516,7 @@ export default function IncomeHistoryPage() {
               {selectedStudent?.paymentSystem === 'package' ? (
                 <div className="space-y-2"><Label className="text-xs">Amount Received (৳)</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" /></div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} placeholder="0.00" /></div>
-                  <div className="space-y-2"><Label className="text-xs">Food Deposit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} placeholder="0.00" /></div>
-                </div>
+                <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} placeholder="0.00" /></div><div className="space-y-2"><Label className="text-xs">Food Deposit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} placeholder="0.00" /></div></div>
               )}
               <div className="space-y-2"><Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} placeholder="0.00" /></div>
             </div>
