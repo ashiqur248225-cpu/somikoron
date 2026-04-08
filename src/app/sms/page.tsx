@@ -556,8 +556,8 @@ export default function SMSPanelPage() {
                       <SelectContent>
                         <SelectItem value="all">All Students</SelectItem>
                         <SelectItem value="birthday">Today's Birthday</SelectItem>
-                        <SelectItem value="due">Total Due > 0</SelectItem>
-                        <SelectItem value="low_balance">Low Food Bal (< 50)</SelectItem>
+                        <SelectItem value="due">Total Due &gt; 0</SelectItem>
+                        <SelectItem value="low_balance">Low Food Bal (&lt; 50)</SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -629,7 +629,7 @@ export default function SMSPanelPage() {
             <div className="space-y-6">
               <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
                 <CardHeader className="bg-primary text-primary-foreground">
-                  <CardTitle className="text-lg flex items-center gap-2">< स्मार्टफोन size={20}/> Composer & Templates</CardTitle>
+                  <CardTitle className="text-lg flex items-center gap-2"><Smartphone size={20}/> Composer & Templates</CardTitle>
                   <CardDescription className="text-primary-foreground/70">Pick a template or write manual message.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
