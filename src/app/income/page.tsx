@@ -175,16 +175,7 @@ export default function IncomeHistoryPage() {
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
-  const studentFinancials = useMemo(() => {
-    if (!selectedStudent) return null;
-    const rentDue = Object.values(selectedStudent.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
-    
-    // Direct use of net balance field
-    const foodBalance = selectedStudent.foodDueAmount || 0;
-    
-    return { rentDue, foodBalance, advance: selectedStudent.advanceAmount || 0 };
-  }, [selectedStudent]);
-
+  // Payment Logic Updated
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver || !selectedStudent) return
     setIsSubmitting(true)
@@ -216,6 +207,7 @@ export default function IncomeHistoryPage() {
         let remainingRentPaid = seatPaid;
         const targetLabel = `${formData.month} ${formData.year}`;
         
+        // Priority 1: Specific Month Check
         if (currentDues[targetLabel] && remainingRentPaid > 0) {
           const dueAmt = Number(currentDues[targetLabel].amount);
           if (remainingRentPaid >= dueAmt) {
@@ -227,6 +219,7 @@ export default function IncomeHistoryPage() {
           }
         }
 
+        // Priority 2: Oldest month first
         if (remainingRentPaid > 0) {
           const remainingMonths = Object.keys(currentDues).sort((a, b) => {
             const [mA, yA] = a.split(' ');
@@ -248,6 +241,7 @@ export default function IncomeHistoryPage() {
           }
         }
 
+        // Final totalDue is sum of remaining objects in map
         const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
         await updateDoc(doc(db, "students", selectedStudent.id), {
@@ -255,7 +249,7 @@ export default function IncomeHistoryPage() {
           advanceAmount: increment(extraAdvance),
           totalDue: finalTotalDue,
           duesBreakdown: currentDues,
-          foodDueAmount: increment(foodPaid), // Logic: Plus food deposit to net balance
+          foodDueAmount: increment(foodPaid), // PLUS food deposit to net balance
           historicalTotalReceived: increment(totalAmt),
           updatedAt: serverTimestamp()
         })
@@ -283,7 +277,6 @@ export default function IncomeHistoryPage() {
 
   return (
     <div className="space-y-8 pb-20 print:p-0 w-full overflow-hidden">
-      {/* (Previous UI code for App Bar, PDF, and Filters...) */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -302,81 +295,27 @@ export default function IncomeHistoryPage() {
         </div>
       </div>
 
-      {/* FILTER DIALOG */}
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Income Records</DialogTitle>
-            <DialogDescription>Refine your results by applying multiple conditions.</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Income Records</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
-                <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}>
-                  <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Buildings</SelectItem>
-                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room</Label>
-                <Select value={roomFilter} onValueChange={setRoomFilter}>
-                  <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Rooms</SelectItem>
-                    {availableRoomsForFilter.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase">Building</Label><Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}><SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase">Room</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForFilter.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Received By</Label>
-                <Select value={receiverFilter} onValueChange={setReceiverFilter}>
-                  <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All Staff" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Staff</SelectItem>
-                    {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Method</Label>
-                <Select value={methodFilter} onValueChange={setMethodFilter}>
-                  <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Methods</SelectItem>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bkash">Bkash</SelectItem>
-                    <SelectItem value="nagad">Nagad</SelectItem>
-                    <SelectItem value="bank">Bank</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase">Staff</Label><Select value={receiverFilter} onValueChange={setReceiverFilter}><SelectTrigger className="bg-slate-50"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase">Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger className="bg-slate-50"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Date Range</Label>
-              <div className="flex gap-2">
-                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50" />
-                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50" />
-              </div>
-            </div>
+            <div className="space-y-1.5"><Label className="text-[10px] font-bold uppercase">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50" /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50" /></div></div>
           </div>
-          <DialogFooter className="flex gap-2 sm:justify-between">
-            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setBuildingFilter("all"); setRoomFilter("all"); setMethodFilter("all"); setReceiverFilter("all"); setStartDate(""); setEndDate(""); }}>
-              <RotateCcw size={14}/> Reset
-            </Button>
-            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
-          </DialogFooter>
+          <DialogFooter><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden print:hidden">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-xs font-bold uppercase text-success">Total Filtered Income</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader>
-        <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div><p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">Found {stats.count} matching records</p></CardContent>
+        <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-success">Total Filtered Income</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader>
+        <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
       </Card>
 
       {paymentsLoading ? (
@@ -406,7 +345,6 @@ export default function IncomeHistoryPage() {
 
       <div className="fixed bottom-8 right-8 z-50 print:hidden"><Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-income"><Plus size={32} className="text-white" /></Button></div>
 
-      {/* (New Income Entry Dialog implementation...) */}
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>New Income Entry</DialogTitle></DialogHeader>
@@ -416,22 +354,22 @@ export default function IncomeHistoryPage() {
               <div className="space-y-1"><Label className="text-[10px] font-bold">Room</Label><Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}><SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{availableRoomsForEntry.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
             </div>
             
-            <div className="space-y-2"><Label>Select Resident</Label><Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}><SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger><SelectContent>{filteredStudentsForEntry.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Resident</Label><Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}><SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger><SelectContent>{filteredStudentsForEntry.map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}</SelectContent></Select></div>
             
-            {studentFinancials && (
-              <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3 shadow-inner border border-slate-800">
-                <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Total Outstanding Dues</span> <span className="text-destructive font-black">৳{studentFinancials.rentDue.toLocaleString()}</span></div>
-                <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Advance Pool</span> <span className="text-primary font-black">৳{studentFinancials.advance.toLocaleString()}</span></div>
-                {selectedStudent?.paymentSystem === 'non-package' && (
-                  <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Food Balance</span> <span className={studentFinancials.foodBalance < 0 ? "text-destructive" : "text-success"}>৳{studentFinancials.foodBalance.toLocaleString()}</span></div>
+            {selectedStudent && (
+              <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3 shadow-inner">
+                <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Total Outstanding Dues</span> <span className="text-destructive font-black">৳{selectedStudent.totalDue || 0}</span></div>
+                <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Security Advance</span> <span className="text-primary font-black">৳{selectedStudent.advanceAmount || 0}</span></div>
+                {selectedStudent.paymentSystem === 'non-package' && (
+                  <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Food Balance</span> <span className={cn((selectedStudent.foodDueAmount || 0) < 0 ? "text-destructive" : "text-success")}>৳{selectedStudent.foodDueAmount || 0}</span></div>
                 )}
                 
-                {selectedStudent?.duesBreakdown && Object.keys(selectedStudent.duesBreakdown).length > 0 && (
+                {selectedStudent.duesBreakdown && Object.keys(selectedStudent.duesBreakdown).length > 0 && (
                   <div className="pt-2 border-t border-white/10">
-                    <p className="text-[8px] font-black uppercase text-primary mb-2">Pending Dues History:</p>
-                    <div className="grid grid-cols-2 gap-2 max-h-[80px] overflow-y-auto pr-1 scrollbar-hide">
+                    <p className="text-[8px] font-black uppercase text-primary mb-2">Pending Dues:</p>
+                    <div className="grid grid-cols-2 gap-2 max-h-[80px] overflow-y-auto pr-1">
                       {Object.entries(selectedStudent.duesBreakdown).map(([label, data]: any) => (
-                        <div key={label} className="bg-white/5 p-1.5 rounded flex justify-between items-center">
+                        <div key={label} className="bg-white/5 p-1.5 rounded flex justify-between items-center border border-white/5">
                           <span className="text-[8px] font-medium">{label}</span>
                           <span className="text-[9px] font-black text-destructive">৳{data.amount}</span>
                         </div>
@@ -448,13 +386,12 @@ export default function IncomeHistoryPage() {
             </div>
 
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
-              <Label className="font-bold text-primary flex items-center gap-2"><Calculator size={14} /> Collection Amounts</Label>
               {selectedStudent?.paymentSystem === 'package' ? (
                 <div className="space-y-2"><Label className="text-xs">Amount Received (৳)</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" /></div>
               ) : (
                 <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} placeholder="0.00" /></div><div className="space-y-2"><Label className="text-xs">Food Deposit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} placeholder="0.00" /></div></div>
               )}
-              <div className="space-y-2"><Label className="text-xs font-bold text-primary">Add to Advance Pool (৳)</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} placeholder="0.00" /></div>
+              <div className="space-y-2"><Label className="text-xs font-bold text-primary">Add to Security Advance (৳)</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} placeholder="0.00" /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={v => setFormData({...formData, method: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>

@@ -208,25 +208,30 @@ export default function DashboardPage() {
   }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
 
-  // Auto Rent Generation Logic
+  // Auto Rent Generation Logic - Object Based
   useEffect(() => {
     const generateMonthlyRent = async () => {
       if (!students || students.length === 0 || !userBranch) return;
       const now = new Date();
-      const currentMonthLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+      const currentMonth = MONTHS[now.getMonth()];
+      const currentYear = now.getFullYear().toString();
+      const currentMonthLabel = `${currentMonth} ${currentYear}`;
       const batch = writeBatch(db);
       let updatesCount = 0;
 
       students.forEach(s => {
         if (!s.isActive) return;
         const dues = { ...(s.duesBreakdown || {}) };
+        
+        // Logical check: If month+year is missing from breakdown map, add it
         if (dues[currentMonthLabel] === undefined) {
           const rent = Number(s.monthlyRent || 0);
           dues[currentMonthLabel] = {
-            month: MONTHS[now.getMonth()],
-            year: now.getFullYear().toString(),
+            month: currentMonth,
+            year: currentYear,
             amount: rent
           };
+          // Recalculate totalDue as sum of all objects in map
           const total = Object.values(dues).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
           batch.update(doc(db, "students", s.id), {
             duesBreakdown: dues,
@@ -270,7 +275,13 @@ export default function DashboardPage() {
 
     const totalIncome = filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
     const totalExpense = filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
-    const totalDue = (students || []).filter(s => s.isActive).reduce((acc, s) => acc + (s.totalDue || 0), 0)
+    
+    // Total Due from DB field (which is kept updated as sum of breakdown)
+    const totalDue = (students || []).filter(s => s.isActive).reduce((acc, s) => {
+      const rentDue = Number(s.totalDue || 0);
+      const foodDebt = (s.foodDueAmount || 0) < 0 ? Math.abs(s.foodDueAmount) : 0;
+      return acc + rentDue + foodDebt;
+    }, 0)
 
     return { 
       income: totalIncome, 
@@ -280,6 +291,7 @@ export default function DashboardPage() {
     }
   }, [allPayments, allExpenses, students, timeRange])
 
+  // Bulk Meal Entry Logic - Deducts from foodDueAmount (Net balance)
   const handleBulkMealSubmit = async () => {
     if (!students || !mealConfig?.rate) return;
     setIsSubmitting(true);
@@ -302,6 +314,7 @@ export default function DashboardPage() {
           date: new Date().toISOString()
         };
 
+        // SUBTRACT from net balance (Minus cost)
         batch.update(doc(db, "students", s.id), {
           mealsHistory: arrayUnion(mealRecord),
           foodDueAmount: increment(-totalCost),
@@ -320,6 +333,7 @@ export default function DashboardPage() {
     }
   };
 
+  // Create Payment Logic - Standardized
   const handleCreatePayment = async () => {
     const selectedStudent = students?.find(s => s.id === formData.studentId)
     if (!formData.studentId || !formData.receiver || !selectedStudent) return
@@ -345,6 +359,7 @@ export default function DashboardPage() {
       const targetLabel = `${formData.month} ${formData.year}`;
       let remainingRentPaid = seatPaid;
 
+      // Deduct from specific month object if exists
       if (currentDues[targetLabel] && remainingRentPaid > 0) {
         const dueAmt = Number(currentDues[targetLabel].amount);
         if (remainingRentPaid >= dueAmt) {
@@ -356,6 +371,29 @@ export default function DashboardPage() {
         }
       }
 
+      // If still have money, pay other months
+      if (remainingRentPaid > 0) {
+        const remainingMonths = Object.keys(currentDues).sort((a, b) => {
+          const [mA, yA] = a.split(' ');
+          const [mB, yB] = b.split(' ');
+          if (yA !== yB) return Number(yA) - Number(yB);
+          return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
+        });
+
+        for (const month of remainingMonths) {
+          if (remainingRentPaid <= 0) break;
+          const dueAmt = Number(currentDues[month].amount);
+          if (remainingRentPaid >= dueAmt) {
+            remainingRentPaid -= dueAmt;
+            delete currentDues[month];
+          } else {
+            currentDues[month].amount = dueAmt - remainingRentPaid;
+            remainingRentPaid = 0;
+          }
+        }
+      }
+
+      // Recalculate totalDue as sum of all objects in duesBreakdown
       const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
       await updateDoc(doc(db, "students", selectedStudent.id), {
@@ -363,8 +401,8 @@ export default function DashboardPage() {
         advanceAmount: increment(extraAdvance),
         totalDue: finalTotalDue,
         duesBreakdown: currentDues,
-        foodDueAmount: increment(foodPaid),
-        historicalTotalReceived: increment(totalAmt),
+        foodDueAmount: increment(foodPaid), // PLUS to net balance
+        historicalTotalReceived: increment(totalAmt), // Accumulate total received
         updatedAt: serverTimestamp()
       })
       
@@ -394,6 +432,8 @@ export default function DashboardPage() {
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
     finally { setIsSubmitting(false) }
   }
+
+  const selectedStudentForEntry = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId]);
 
   return (
     <div className="space-y-8 pb-20">
@@ -427,6 +467,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Main Dashboard Cards */}
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-black uppercase text-success tracking-widest">Income ({timeRangeLabels[timeRange]})</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader>
@@ -474,13 +515,14 @@ export default function DashboardPage() {
         </Card>
 
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b"><CardTitle className="text-lg font-bold flex items-center gap-2"><Wallet size={20} className="text-primary"/> Branch Fund Status</CardTitle></CardHeader>
-          <CardContent className="p-6 space-y-4">
-            <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-500 uppercase">Total Net Balance</span>
-              <span className="text-2xl font-black text-primary">৳{(stats.income - stats.expense).toLocaleString()}</span>
+          <CardHeader className="bg-slate-50/50 border-b flex justify-between items-center">
+            <CardTitle className="text-lg font-bold flex items-center gap-2"><Wallet size={20} className="text-primary"/> Branch Fund Status</CardTitle>
+            <div className="text-right">
+              <p className="text-[8px] font-bold text-muted-foreground uppercase">Total Net Balance</p>
+              <p className="text-lg font-black text-primary">৳{(stats.income - stats.expense).toLocaleString()}</p>
             </div>
-            <Separator className="opacity-50" />
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
             <div className="space-y-3">
               {[
                 { label: "Cash in Hand", icon: Banknote, color: "text-green-600", val: (allPayments || []).filter(p => p.method === 'cash').reduce((a,b)=>a+b.amount,0) - (allExpenses || []).filter(e => e.method === 'cash').reduce((a,b)=>a+b.amount,0) },
@@ -523,6 +565,29 @@ export default function DashboardPage() {
               <div className="space-y-1"><Label className="text-[10px] font-bold">Room</Label><Select value={entryRoomFilter} onValueChange={setEntryRoomFilter}><SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{Array.from(new Set(students?.filter(s => s.buildingId === entryBuildingFilter || entryBuildingFilter === 'all').map(s => s.roomNumber))).sort().map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="space-y-2"><Label>Resident</Label><Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}><SelectTrigger><SelectValue placeholder="Choose student" /></SelectTrigger><SelectContent>{students?.filter(s => (entryBuildingFilter === 'all' || s.buildingId === entryBuildingFilter) && (entryRoomFilter === 'all' || s.roomNumber === entryRoomFilter) && s.isActive).map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}</SelectContent></Select></div>
+            
+            {selectedStudentForEntry && (
+              <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3 shadow-inner">
+                <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Rent Due</span> <span className="text-destructive font-black">৳{selectedStudentForEntry.totalDue || 0}</span></div>
+                {selectedStudentForEntry.paymentSystem === 'non-package' && (
+                  <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Food Bal</span> <span className={cn((selectedStudentForEntry.foodDueAmount || 0) < 0 ? "text-destructive" : "text-success")}>৳{selectedStudentForEntry.foodDueAmount || 0}</span></div>
+                )}
+                {selectedStudentForEntry.duesBreakdown && Object.keys(selectedStudentForEntry.duesBreakdown).length > 0 && (
+                  <div className="pt-2 border-t border-white/10 space-y-1">
+                    <p className="text-[8px] font-black uppercase text-primary">Dues History:</p>
+                    <div className="grid grid-cols-2 gap-2 max-h-[80px] overflow-y-auto pr-1">
+                      {Object.entries(selectedStudentForEntry.duesBreakdown).map(([label, data]: any) => (
+                        <div key={label} className="bg-white/5 p-1.5 rounded flex justify-between items-center border border-white/5">
+                          <span className="text-[8px] font-medium">{label}</span>
+                          <span className="text-[9px] font-black text-destructive">৳{data.amount}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div></div>
             <div className="p-4 border-2 border-primary/20 rounded-xl space-y-4 bg-primary/5">
               <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-xs">Seat Rent (৳)</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} /></div><div className="space-y-2"><Label className="text-xs">Food Deposit (৳)</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} /></div></div>

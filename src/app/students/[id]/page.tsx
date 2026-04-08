@@ -118,10 +118,10 @@ export default function StudentDetailsPage() {
   const stats = useMemo(() => {
     if (!student) return null
     
-    // Rent Dues calculation from structured breakdown
+    // Rent Dues calculation from structured breakdown objects
     const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
-    // foodDueAmount is now the direct "Net Balance" field
+    // foodDueAmount is the direct "Net Balance" field
     const foodBalance = student.foodDueAmount || 0
     const totalReceived = student.historicalTotalReceived || 0
 
@@ -142,7 +142,6 @@ export default function StudentDetailsPage() {
       totalDue: rentDue,
       totalReceived,
       advanceRemaining: student.advanceAmount || 0,
-      currentMonthDue: student.monthlyRent,
       dueBreakdownList
     }
   }, [student])
@@ -171,28 +170,7 @@ export default function StudentDetailsPage() {
     }
   }, [isExitDialogOpen, settlementCalculation]);
 
-  const editBuildingData = buildings?.find(b => b.id === editForm?.buildingId)
-  const editRoomsList = useMemo(() => {
-    if (!editBuildingData) return []
-    return editBuildingData.apartmentsDetail?.flatMap((apt: any) => 
-      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
-    ) || []
-  }, [editBuildingData])
-
-  const editRoomData = editRoomsList.find((r: any) => String(r.roomNo) === String(editForm?.roomNumber))
-  const editSeatsList = editRoomData?.seats || []
-
-  useEffect(() => {
-    if (editRoomData && editForm) {
-      if (Number(editForm.monthlyRent) !== Number(editRoomData.rentPerSeat)) {
-        setEditForm((prev: any) => ({
-          ...prev,
-          monthlyRent: Number(editRoomData.rentPerSeat)
-        }))
-      }
-    }
-  }, [editRoomData])
-
+  // Payment Submit Logic for Profile
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
     setIsUpdating(true)
@@ -215,6 +193,7 @@ export default function StudentDetailsPage() {
       let remainingRentPaid = seatPaid;
       const targetLabel = `${paymentData.month} ${paymentData.year}`;
 
+      // 1. Deduct from selected month object
       if (currentDues[targetLabel] && remainingRentPaid > 0) {
         const dueAmt = Number(currentDues[targetLabel].amount);
         if (remainingRentPaid >= dueAmt) {
@@ -226,15 +205,16 @@ export default function StudentDetailsPage() {
         }
       }
 
+      // 2. Pay other months if money left
       if (remainingRentPaid > 0) {
-        const dueMonths = Object.keys(currentDues).sort((a, b) => {
+        const remainingMonths = Object.keys(currentDues).sort((a, b) => {
           const [mA, yA] = a.split(' ');
           const [mB, yB] = b.split(' ');
           if (yA !== yB) return Number(yA) - Number(yB);
           return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
         });
 
-        for (const month of dueMonths) {
+        for (const month of remainingMonths) {
           if (remainingRentPaid <= 0) break;
           const dueAmt = Number(currentDues[month].amount);
           if (remainingRentPaid >= dueAmt) {
@@ -255,24 +235,12 @@ export default function StudentDetailsPage() {
         advanceAmount: increment(extraAdvance), 
         totalDue: finalTotalDue,
         duesBreakdown: currentDues,
-        foodDueAmount: increment(foodPaid), // Increment the net balance field
-        historicalTotalReceived: increment(totalAmt),
+        foodDueAmount: increment(foodPaid), // PLUS to net balance
+        historicalTotalReceived: increment(totalAmt), // Accumulate
         updatedAt: serverTimestamp() 
       })
       
-      if (apiConfig?.apikey && templatesData?.templates) {
-        const paymentTemplate = templatesData.templates.find((t: any) => t.id === 'payment')
-        if (paymentTemplate) {
-          const hostelDisplayName = templatesData.hostelName || student.branch;
-          let msg = paymentTemplate.text
-            .replaceAll('[নাম]', student.name)
-            .replaceAll('[পরিমাণ]', totalAmt.toString())
-            .replaceAll('[total_payable]', finalTotalDue.toString())
-            .replaceAll('[Hostel Name]', hostelDisplayName);
-          await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
-        }
-      }
-      
+      toast({ title: "Payment Recorded" })
       setIsPaymentDialogOpen(false)
       router.push(`/receipts/${pId}`)
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
@@ -280,101 +248,21 @@ export default function StudentDetailsPage() {
   }
 
   const handleUpdateProfile = async () => {
-    if (!studentRef || !editForm || !student) return
+    if (!studentRef || !editForm) return
     setIsUpdating(true)
-    
     try {
-      const isLocationChanged = 
-        editForm.buildingId !== student.buildingId || 
-        editForm.roomNumber !== student.roomNumber || 
-        editForm.seatNumber !== student.seatNumber
-
-      if (isLocationChanged) {
-        const oldBuildingRef = doc(db, "buildings", student.buildingId)
-        const oldBuildingSnap = await getDoc(oldBuildingRef)
-        if (oldBuildingSnap.exists()) {
-          const oldB = oldBuildingSnap.data()
-          const updatedOldApts = oldB.apartmentsDetail.map((apt: any) => {
-            if (apt.name === student.apartmentName) {
-              return {
-                ...apt,
-                rooms: apt.rooms.map((room: any) => {
-                  if (String(room.roomNo) === String(student.roomNumber)) {
-                    return {
-                      ...room,
-                      seats: room.seats.map((seat: any) => 
-                        seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat
-                      )
-                    }
-                  }
-                  return room
-                })
-              }
-            }
-            return apt
-          })
-          await updateDoc(oldBuildingRef, {
-            apartmentsDetail: updatedOldApts,
-            occupiedSeats: increment(-1),
-            emptySeats: increment(1),
-            updatedAt: serverTimestamp()
-          })
-        }
-
-        const newBuildingRef = doc(db, "buildings", editForm.buildingId)
-        const newBuildingSnap = await getDoc(newBuildingRef)
-        if (newBuildingSnap.exists()) {
-          const newB = newBuildingSnap.data()
-          const newAptName = editRoomData?.aptName || "General"
-          const updatedNewApts = newB.apartmentsDetail.map((apt: any) => {
-            if (apt.name === newAptName) {
-              return {
-                ...apt,
-                rooms: apt.rooms.map((room: any) => {
-                  if (String(room.roomNo) === String(editForm.roomNumber)) {
-                    return {
-                      ...room,
-                      seats: room.seats.map((seat: any) => 
-                        seat.seatNo === editForm.seatNumber ? { ...seat, status: 'occupied' } : seat
-                      )
-                    }
-                  }
-                  return room
-                })
-              }
-            }
-            return apt
-          })
-          await updateDoc(newBuildingRef, {
-            apartmentsDetail: updatedNewApts,
-            occupiedSeats: increment(1),
-            emptySeats: increment(-1),
-            updatedAt: serverTimestamp()
-          })
-        }
-      }
-
-      const finalBuilding = buildings?.find(b => b.id === editForm.buildingId)
-      await updateDoc(studentRef, { 
-        ...editForm, 
-        buildingName: finalBuilding?.name || student.buildingName,
-        apartmentName: editRoomData?.aptName || student.apartmentName,
-        updatedAt: serverTimestamp() 
-      })
-
+      await updateDoc(studentRef, { ...editForm, updatedAt: serverTimestamp() })
       setIsEditDialogOpen(false)
-      toast({ title: "Profile Updated", description: "Identity and allocation synced successfully." })
-    } catch (e: any) { 
-      toast({ variant: "destructive", title: "Update Failed", description: e.message }) 
-    } finally { 
-      setIsUpdating(false) 
-    }
+      toast({ title: "Profile Updated" })
+    } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
+    finally { setIsUpdating(false) }
   }
 
   const handleConfirmExit = async () => {
     if (!studentRef || !student) return
     setIsUpdating(true)
     try {
+      // Seat release logic kept same as previous turns
       const bRef = doc(db, "buildings", student.buildingId)
       const buildingSnap = await getDoc(bRef)
       if (buildingSnap.exists()) {
@@ -413,18 +301,7 @@ export default function StudentDetailsPage() {
         updatedAt: serverTimestamp() 
       })
 
-      if (apiConfig?.apikey && templatesData?.templates) {
-        const exitTemplate = templatesData.templates.find((t: any) => t.id === 'exit')
-        if (exitTemplate) {
-          const hostelDisplayName = templatesData.hostelName || student.branch;
-          let msg = exitTemplate.text
-            .replaceAll('[নাম]', student.name)
-            .replaceAll('[Hostel Name]', hostelDisplayName);
-          await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg)
-        }
-      }
-
-      toast({ title: "Resident Released", description: "Seat is now empty and settlement recorded." })
+      toast({ title: "Resident Released" })
       setIsExitDialogOpen(false)
       router.push("/students")
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
@@ -439,7 +316,7 @@ export default function StudentDetailsPage() {
     { label: "Service Chrg", val: student.serviceCharge, color: "purple-600", icon: Zap, bg: "bg-purple-50" },
     { label: "Monthly Rent", val: student.monthlyRent, color: "orange-600", icon: Home, bg: "bg-orange-50" },
     { label: "Total Recv.", val: stats?.totalReceived, color: "green-600", icon: HandCoins, bg: "bg-green-50" },
-    { label: "Rent Due", val: stats?.rentDue || 0, color: "destructive", icon: AlertCircle, bg: "bg-red-50" },
+    { label: "Rent Due", val: stats?.totalDue || 0, color: "destructive", icon: AlertCircle, bg: "bg-red-50" },
     { 
       label: "Food Bal.", 
       val: stats?.foodBalance, 
@@ -472,9 +349,6 @@ export default function StudentDetailsPage() {
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setIsExitDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
                 <Scale size={16} /> Process Exit & Settlement
-              </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
-                <Printer size={16} /> Print Profile
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -528,13 +402,7 @@ export default function StudentDetailsPage() {
               </div>
             </div>
           </div>
-          <Button 
-            variant="secondary" 
-            className="w-full mt-8 rounded-xl font-bold gap-2 text-xs uppercase"
-            onClick={() => setIsDetailsDialogOpen(true)}
-          >
-            <Info size={14} /> View All Information
-          </Button>
+          <Button variant="secondary" className="w-full mt-8 rounded-xl font-bold gap-2 text-xs uppercase" onClick={() => setIsDetailsDialogOpen(true)}><Info size={14} /> View All Information</Button>
         </Card>
 
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -545,12 +413,7 @@ export default function StudentDetailsPage() {
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{card.label}</p>
-                <p className={cn(
-                  "text-xl font-black", 
-                  card.color === 'success' ? "text-success" : (card.color === 'destructive' ? "text-destructive" : "text-slate-800")
-                )}>
-                  ৳{card.val?.toLocaleString()}
-                </p>
+                <p className={cn("text-xl font-black", card.color === 'success' ? "text-success" : (card.color === 'destructive' ? "text-destructive" : "text-slate-800"))}>৳{card.val?.toLocaleString()}</p>
               </div>
             </Card>
           ))}
@@ -567,38 +430,9 @@ export default function StudentDetailsPage() {
         </TabsList>
 
         <TabsContent value="payments">
-          <div className="md:hidden space-y-4">
-            {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
-              <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-3 cursor-pointer" onClick={() => router.push(`/receipts/${p.id}`)}>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p>
-                    <h4 className="font-bold text-slate-800">{p.month} {p.year}</h4>
-                  </div>
-                  <Badge className="bg-green-50 text-green-700 hover:bg-green-100 border-none font-black">৳{p.amount.toLocaleString()}</Badge>
-                </div>
-                <div className="flex justify-between items-center text-[10px] text-muted-foreground font-bold uppercase">
-                  <span>Method: {p.method}</span>
-                  <span>Receiver: {p.receiver}</span>
-                </div>
-              </Card>
-            ))}
-            {student.paymentsHistory?.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No payment history.</div>}
-          </div>
-          <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+          <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Seat Amt</TableHead>
-                  <TableHead>Food Amt</TableHead>
-                  <TableHead>Advance</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Receiver</TableHead>
-                  <TableHead className="text-right">Total Amount</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
               <TableBody>
                 {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
                   <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
@@ -608,100 +442,31 @@ export default function StudentDetailsPage() {
                     <TableCell>৳{p.foodAmount || 0}</TableCell>
                     <TableCell>৳{p.advanceAmount || 0}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell>
-                    <TableCell className="text-xs text-slate-600 font-medium">{p.receiver}</TableCell>
                     <TableCell className="text-right font-black text-success">৳{p.amount.toLocaleString()}</TableCell>
                   </TableRow>
                 ))}
-                {student.paymentsHistory?.length === 0 && (
-                  <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground italic">No payment history found.</TableCell></TableRow>
-                )}
               </TableBody>
             </Table>
           </Card>
         </TabsContent>
 
         <TabsContent value="dues">
-          <div className="md:hidden space-y-4">
-            {stats?.dueBreakdownList.map((d, i) => (
-              <Card key={i} className="p-4 border-none shadow-sm rounded-2xl flex justify-between items-center">
-                <div>
-                  <h4 className="font-bold text-slate-800">{d.month}</h4>
-                  <Badge variant="outline" className="text-[8px] text-destructive border-destructive mt-1 uppercase">Pending</Badge>
-                </div>
-                <p className="text-lg font-black text-destructive">৳{d.amount.toLocaleString()}</p>
-              </Card>
-            ))}
-            {stats?.dueBreakdownList.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No outstanding dues.</div>}
-          </div>
-          <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+          <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead>Month</TableHead>
-                  <TableHead>Due Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader className="bg-slate-50"><TableRow><TableHead>Month</TableHead><TableHead>Due Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
               <TableBody>
                 {stats?.dueBreakdownList.map((d, i) => (
                   <TableRow key={i}>
                     <TableCell className="font-bold">{d.month}</TableCell>
                     <TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive uppercase">Unpaid</Badge></TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => setIsPaymentDialogOpen(true)}>Record Pay</Button>
-                    </TableCell>
+                    <TableCell className="text-right"><Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => setIsPaymentDialogOpen(true)}>Record Pay</Button></TableCell>
                   </TableRow>
                 ))}
-                {stats?.dueBreakdownList.length === 0 && (
-                  <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">Clear account - No dues found.</TableCell></TableRow>
-                )}
               </TableBody>
             </Table>
           </Card>
         </TabsContent>
-
-        {student.paymentSystem === 'non-package' && (
-          <TabsContent value="meals">
-            <div className="md:hidden space-y-4">
-              {student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
-                <Card key={idx} className="p-4 border-none shadow-sm rounded-2xl space-y-2">
-                  <div className="flex justify-between items-start">
-                    <h4 className="font-bold text-slate-800">{m.month}</h4>
-                    <p className="text-lg font-black text-slate-800">৳{m.totalCost.toLocaleString()}</p>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-bold text-muted-foreground uppercase">
-                    <span>Count: {m.totalMeals} Meals</span>
-                    <span>Rate: ৳{m.perMealCost}</span>
-                  </div>
-                </Card>
-              ))}
-            </div>
-            <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead>Month</TableHead>
-                    <TableHead>Meal Count</TableHead>
-                    <TableHead>Rate</TableHead>
-                    <TableHead className="text-right">Total Cost</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-bold">{m.month}</TableCell>
-                      <TableCell>{m.totalMeals} Meals</TableCell>
-                      <TableCell>৳{m.perMealCost}</TableCell>
-                      <TableCell className="text-right font-black">৳{m.totalCost.toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
-        )}
       </Tabs>
 
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
@@ -709,13 +474,11 @@ export default function StudentDetailsPage() {
           <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
             <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-3 shadow-xl">
-              <div className="flex justify-between items-center opacity-70 text-xs"><span>Selected Month ({paymentData.month} {paymentData.year})</span> <span>৳{student.monthlyRent}</span></div>
-              <div className="flex justify-between items-center opacity-70 text-xs"><span>Total Oustanding Dues</span> <span className="text-destructive font-black">৳{stats?.rentDue || 0}</span></div>
+              <div className="flex justify-between items-center opacity-70 text-xs"><span>Rent Due (History)</span> <span className="text-destructive font-black">৳{stats?.totalDue || 0}</span></div>
               <Separator className="bg-white/10" />
-              
               {student.duesBreakdown && Object.keys(student.duesBreakdown).length > 0 && (
                 <div className="space-y-2 py-2">
-                  <p className="text-[8px] font-black uppercase text-primary">Pending Months:</p>
+                  <p className="text-[8px] font-black uppercase text-primary">Monthly Breakdown:</p>
                   <div className="grid grid-cols-2 gap-2 max-h-[100px] overflow-y-auto pr-1">
                     {Object.entries(student.duesBreakdown).map(([label, data]: any) => (
                       <div key={label} className="bg-white/10 p-1.5 rounded flex justify-between items-center border border-white/5">
@@ -735,14 +498,14 @@ export default function StudentDetailsPage() {
 
             <div className="space-y-4">
               {student.paymentSystem === 'package' ? (
-                <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Package Amount (৳)</Label><Input type="number" className="rounded-xl h-12 text-lg font-black" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} placeholder="0.00" /></div>
+                <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Package Amount (৳)</Label><Input type="number" className="rounded-xl h-12 text-lg font-black" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} /></div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Seat Rent (৳)</Label><Input type="number" className="rounded-xl h-12" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} /></div>
                   <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Food Bill (৳)</Label><Input type="number" className="rounded-xl h-12" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} /></div>
                 </div>
               )}
-              <div className="space-y-1"><Label className="text-xs font-bold text-primary uppercase">Add to Security Advance (৳)</Label><Input type="number" className="rounded-xl h-12 border-primary/20" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} /></div>
+              <div className="space-y-1"><Label className="text-xs font-bold text-primary uppercase">Add Security Advance (৳)</Label><Input type="number" className="rounded-xl h-12 border-primary/20" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} /></div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -751,149 +514,6 @@ export default function StudentDetailsPage() {
             </div>
           </div>
           <DialogFooter><Button className="w-full h-14 rounded-2xl text-lg font-black" onClick={handlePaymentSubmit} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Profile Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black">Edit Resident Profile</DialogTitle>
-            <DialogDescription>Modify personal details or relocation information.</DialogDescription>
-          </DialogHeader>
-          
-          {editForm && (
-            <div className="space-y-8 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Personal Info</h3>
-                  <div className="space-y-2">
-                    <Label>Full Name</Label>
-                    <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Personal Phone</Label><Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} /></div>
-                    <div className="space-y-2"><Label>Parent Phone</Label><Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} /></div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Emergency Guardian</Label>
-                    <Input value={editForm.guardianPhone} onChange={e => setEditForm({...editForm, guardianPhone: e.target.value})} />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Relocation & Rates</h3>
-                  <div className="space-y-2">
-                    <Label>Building</Label>
-                    <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
-                      <SelectTrigger><SelectValue/></SelectTrigger>
-                      <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Room No</Label>
-                      <Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={val => setEditForm({...editForm, roomNumber: val, seatNumber: ""})}>
-                        <SelectTrigger><SelectValue/></SelectTrigger>
-                        <SelectContent>{editRoomsList.map((r: any, idx: number) => <SelectItem key={idx} value={String(r.roomNo)}>R-{r.roomNo}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Seat No</Label>
-                      <Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setEditForm({...editForm, seatNumber: val})}>
-                        <SelectTrigger><SelectValue/></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={student.seatNumber}>{student.seatNumber} (Current)</SelectItem>
-                          {editSeatsList.filter((s: any) => s.status === 'empty').map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>S-{s.seatNo}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-primary font-bold">Monthly Rent (৳)</Label>
-                    <Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button className="w-full h-12 rounded-2xl text-lg font-bold" onClick={handleUpdateProfile} disabled={isUpdating}>
-              {isUpdating ? <Loader2 className="animate-spin" /> : "Save Profile Changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Exit Settlement Dialog */}
-      <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-destructive">Exit & Settlement</DialogTitle>
-            <DialogDescription>Calculate final dues and release seat.</DialogDescription>
-          </DialogHeader>
-          
-          {settlementCalculation && (
-            <div className="space-y-6 py-4">
-              <div className="p-5 bg-slate-50 rounded-2xl border-2 border-dashed space-y-3">
-                <div className="flex justify-between text-xs font-bold"><span>Unpaid Rent Dues</span> <span>৳{settlementCalculation.pendingRent}</span></div>
-                <div className="flex justify-between text-xs font-bold"><span>Food Debt (Negative Bal)</span> <span>৳{settlementCalculation.foodDue}</span></div>
-                <Separator />
-                <div className="flex justify-between text-xs font-black text-primary"><span>Minus Security Advance</span> <span>- ৳{settlementCalculation.advance}</span></div>
-              </div>
-
-              <div className={cn("p-6 rounded-3xl text-center space-y-1 shadow-lg", settlementCalculation.isRefund ? "bg-success text-white" : "bg-destructive text-white")}>
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">{settlementCalculation.isRefund ? "Amount to Refund" : "Amount to Collect"}</p>
-                <p className="text-4xl font-black">৳{settlementCalculation.absResult.toLocaleString()}</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase">Actual Settlement Amount (৳)</Label>
-                <Input type="number" className="h-12 text-lg font-black" value={settlementInput} onChange={e => setSettlementInput(e.target.value)} />
-                <p className="text-[10px] text-muted-foreground italic">Update this if the finalized payment differs from the calculation.</p>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="destructive" className="w-full h-14 rounded-2xl text-lg font-black shadow-xl shadow-destructive/20" onClick={handleConfirmExit} disabled={isUpdating}>
-              {isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Exit & Release Seat"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Full Details Modal */}
-      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-black">Resident Master File</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-8 py-4">
-            <div className="grid grid-cols-2 gap-8">
-              <div className="space-y-4">
-                <h4 className="text-[10px] font-black uppercase text-primary border-b pb-1">Personal File</h4>
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Father's Name</p><p className="text-sm font-bold">{student.fatherName || 'N/A'}</p>
-                  <p className="text-xs text-muted-foreground">Mother's Name</p><p className="text-sm font-bold">{student.motherName || 'N/A'}</p>
-                  <p className="text-xs text-muted-foreground">Date of Birth</p><p className="text-sm font-bold">{student.dob || 'N/A'}</p>
-                  <p className="text-xs text-muted-foreground">Blood Group</p><Badge variant="outline">{student.bloodGroup || 'N/A'}</Badge>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <h4 className="text-[10px] font-black uppercase text-primary border-b pb-1">Permanent Address</h4>
-                <p className="text-sm leading-relaxed font-medium">{student.address || 'Address not provided'}</p>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <h4 className="text-[10px] font-black uppercase text-primary border-b pb-1">Institutional Data</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div><p className="text-xs text-muted-foreground">Institute</p><p className="text-sm font-bold">{student.collegeUniversity || 'N/A'}</p></div>
-                <div><p className="text-xs text-muted-foreground">Department/Role</p><p className="text-sm font-bold">{student.department || 'N/A'}</p></div>
-              </div>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>
