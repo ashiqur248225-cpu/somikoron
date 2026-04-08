@@ -12,7 +12,7 @@ import {
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
   AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2,
   Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft, ListOrdered, Hash,
-  User, ChevronRight
+  User, ChevronRight, LayoutGrid
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
