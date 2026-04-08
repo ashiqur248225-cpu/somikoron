@@ -21,7 +21,9 @@ import {
   MapPin, GraduationCap,
   LayoutGrid, CheckCircle2, 
   MoreVertical, Utensils, Clock,
-  Smartphone, User, Zap, CircleDollarSign, Home, Trash2, Scale, Receipt, Printer, Send, FileText
+  Smartphone, User, Zap, CircleDollarSign, Home, Trash2, Scale, Receipt, Printer, Send, FileText,
+  X,
+  Briefcase
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -53,7 +55,6 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
@@ -86,14 +87,8 @@ export default function StudentDetailsPage() {
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  const staffQuery = useMemoFirebase(() => collection(db, "staff"), [db])
-  const { data: staffList } = useCollection(staffQuery)
-
-  const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
-  const { data: apiConfig } = useDoc(apiConfigRef)
-
-  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
-  const { data: templatesData } = useDoc(templatesRef)
+  const staffListQuery = useMemoFirebase(() => collection(db, "staff"), [db])
+  const { data: staffList } = useCollection(staffListQuery)
 
   const [paymentData, setPaymentData] = useState({
     month: MONTHS[new Date().getMonth()],
@@ -170,7 +165,6 @@ export default function StudentDetailsPage() {
     }
   }, [isExitDialogOpen, settlementCalculation]);
 
-  // Payment Submit Logic for Profile
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
     setIsUpdating(true)
@@ -193,7 +187,6 @@ export default function StudentDetailsPage() {
       let remainingRentPaid = seatPaid;
       const targetLabel = `${paymentData.month} ${paymentData.year}`;
 
-      // 1. Deduct from selected month object
       if (currentDues[targetLabel] && remainingRentPaid > 0) {
         const dueAmt = Number(currentDues[targetLabel].amount);
         if (remainingRentPaid >= dueAmt) {
@@ -205,7 +198,6 @@ export default function StudentDetailsPage() {
         }
       }
 
-      // 2. Pay other months if money left
       if (remainingRentPaid > 0) {
         const remainingMonths = Object.keys(currentDues).sort((a, b) => {
           const [mA, yA] = a.split(' ');
@@ -235,8 +227,8 @@ export default function StudentDetailsPage() {
         advanceAmount: increment(extraAdvance), 
         totalDue: finalTotalDue,
         duesBreakdown: currentDues,
-        foodDueAmount: increment(foodPaid), // PLUS to net balance
-        historicalTotalReceived: increment(totalAmt), // Accumulate
+        foodDueAmount: increment(foodPaid), 
+        historicalTotalReceived: increment(totalAmt), 
         updatedAt: serverTimestamp() 
       })
       
@@ -262,7 +254,6 @@ export default function StudentDetailsPage() {
     if (!studentRef || !student) return
     setIsUpdating(true)
     try {
-      // Seat release logic kept same as previous turns
       const bRef = doc(db, "buildings", student.buildingId)
       const buildingSnap = await getDoc(bRef)
       if (buildingSnap.exists()) {
@@ -402,7 +393,9 @@ export default function StudentDetailsPage() {
               </div>
             </div>
           </div>
-          <Button variant="secondary" className="w-full mt-8 rounded-xl font-bold gap-2 text-xs uppercase" onClick={() => setIsDetailsDialogOpen(true)}><Info size={14} /> View All Information</Button>
+          <Button variant="secondary" className="w-full mt-8 rounded-xl font-bold gap-2 text-xs uppercase" onClick={() => setIsDetailsDialogOpen(true)}>
+            <Info size={14} /> View All Information
+          </Button>
         </Card>
 
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -467,6 +460,26 @@ export default function StudentDetailsPage() {
             </Table>
           </Card>
         </TabsContent>
+
+        {student.paymentSystem === 'non-package' && (
+          <TabsContent value="meals">
+            <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+              <Table>
+                <TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Month</TableHead><TableHead>Meal Count</TableHead><TableHead className="text-right">Total Cost</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
+                    <TableRow key={idx}>
+                      <TableCell className="text-xs text-slate-500">{new Date(m.date).toLocaleDateString()}</TableCell>
+                      <TableCell className="font-bold">{m.month}</TableCell>
+                      <TableCell><Badge variant="secondary" className="font-bold">{m.totalMeals} Meals</Badge></TableCell>
+                      <TableCell className="text-right font-black text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
@@ -514,6 +527,210 @@ export default function StudentDetailsPage() {
             </div>
           </div>
           <DialogFooter><Button className="w-full h-14 rounded-2xl text-lg font-black" onClick={handlePaymentSubmit} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* FULL DETAILS DIALOG */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="text-primary" /> Full Resident Profile
+            </DialogTitle>
+            <DialogDescription>Comprehensive records for {student.name}</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-8 py-4">
+            {/* Personal Section */}
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                <User size={14}/> Personal Information
+              </h3>
+              <div className="grid grid-cols-2 gap-6 p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">Father's Name</Label>
+                  <p className="font-bold text-slate-700">{student.fatherName || 'N/A'}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">Mother's Name</Label>
+                  <p className="font-bold text-slate-700">{student.motherName || 'N/A'}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">Date of Birth</Label>
+                  <p className="font-bold text-slate-700">{student.dob || 'N/A'}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">Blood Group</Label>
+                  <Badge variant="outline" className="font-black text-primary border-primary/20">{student.bloodGroup || 'N/A'}</Badge>
+                </div>
+              </div>
+            </div>
+
+            {/* Academic/Work Section */}
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                <GraduationCap size={14}/> Occupation & Institution
+              </h3>
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold text-muted-foreground uppercase">Occupation</Label>
+                    <p className="font-bold text-slate-700 capitalize">{student.occupation || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold text-muted-foreground uppercase">Dept / Designation</Label>
+                    <p className="font-bold text-slate-700">{student.department || 'N/A'}</p>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">Institution / Company</Label>
+                  <p className="font-bold text-slate-700">{student.collegeUniversity || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Permanent Address */}
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                <MapPin size={14}/> Permanent Address
+              </h3>
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">District</Label>
+                  <p className="font-bold text-slate-700">{student.district || 'N/A'}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">Upazila</Label>
+                  <p className="font-bold text-slate-700">{student.upazila || 'N/A'}</p>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">Full Details</Label>
+                  <p className="text-sm font-medium text-slate-600">{student.address || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Contacts */}
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black uppercase text-destructive tracking-widest flex items-center gap-2">
+                <Smartphone size={14}/> Emergency Contacts
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-red-50 rounded-2xl border border-red-100 space-y-1">
+                  <Label className="text-[8px] font-bold text-destructive uppercase">Parent's Mobile</Label>
+                  <p className="font-black text-slate-800">{student.parentPhone || 'N/A'}</p>
+                </div>
+                <div className="p-4 bg-red-50 rounded-2xl border border-red-100 space-y-1">
+                  <Label className="text-[8px] font-bold text-destructive uppercase">Guardian Mobile</Label>
+                  <p className="font-black text-slate-800">{student.guardianPhone || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsDetailsDialogOpen(false)} className="w-full rounded-2xl h-12 font-bold">Close Details</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EDIT PROFILE DIALOG */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-xl rounded-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Resident Profile</DialogTitle>
+            <DialogDescription>Modify contact or personal details.</DialogDescription>
+          </DialogHeader>
+          {editForm && (
+            <div className="space-y-6 py-4">
+              <div className="space-y-4">
+                <Label className="text-xs font-bold uppercase text-primary tracking-widest">Personal Info</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label>Full Name</Label>
+                    <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Phone</Label>
+                    <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <Label className="text-xs font-bold uppercase text-primary tracking-widest">Financial Settings</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label>Monthly Rent</Label>
+                    <Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Billing Start Date</Label>
+                    <Input type="date" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+              <Button onClick={handleUpdateProfile} className="w-full h-12 rounded-2xl font-bold" disabled={isUpdating}>
+                {isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* EXIT SETTLEMENT DIALOG */}
+      <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><UserMinus /> Exit & Settlement</DialogTitle>
+            <DialogDescription>Process resident checkout and final financial clearing.</DialogDescription>
+          </DialogHeader>
+          {settlementCalculation && (
+            <div className="space-y-6 py-4">
+              <div className="p-5 bg-slate-50 rounded-2xl border-2 border-slate-100 space-y-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Unpaid Rent:</span>
+                  <span className="font-bold text-destructive">৳{settlementCalculation.pendingRent.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Food Debt:</span>
+                  <span className="font-bold text-destructive">৳{settlementCalculation.foodDue}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Security Advance:</span>
+                  <span className="font-bold text-primary">৳{settlementCalculation.advance.toLocaleString()}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between items-center">
+                  <span className="font-black text-slate-800">Final Result:</span>
+                  <div className="text-right">
+                    <p className={cn("text-2xl font-black", settlementCalculation.isRefund ? "text-success" : "text-destructive")}>
+                      ৳{settlementCalculation.absResult.toLocaleString()}
+                    </p>
+                    <p className="text-[10px] font-bold uppercase opacity-60">
+                      {settlementCalculation.isRefund ? "Refund to Resident" : "Collect from Resident"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase">Final Amount Processed (৳)</Label>
+                <Input type="number" value={settlementInput} onChange={e => setSettlementInput(e.target.value)} className="h-12 text-lg font-black" />
+              </div>
+
+              <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex gap-3">
+                <AlertCircle className="text-destructive h-5 w-5 shrink-0" />
+                <p className="text-[10px] text-red-700 leading-tight">
+                  This action will release Seat {student.seatNumber} in Room {student.roomNumber} and mark the resident as inactive. This is irreversible.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="grid grid-cols-2 gap-4">
+            <Button variant="outline" className="rounded-xl" onClick={() => setIsExitDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" className="rounded-xl font-bold" onClick={handleConfirmExit} disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Exit"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
