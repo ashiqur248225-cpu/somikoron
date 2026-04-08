@@ -84,6 +84,27 @@ import { useRouter } from "next/navigation"
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
 
+const EXPENSE_CATEGORIES = [
+  { id: "rent", label: "Building Rent", icon: Building2 },
+  { id: "electricity", label: "Electricity Bill", icon: Lightbulb },
+  { id: "water", label: "Water & Gas Bill", icon: Receipt },
+  { id: "maintenance", label: "Maintenance/Repair", icon: Wrench },
+  { id: "food", label: "Food / Meal Cost", icon: Utensils },
+  { id: "market", label: "General Market", icon: Apple },
+  { id: "internet", label: "Internet Bill", icon: Wifi },
+  { id: "salary", label: "Staff Salary", icon: UserCircle },
+  { id: "others", label: "Others", icon: Wallet },
+]
+
+const timeRangeLabels: Record<string, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  this_week: "This Week",
+  this_month: "This Month",
+  this_year: "This Year",
+  all_time: "All Time"
+};
+
 export default function DashboardPage() {
   const db = useFirestore()
   const { toast } = useToast()
@@ -100,6 +121,7 @@ export default function DashboardPage() {
 
   // Dialog States
   const [isIncomeDialogOpen, setIsIncomeDialogOpen] = useState(false)
+  const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false)
   const [isMealLogSelectorOpen, setIsMealLogSelectorOpen] = useState(false)
   const [isBulkMealEntryOpen, setIsBulkMealEntryOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -128,6 +150,23 @@ export default function DashboardPage() {
     method: "cash",
     receiver: "",
     description: ""
+  })
+
+  const [expenseFormData, setExpenseFormData] = useState({
+    category: "others",
+    buildingId: "none",
+    apartmentName: "",
+    roomNumber: "",
+    meterNo: "",
+    amount: "",
+    totalMeals: "",
+    method: "cash",
+    expensePartyName: "",
+    receiver: "",
+    month: MONTHS[new Date().getMonth()],
+    year: new Date().getFullYear().toString(),
+    description: "",
+    expenseDate: new Date().toISOString().split('T')[0]
   })
 
   useEffect(() => {
@@ -410,6 +449,37 @@ export default function DashboardPage() {
     finally { setIsSubmitting(false) }
   }
 
+  const handleCreateExpense = async () => {
+    if (!expenseFormData.amount || !expenseFormData.expensePartyName) {
+      toast({ variant: "destructive", title: "Error", description: "Amount and Spent By are required." })
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      const selectedB = buildings?.find(b => b.id === expenseFormData.buildingId)
+      const expenseId = doc(collection(db, "expenses")).id
+      const expenseData = { 
+        ...expenseFormData, 
+        amount: Number(expenseFormData.amount), 
+        totalMeals: expenseFormData.category === 'food' ? Number(expenseFormData.totalMeals || 0) : 0,
+        branch: userBranch, 
+        buildingName: selectedB?.name || "General", 
+        updatedAt: serverTimestamp() 
+      }
+
+      if (userRole === 'Building Manager') {
+        const reqId = doc(collection(db, "managerRequests")).id
+        await setDoc(doc(db, "managerRequests", reqId), { ...expenseData, id: reqId, requestType: "expense", requestedBy: localStorage.getItem("somikoron_auth_id"), requestedByName: userName, createdAt: serverTimestamp() })
+        toast({ title: "Request Sent" })
+      } else {
+        await setDoc(doc(db, "expenses", expenseId), { ...expenseData, id: expenseId, createdAt: serverTimestamp() })
+        toast({ title: "Success" })
+      }
+      setIsExpenseDialogOpen(false)
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
+    finally { setIsSubmitting(false) }
+  }
+
   const handleBulkMealSubmit = async () => {
     const entries = Object.entries(mealInputs).filter(([_, count]) => count && Number(count) > 0)
     if (entries.length === 0) return
@@ -483,8 +553,24 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="pb-2"><CardTitle className="text-[10px] uppercase text-success">Income</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">৳{stats.income.toLocaleString()}</div></CardContent></Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl"><CardHeader className="pb-2"><CardTitle className="text-[10px] uppercase text-destructive">Expenses</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">৳{stats.expense.toLocaleString()}</div></CardContent></Card>
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[10px] uppercase text-success flex justify-between items-center">
+              <span>Income</span>
+              <span className="text-[8px] font-black text-slate-400">({timeRangeLabels[timeRange]})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold">৳{stats.income.toLocaleString()}</div></CardContent>
+        </Card>
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[10px] uppercase text-destructive flex justify-between items-center">
+              <span>Expenses</span>
+              <span className="text-[8px] font-black text-slate-400">({timeRangeLabels[timeRange]})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold">৳{stats.expense.toLocaleString()}</div></CardContent>
+        </Card>
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-primary rounded-2xl"><CardHeader className="pb-2"><CardTitle className="text-[10px] uppercase text-primary">Residents</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.activeResidents}</div></CardContent></Card>
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-blue-500 rounded-2xl"><CardHeader className="pb-2"><CardTitle className="text-[10px] uppercase text-blue-600">Net Fund</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">৳{combinedBalance.toLocaleString()}</div></CardContent></Card>
       </div>
@@ -518,6 +604,9 @@ export default function DashboardPage() {
           <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 shadow-xl">
             {(userRole !== 'Building Manager' || canRequestIncome) && (
               <DropdownMenuItem onClick={() => setIsIncomeDialogOpen(true)} className="flex items-center gap-3 p-3 cursor-pointer text-primary font-bold"><Wallet size={20} /><span>New Income Entry</span></DropdownMenuItem>
+            )}
+            {(userRole !== 'Building Manager' || canRequestExpense) && (
+              <DropdownMenuItem onClick={() => setIsExpenseDialogOpen(true)} className="flex items-center gap-3 p-3 cursor-pointer text-destructive font-bold"><Receipt size={20} /><span>New Expense Entry</span></DropdownMenuItem>
             )}
             <DropdownMenuItem onClick={() => setIsMealLogSelectorOpen(true)} className="flex items-center gap-3 p-3 cursor-pointer text-orange-600 font-bold"><Utensils size={20} /><span>Monthly Meal Log</span></DropdownMenuItem>
           </DropdownMenuContent>
@@ -584,11 +673,28 @@ export default function DashboardPage() {
               ) : (
                 <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-xs">Seat Rent</Label><Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} /></div><div className="space-y-2"><Label className="text-xs">Food Deposit</Label><Input type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} /></div></div>
               )}
-              <div className="space-y-2"><Label className="text-xs">Add to Advance Pool</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} /></div>
+              <div className="space-y-2"><Label className="text-xs">Add to Security Advance</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label>Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div>
           </div>
           <DialogFooter><Button onClick={handleCreatePayment} disabled={isSubmitting} className="w-full h-12 text-lg font-bold">{isSubmitting ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Record New Expense</DialogTitle></DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="space-y-4">
+              <div className="space-y-2"><Label>Category</Label><Select value={expenseFormData.category} onValueChange={val => setExpenseFormData({...expenseFormData, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: '', totalMeals: '', month: MONTHS[new Date().getMonth()]})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Spent By</Label><Select value={expenseFormData.expensePartyName} onValueChange={val => setExpenseFormData({...expenseFormData, expensePartyName: val})}><SelectTrigger><SelectValue placeholder="Who spent?" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+            <Separator />
+            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Amount</Label><Input type="number" value={expenseFormData.amount} onChange={e => setExpenseFormData({...expenseFormData, amount: e.target.value})} /></div><div className="space-y-2"><Label>Method</Label><Select value={expenseFormData.method} onValueChange={val => setExpenseFormData({...expenseFormData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div></div>
+            <div className="space-y-2"><Label>Date</Label><Input type="date" value={expenseFormData.expenseDate} onChange={e => setExpenseFormData({...expenseFormData, expenseDate: e.target.value})} /></div>
+            <div className="space-y-2"><Label>Note</Label><Textarea value={expenseFormData.description} onChange={e => setExpenseFormData({...expenseFormData, description: e.target.value})} /></div>
+          </div>
+          <DialogFooter><Button onClick={handleCreateExpense} disabled={isSubmitting} className="w-full h-12 bg-destructive text-white">{isSubmitting ? <Loader2 className="animate-spin" /> : "Save Expense"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
