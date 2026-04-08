@@ -16,7 +16,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { 
-  Plus, 
   Loader2, 
   Building2, 
   UserCircle, 
@@ -208,7 +207,6 @@ export default function ExpenseHistoryPage() {
         </div>
       </div>
 
-      {/* FILTER DIALOG */}
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
@@ -300,8 +298,6 @@ export default function ExpenseHistoryPage() {
           </div>
         </>
       )}
-
-      <div className="fixed bottom-8 right-8 z-50 print:hidden"><Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-expense"><Plus size={32} className="text-white" /></Button></div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">

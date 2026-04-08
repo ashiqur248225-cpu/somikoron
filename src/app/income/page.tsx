@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Wallet, Info, Loader2, Building2, Plus, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Calculator, ArrowUpCircle, RotateCcw, Clock, AlertCircle } from "lucide-react"
+import { Wallet, Info, Loader2, Building2, Search, Filter, HandCoins, CreditCard, LayoutGrid, XCircle, UserCheck, Calendar, DoorOpen, FileSpreadsheet, Printer, Download, Calculator, ArrowUpCircle, RotateCcw, Clock, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, limit, where, getDoc } from "firebase/firestore"
@@ -175,7 +175,6 @@ export default function IncomeHistoryPage() {
 
   const selectedStudent = useMemo(() => students?.find(s => s.id === formData.studentId), [students, formData.studentId])
 
-  // Payment Logic Updated
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver || !selectedStudent) return
     setIsSubmitting(true)
@@ -207,7 +206,6 @@ export default function IncomeHistoryPage() {
         let remainingRentPaid = seatPaid;
         const targetLabel = `${formData.month} ${formData.year}`;
         
-        // Priority 1: Specific Month Check
         if (currentDues[targetLabel] && remainingRentPaid > 0) {
           const dueAmt = Number(currentDues[targetLabel].amount);
           if (remainingRentPaid >= dueAmt) {
@@ -219,7 +217,6 @@ export default function IncomeHistoryPage() {
           }
         }
 
-        // Priority 2: Oldest month first
         if (remainingRentPaid > 0) {
           const remainingMonths = Object.keys(currentDues).sort((a, b) => {
             const [mA, yA] = a.split(' ');
@@ -241,7 +238,6 @@ export default function IncomeHistoryPage() {
           }
         }
 
-        // Final totalDue is sum of remaining objects in map
         const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
         await updateDoc(doc(db, "students", selectedStudent.id), {
@@ -249,7 +245,7 @@ export default function IncomeHistoryPage() {
           advanceAmount: increment(extraAdvance),
           totalDue: finalTotalDue,
           duesBreakdown: currentDues,
-          foodDueAmount: increment(foodPaid), // PLUS food deposit to net balance
+          foodDueAmount: increment(foodPaid),
           historicalTotalReceived: increment(totalAmt),
           updatedAt: serverTimestamp()
         })
@@ -342,8 +338,6 @@ export default function IncomeHistoryPage() {
           </div>
         </>
       )}
-
-      <div className="fixed bottom-8 right-8 z-50 print:hidden"><Button onClick={() => setIsEntryOpen(true)} size="icon" className="h-14 w-14 rounded-full shadow-lg bg-income"><Plus size={32} className="text-white" /></Button></div>
 
       <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
