@@ -140,9 +140,24 @@ export default function RegistrationsPage() {
   useEffect(() => {
     if (selectedRoom) {
       const rent = String(selectedRoom.rentPerSeat || 0)
-      setApprovalForm(prev => ({ ...prev, monthlyRent: rent, advanceAmount: rent }))
+      setApprovalForm(prev => ({ 
+        ...prev, 
+        monthlyRent: rent, 
+        advanceAmount: rent,
+        initialRentPayment: rent // Auto-fill Initial Payment with Full Rent
+      }))
     }
   }, [selectedRoom])
+
+  // Custom handler for rent change to sync advance and initial payment
+  const handleMonthlyRentChange = (val: string) => {
+    setApprovalForm(prev => ({
+      ...prev,
+      monthlyRent: val,
+      advanceAmount: val,
+      initialRentPayment: val
+    }))
+  }
 
   const addDueEntry = () => {
     const newEntry: DueEntry = {
@@ -176,21 +191,43 @@ export default function RegistrationsPage() {
       const isOld = selectedReg.type === 'old'
       const aptName = selectedRoom?.aptName || "General"
       
+      const now = new Date()
+      const currentMonth = MONTHS[now.getMonth()]
+      const currentYear = now.getFullYear().toString()
+      const currentMonthLabel = `${currentMonth} ${currentYear}`
+
       const finalDuesBreakdown: Record<string, any> = {}
       let initialTotalDue = 0;
       
-      // Calculate Historical Dues for Old Students
+      // Calculate Dues Logic
       if (isOld) {
+        // Historical Dues for Old Students
         approvalForm.duesBreakdown.forEach(d => {
           const label = `${d.month} ${d.year}`;
           const amt = Number(d.amount);
           finalDuesBreakdown[label] = { month: d.month, year: d.year, amount: amt };
           initialTotalDue += amt;
         });
+      } else {
+        // Logic for New Students: Determine if current month is paid
+        const rentPaid = Number(approvalForm.initialRentPayment || 0)
+        const monthlyRent = Number(approvalForm.monthlyRent || 0)
+        
+        if (rentPaid < monthlyRent) {
+          const dueAmt = monthlyRent - rentPaid;
+          finalDuesBreakdown[currentMonthLabel] = {
+            month: currentMonth,
+            year: currentYear,
+            amount: dueAmt
+          };
+          initialTotalDue = dueAmt;
+        }
       }
 
       // Handle Initial Income for New Students
       let totalNewReceived = 0;
+      let initialPaymentRecord: any = null;
+
       if (!isOld) {
         const rentPaid = Number(approvalForm.initialRentPayment)
         const foodPaid = Number(approvalForm.initialFoodPayment)
@@ -200,7 +237,7 @@ export default function RegistrationsPage() {
 
         if (totalNewReceived > 0) {
           const pId = doc(collection(db, "payments")).id
-          await setDoc(doc(db, "payments", pId), {
+          initialPaymentRecord = {
             id: pId, 
             amount: totalNewReceived, 
             seatAmount: rentPaid, 
@@ -216,7 +253,15 @@ export default function RegistrationsPage() {
             type: "income", 
             method: approvalForm.method,
             receiver: approvalForm.receiver,
-            date: serverTimestamp(), 
+            month: currentMonth, // Auto-derived month
+            year: currentYear,   // Auto-derived year
+            date: new Date().toISOString(), 
+            createdAt: new Date().toISOString()
+          }
+
+          await setDoc(doc(db, "payments", pId), {
+            ...initialPaymentRecord,
+            date: serverTimestamp(),
             createdAt: serverTimestamp()
           })
         }
@@ -245,7 +290,6 @@ export default function RegistrationsPage() {
         billingStartDate: approvalForm.billingStartDate,
         createdAt: serverTimestamp(), 
         updatedAt: serverTimestamp(),
-        // Initializing other fields from registration
         fatherName: selectedReg.fatherName || "",
         motherName: selectedReg.motherName || "",
         dob: selectedReg.dob || "",
@@ -256,7 +300,7 @@ export default function RegistrationsPage() {
         department: selectedReg.department || "",
         parentPhone: selectedReg.parentPhone || "",
         guardianPhone: selectedReg.guardianPhone || "",
-        paymentsHistory: [],
+        paymentsHistory: initialPaymentRecord ? [initialPaymentRecord] : [],
         mealsHistory: []
       })
 
@@ -525,7 +569,7 @@ export default function RegistrationsPage() {
                   <div className="p-6 border-2 border-slate-100 rounded-3xl bg-white grid grid-cols-1 md:grid-cols-3 gap-6 shadow-sm">
                     <div className="space-y-2">
                       <Label className="text-xs font-bold text-primary">Monthly Seat Rent (৳)</Label>
-                      <Input type="number" value={approvalForm.monthlyRent} onChange={e => setApprovalForm({...approvalForm, monthlyRent: e.target.value})} className="h-11 font-black text-lg" />
+                      <Input type="number" value={approvalForm.monthlyRent} onChange={e => handleMonthlyRentChange(e.target.value)} className="h-11 font-black text-lg" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs">Payment System</Label>
@@ -561,15 +605,17 @@ export default function RegistrationsPage() {
                   
                   {selectedReg?.type === 'old' ? (
                     <div className="p-6 border-2 border-orange-200 bg-orange-50/50 rounded-3xl space-y-6 shadow-sm">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-xs font-bold text-orange-700">Lifetime Total Received (৳)</Label>
                           <Input type="number" value={approvalForm.historicalTotalReceived} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} placeholder="Total collected so far" className="bg-white" />
                         </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold text-orange-700">Net Food Balance (৳)</Label>
-                          <Input type="number" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="+ জমা / - বকেয়া" className="bg-white" />
-                        </div>
+                        {approvalForm.paymentSystem === 'non-package' && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-bold text-orange-700">Net Food Balance (৳)</Label>
+                            <Input type="number" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="+ জমা / - বকেয়া" className="bg-white" />
+                          </div>
+                        )}
                       </div>
 
                       <Separator className="bg-orange-200" />
@@ -622,10 +668,12 @@ export default function RegistrationsPage() {
                         <Label className="text-xs font-bold text-primary">Initial Rent Payment (৳)</Label>
                         <Input type="number" value={approvalForm.initialRentPayment} onChange={e => setApprovalForm({...approvalForm, initialRentPayment: e.target.value})} className="bg-white h-11" placeholder="Current month rent if paid" />
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-primary">Initial Food Deposit (৳)</Label>
-                        <Input type="number" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} className="bg-white h-11" placeholder="Food opening balance" />
-                      </div>
+                      {approvalForm.paymentSystem === 'non-package' && (
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold text-primary">Initial Food Deposit (৳)</Label>
+                          <Input type="number" value={approvalForm.initialFoodPayment} onChange={e => setApprovalForm({...approvalForm, initialFoodPayment: e.target.value})} className="bg-white h-11" placeholder="Food opening balance" />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
