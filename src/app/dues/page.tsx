@@ -61,16 +61,13 @@ export default function DuesPage() {
   const processedData = useMemo(() => {
     if (!students) return []
     return students.map(s => {
-      // Use the persistent totalDue field from the DB.
+      // Persistent totalDue field from the DB (Rent only)
       const totalDueFromDB = s.totalDue || 0;
 
-      // Corrected formula for food balance: Opening + Paid - Cost
-      const historicalFoodDue = Number(s.foodDueAmount) || 0
-      const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-      const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0
-      const foodBalance = historicalFoodDue + totalFoodPaid - generatedFoodCost
+      // foodDueAmount is now the direct "Net Balance" field
+      const foodBalance = s.foodDueAmount || 0;
 
-      // The final display due is what's in the DB totalDue plus any food debt
+      // The final display due is what's in the DB totalDue plus any negative food balance (debt)
       const displayTotalDue = totalDueFromDB + (foodBalance < 0 ? Math.abs(foodBalance) : 0);
 
       return { ...s, foodBalance, displayTotalDue, isPaid: displayTotalDue <= 0 }
@@ -138,7 +135,6 @@ export default function DuesPage() {
         </div>
       </div>
 
-      {/* FILTER DIALOG */}
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
@@ -185,7 +181,6 @@ export default function DuesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Official Ledger Print Format */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
           <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
@@ -211,7 +206,7 @@ export default function DuesPage() {
                 <TableCell className="font-bold border">{s.name}<br/><span className="text-[7pt] font-normal">{s.phone}</span></TableCell>
                 <TableCell className="border">{s.buildingName} - R{s.roomNumber}</TableCell>
                 <TableCell className="text-right border">৳{s.monthlyRent}</TableCell>
-                <TableCell className={cn("text-right border", s.foodBalance < 0 ? "text-destructive font-bold" : "")}>৳{s.foodBalance.toLocaleString()}</TableCell>
+                <TableCell className={cn("text-right border", s.foodBalance < 0 ? "text-destructive font-bold" : "text-success")}>৳{s.foodBalance.toLocaleString()}</TableCell>
                 <TableCell className="text-right font-black border">৳{s.displayTotalDue.toLocaleString()}</TableCell>
               </TableRow>
             ))}
@@ -250,7 +245,7 @@ export default function DuesPage() {
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start"><div><h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3><p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p></div><Badge variant="destructive" className="text-[10px]">Due</Badge></div>
                   <div className="bg-secondary/30 p-3 rounded-xl border border-secondary"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold text-muted-foreground uppercase">Property</span><span className="text-xs font-bold text-slate-700">{s.buildingName} • R-{s.roomNumber}</span></div><div className="flex justify-between items-center pt-2 border-t border-white/50"><span className="text-[10px] font-bold text-destructive uppercase">Total Outstanding</span><span className="text-xl font-black text-destructive">৳{s.displayTotalDue.toLocaleString()}</span></div></div>
-                  <div className="grid grid-cols-2 gap-2 text-[10px] font-medium text-slate-500"><p>Rent Due: ৳{(s.totalDue || 0).toLocaleString()}</p><p className={cn("text-right", s.foodBalance < 0 ? "text-destructive font-bold" : "")}>Food Bal: ৳{s.foodBalance.toLocaleString()}</p></div>
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-medium text-slate-500"><p>Rent Due: ৳{(s.totalDue || 0).toLocaleString()}</p><p className={cn("text-right", s.foodBalance < 0 ? "text-destructive font-bold" : "text-success")}>Food Bal: ৳{s.foodBalance.toLocaleString()}</p></div>
                   <Button variant="outline" className="w-full h-10 rounded-xl font-bold gap-2 text-xs" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} /> View Full Profile</Button>
                 </CardContent>
               </Card>

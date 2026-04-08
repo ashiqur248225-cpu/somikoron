@@ -118,16 +118,11 @@ export default function StudentDetailsPage() {
   const stats = useMemo(() => {
     if (!student) return null
     
-    // Recalculate totalDue from structured duesBreakdown
-    const breakdownSum = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
-    const rentDue = breakdownSum;
+    // Rent Dues calculation from structured breakdown
+    const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
-    // Formatted Food Balance Calculation: Opening Balance + Total Paid - Total Cost
-    const historicalFoodDue = Number(student.foodDueAmount) || 0
-    const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
-    const totalFoodPaid = (student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0)
-    const foodBalance = historicalFoodDue + totalFoodPaid - generatedFoodCost
-
+    // foodDueAmount is now the direct "Net Balance" field
+    const foodBalance = student.foodDueAmount || 0
     const totalReceived = student.historicalTotalReceived || 0
 
     const dueBreakdownList = Object.entries(student.duesBreakdown || {}).map(([monthLabel, data]: any) => ({
@@ -260,6 +255,7 @@ export default function StudentDetailsPage() {
         advanceAmount: increment(extraAdvance), 
         totalDue: finalTotalDue,
         duesBreakdown: currentDues,
+        foodDueAmount: increment(foodPaid), // Increment the net balance field
         historicalTotalReceived: increment(totalAmt),
         updatedAt: serverTimestamp() 
       })
@@ -444,7 +440,13 @@ export default function StudentDetailsPage() {
     { label: "Monthly Rent", val: student.monthlyRent, color: "orange-600", icon: Home, bg: "bg-orange-50" },
     { label: "Total Recv.", val: stats?.totalReceived, color: "green-600", icon: HandCoins, bg: "bg-green-50" },
     { label: "Rent Due", val: stats?.rentDue || 0, color: "destructive", icon: AlertCircle, bg: "bg-red-50" },
-    { label: "Food Bal.", val: stats?.foodBalance, color: (stats?.foodBalance ?? 0) >= 0 ? "success" : "destructive", icon: Utensils, bg: (stats?.foodBalance ?? 0) >= 0 ? "bg-success/5" : "bg-red-50" },
+    { 
+      label: "Food Bal.", 
+      val: stats?.foodBalance, 
+      color: (stats?.foodBalance ?? 0) >= 0 ? "success" : "destructive", 
+      icon: Utensils, 
+      bg: (stats?.foodBalance ?? 0) >= 0 ? "bg-success/5" : "bg-red-50" 
+    },
   ].filter(c => c.label !== 'Food Bal.' || student.paymentSystem === 'non-package');
 
   return (
