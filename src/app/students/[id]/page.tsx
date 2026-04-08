@@ -122,10 +122,11 @@ export default function StudentDetailsPage() {
     const breakdownSum = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
     const rentDue = breakdownSum;
 
+    // Formatted Food Balance Calculation: Opening Balance + Total Paid - Total Cost
     const historicalFoodDue = Number(student.foodDueAmount) || 0
     const generatedFoodCost = student.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
     const totalFoodPaid = (student.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0)
-    const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
+    const foodBalance = historicalFoodDue + totalFoodPaid - generatedFoodCost
 
     const totalReceived = student.historicalTotalReceived || 0
 
@@ -442,13 +443,12 @@ export default function StudentDetailsPage() {
     { label: "Service Chrg", val: student.serviceCharge, color: "purple-600", icon: Zap, bg: "bg-purple-50" },
     { label: "Monthly Rent", val: student.monthlyRent, color: "orange-600", icon: Home, bg: "bg-orange-50" },
     { label: "Total Recv.", val: stats?.totalReceived, color: "green-600", icon: HandCoins, bg: "bg-green-50" },
-    { label: "Rent Due", val: stats?.rentDue || 0, color: "red-600", icon: AlertCircle, bg: "bg-red-50" },
-    { label: "Food Bal.", val: stats?.foodBalance, color: (stats?.foodBalance ?? 0) >= 0 ? "success" : "red-600", icon: Utensils, bg: (stats?.foodBalance ?? 0) >= 0 ? "bg-success/5" : "bg-red-50" },
+    { label: "Rent Due", val: stats?.rentDue || 0, color: "destructive", icon: AlertCircle, bg: "bg-red-50" },
+    { label: "Food Bal.", val: stats?.foodBalance, color: (stats?.foodBalance ?? 0) >= 0 ? "success" : "destructive", icon: Utensils, bg: (stats?.foodBalance ?? 0) >= 0 ? "bg-success/5" : "bg-red-50" },
   ].filter(c => c.label !== 'Food Bal.' || student.paymentSystem === 'non-package');
 
   return (
     <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 relative">
-      {/* (Previous UI sections omitted for brevity but they remain same) */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
           <ChevronLeft size={24} />
@@ -538,10 +538,17 @@ export default function StudentDetailsPage() {
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {financialCards.map((card, idx) => (
             <Card key={idx} className={cn("p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 bg-white")}>
-              <div className={cn("p-3 rounded-xl shrink-0", card.bg, `text-${card.color}`)}><card.icon size={24}/></div>
+              <div className={cn("p-3 rounded-xl shrink-0", card.bg, card.color === 'success' ? 'text-success' : (card.color === 'destructive' ? 'text-destructive' : `text-${card.color}`))}>
+                <card.icon size={24}/>
+              </div>
               <div>
                 <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{card.label}</p>
-                <p className={cn("text-xl font-black text-slate-800", card.label === 'Rent Due' && "text-destructive")}>৳{card.val?.toLocaleString()}</p>
+                <p className={cn(
+                  "text-xl font-black", 
+                  card.color === 'success' ? "text-success" : (card.color === 'destructive' ? "text-destructive" : "text-slate-800")
+                )}>
+                  ৳{card.val?.toLocaleString()}
+                </p>
               </div>
             </Card>
           ))}
@@ -744,7 +751,149 @@ export default function StudentDetailsPage() {
           <DialogFooter><Button className="w-full h-14 rounded-2xl text-lg font-black" onClick={handlePaymentSubmit} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* ... (Rest of UI sections omitted for brevity) */}
+
+      {/* Profile Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black">Edit Resident Profile</DialogTitle>
+            <DialogDescription>Modify personal details or relocation information.</DialogDescription>
+          </DialogHeader>
+          
+          {editForm && (
+            <div className="space-y-8 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Personal Info</h3>
+                  <div className="space-y-2">
+                    <Label>Full Name</Label>
+                    <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Personal Phone</Label><Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Parent Phone</Label><Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} /></div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Emergency Guardian</Label>
+                    <Input value={editForm.guardianPhone} onChange={e => setEditForm({...editForm, guardianPhone: e.target.value})} />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-[10px] font-black uppercase text-primary tracking-widest">Relocation & Rates</h3>
+                  <div className="space-y-2">
+                    <Label>Building</Label>
+                    <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
+                      <SelectTrigger><SelectValue/></SelectTrigger>
+                      <SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Room No</Label>
+                      <Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={val => setEditForm({...editForm, roomNumber: val, seatNumber: ""})}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent>{editRoomsList.map((r: any, idx: number) => <SelectItem key={idx} value={String(r.roomNo)}>R-{r.roomNo}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Seat No</Label>
+                      <Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setEditForm({...editForm, seatNumber: val})}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={student.seatNumber}>{student.seatNumber} (Current)</SelectItem>
+                          {editSeatsList.filter((s: any) => s.status === 'empty').map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>S-{s.seatNo}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-primary font-bold">Monthly Rent (৳)</Label>
+                    <Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button className="w-full h-12 rounded-2xl text-lg font-bold" onClick={handleUpdateProfile} disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="animate-spin" /> : "Save Profile Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Exit Settlement Dialog */}
+      <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-destructive">Exit & Settlement</DialogTitle>
+            <DialogDescription>Calculate final dues and release seat.</DialogDescription>
+          </DialogHeader>
+          
+          {settlementCalculation && (
+            <div className="space-y-6 py-4">
+              <div className="p-5 bg-slate-50 rounded-2xl border-2 border-dashed space-y-3">
+                <div className="flex justify-between text-xs font-bold"><span>Unpaid Rent Dues</span> <span>৳{settlementCalculation.pendingRent}</span></div>
+                <div className="flex justify-between text-xs font-bold"><span>Food Debt (Negative Bal)</span> <span>৳{settlementCalculation.foodDue}</span></div>
+                <Separator />
+                <div className="flex justify-between text-xs font-black text-primary"><span>Minus Security Advance</span> <span>- ৳{settlementCalculation.advance}</span></div>
+              </div>
+
+              <div className={cn("p-6 rounded-3xl text-center space-y-1 shadow-lg", settlementCalculation.isRefund ? "bg-success text-white" : "bg-destructive text-white")}>
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">{settlementCalculation.isRefund ? "Amount to Refund" : "Amount to Collect"}</p>
+                <p className="text-4xl font-black">৳{settlementCalculation.absResult.toLocaleString()}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase">Actual Settlement Amount (৳)</Label>
+                <Input type="number" className="h-12 text-lg font-black" value={settlementInput} onChange={e => setSettlementInput(e.target.value)} />
+                <p className="text-[10px] text-muted-foreground italic">Update this if the finalized payment differs from the calculation.</p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="destructive" className="w-full h-14 rounded-2xl text-lg font-black shadow-xl shadow-destructive/20" onClick={handleConfirmExit} disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Exit & Release Seat"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Full Details Modal */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black">Resident Master File</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-8 py-4">
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black uppercase text-primary border-b pb-1">Personal File</h4>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Father's Name</p><p className="text-sm font-bold">{student.fatherName || 'N/A'}</p>
+                  <p className="text-xs text-muted-foreground">Mother's Name</p><p className="text-sm font-bold">{student.motherName || 'N/A'}</p>
+                  <p className="text-xs text-muted-foreground">Date of Birth</p><p className="text-sm font-bold">{student.dob || 'N/A'}</p>
+                  <p className="text-xs text-muted-foreground">Blood Group</p><Badge variant="outline">{student.bloodGroup || 'N/A'}</Badge>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black uppercase text-primary border-b pb-1">Permanent Address</h4>
+                <p className="text-sm leading-relaxed font-medium">{student.address || 'Address not provided'}</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-black uppercase text-primary border-b pb-1">Institutional Data</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div><p className="text-xs text-muted-foreground">Institute</p><p className="text-sm font-bold">{student.collegeUniversity || 'N/A'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Department/Role</p><p className="text-sm font-bold">{student.department || 'N/A'}</p></div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

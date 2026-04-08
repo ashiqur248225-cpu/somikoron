@@ -177,12 +177,13 @@ export default function IncomeHistoryPage() {
 
   const studentFinancials = useMemo(() => {
     if (!selectedStudent) return null;
-    // Updated summing logic for structured duesBreakdown
     const rentDue = Object.values(selectedStudent.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
+    
+    // Corrected formula for food balance: Opening + Paid - Cost
     const historicalFoodDue = Number(selectedStudent.foodDueAmount) || 0;
     const generatedFoodCost = selectedStudent.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0;
     const totalFoodPaid = (selectedStudent.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0);
-    const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost);
+    const foodBalance = historicalFoodDue + totalFoodPaid - generatedFoodCost;
     
     return { rentDue, foodBalance, advance: selectedStudent.advanceAmount || 0 };
   }, [selectedStudent]);
@@ -218,7 +219,6 @@ export default function IncomeHistoryPage() {
         let remainingRentPaid = seatPaid;
         const targetLabel = `${formData.month} ${formData.year}`;
         
-        // Use amount.amount logic for payment subtraction
         if (currentDues[targetLabel] && remainingRentPaid > 0) {
           const dueAmt = Number(currentDues[targetLabel].amount);
           if (remainingRentPaid >= dueAmt) {

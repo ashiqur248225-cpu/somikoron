@@ -64,12 +64,13 @@ export default function DuesPage() {
       // Use the persistent totalDue field from the DB.
       const totalDueFromDB = s.totalDue || 0;
 
+      // Corrected formula for food balance: Opening + Paid - Cost
       const historicalFoodDue = Number(s.foodDueAmount) || 0
       const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
       const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0
-      const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
+      const foodBalance = historicalFoodDue + totalFoodPaid - generatedFoodCost
 
-      // The final display due is what's in the DB totalDue plus any new food debt
+      // The final display due is what's in the DB totalDue plus any food debt
       const displayTotalDue = totalDueFromDB + (foodBalance < 0 ? Math.abs(foodBalance) : 0);
 
       return { ...s, foodBalance, displayTotalDue, isPaid: displayTotalDue <= 0 }

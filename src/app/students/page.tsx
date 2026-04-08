@@ -57,7 +57,7 @@ export default function StudentsPage() {
     if (!userBranch) return null
     return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userBranch])
-  const { data: students, isLoading } = useCollection(studentsQuery)
+  const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
@@ -68,10 +68,11 @@ export default function StudentsPage() {
       // Directly use the totalDue from DB (Admin-dependent)
       const rentDue = s.totalDue || 0;
 
+      // Corrected formula for food balance: Opening + Paid - Cost
       const historicalFoodDue = Number(s.foodDueAmount) || 0
       const generatedFoodCost = s.mealsHistory?.reduce((acc: number, curr: any) => acc + (curr.totalCost || 0), 0) || 0
       const totalFoodPaid = s.paymentsHistory?.reduce((acc: number, curr: any) => acc + Number(curr.foodAmount || 0), 0) || 0
-      const foodBalance = totalFoodPaid - (historicalFoodDue + generatedFoodCost)
+      const foodBalance = historicalFoodDue + totalFoodPaid - generatedFoodCost
       
       const totalReceived = s.historicalTotalReceived || 0
       const totalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
