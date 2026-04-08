@@ -11,7 +11,8 @@ import {
   UserCheck, XCircle, Loader2, Eye, Phone, Building2, 
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
   AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2,
-  Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft, ListOrdered, Hash
+  Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft, ListOrdered, Hash,
+  User, ChevronRight
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -567,7 +568,7 @@ export default function RegistrationsPage() {
                         </div>
                         <div className="space-y-2">
                           <Label className="text-xs font-bold text-orange-700">Net Food Balance (৳)</Label>
-                          <Input type="number" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="+ जमा / - বকেয়া" className="bg-white" />
+                          <Input type="number" value={approvalForm.foodDueAmount} onChange={e => setApprovalForm({...approvalForm, foodDueAmount: e.target.value})} placeholder="+ জমা / - বকেয়া" className="bg-white" />
                         </div>
                       </div>
 
