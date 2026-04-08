@@ -12,7 +12,7 @@ import {
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
   AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2,
   Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft, ListOrdered, Hash,
-  User, ChevronRight, LayoutGrid
+  User, ChevronRight, LayoutGrid, CircleDollarSign
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -144,7 +144,7 @@ export default function RegistrationsPage() {
         ...prev, 
         monthlyRent: rent, 
         advanceAmount: rent,
-        initialRentPayment: rent // Auto-fill Initial Payment with Full Rent
+        initialRentPayment: rent 
       }))
     }
   }, [selectedRoom])
@@ -253,8 +253,8 @@ export default function RegistrationsPage() {
             type: "income", 
             method: approvalForm.method,
             receiver: approvalForm.receiver,
-            month: currentMonth, // Auto-derived month
-            year: currentYear,   // Auto-derived year
+            month: currentMonth,
+            year: currentYear,
             date: new Date().toISOString(), 
             createdAt: new Date().toISOString()
           }
@@ -680,29 +680,51 @@ export default function RegistrationsPage() {
 
                 {/* SECTION 5: COLLECTION (NEW ONLY) */}
                 {selectedReg?.type !== 'old' && (
-                  <div className="space-y-4">
-                    <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><HandCoins size={14}/> Section 5: Collection Details</h3>
-                    <div className="p-6 border-2 border-slate-100 rounded-3xl bg-white grid grid-cols-1 md:grid-cols-2 gap-6 shadow-sm">
-                      <div className="space-y-2">
-                        <Label className="text-xs">Received By (Staff)</Label>
-                        <Select value={approvalForm.receiver} onValueChange={v => setApprovalForm({...approvalForm, receiver: v})}>
-                          <SelectTrigger className="h-11"><SelectValue placeholder="Select Staff Member" /></SelectTrigger>
-                          <SelectContent>
-                            {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><HandCoins size={14}/> Section 5: Collection Details</h3>
+                      <div className="p-6 border-2 border-slate-100 rounded-3xl bg-white grid grid-cols-1 md:grid-cols-2 gap-6 shadow-sm">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Received By (Staff)</Label>
+                          <Select value={approvalForm.receiver} onValueChange={v => setApprovalForm({...approvalForm, receiver: v})}>
+                            <SelectTrigger className="h-11"><SelectValue placeholder="Select Staff Member" /></SelectTrigger>
+                            <SelectContent>
+                              {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Payment Method</Label>
+                          <Select value={approvalForm.method} onValueChange={v => setApprovalForm({...approvalForm, method: v})}>
+                            <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="cash">Cash</SelectItem>
+                              <SelectItem value="bkash">Bkash</SelectItem>
+                              <SelectItem value="nagad">Nagad</SelectItem>
+                              <SelectItem value="bank">Bank</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs">Payment Method</Label>
-                        <Select value={approvalForm.method} onValueChange={v => setApprovalForm({...approvalForm, method: v})}>
-                          <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="cash">Cash</SelectItem>
-                            <SelectItem value="bkash">Bkash</SelectItem>
-                            <SelectItem value="nagad">Nagad</SelectItem>
-                            <SelectItem value="bank">Bank</SelectItem>
-                          </SelectContent>
-                        </Select>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><CircleDollarSign size={14}/> Section 6: Total Amount Summary</h3>
+                      <div className="p-6 border-2 border-slate-100 rounded-3xl bg-white shadow-sm">
+                        <div className="flex justify-between items-center">
+                          <div className="space-y-1">
+                            <span className="text-sm font-bold text-slate-600 uppercase">Grand Total Collection</span>
+                            <p className="text-[10px] text-muted-foreground font-medium">Rent + Food + Advance + Service Charge</p>
+                          </div>
+                          <span className="text-3xl font-black text-primary">
+                            ৳{(
+                              Number(approvalForm.initialRentPayment || 0) + 
+                              Number(approvalForm.initialFoodPayment || 0) + 
+                              Number(approvalForm.advanceAmount || 0) + 
+                              Number(approvalForm.serviceCharge || 0)
+                            ).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
