@@ -5,7 +5,7 @@ import * as React from "react"
 import { useState, useMemo, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, serverTimestamp, updateDoc, setDoc, arrayUnion, increment, collection, query, where, getDoc } from "firebase/firestore"
+import { doc, serverTimestamp, updateDoc, setDoc, arrayUnion, increment, collection, query, where, getDoc, writeBatch } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -110,13 +110,52 @@ export default function StudentDetailsPage() {
     }
   }, [student])
 
+  // Helpers for location dropdowns in Edit Dialog
+  const selectedBuildingForEdit = useMemo(() => 
+    buildings?.find(b => b.id === editForm?.buildingId), 
+    [buildings, editForm?.buildingId]
+  )
+
+  const roomsInBuildingForEdit = useMemo(() => {
+    if (!selectedBuildingForEdit) return []
+    return selectedBuildingForEdit.apartmentsDetail?.flatMap((apt: any) => 
+      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
+    ) || []
+  }, [selectedBuildingForEdit])
+
+  const selectedRoomForEdit = useMemo(() => 
+    roomsInBuildingForEdit.find((r: any) => String(r.roomNo) === String(editForm?.roomNumber)), 
+    [roomsInBuildingForEdit, editForm?.roomNumber]
+  )
+
+  const emptySeatsForEdit = useMemo(() => {
+    if (!selectedRoomForEdit) return []
+    // Filter empty seats but also include the student's CURRENT seat if we are in the same room
+    const originalSeat = student?.seatNumber
+    const originalRoom = student?.roomNumber
+    const originalBuilding = student?.buildingId
+
+    return selectedRoomForEdit.seats?.filter((s: any) => {
+      if (s.status === 'empty') return true
+      if (originalBuilding === editForm?.buildingId && originalRoom === editForm?.roomNumber && s.seatNo === originalSeat) return true
+      return false
+    }) || []
+  }, [selectedRoomForEdit, student, editForm?.buildingId, editForm?.roomNumber])
+
+  // Sync rent in Edit Form when room changes
+  useEffect(() => {
+    if (selectedRoomForEdit && isEditDialogOpen) {
+      const newRent = Number(selectedRoomForEdit.rentPerSeat || 0)
+      if (editForm?.monthlyRent !== newRent) {
+        setEditForm((prev: any) => ({ ...prev, monthlyRent: newRent }))
+      }
+    }
+  }, [selectedRoomForEdit, isEditDialogOpen])
+
   const stats = useMemo(() => {
     if (!student) return null
     
-    // Rent Dues calculation from structured breakdown objects
     const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
-
-    // foodDueAmount is the direct "Net Balance" field
     const foodBalance = student.foodDueAmount || 0
     const totalReceived = student.historicalTotalReceived || 0
 
@@ -240,14 +279,102 @@ export default function StudentDetailsPage() {
   }
 
   const handleUpdateProfile = async () => {
-    if (!studentRef || !editForm) return
+    if (!studentRef || !editForm || !student) return
     setIsUpdating(true)
+    
+    const batch = writeBatch(db)
+    
+    // Check if location changed
+    const locationChanged = 
+      student.buildingId !== editForm.buildingId || 
+      student.roomNumber !== editForm.roomNumber || 
+      student.seatNumber !== editForm.seatNumber
+
     try {
-      await updateDoc(studentRef, { ...editForm, updatedAt: serverTimestamp() })
+      if (locationChanged) {
+        // 1. Release previous seat
+        const oldBRef = doc(db, "buildings", student.buildingId)
+        const oldBSnap = await getDoc(oldBRef)
+        if (oldBSnap.exists()) {
+          const oldBData = oldBSnap.data()
+          const updatedApts = oldBData.apartmentsDetail.map((apt: any) => {
+            if (apt.name === student.apartmentName) {
+              return {
+                ...apt,
+                rooms: apt.rooms.map((room: any) => {
+                  if (String(room.roomNo) === String(student.roomNumber)) {
+                    return {
+                      ...room,
+                      seats: room.seats.map((seat: any) => 
+                        seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat
+                      )
+                    }
+                  }
+                  return room
+                })
+              }
+            }
+            return apt
+          })
+          batch.update(oldBRef, {
+            apartmentsDetail: updatedApts,
+            occupiedSeats: increment(-1),
+            emptySeats: increment(1),
+            updatedAt: serverTimestamp()
+          })
+        }
+
+        // 2. Occupy new seat
+        const newBRef = doc(db, "buildings", editForm.buildingId)
+        const newBSnap = await getDoc(newBRef)
+        if (newBSnap.exists()) {
+          const newBData = newBSnap.data()
+          const newAptName = selectedRoomForEdit?.aptName || "General"
+          const updatedApts = newBData.apartmentsDetail.map((apt: any) => {
+            if (apt.name === newAptName) {
+              return {
+                ...apt,
+                rooms: apt.rooms.map((room: any) => {
+                  if (String(room.roomNo) === String(editForm.roomNumber)) {
+                    return {
+                      ...room,
+                      seats: room.seats.map((seat: any) => 
+                        seat.seatNo === editForm.seatNumber ? { ...seat, status: 'occupied' } : seat
+                      )
+                    }
+                  }
+                  return room
+                })
+              }
+            }
+            return apt
+          })
+          batch.update(newBRef, {
+            apartmentsDetail: updatedApts,
+            occupiedSeats: increment(1),
+            emptySeats: increment(-1),
+            updatedAt: serverTimestamp()
+          })
+          
+          // Update buildingName and apartmentName in student profile
+          editForm.buildingName = newBData.name
+          editForm.apartmentName = newAptName
+        }
+      }
+
+      batch.update(studentRef, { 
+        ...editForm, 
+        updatedAt: serverTimestamp() 
+      })
+
+      await batch.commit()
       setIsEditDialogOpen(false)
-      toast({ title: "Profile Updated" })
-    } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
-    finally { setIsUpdating(false) }
+      toast({ title: "Profile Updated", description: locationChanged ? "Location shifted and rent adjusted." : "" })
+    } catch (e: any) { 
+      toast({ variant: "destructive", title: "Error", description: e.message }) 
+    } finally { 
+      setIsUpdating(false) 
+    }
   }
 
   const handleConfirmExit = async () => {
@@ -541,7 +668,6 @@ export default function StudentDetailsPage() {
           </DialogHeader>
           
           <div className="space-y-8 py-4">
-            {/* Personal Section */}
             <div className="space-y-4">
               <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                 <User size={14}/> Personal Information
@@ -566,7 +692,6 @@ export default function StudentDetailsPage() {
               </div>
             </div>
 
-            {/* Academic/Work Section */}
             <div className="space-y-4">
               <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                 <GraduationCap size={14}/> Occupation & Institution
@@ -589,28 +714,16 @@ export default function StudentDetailsPage() {
               </div>
             </div>
 
-            {/* Permanent Address */}
             <div className="space-y-4">
               <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                 <MapPin size={14}/> Permanent Address
               </h3>
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">District</Label>
-                  <p className="font-bold text-slate-700">{student.district || 'N/A'}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">Upazila</Label>
-                  <p className="font-bold text-slate-700">{student.upazila || 'N/A'}</p>
-                </div>
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-[10px] font-bold text-muted-foreground uppercase">Full Details</Label>
-                  <p className="text-sm font-medium text-slate-600">{student.address || 'N/A'}</p>
-                </div>
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase">Address</Label>
+                <p className="text-sm font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">{student.address || 'N/A'}</p>
               </div>
             </div>
 
-            {/* Emergency Contacts */}
             <div className="space-y-4">
               <h3 className="text-[10px] font-black uppercase text-destructive tracking-widest flex items-center gap-2">
                 <Smartphone size={14}/> Emergency Contacts
@@ -635,41 +748,107 @@ export default function StudentDetailsPage() {
 
       {/* EDIT PROFILE DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-xl rounded-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Resident Profile</DialogTitle>
-            <DialogDescription>Modify contact or personal details.</DialogDescription>
+            <DialogDescription>Update contact, location, or personal details.</DialogDescription>
           </DialogHeader>
           {editForm && (
-            <div className="space-y-6 py-4">
+            <div className="space-y-8 py-4">
+              {/* Communication */}
               <div className="space-y-4">
-                <Label className="text-xs font-bold uppercase text-primary tracking-widest">Personal Info</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                  <Smartphone size={14}/> Communication & Contacts
+                </Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
                   <div className="space-y-1">
-                    <Label>Full Name</Label>
-                    <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                    <Label className="text-xs">Full Name</Label>
+                    <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="bg-white" />
                   </div>
                   <div className="space-y-1">
-                    <Label>Phone</Label>
-                    <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                    <Label className="text-xs">Personal Phone</Label>
+                    <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="bg-white" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Parent's Mobile</Label>
+                    <Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} className="bg-white" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Guardian Mobile</Label>
+                    <Input value={editForm.guardianPhone} onChange={e => setEditForm({...editForm, guardianPhone: e.target.value})} className="bg-white" />
                   </div>
                 </div>
               </div>
+
+              {/* Location Shifting */}
               <div className="space-y-4">
-                <Label className="text-xs font-bold uppercase text-primary tracking-widest">Financial Settings</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label>Monthly Rent</Label>
-                    <Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} />
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                  <Building2 size={14}/> Location Shifting (Hierarchy)
+                </Label>
+                <div className="p-5 border-2 border-primary/10 bg-primary/5 rounded-3xl space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Select Building</Label>
+                    <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}>
+                      <SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Choose Building" /></SelectTrigger>
+                      <SelectContent>
+                        {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="space-y-1">
-                    <Label>Billing Start Date</Label>
-                    <Input type="date" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Room No.</Label>
+                      <Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={val => setEditForm({...editForm, roomNumber: val, seatNumber: ""})}>
+                        <SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Room" /></SelectTrigger>
+                        <SelectContent>
+                          {roomsInBuildingForEdit.map((r: any, idx: number) => (
+                            <SelectItem key={idx} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Available Seat</Label>
+                      <Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setEditForm({...editForm, seatNumber: val})}>
+                        <SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Seat" /></SelectTrigger>
+                        <SelectContent>
+                          {emptySeatsForEdit.map((s: any) => (
+                            <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold text-orange-600">Monthly Rent (Auto-sync)</Label>
+                      <Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} className="bg-white font-black" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Billing Start Date</Label>
+                      <Input type="date" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} className="bg-white" />
+                    </div>
                   </div>
                 </div>
               </div>
-              <Button onClick={handleUpdateProfile} className="w-full h-12 rounded-2xl font-bold" disabled={isUpdating}>
-                {isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}
+
+              {/* Permanent Address */}
+              <div className="space-y-4">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                  <MapPin size={14}/> Permanent Address
+                </Label>
+                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                  <Textarea 
+                    value={editForm.address} 
+                    onChange={e => setEditForm({...editForm, address: e.target.value})} 
+                    placeholder="Enter village, post office, upazila, and district here..."
+                    className="bg-white min-h-[100px] rounded-xl resize-none"
+                  />
+                </div>
+              </div>
+
+              <Button onClick={handleUpdateProfile} className="w-full h-14 rounded-2xl font-black text-lg shadow-xl" disabled={isUpdating}>
+                {isUpdating ? <Loader2 className="animate-spin" /> : "Save Profile Updates"}
               </Button>
             </div>
           )}
