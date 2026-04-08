@@ -37,7 +37,8 @@ import {
   LayoutGrid,
   Apple,
   Table as TableIcon,
-  Check
+  Check,
+  CircleAlert
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -312,7 +313,15 @@ export default function DashboardPage() {
       if (fund[t.toAccount as keyof typeof fund] !== undefined) fund[t.toAccount as keyof typeof fund] += (t.amount || 0)
     });
 
-    return { income: totalIncome, expense: totalExpense, fund, activeResidents: (students || []).filter(s => s.isActive).length }
+    const totalDue = (students || []).filter(s => s.isActive).reduce((acc, s) => acc + (s.totalDue || 0), 0)
+
+    return { 
+      income: totalIncome, 
+      expense: totalExpense, 
+      fund, 
+      activeResidents: (students || []).filter(s => s.isActive).length,
+      totalDue
+    }
   }, [allPayments, allExpenses, allTransfers, students, openingBalances, timeRange])
 
   const filteredStudentsForMealLog = useMemo(() => {
@@ -385,7 +394,6 @@ export default function DashboardPage() {
         let remainingRentPaid = seatPaid;
         const targetLabel = `${formData.month} ${formData.year}`;
 
-        // 1. Specific month removal
         if (currentDues[targetLabel] && remainingRentPaid > 0) {
           const dueAmt = Number(currentDues[targetLabel]);
           if (remainingRentPaid >= dueAmt) {
@@ -397,7 +405,6 @@ export default function DashboardPage() {
           }
         }
 
-        // 2. Cascade surplus to oldest
         if (remainingRentPaid > 0) {
           const dueMonths = Object.keys(currentDues).sort((a, b) => {
             const [mA, yA] = a.split(' ');
@@ -418,7 +425,6 @@ export default function DashboardPage() {
           }
         }
 
-        // Final recalculation of totalDue
         const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b || 0), 0);
 
         await updateDoc(doc(db, "students", selectedStudent.id), { 
@@ -571,13 +577,34 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent><div className="text-2xl font-bold">৳{stats.expense.toLocaleString()}</div></CardContent>
         </Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-primary rounded-2xl"><CardHeader className="pb-2"><CardTitle className="text-[10px] uppercase text-primary">Residents</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.activeResidents}</div></CardContent></Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-blue-500 rounded-2xl"><CardHeader className="pb-2"><CardTitle className="text-[10px] uppercase text-blue-600">Net Fund</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">৳{combinedBalance.toLocaleString()}</div></CardContent></Card>
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-orange-500 rounded-2xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[10px] uppercase text-orange-600 flex justify-between items-center">
+              <span>Total Due</span>
+              <CircleAlert size={12} className="text-orange-400" />
+            </CardTitle>
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold">৳{stats.totalDue.toLocaleString()}</div></CardContent>
+        </Card>
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-primary rounded-2xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[10px] uppercase text-primary">Residents</CardTitle>
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold">{stats.activeResidents}</div></CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-5">
         <Card className="lg:col-span-3 shadow-sm border-none bg-white rounded-3xl overflow-hidden">
-          <CardHeader className="pb-6 border-b border-slate-50"><CardTitle className="text-lg">Branch Fund Status</CardTitle></CardHeader>
+          <CardHeader className="pb-6 border-b border-slate-50">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-lg">Branch Fund Status</CardTitle>
+              <div className="text-right">
+                <p className="text-[10px] font-black uppercase text-muted-foreground">Total Net Balance</p>
+                <p className="text-xl font-black text-primary">৳{combinedBalance.toLocaleString()}</p>
+              </div>
+            </div>
+          </CardHeader>
           <CardContent className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="p-6 rounded-3xl border space-y-2"><p className="text-[10px] uppercase font-bold text-muted-foreground">Cash in Hand</p><div className="text-2xl font-bold">৳{stats.fund.cash.toLocaleString()}</div></div>
             <div className="p-6 rounded-3xl border space-y-2"><p className="text-[10px] uppercase font-bold text-muted-foreground">Bank Account</p><div className="text-2xl font-bold">৳{stats.fund.bank.toLocaleString()}</div></div>
@@ -675,7 +702,7 @@ export default function DashboardPage() {
               )}
               <div className="space-y-2"><Label className="text-xs">Add to Security Advance</Label><Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} /></div>
             </div>
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label>Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: val})}><SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div>
+            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label>Receiver</Label><Select value={formData.receiver} onValueChange={val => setFormData({...formData, receiver: v})}><SelectTrigger><SelectValue placeholder="Select staff" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div></div>
           </div>
           <DialogFooter><Button onClick={handleCreatePayment} disabled={isSubmitting} className="w-full h-12 text-lg font-bold">{isSubmitting ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
         </DialogContent>
