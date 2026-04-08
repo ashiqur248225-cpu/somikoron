@@ -33,7 +33,9 @@ import {
   Plus,
   Trash2,
   Building,
-  RotateCcw
+  RotateCcw,
+  Eye,
+  ChevronDown
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -64,8 +66,8 @@ import { cn } from "@/lib/utils"
 import { sendSMS, getSMSBalance } from "@/app/actions/sms"
 
 const DEFAULT_TEMPLATES = [
-  { id: "admission", label: "Admission Success", text: "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], সিট: [সিট]। আমাদের সাথে থাকার জন্য ধন্যবাদ।" },
-  { id: "payment", label: "Payment Receipt", text: "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[পরিমাণ] টাকা। বর্তমান বকেয়া: ৳[total_payable]। ধন্যবাদ। [Hostel Name]" },
+  { id: "admission", label: "Admission Success", text: "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আমাদের সাথে থাকার জন্য ধন্যবাদ।" },
+  { id: "payment", label: "Payment Receipt", text: "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[paid] টাকা। বর্তমান মোট বকেয়া: ৳[total_payable]। ধন্যবাদ। [Hostel Name]" },
   { id: "due_reminder", label: "Due Reminder", text: "প্রিয় [নাম], [মাস] মাসের ভাড়া/খাবার বাবদ আপনার ৳[total_payable] বকেয়া রয়েছে। অনুগ্রহ করে দ্রুত পরিশোধ করুন। [Hostel Name]" },
   { id: "low_food", label: "Low Food Balance", text: "প্রিয় [নাম], আপনার খাবার ব্যালেন্স কমে ৳[food_balance] হয়েছে। অনুগ্রহ করে দ্রুত রিচার্জ করুন। [Hostel Name]" },
   { id: "meal_summary", label: "Monthly Meal Summary", text: "প্রিয় [নাম], [মাস] মাসে আপনি মোট [meal_count] টি meal গ্রহণ করেছেন। মোট খাবার বিল ৳[meal_bill]। আপনার বর্তমান Food Balance ৳[food_balance] এবং খাবার বাবদ বকেয়া ৳[food_due]। [Hostel Name]" },
@@ -76,8 +78,10 @@ const DEFAULT_TEMPLATES = [
 const SMART_TAGS = [
   '[নাম]', '[মাস]', '[meal_count]', '[meal_rate]', '[meal_bill]', 
   '[rent]', '[previous_due]', '[total_payable]', '[paid]', 
-  '[food_balance]', '[food_due]', '[রুম]', '[সিট]', '[Hostel Name]'
+  '[food_balance]', '[food_due]', '[রুম]', '[building]', '[Hostel Name]'
 ];
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function SMSPanelPage() {
   const { toast } = useToast()
@@ -101,8 +105,10 @@ export default function SMSPanelPage() {
   // Broadcast States
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all") // all, birthday, due, low_balance
   const [selectedStudents, setSelectedStudents] = useState<string[]>([])
   const [customMessage, setCustomMessage] = useState("")
+  const [selectedTemplateId, setSelectedTemplateId] = useState("manual")
 
   // Birthday States
   const [birthdayStudents, setBirthdayStudents] = useState<any[]>([])
@@ -115,7 +121,7 @@ export default function SMSPanelPage() {
 
   // Templates Logic
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
-  const { data: templatesData, isLoading: templatesLoading } = useDoc(templatesRef)
+  const { data: templatesData } = useDoc(templatesRef)
   
   const [localTemplates, setLocalTemplates] = useState<any[]>(DEFAULT_TEMPLATES)
   const [hostelNameForSms, setHostelNameForSms] = useState("")
@@ -161,6 +167,10 @@ export default function SMSPanelPage() {
     }
   }
 
+  // Meal Rate Config
+  const mealConfigRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
   // Student Query
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -183,12 +193,69 @@ export default function SMSPanelPage() {
 
   const filteredStudents = useMemo(() => {
     if (!students) return []
+    const today = new Date()
+    const todayStr = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`
+
     return students.filter(s => {
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.phone?.includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
-      return matchesSearch && matchesBuilding
+      
+      let matchesStatus = true
+      if (statusFilter === 'birthday') matchesStatus = s.dob?.endsWith(todayStr)
+      if (statusFilter === 'due') matchesStatus = (s.totalDue || 0) > 0
+      if (statusFilter === 'low_balance') matchesStatus = (s.foodDueAmount || 0) < 50 && s.paymentSystem === 'non-package'
+
+      return matchesSearch && matchesBuilding && matchesStatus
     })
-  }, [students, searchTerm, buildingFilter])
+  }, [students, searchTerm, buildingFilter, statusFilter])
+
+  // Smart Tag Replacement Logic
+  const replaceTags = (message: string, student: any) => {
+    if (!message || !student) return message;
+    
+    const now = new Date();
+    const mealRate = Number(mealConfig?.rate || 0);
+    const rentDue = Number(student.totalDue || 0);
+    const foodBal = Number(student.foodDueAmount || 0);
+    
+    // total_payable = totalDue + negative foodDueAmount (debt)
+    const totalPayable = rentDue + (foodBal < 0 ? Math.abs(foodBal) : 0);
+    const foodDue = foodBal < 0 ? Math.abs(foodBal) : 0;
+    const foodBalance = foodBal > 0 ? foodBal : 0;
+
+    return message
+      .replaceAll('[নাম]', student.name || '')
+      .replaceAll('[মাস]', MONTHS[now.getMonth()])
+      .replaceAll('[meal_rate]', mealRate.toString())
+      .replaceAll('[rent]', (student.monthlyRent || 0).toString())
+      .replaceAll('[total_payable]', totalPayable.toString())
+      .replaceAll('[food_balance]', foodBalance.toString())
+      .replaceAll('[food_due]', foodDue.toString())
+      .replaceAll('[রুম]', student.roomNumber || '')
+      .replaceAll('[building]', student.buildingName || '')
+      .replaceAll('[Hostel Name]', hostelNameForSms || userBranch)
+      // Generic placeholders if data not in object context
+      .replaceAll('[meal_count]', '0')
+      .replaceAll('[meal_bill]', '0')
+      .replaceAll('[previous_due]', rentDue.toString())
+      .replaceAll('[paid]', '0');
+  };
+
+  const messagePreview = useMemo(() => {
+    if (!customMessage || filteredStudents.length === 0) return "";
+    const firstStudent = filteredStudents[0];
+    return replaceTags(customMessage, firstStudent);
+  }, [customMessage, filteredStudents, mealConfig, hostelNameForSms]);
+
+  const handleTemplateSelect = (val: string) => {
+    setSelectedTemplateId(val);
+    if (val === 'manual') {
+      setCustomMessage("");
+    } else {
+      const template = localTemplates.find(t => t.id === val);
+      if (template) setCustomMessage(template.text);
+    }
+  };
 
   const handleSaveApiConfig = async () => {
     if (!apiConfig.apikey) {
@@ -197,18 +264,14 @@ export default function SMSPanelPage() {
     }
     setIsSubmitting(true)
     try {
-      const configToSave = {
-        apikey: apiConfig.apikey.trim(),
-        senderid: apiConfig.senderid.trim()
-      }
-      
       await setDoc(apiConfigRef, {
-        ...configToSave,
+        apikey: apiConfig.apikey.trim(),
+        senderid: apiConfig.senderid.trim(),
         updatedAt: serverTimestamp(),
         updatedBy: userName
       })
       toast({ title: "API Config Saved", description: "Alpha Net BD API settings updated." })
-      fetchBalance(configToSave.apikey)
+      fetchBalance(apiConfig.apikey)
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -278,28 +341,56 @@ export default function SMSPanelPage() {
 
     setIsSubmitting(true)
     try {
-      const selectedPhones = students?.filter(s => selectedStudents.includes(s.id)).map(s => s.phone) || []
-      const toNumbers = selectedPhones.join(',')
-      const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, toNumbers, customMessage)
+      // For broadcast, we send multiple but the message is unique for each if we want tags replaced.
+      // ALPHA NET supports multiple recipients in one call but only one message.
+      // If tags are used, we MUST send individually to each student to ensure tag replacement.
+      const hasTags = SMART_TAGS.some(tag => customMessage.includes(tag));
+      
+      let successCount = 0;
+      let failureCount = 0;
 
-      if (result.error === 0) {
+      if (hasTags) {
+        // Send individually for personalization
+        for (const studentId of selectedStudents) {
+          const student = students?.find(s => s.id === studentId);
+          if (!student) continue;
+          
+          const personalizedMsg = replaceTags(customMessage, student);
+          const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, personalizedMsg);
+          
+          if (result.error === 0) {
+            successCount++;
+            await logSMSToDatabase(student.phone, personalizedMsg, 'Success');
+          } else {
+            failureCount++;
+            await logSMSToDatabase(student.phone, personalizedMsg, 'Failed', result.msg);
+          }
+        }
+      } else {
+        // Bulk send for generic messages
+        const selectedPhones = students?.filter(s => selectedStudents.includes(s.id)).map(s => s.phone) || [];
+        const toNumbers = selectedPhones.join(',');
+        const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, toNumbers, customMessage);
+        
+        if (result.error === 0) {
+          successCount = selectedPhones.length;
+          await logSMSToDatabase(toNumbers, customMessage, 'Success');
+        } else {
+          failureCount = selectedPhones.length;
+          await logSMSToDatabase(toNumbers, customMessage, 'Failed', result.msg);
+        }
+      }
+
+      if (successCount > 0) {
         toast({ 
-          title: "Broadcast Sent", 
-          description: `Message successfully queued for ${selectedPhones.length} recipients.`,
+          title: "Broadcast Complete", 
+          description: `Successfully sent to ${successCount} recipients. ${failureCount > 0 ? `${failureCount} failed.` : ''}`,
           action: <CheckCircle2 className="text-success" />
         })
-        await logSMSToDatabase(toNumbers, customMessage, 'Success')
         setSelectedStudents([])
-        setCustomMessage("")
         fetchBalance()
       } else {
-        const isBalanceError = result.error === 417
-        toast({ 
-          variant: "destructive", 
-          title: isBalanceError ? "ব্যালেন্স নেই" : "Gateway Error", 
-          description: isBalanceError ? "আপনার পর্যাপ্ত ব্যালেন্স নেই, দয়া করে রিচার্জ করুন।" : result.msg 
-        })
-        await logSMSToDatabase(toNumbers, customMessage, 'Failed', result.msg)
+        toast({ variant: "destructive", title: "Broadcast Failed", description: "Check gateway logs for details." })
       }
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -344,7 +435,7 @@ export default function SMSPanelPage() {
       const bTemplate = localTemplates.find(t => t.id === 'birthday')?.text || ""
       
       for (const s of birthdayStudents) {
-        const msg = bTemplate.replace('[নাম]', s.name).replace('[Hostel Name]', hostelNameForSms)
+        const msg = replaceTags(bTemplate, s);
         const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg)
         await logSMSToDatabase(s.phone, msg, result.error === 0 ? 'Success' : 'Failed', result.error !== 0 ? result.msg : undefined)
       }
@@ -445,19 +536,33 @@ export default function SMSPanelPage() {
                     <CardTitle className="text-lg">Recipient Selector</CardTitle>
                     <CardDescription>Select students to receive the broadcast message.</CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-                      <SelectTrigger className="w-[150px] bg-white h-9 text-xs">
-                        <Filter size={12} className="mr-2" />
-                        <SelectValue placeholder="All Buildings" />
+                      <SelectTrigger className="w-[140px] bg-white h-9 text-xs">
+                        <Building2 size={12} className="mr-2" />
+                        <SelectValue placeholder="Buildings" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Buildings</SelectItem>
                         {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-[140px] bg-white h-9 text-xs">
+                        <Filter size={12} className="mr-2" />
+                        <SelectValue placeholder="Quick Filters" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Students</SelectItem>
+                        <SelectItem value="birthday">Today's Birthday</SelectItem>
+                        <SelectItem value="due">Total Due > 0</SelectItem>
+                        <SelectItem value="low_balance">Low Food Bal (< 50)</SelectItem>
+                      </SelectContent>
+                    </Select>
+
                     <Button variant="outline" size="sm" onClick={selectAll} className="h-9 font-bold text-[10px] uppercase">
-                      {selectedStudents.length === filteredStudents.length && filteredStudents.length > 0 ? 'Unselect All' : 'Select All Filtered'}
+                      {selectedStudents.length === filteredStudents.length && filteredStudents.length > 0 ? 'Unselect' : 'Select All'}
                     </Button>
                   </div>
                 </div>
@@ -479,7 +584,7 @@ export default function SMSPanelPage() {
                         <TableHead className="w-[50px]"></TableHead>
                         <TableHead>Student Name</TableHead>
                         <TableHead>Building & Room</TableHead>
-                        <TableHead>Phone</TableHead>
+                        <TableHead>Balance Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -491,13 +596,29 @@ export default function SMSPanelPage() {
                               onCheckedChange={() => toggleStudent(s.id)}
                             />
                           </TableCell>
-                          <TableCell className="font-bold text-slate-700">{s.name}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{s.buildingName} • R-{s.roomNumber}</TableCell>
-                          <TableCell className="font-mono text-xs">{s.phone}</TableCell>
+                          <TableCell className="font-bold text-slate-700">
+                            {s.name}
+                            <div className="md:hidden text-[8px] font-mono text-muted-foreground">{s.phone}</div>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {s.buildingName} • R-{s.roomNumber}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="outline" className={cn("text-[8px] font-black uppercase", (s.totalDue || 0) > 0 ? "text-destructive border-destructive/20" : "text-success border-success/20")}>
+                                Rent: ৳{s.totalDue || 0}
+                              </Badge>
+                              {s.paymentSystem === 'non-package' && (
+                                <Badge variant="outline" className={cn("text-[8px] font-black uppercase", (s.foodDueAmount || 0) < 50 ? "text-orange-600 border-orange-200" : "text-primary border-primary/20")}>
+                                  Food: ৳{s.foodDueAmount || 0}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
                       {filteredStudents.length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic">No students found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic">No students match current filters.</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
@@ -508,16 +629,23 @@ export default function SMSPanelPage() {
             <div className="space-y-6">
               <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
                 <CardHeader className="bg-primary text-primary-foreground">
-                  <CardTitle className="text-lg flex items-center gap-2"><Smartphone size={20}/> Composer</CardTitle>
-                  <CardDescription className="text-primary-foreground/70">Type your custom message below.</CardDescription>
+                  <CardTitle className="text-lg flex items-center gap-2">< स्मार्टफोन size={20}/> Composer & Templates</CardTitle>
+                  <CardDescription className="text-primary-foreground/70">Pick a template or write manual message.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recipients</Label>
-                    <div className="p-3 bg-secondary/30 rounded-xl border border-dashed flex items-center justify-between">
-                      <span className="text-sm font-black text-primary">{selectedStudents.length} Students selected</span>
-                      <Users size={16} className="text-primary/40" />
-                    </div>
+                    <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quick Template</Label>
+                    <Select value={selectedTemplateId} onValueChange={handleTemplateSelect}>
+                      <SelectTrigger className="bg-slate-50 border-none h-11 rounded-xl shadow-inner font-bold text-slate-700">
+                        <SelectValue placeholder="Manual Message" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="manual">Manual / Custom Message</SelectItem>
+                        {localTemplates.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
@@ -526,18 +654,30 @@ export default function SMSPanelPage() {
                       value={customMessage}
                       onChange={e => setCustomMessage(e.target.value)}
                       placeholder="Type something important..."
-                      className="min-h-[200px] bg-slate-50 border-none shadow-inner resize-none rounded-2xl p-4 text-sm leading-relaxed"
+                      className="min-h-[180px] bg-slate-50 border-none shadow-inner resize-none rounded-2xl p-4 text-sm leading-relaxed"
                     />
                     <div className="flex justify-between text-[10px] font-bold text-muted-foreground px-1">
                       <span>{customMessage.length} Characters</span>
-                      <span>{Math.ceil(customMessage.length / 160)} SMS Part(s)</span>
+                      <span>{Math.ceil(customMessage.length / 160)} Part(s)</span>
                     </div>
                   </div>
+
+                  {messagePreview && (
+                    <div className="p-4 bg-primary/5 rounded-2xl border border-dashed border-primary/20 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-1"><Eye size={10}/> Smart Preview</span>
+                        <span className="text-[8px] text-muted-foreground italic">Showing example for {filteredStudents[0]?.name}</span>
+                      </div>
+                      <p className="text-xs leading-relaxed text-slate-600 font-medium">
+                        {messagePreview}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex gap-2">
                     <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                     <p className="text-[10px] text-amber-700 leading-tight">
-                      ব্রডকাস্ট পাঠানোর আগে নিশ্চিত হয়ে নিন। একবার সেন্ড করলে এটি ফেরত আনা যাবে না।
+                      Selected Recipients: <b>{selectedStudents.length} Students</b>. Broadcast actions are permanent.
                     </p>
                   </div>
 
@@ -547,7 +687,7 @@ export default function SMSPanelPage() {
                     className="w-full h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20 gap-2"
                   >
                     {isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={20} />}
-                    Launch Broadcast
+                    Launch Personalized Broadcast
                   </Button>
                 </CardContent>
               </Card>

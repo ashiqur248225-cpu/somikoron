@@ -39,7 +39,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection } from "firebase/firestore"
+import { collection, query, where } from "firebase/firestore"
 import {
   Select,
   SelectContent,
@@ -52,6 +52,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Badge } from "@/components/ui/badge"
 
 export function AppSidebar() {
   const pathname = usePathname()
@@ -80,6 +81,20 @@ export function AppSidebar() {
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
   const { data: branches } = useCollection(branchesQuery)
 
+  // Logic for Birthday Badge
+  const studentsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "students"), where("branch", "==", userBranch), where("isActive", "==", true))
+  }, [db, userBranch])
+  const { data: students } = useCollection(studentsQuery)
+
+  const birthdayCount = React.useMemo(() => {
+    if (!students) return 0
+    const today = new Date()
+    const todayStr = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`
+    return students.filter(s => s.dob?.endsWith(todayStr)).length
+  }, [students])
+
   // Strict Menu Access Definition
   const items = [
     { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["Admin", "Branch Manager", "Building Manager"] },
@@ -92,7 +107,7 @@ export function AppSidebar() {
     { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },
-    { title: "SMS Panel", url: "/sms", icon: MessageSquareQuote, roles: ["Admin", "Branch Manager"] },
+    { title: "SMS Panel", url: "/sms", icon: MessageSquareQuote, roles: ["Admin", "Branch Manager"], badge: birthdayCount > 0 ? birthdayCount : null },
     { title: "Staff & Roles", url: "/staff", icon: UserCog, roles: ["Admin"] },
     { title: "Branches", url: "/branches", icon: MapPin, roles: ["Admin"] },
     { title: "Transfers", url: "/transfers", icon: ArrowLeftRight, roles: ["Admin", "Branch Manager"] },
@@ -157,9 +172,14 @@ export function AppSidebar() {
                       isActive={pathname === item.url}
                       tooltip={item.title}
                     >
-                      <Link href={item.url}>
+                      <Link href={item.url} className="flex items-center w-full">
                         <item.icon />
                         <span>{item.title}</span>
+                        {item.badge && (
+                          <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-black text-destructive-foreground animate-pulse">
+                            {item.badge}
+                          </span>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
