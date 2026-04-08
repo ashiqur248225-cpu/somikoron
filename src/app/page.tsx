@@ -208,7 +208,7 @@ export default function DashboardPage() {
   }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
 
-  // Auto Rent Generation Logic - Object Based
+  // Auto Rent Generation Logic - Object Based with Payment History Verification
   useEffect(() => {
     const generateMonthlyRent = async () => {
       if (!students || students.length === 0 || !userBranch) return;
@@ -222,9 +222,20 @@ export default function DashboardPage() {
       students.forEach(s => {
         if (!s.isActive) return;
         const dues = { ...(s.duesBreakdown || {}) };
+        const history = s.paymentsHistory || [];
         
-        // Logical check: If month+year is missing from breakdown map, add it
-        if (dues[currentMonthLabel] === undefined) {
+        // 1. CHECK: Is it already in the dues list?
+        const isAlreadyInDues = dues[currentMonthLabel] !== undefined;
+        
+        // 2. CHECK: Has it already been paid? (Verify seatAmount for this month/year in history)
+        const isAlreadyPaid = history.some(p => 
+          p.month === currentMonth && 
+          p.year === currentYear && 
+          Number(p.seatAmount || 0) > 0
+        );
+
+        // Only generate new due if not already in dues AND not already paid in history
+        if (!isAlreadyInDues && !isAlreadyPaid) {
           const rent = Number(s.monthlyRent || 0);
           dues[currentMonthLabel] = {
             month: currentMonth,
@@ -568,9 +579,9 @@ export default function DashboardPage() {
             
             {selectedStudentForEntry && (
               <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3 shadow-inner">
-                <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Rent Due</span> <span className="text-destructive font-black">৳{selectedStudentForEntry.totalDue || 0}</span></div>
+                <div className="flex justify-between items-center opacity-70 text-xs"><span>Rent Due</span> <span className="text-destructive font-black">৳{selectedStudentForEntry.totalDue || 0}</span></div>
                 {selectedStudentForEntry.paymentSystem === 'non-package' && (
-                  <div className="flex justify-between items-center opacity-70 text-[10px] uppercase font-bold"><span>Food Bal</span> <span className={cn((selectedStudentForEntry.foodDueAmount || 0) < 0 ? "text-destructive" : "text-success")}>৳{selectedStudentForEntry.foodDueAmount || 0}</span></div>
+                  <div className="flex justify-between items-center opacity-70 text-xs"><span>Food Bal</span> <span className={cn((selectedStudentForEntry.foodDueAmount || 0) < 0 ? "text-destructive" : "text-success")}>৳{selectedStudentForEntry.foodDueAmount || 0}</span></div>
                 )}
                 {selectedStudentForEntry.duesBreakdown && Object.keys(selectedStudentForEntry.duesBreakdown).length > 0 && (
                   <div className="pt-2 border-t border-white/10 space-y-1">
