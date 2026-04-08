@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
   ArrowUpCircle, 
   ArrowDownCircle, 
@@ -118,7 +118,6 @@ export default function DashboardPage() {
 
   const [isIncomeDialogOpen, setIsIncomeDialogOpen] = useState(false)
   const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false)
-  const [isMealLogSelectorOpen, setIsMealLogSelectorOpen] = useState(false)
   const [isBulkMealEntryOpen, setIsBulkMealEntryOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -305,7 +304,7 @@ export default function DashboardPage() {
 
         batch.update(doc(db, "students", s.id), {
           mealsHistory: arrayUnion(mealRecord),
-          foodDueAmount: increment(-totalCost), // Logic: Minus meal cost from net balance
+          foodDueAmount: increment(-totalCost),
           updatedAt: serverTimestamp()
         });
       });
@@ -364,7 +363,7 @@ export default function DashboardPage() {
         advanceAmount: increment(extraAdvance),
         totalDue: finalTotalDue,
         duesBreakdown: currentDues,
-        foodDueAmount: increment(foodPaid), // Logic: Plus food deposit to net balance
+        foodDueAmount: increment(foodPaid),
         historicalTotalReceived: increment(totalAmt),
         updatedAt: serverTimestamp()
       })
