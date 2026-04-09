@@ -186,6 +186,7 @@ export default function ExpenseHistoryPage() {
         toast({ title: "Success" })
       }
       setIsEntryOpen(false)
+      router.refresh();
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
     finally { setIsSubmitting(false) }
   }

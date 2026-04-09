@@ -345,6 +345,7 @@ export default function RegistrationsPage() {
       toast({ title: "ভর্তি সম্পন্ন হয়েছে!", description: `${selectedReg.name} এখন একজন সচল রেসিডেন্ট।` })
       setIsDetailOpen(false)
       setSelectedReg(null)
+      router.refresh();
     } catch (e: any) { 
       toast({ variant: "destructive", title: "Error", description: e.message }) 
     } finally { 
@@ -360,6 +361,7 @@ export default function RegistrationsPage() {
       toast({ title: "বাতিল করা হয়েছে", description: "আবেদনটি লিস্ট থেকে সরিয়ে দেওয়া হয়েছে।" })
       setIsDetailOpen(false)
       setSelectedReg(null)
+      router.refresh();
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {

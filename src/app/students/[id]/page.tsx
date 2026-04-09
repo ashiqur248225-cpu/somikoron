@@ -273,6 +273,7 @@ export default function StudentDetailsPage() {
       
       toast({ title: "Payment Recorded" })
       setIsPaymentDialogOpen(false)
+      router.refresh();
       router.push(`/receipts/${pId}`)
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
     finally { setIsUpdating(false) }
@@ -370,6 +371,7 @@ export default function StudentDetailsPage() {
       await batch.commit()
       setIsEditDialogOpen(false)
       toast({ title: "Profile Updated", description: locationChanged ? "Location shifted and rent adjusted." : "" })
+      router.refresh();
     } catch (e: any) { 
       toast({ variant: "destructive", title: "Error", description: e.message }) 
     } finally { 
@@ -421,6 +423,7 @@ export default function StudentDetailsPage() {
 
       toast({ title: "Resident Released" })
       setIsExitDialogOpen(false)
+      router.refresh();
       router.push("/students")
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
     finally { setIsUpdating(false) }

@@ -262,6 +262,7 @@ export default function IncomeHistoryPage() {
             await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
           }
         }
+        router.refresh();
         router.push(`/receipts/${pId}`)
       }
       setIsEntryOpen(false)

@@ -254,7 +254,10 @@ export default function DashboardPage() {
       });
 
       if (updatesCount > 0) {
-        try { await batch.commit(); } catch (e) { console.error("Auto-rent failed:", e); }
+        try { 
+          await batch.commit(); 
+          router.refresh();
+        } catch (e) { console.error("Auto-rent failed:", e); }
       }
     };
 
@@ -337,6 +340,7 @@ export default function DashboardPage() {
       toast({ title: "Meals Logged", description: "Food balances updated." });
       setMealLogInputs({});
       setIsBulkMealEntryOpen(false);
+      router.refresh();
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message });
     } finally {
@@ -419,6 +423,7 @@ export default function DashboardPage() {
       
       toast({ title: "Payment Recorded" })
       setIsIncomeDialogOpen(false)
+      router.refresh();
       router.push(`/receipts/${pId}`)
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
     finally { setIsSubmitting(false) }
@@ -440,6 +445,7 @@ export default function DashboardPage() {
       await setDoc(doc(db, "expenses", expenseId), { ...expenseData, id: expenseId, createdAt: serverTimestamp() })
       toast({ title: "Expense Saved" })
       setIsExpenseDialogOpen(false)
+      router.refresh();
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
     finally { setIsSubmitting(false) }
   }
