@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -88,8 +89,10 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 export default function SMSPanelPage() {
   const { toast } = useToast()
   const db = useFirestore()
+  const router = useRouter()
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
+  const [userRole, setUserRole] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [smsBalance, setSmsBalance] = useState<string | null>(null)
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false)
@@ -119,6 +122,7 @@ export default function SMSPanelPage() {
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
+    setUserRole(localStorage.getItem("user_role") || "Manager")
   }, [])
 
   // Templates Logic
@@ -176,8 +180,12 @@ export default function SMSPanelPage() {
   // Student Query
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    // Admins can see all active students if they choose "Global"
+    if (userRole === 'Admin' && buildingFilter === 'global_all') {
+      return query(collection(db, "students"), where("isActive", "==", true))
+    }
     return query(collection(db, "students"), where("branch", "==", userBranch), where("isActive", "==", true))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, buildingFilter])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
   // Logs Query
@@ -201,7 +209,11 @@ export default function SMSPanelPage() {
     return students.filter(s => {
       const search = searchTerm.toLowerCase()
       const matchesSearch = s.name.toLowerCase().includes(search) || (s.phone || "").includes(search)
-      const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
+      
+      let matchesBuilding = true
+      if (buildingFilter !== "all" && buildingFilter !== 'global_all') {
+        matchesBuilding = s.buildingId === buildingFilter
+      }
       
       let matchesStatus = true
       if (statusFilter === 'birthday') matchesStatus = s.dob?.endsWith(todayStr)
@@ -330,8 +342,12 @@ export default function SMSPanelPage() {
   }
 
   const handleBroadcast = async () => {
-    if (selectedStudents.length === 0 || !customMessage) {
-      toast({ variant: "destructive", title: "Error", description: "Please select students and type a message." })
+    if (selectedStudents.length === 0) {
+      toast({ variant: "destructive", title: "Selection Required", description: "Please check/select the students from the list first." })
+      return
+    }
+    if (!customMessage) {
+      toast({ variant: "destructive", title: "Message Required", description: "Please type a message or select a template." })
       return
     }
 
@@ -341,6 +357,7 @@ export default function SMSPanelPage() {
     }
 
     setIsSubmitting(true)
+    let lastError = "Unknown gateway rejection.";
     try {
       const hasTags = SMART_TAGS.some(tag => customMessage.includes(tag));
       
@@ -360,6 +377,7 @@ export default function SMSPanelPage() {
             await logSMSToDatabase(student.phone, personalizedMsg, 'Success');
           } else {
             failureCount++;
+            lastError = result.msg;
             await logSMSToDatabase(student.phone, personalizedMsg, 'Failed', result.msg);
           }
         }
@@ -373,6 +391,7 @@ export default function SMSPanelPage() {
           await logSMSToDatabase(toNumbers, customMessage, 'Success');
         } else {
           failureCount = selectedPhones.length;
+          lastError = result.msg;
           await logSMSToDatabase(toNumbers, customMessage, 'Failed', result.msg);
         }
       }
@@ -385,11 +404,16 @@ export default function SMSPanelPage() {
         })
         setSelectedStudents([])
         fetchBalance()
+        router.refresh()
       } else {
-        toast({ variant: "destructive", title: "Broadcast Failed", description: "Check gateway logs for details." })
+        toast({ 
+          variant: "destructive", 
+          title: "Broadcast Failed", 
+          description: `Gateway Error: ${lastError}. (Tip: Balance ৳0.50 is usually insufficient for broadcast).` 
+        })
       }
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
+      toast({ variant: "destructive", title: "System Error", description: e.message })
     } finally {
       setIsSubmitting(false)
     }
@@ -439,6 +463,7 @@ export default function SMSPanelPage() {
       toast({ title: "Wishes Sent!", description: `Process complete. Check logs for delivery status.` })
       setBirthdayStudents([])
       fetchBalance()
+      router.refresh()
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -454,6 +479,7 @@ export default function SMSPanelPage() {
       if (result.error === 0) {
         toast({ title: "Resent Successfully" })
         await logSMSToDatabase(log.to, log.message, 'Success')
+        router.refresh()
       } else {
         toast({ variant: "destructive", title: "Resend Failed", description: result.msg })
       }
@@ -468,6 +494,7 @@ export default function SMSPanelPage() {
     try {
       await deleteDoc(doc(db, "smsLogs", id))
       toast({ title: "Log Deleted" })
+      router.refresh()
     } catch (e) {
       toast({ variant: "destructive", title: "Error", description: "Failed to delete log" })
     }
@@ -495,7 +522,7 @@ export default function SMSPanelPage() {
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">SMS Panel</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Manage notifications and broadcasts for <span className="text-foreground font-bold">{userBranch}</span>.</p>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Broadcast notifications for <span className="text-foreground font-bold">{userBranch}</span>.</p>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -533,9 +560,9 @@ export default function SMSPanelPage() {
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                     <div>
                       <CardTitle className="text-lg">Recipient Selector</CardTitle>
-                      <CardDescription>Select students to receive the broadcast message.</CardDescription>
+                      <CardDescription>Filter and select residents for broadcast.</CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" onClick={selectAll} className="font-bold text-[10px] uppercase h-9">
+                    <Button variant="outline" size="sm" onClick={selectAll} className="font-bold text-[10px] uppercase h-9 border-primary/30 text-primary">
                       {selectedStudents.length === filteredStudents.length && filteredStudents.length > 0 ? 'Unselect All' : 'Select All Filtered'}
                     </Button>
                   </div>
@@ -547,7 +574,8 @@ export default function SMSPanelPage() {
                         <SelectValue placeholder="All Buildings" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Buildings</SelectItem>
+                        <SelectItem value="all">Current Branch Buildings</SelectItem>
+                        {userRole === 'Admin' && <SelectItem value="global_all" className="font-bold text-primary">Global (All Hostels)</SelectItem>}
                         {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -666,18 +694,18 @@ export default function SMSPanelPage() {
             <div className="space-y-6">
               <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
                 <CardHeader className="bg-slate-900 text-white p-4 md:p-6">
-                  <CardTitle className="text-lg flex items-center gap-2"><Smartphone size={20}/> Composer</CardTitle>
-                  <CardDescription className="text-slate-400">Type your custom message below.</CardDescription>
+                  <CardTitle className="text-lg flex items-center gap-2"><Smartphone size={20}/> SMS Composer</CardTitle>
+                  <CardDescription className="text-slate-400">Personalized broadcast setup.</CardDescription>
                 </CardHeader>
                 <CardContent className="p-4 md:p-6 space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground">Template</Label>
+                    <Label className="text-xs font-bold uppercase text-muted-foreground">Select Template</Label>
                     <Select value={selectedTemplateId} onValueChange={handleTemplateSelect}>
                       <SelectTrigger className="bg-slate-50 border-none h-11 rounded-xl shadow-inner font-bold">
                         <SelectValue placeholder="Manual Message" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="manual">Manual Message</SelectItem>
+                        <SelectItem value="manual">Write Manual Message</SelectItem>
                         {localTemplates.map(t => (
                           <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
                         ))}
@@ -687,13 +715,15 @@ export default function SMSPanelPage() {
 
                   <div className="space-y-2">
                     <div className="flex justify-between items-end">
-                      <Label className="text-xs font-bold uppercase text-muted-foreground">Recipients</Label>
-                      <span className="text-[10px] font-black text-primary">{selectedStudents.length} Students selected</span>
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">Message Body</Label>
+                      <span className={cn("text-[10px] font-black", selectedStudents.length > 0 ? "text-primary" : "text-destructive")}>
+                        {selectedStudents.length} Students selected
+                      </span>
                     </div>
                     <Textarea 
                       value={customMessage}
                       onChange={e => setCustomMessage(e.target.value)}
-                      placeholder="Type message here..."
+                      placeholder="Type your message here... Use tags like [নাম] for personalization."
                       className="min-h-[150px] bg-slate-50 border-none shadow-inner resize-none rounded-2xl p-4 text-sm"
                     />
                     <div className="flex justify-between text-[10px] font-bold text-muted-foreground px-1">
@@ -704,7 +734,7 @@ export default function SMSPanelPage() {
 
                   {messagePreview && (
                     <div className="p-4 bg-primary/5 rounded-2xl border border-dashed border-primary/20 space-y-2">
-                      <span className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-1"><Eye size={10}/> Preview (Example)</span>
+                      <span className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-1"><Eye size={10}/> Sample Preview</span>
                       <p className="text-xs leading-relaxed text-slate-600 font-medium italic">
                         "{messagePreview}"
                       </p>
@@ -714,7 +744,7 @@ export default function SMSPanelPage() {
                   <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex gap-2">
                     <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                     <p className="text-[9px] text-amber-700 leading-tight">
-                      ব্রডকাস্ট পাঠানোর আগে নিশ্চিত হয়ে নিন। একবার সেন্ড করলে এটি ফেরত আনা যাবে না।
+                      ব্রডকাস্ট পাঠানোর আগে নিশ্চিত হয়ে নিন। একবার সেন্ড করলে এটি গেটওয়ে থেকে ফেরত আনা যাবে না।
                     </p>
                   </div>
 
@@ -724,7 +754,7 @@ export default function SMSPanelPage() {
                     className="w-full h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20 gap-2"
                   >
                     {isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={20} />}
-                    Launch Broadcast
+                    Launch to {selectedStudents.length} Students
                   </Button>
                 </CardContent>
               </Card>
