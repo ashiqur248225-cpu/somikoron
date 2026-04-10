@@ -292,6 +292,62 @@ export default function IncomeHistoryPage() {
         </div>
       </div>
 
+      {/* OFFICIAL PRINT REPORT SECTION */}
+      <div className="print-only print-report-container">
+        <div className="report-header text-center">
+          <h1 className="text-2xl font-black uppercase text-primary">{templatesData?.hostelName || "SOMIKORON HOSTEL"}</h1>
+          <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Income Summary Report</p>
+          <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[9pt] font-medium bg-slate-50/50 px-4">
+            <div>
+              <p><b>Period:</b> {startDate || 'Start'} to {endDate || 'Today'}</p>
+              <p><b>Filter Building:</b> {buildingFilter === 'all' ? 'All' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+            </div>
+            <div className="text-right">
+              <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
+              <p><b>Staff:</b> {userName}</p>
+            </div>
+          </div>
+        </div>
+
+        <table className="w-full border-collapse border mt-6 text-[9pt]">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Date</th>
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Student Name</th>
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Location</th>
+              <th className="border border-slate-300 p-2 text-center font-black uppercase text-slate-700">Method</th>
+              <th className="border border-slate-300 p-2 text-right font-black uppercase text-slate-700">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredPayments.map((p: any) => (
+              <tr key={p.id}>
+                <td className="border border-slate-200 p-2">{formatCompactDate(p.date)}</td>
+                <td className="border border-slate-200 p-2 font-bold">{p.studentName}</td>
+                <td className="border border-slate-200 p-2 text-xs">{p.buildingName} • R-{p.roomNumber}</td>
+                <td className="border border-slate-200 p-2 text-center uppercase text-[8pt]">{p.method}</td>
+                <td className="border border-slate-200 p-2 text-right font-bold">৳{p.amount?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-900 text-white font-black">
+              <td colSpan={4} className="p-3 text-right uppercase text-[10pt]">Grand Total Income</td>
+              <td className="p-3 text-right text-[11pt]">৳{stats.total.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div className="print-footer mt-24 flex justify-between px-10">
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[8pt] font-black uppercase text-slate-800">Accountant Signature</p>
+          </div>
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[8pt] font-black uppercase text-slate-800">Manager Signature</p>
+          </div>
+        </div>
+      </div>
+
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Income Records</DialogTitle></DialogHeader>

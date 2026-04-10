@@ -141,6 +141,9 @@ export default function ExpenseHistoryPage() {
   }, [db, userBranch])
   const { data: rawExpenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
+
   const filteredExpenses = useMemo(() => {
     if (!rawExpenses) return []
     return rawExpenses.filter(e => {
@@ -205,6 +208,62 @@ export default function ExpenseHistoryPage() {
           </Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
+        </div>
+      </div>
+
+      {/* OFFICIAL PRINT REPORT SECTION */}
+      <div className="print-only print-report-container">
+        <div className="report-header text-center">
+          <h1 className="text-2xl font-black uppercase text-primary">{templatesData?.hostelName || "SOMIKORON HOSTEL"}</h1>
+          <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Expense Summary Report</p>
+          <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[9pt] font-medium bg-slate-50/50 px-4">
+            <div>
+              <p><b>Period:</b> {startDate || 'Start'} to {endDate || 'Today'}</p>
+              <p><b>Category:</b> {categoryFilter === 'all' ? 'All' : categoryFilter}</p>
+            </div>
+            <div className="text-right">
+              <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
+              <p><b>Staff:</b> {userName}</p>
+            </div>
+          </div>
+        </div>
+
+        <table className="w-full border-collapse border mt-6 text-[9pt]">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Date</th>
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Category</th>
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Spent By</th>
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Description</th>
+              <th className="border border-slate-300 p-2 text-right font-black uppercase text-slate-700">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredExpenses.map((e: any) => (
+              <tr key={e.id}>
+                <td className="border border-slate-200 p-2">{formatCompactDate(e.expenseDate)}</td>
+                <td className="border border-slate-200 p-2 capitalize">{e.category}</td>
+                <td className="border border-slate-200 p-2 font-medium">{e.expensePartyName}</td>
+                <td className="border border-slate-200 p-2 text-xs italic">{e.description || '-'}</td>
+                <td className="border border-slate-200 p-2 text-right font-bold">৳{e.amount?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-900 text-white font-black">
+              <td colSpan={4} className="p-3 text-right uppercase text-[10pt]">Grand Total Expense</td>
+              <td className="p-3 text-right text-[11pt]">৳{stats.total.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div className="print-footer mt-24 flex justify-between px-10">
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[8pt] font-black uppercase text-slate-800">Accountant Signature</p>
+          </div>
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[8pt] font-black uppercase text-slate-800">Manager Signature</p>
+          </div>
         </div>
       </div>
 

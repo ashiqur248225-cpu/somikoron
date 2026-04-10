@@ -66,7 +66,7 @@
 @media print {
   @page {
     size: A4;
-    margin: 10mm;
+    margin: 15mm;
   }
 
   /* Hide everything on screen by default */
@@ -80,12 +80,13 @@
   }
 
   .print-only {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 100% !important;
     display: block !important;
     background-color: white !important;
+    z-index: 9999 !important;
   }
 
   .print-report-container {
@@ -100,6 +101,7 @@
     border-collapse: collapse !important;
     margin-bottom: 20px !important;
     page-break-inside: auto;
+    border: 1px solid #333 !important;
   }
 
   tr { page-break-inside: avoid; page-break-after: auto; }
@@ -107,30 +109,27 @@
   tfoot { display: table-footer-group; }
 
   th, td {
-    border: 0.5pt solid #ccc !important;
-    padding: 6px 8px !important;
+    border: 1px solid #333 !important;
+    padding: 8px 10px !important;
     text-align: left;
     color: black !important;
     background-color: transparent !important;
   }
 
-  th { background-color: #f3f4f6 !important; font-weight: bold !important; font-size: 9pt !important; }
-  td { font-size: 8pt !important; }
+  th { background-color: #f3f4f6 !important; font-weight: bold !important; font-size: 10pt !important; text-transform: uppercase; }
+  td { font-size: 9pt !important; line-height: 1.4; }
 
-  .report-header { margin-bottom: 20px; text-align: center; border-bottom: 2px solid #296EB3; padding-bottom: 10px; }
-  .report-header h1 { font-size: 22pt; margin: 0; color: #296EB3 !important; font-weight: 900; }
-  
-  .summary-section { margin-bottom: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-  .summary-box { padding: 8px; border: 1px solid #ddd; border-radius: 8px; text-align: center; background-color: #f9fafb !important; }
+  .report-header { margin-bottom: 25px; text-align: center; border-bottom: 2.5px solid #296EB3; padding-bottom: 15px; }
+  .report-header h1 { font-size: 24pt; margin: 0; color: #296EB3 !important; font-weight: 900; }
   
   .print-footer { 
-    margin-top: 40px; 
+    margin-top: 60px; 
     display: flex; 
     justify-content: space-between; 
     align-items: flex-end; 
     page-break-inside: avoid;
   }
-  .signature-box { border-top: 1pt solid #000; width: 160px; text-align: center; padding-top: 5px; font-weight: bold; font-size: 8pt; }
+  .signature-box { border-top: 1.5pt solid #000; width: 180px; text-align: center; padding-top: 8px; font-weight: bold; font-size: 9pt; }
 }
 
 /* Hidden in screen view */
