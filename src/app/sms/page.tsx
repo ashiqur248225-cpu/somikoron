@@ -105,7 +105,7 @@ export default function SMSPanelPage() {
   // Broadcast States
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all") // all, birthday, due, low_balance
+  const [statusFilter, setStatusFilter] = useState("all") 
   const [selectedStudents, setSelectedStudents] = useState<string[]>([])
   const [customMessage, setCustomMessage] = useState("")
   const [selectedTemplateId, setSelectedTemplateId] = useState("manual")
@@ -218,7 +218,6 @@ export default function SMSPanelPage() {
     const rentDue = Number(student.totalDue || 0);
     const foodBal = Number(student.foodDueAmount || 0);
     
-    // total_payable = totalDue + negative foodDueAmount (debt)
     const totalPayable = rentDue + (foodBal < 0 ? Math.abs(foodBal) : 0);
     const foodDue = foodBal < 0 ? Math.abs(foodBal) : 0;
     const foodBalance = foodBal > 0 ? foodBal : 0;
@@ -234,7 +233,6 @@ export default function SMSPanelPage() {
       .replaceAll('[রুম]', student.roomNumber || '')
       .replaceAll('[building]', student.buildingName || '')
       .replaceAll('[Hostel Name]', hostelNameForSms || userBranch)
-      // Generic placeholders if data not in object context
       .replaceAll('[meal_count]', '0')
       .replaceAll('[meal_bill]', '0')
       .replaceAll('[previous_due]', rentDue.toString())
@@ -341,16 +339,12 @@ export default function SMSPanelPage() {
 
     setIsSubmitting(true)
     try {
-      // For broadcast, we send multiple but the message is unique for each if we want tags replaced.
-      // ALPHA NET supports multiple recipients in one call but only one message.
-      // If tags are used, we MUST send individually to each student to ensure tag replacement.
       const hasTags = SMART_TAGS.some(tag => customMessage.includes(tag));
       
       let successCount = 0;
       let failureCount = 0;
 
       if (hasTags) {
-        // Send individually for personalization
         for (const studentId of selectedStudents) {
           const student = students?.find(s => s.id === studentId);
           if (!student) continue;
@@ -367,7 +361,6 @@ export default function SMSPanelPage() {
           }
         }
       } else {
-        // Bulk send for generic messages
         const selectedPhones = students?.filter(s => selectedStudents.includes(s.id)).map(s => s.phone) || [];
         const toNumbers = selectedPhones.join(',');
         const result = await sendSMS(apiConfig.apikey, apiConfig.senderid, toNumbers, customMessage);
@@ -492,7 +485,7 @@ export default function SMSPanelPage() {
   }
 
   return (
-    <div className="space-y-8 pb-20">
+    <div className="space-y-8 pb-20 w-full overflow-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -503,10 +496,10 @@ export default function SMSPanelPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-primary/5 rounded-xl border border-primary/10">
-            <Wallet size={14} className="text-primary" />
+          <div className="flex items-center gap-2 px-2 sm:px-4 py-2 bg-primary/5 rounded-xl border border-primary/10">
+            <Wallet size={14} className="text-primary hidden xs:block" />
             <div className="flex flex-col">
-              <span className="text-[8px] font-bold uppercase text-muted-foreground">Gateway Balance</span>
+              <span className="text-[8px] font-bold uppercase text-muted-foreground">Balance</span>
               <span className="text-xs font-black text-primary">
                 {smsBalance !== null ? `৳${Number(smsBalance).toFixed(2)}` : 'N/A'}
               </span>
@@ -519,28 +512,36 @@ export default function SMSPanelPage() {
       </div>
 
       <Tabs defaultValue="broadcast" className="w-full">
-        <TabsList className="bg-secondary/50 p-1 mb-6 flex overflow-x-auto h-auto">
-          <TabsTrigger value="broadcast" className="gap-2 flex-1 h-10"><Send size={14} /> Send Broadcast</TabsTrigger>
-          <TabsTrigger value="birthdays" className="gap-2 flex-1 h-10"><Cake size={14} /> Birthday Wishes</TabsTrigger>
-          <TabsTrigger value="templates" className="gap-2 flex-1 h-10"><Settings2 size={14} /> Message Templates</TabsTrigger>
-          <TabsTrigger value="api" className="gap-2 flex-1 h-10"><Globe size={14} /> API Configuration</TabsTrigger>
-          <TabsTrigger value="logs" className="gap-2 flex-1 h-10"><History size={14} /> Sending History</TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto pb-2 scrollbar-hide">
+          <TabsList className="bg-secondary/50 p-1 flex w-max min-w-full h-auto">
+            <TabsTrigger value="broadcast" className="gap-2 flex-1 h-10 px-4 whitespace-nowrap"><Send size={14} /> Send Broadcast</TabsTrigger>
+            <TabsTrigger value="birthdays" className="gap-2 flex-1 h-10 px-4 whitespace-nowrap"><Cake size={14} /> Birthday Wishes</TabsTrigger>
+            <TabsTrigger value="templates" className="gap-2 flex-1 h-10 px-4 whitespace-nowrap"><Settings2 size={14} /> Message Templates</TabsTrigger>
+            <TabsTrigger value="api" className="gap-2 flex-1 h-10 px-4 whitespace-nowrap"><Globe size={14} /> API Configuration</TabsTrigger>
+            <TabsTrigger value="logs" className="gap-2 flex-1 h-10 px-4 whitespace-nowrap"><History size={14} /> Sending History</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="broadcast" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-white rounded-3xl">
               <CardHeader className="bg-slate-50/50 border-b">
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                  <div>
-                    <CardTitle className="text-lg">Recipient Selector</CardTitle>
-                    <CardDescription>Select students to receive the broadcast message.</CardDescription>
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div>
+                      <CardTitle className="text-lg">Recipient Selector</CardTitle>
+                      <CardDescription>Select students to receive the broadcast message.</CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={selectAll} className="font-bold text-[10px] uppercase h-9">
+                      {selectedStudents.length === filteredStudents.length && filteredStudents.length > 0 ? 'Unselect All' : 'Select All Filtered'}
+                    </Button>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-                      <SelectTrigger className="w-[140px] bg-white h-9 text-xs">
+                      <SelectTrigger className="bg-white h-9 text-xs">
                         <Building2 size={12} className="mr-2" />
-                        <SelectValue placeholder="Buildings" />
+                        <SelectValue placeholder="All Buildings" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Buildings</SelectItem>
@@ -549,7 +550,7 @@ export default function SMSPanelPage() {
                     </Select>
                     
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="w-[140px] bg-white h-9 text-xs">
+                      <SelectTrigger className="bg-white h-9 text-xs">
                         <Filter size={12} className="mr-2" />
                         <SelectValue placeholder="Quick Filters" />
                       </SelectTrigger>
@@ -560,26 +561,23 @@ export default function SMSPanelPage() {
                         <SelectItem value="low_balance">Low Food Bal (&lt; 50)</SelectItem>
                       </SelectContent>
                     </Select>
-
-                    <Button variant="outline" size="sm" onClick={selectAll} className="h-9 font-bold text-[10px] uppercase">
-                      {selectedStudents.length === filteredStudents.length && filteredStudents.length > 0 ? 'Unselect' : 'Select All'}
-                    </Button>
                   </div>
-                </div>
-                <div className="relative mt-4">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <input 
-                    placeholder="Search by name or phone..." 
-                    className="flex h-10 w-full rounded-md border-none bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 shadow-inner"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                  />
+
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search by name or phone..." 
+                      className="pl-10 h-10 border-none bg-white shadow-inner"
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                    />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <ScrollArea className="h-[500px]">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[600px]">
+                    <TableHeader className="bg-white sticky top-0 z-10 shadow-sm">
                       <TableRow>
                         <TableHead className="w-[50px]"></TableHead>
                         <TableHead>Student Name</TableHead>
@@ -598,7 +596,7 @@ export default function SMSPanelPage() {
                           </TableCell>
                           <TableCell className="font-bold text-slate-700">
                             {s.name}
-                            <div className="md:hidden text-[8px] font-mono text-muted-foreground">{s.phone}</div>
+                            <div className="text-[10px] font-mono text-muted-foreground">{s.phone}</div>
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             {s.buildingName} • R-{s.roomNumber}
@@ -622,25 +620,25 @@ export default function SMSPanelPage() {
                       )}
                     </TableBody>
                   </Table>
-                </ScrollArea>
+                </div>
               </CardContent>
             </Card>
 
             <div className="space-y-6">
               <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
-                <CardHeader className="bg-primary text-primary-foreground">
-                  <CardTitle className="text-lg flex items-center gap-2"><Smartphone size={20}/> Composer & Templates</CardTitle>
-                  <CardDescription className="text-primary-foreground/70">Pick a template or write manual message.</CardDescription>
+                <CardHeader className="bg-slate-900 text-white">
+                  <CardTitle className="text-lg flex items-center gap-2"><Smartphone size={20}/> Composer</CardTitle>
+                  <CardDescription className="text-slate-400">Type your custom message below.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quick Template</Label>
+                    <Label className="text-xs font-bold uppercase text-muted-foreground">Template</Label>
                     <Select value={selectedTemplateId} onValueChange={handleTemplateSelect}>
-                      <SelectTrigger className="bg-slate-50 border-none h-11 rounded-xl shadow-inner font-bold text-slate-700">
+                      <SelectTrigger className="bg-slate-50 border-none h-11 rounded-xl shadow-inner font-bold">
                         <SelectValue placeholder="Manual Message" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="manual">Manual / Custom Message</SelectItem>
+                        <SelectItem value="manual">Manual Message</SelectItem>
                         {localTemplates.map(t => (
                           <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
                         ))}
@@ -649,35 +647,35 @@ export default function SMSPanelPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Message Body</Label>
+                    <div className="flex justify-between items-end">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">Recipients</Label>
+                      <span className="text-[10px] font-black text-primary">{selectedStudents.length} Students selected</span>
+                    </div>
                     <Textarea 
                       value={customMessage}
                       onChange={e => setCustomMessage(e.target.value)}
-                      placeholder="Type something important..."
-                      className="min-h-[180px] bg-slate-50 border-none shadow-inner resize-none rounded-2xl p-4 text-sm leading-relaxed"
+                      placeholder="Type message here..."
+                      className="min-h-[150px] bg-slate-50 border-none shadow-inner resize-none rounded-2xl p-4 text-sm"
                     />
                     <div className="flex justify-between text-[10px] font-bold text-muted-foreground px-1">
                       <span>{customMessage.length} Characters</span>
-                      <span>{Math.ceil(customMessage.length / 160)} Part(s)</span>
+                      <span>{Math.ceil(customMessage.length / 160)} SMS Part(s)</span>
                     </div>
                   </div>
 
                   {messagePreview && (
                     <div className="p-4 bg-primary/5 rounded-2xl border border-dashed border-primary/20 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-1"><Eye size={10}/> Smart Preview</span>
-                        <span className="text-[8px] text-muted-foreground italic">Showing example for {filteredStudents[0]?.name}</span>
-                      </div>
-                      <p className="text-xs leading-relaxed text-slate-600 font-medium">
-                        {messagePreview}
+                      <span className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-1"><Eye size={10}/> Preview (Example)</span>
+                      <p className="text-xs leading-relaxed text-slate-600 font-medium italic">
+                        "{messagePreview}"
                       </p>
                     </div>
                   )}
 
                   <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex gap-2">
                     <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-amber-700 leading-tight">
-                      Selected Recipients: <b>{selectedStudents.length} Students</b>. Broadcast actions are permanent.
+                    <p className="text-[9px] text-amber-700 leading-tight">
+                      ব্রডকাস্ট পাঠানোর আগে নিশ্চিত হয়ে নিন। একবার সেন্ড করলে এটি ফেরত আনা যাবে না।
                     </p>
                   </div>
 
@@ -687,7 +685,7 @@ export default function SMSPanelPage() {
                     className="w-full h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20 gap-2"
                   >
                     {isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={20} />}
-                    Launch Personalized Broadcast
+                    Launch Broadcast
                   </Button>
                 </CardContent>
               </Card>
@@ -698,25 +696,25 @@ export default function SMSPanelPage() {
         <TabsContent value="birthdays" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-white rounded-3xl">
-              <CardHeader className="bg-primary/5 border-b flex flex-row items-center justify-between">
+              <CardHeader className="bg-primary/5 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Cake className="text-primary" size={20} /> Birthday Scanner
                   </CardTitle>
-                  <CardDescription>Scan database for students celebrating birthday today.</CardDescription>
+                  <CardDescription>Find students celebrating birthday today.</CardDescription>
                 </div>
                 <Button 
                   onClick={handleScanBirthdays} 
                   disabled={isScanning || studentsLoading} 
-                  className="gap-2 font-bold h-11 px-6 rounded-xl"
+                  className="gap-2 font-bold h-11 px-6 rounded-xl w-full sm:w-auto"
                 >
                   {isScanning ? <RefreshCw className="animate-spin" /> : <RefreshCw />}
                   Scan for Today
                 </Button>
               </CardHeader>
               <CardContent className="p-0">
-                <ScrollArea className="h-[450px]">
-                  <Table>
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[500px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead>Student Name</TableHead>
@@ -738,52 +736,43 @@ export default function SMSPanelPage() {
                       ))}
                       {birthdayStudents.length === 0 && !isScanning && (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center py-24">
-                            <div className="opacity-30 space-y-2">
-                              <Cake size={48} className="mx-auto" />
-                              <p className="text-sm font-medium">Click "Scan for Today" to find birthday winners!</p>
-                            </div>
-                          </TableCell>
+                          <TableCell colSpan={4} className="text-center py-24 text-muted-foreground italic">No birthdays found for today.</TableCell>
                         </TableRow>
                       )}
                       {isScanning && (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center py-24">
                             <Loader2 className="animate-spin h-8 w-8 mx-auto text-primary" />
-                            <p className="text-xs mt-2 font-bold text-muted-foreground animate-pulse">Scanning records...</p>
+                            <p className="text-xs mt-2 font-bold animate-pulse">Scanning records...</p>
                           </TableCell>
                         </TableRow>
                       )}
                     </TableBody>
                   </Table>
-                </ScrollArea>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
-              <CardHeader className="bg-primary/5 border-b">
-                <CardTitle className="text-lg">Birthday Greetings</CardTitle>
-                <CardDescription>Automated wishes for today's celebrants.</CardDescription>
+              <CardHeader className="bg-primary text-white">
+                <CardTitle className="text-lg">Send Wishes</CardTitle>
+                <CardDescription className="text-primary-foreground/70">Automated wishes for today.</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
-                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Active Template</Label>
-                    <Badge className="bg-primary/10 text-primary border-none text-[8px]">AUTO-GEN (ID: birthday)</Badge>
-                  </div>
-                  <p className="text-xs leading-relaxed text-slate-600 font-medium italic bg-white p-3 rounded-lg border border-dashed border-primary/20">
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
+                  <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Birthday Template</Label>
+                  <p className="text-xs leading-relaxed text-slate-600 font-medium italic">
                     "{localTemplates.find(t => t.id === 'birthday')?.text}"
                   </p>
-                  <p className="text-[8px] text-muted-foreground">* To change this text, edit the template in the "Message Templates" tab.</p>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between items-end">
                     <Label className="text-xs font-bold text-muted-foreground uppercase">Target Recipients</Label>
-                    <span className="text-xl font-black text-primary">{birthdayStudents.length} Students</span>
+                    <span className="text-xl font-black text-primary">{birthdayStudents.length}</span>
                   </div>
                   <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                    <div className="h-full bg-primary" style={{ width: birthdayStudents.length > 0 ? '100%' : '0%' }} />
+                    <div className="h-full bg-primary transition-all" style={{ width: birthdayStudents.length > 0 ? '100%' : '0%' }} />
                   </div>
                 </div>
 
@@ -804,24 +793,24 @@ export default function SMSPanelPage() {
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden">
             <CardHeader className="border-b bg-slate-50/50 flex flex-col md:flex-row justify-between md:items-center gap-4">
               <div>
-                <CardTitle className="text-lg flex items-center gap-2"><Settings2 className="text-primary"/> Message & Profile Setup</CardTitle>
-                <CardDescription>Manage how your hostel name appears and customize SMS templates.</CardDescription>
+                <CardTitle className="text-lg flex items-center gap-2"><Settings2 className="text-primary"/> Templates Setup</CardTitle>
+                <CardDescription>Customize automated messages and brand name.</CardDescription>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Dialog open={isNewTemplateOpen} onOpenChange={setIsNewTemplateOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline" className="gap-2 h-10 rounded-xl font-bold border-primary/30 text-primary">
-                      <Plus size={16}/> Create Extra Template
+                      <Plus size={16}/> New Template
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-md">
+                  <DialogContent className="max-w-md w-[95vw] rounded-3xl">
                     <DialogHeader>
                       <DialogTitle>New Custom Template</DialogTitle>
-                      <DialogDescription>Define a reusable message for specific events.</DialogDescription>
+                      <DialogDescription>Define a reusable message.</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
-                        <Label>Template Name (Label)</Label>
+                        <Label>Label</Label>
                         <Input 
                           placeholder="e.g. Festival Wish" 
                           value={newTemplate.label}
@@ -829,9 +818,9 @@ export default function SMSPanelPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Message Content</Label>
+                        <Label>Content</Label>
                         <Textarea 
-                          placeholder="Your message here..." 
+                          placeholder="Your message..." 
                           className="min-h-[120px]"
                           value={newTemplate.text}
                           onChange={e => setNewTemplate({...newTemplate, text: e.target.value})}
@@ -839,13 +828,13 @@ export default function SMSPanelPage() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button className="w-full h-12 text-lg font-bold" onClick={handleAddCustomTemplate}>Add to My Templates</Button>
+                      <Button className="w-full h-12 text-lg font-bold" onClick={handleAddCustomTemplate}>Add Template</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
                 <Button onClick={handleSaveTemplates} disabled={isSubmitting} className="h-10 px-6 font-bold rounded-xl gap-2 shadow-lg shadow-primary/20">
                   {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />}
-                  Save All Changes
+                  Save All
                 </Button>
               </div>
             </CardHeader>
@@ -854,34 +843,32 @@ export default function SMSPanelPage() {
                 <div className="flex items-center gap-2 text-primary font-bold uppercase text-[10px] tracking-widest">
                   <Building size={14} /> Hostel Brand Name
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold text-slate-600">This name will replace [Hostel Name] in all SMS</Label>
+                <div className="flex flex-col md:flex-row gap-6 items-end">
+                  <div className="space-y-2 flex-1 w-full">
+                    <Label className="text-xs font-bold text-slate-600">Replaces [Hostel Name] tag</Label>
                     <Input 
                       value={hostelNameForSms}
                       onChange={e => setHostelNameForSms(e.target.value)}
-                      placeholder="Enter your official hostel name"
-                      className="bg-white h-12 text-lg font-bold border-primary/20 focus:border-primary shadow-sm"
+                      placeholder="Official Name"
+                      className="bg-white h-12 text-lg font-bold border-primary/20"
                     />
                   </div>
-                  <div className="flex items-center gap-2 p-3 bg-white/50 rounded-xl border border-dashed border-primary/20">
-                    <Info size={16} className="text-primary shrink-0" />
+                  <div className="p-3 bg-white/50 rounded-xl border border-dashed border-primary/20 flex-1 w-full">
                     <p className="text-[10px] text-slate-500 italic">
-                      <b>Example:</b> "Dear [নাম], Welcome to [Hostel Name]" becomes "Dear Rafi, Welcome to {hostelNameForSms || 'Your Hostel'}"
+                      <b>Example:</b> "Welcome to {hostelNameForSms || 'Your Hostel'}"
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {localTemplates.map((template: any, idx: number) => (
-                  <div key={template.id} className="relative space-y-3 p-6 rounded-3xl bg-slate-50 border border-slate-100 group hover:border-primary/20 transition-all shadow-sm hover:shadow-md">
+                  <div key={template.id} className="relative space-y-3 p-5 rounded-3xl bg-slate-50 border border-slate-100 shadow-sm">
                     <div className="flex justify-between items-center">
-                      <Label className="text-xs font-black uppercase tracking-wider text-primary">{template.label}</Label>
+                      <Label className="text-[10px] font-black uppercase text-primary">{template.label}</Label>
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[8px] bg-white">ID: {template.id}</Badge>
                         {template.id.startsWith('custom_') && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-destructive/5" onClick={() => handleRemoveTemplate(template.id)}>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRemoveTemplate(template.id)}>
                             <Trash2 size={12}/>
                           </Button>
                         )}
@@ -894,11 +881,11 @@ export default function SMSPanelPage() {
                         newT[idx] = { ...newT[idx], text: e.target.value }
                         setLocalTemplates(newT)
                       }}
-                      className="min-h-[100px] bg-white border-slate-200 text-sm leading-relaxed focus:ring-primary/20 rounded-2xl"
+                      className="min-h-[80px] bg-white border-slate-200 text-xs leading-relaxed rounded-xl"
                     />
-                    <div className="flex gap-1.5 flex-wrap">
-                      {SMART_TAGS.map(tag => (
-                        <Badge key={tag} variant="secondary" className="text-[8px] py-0 px-1.5 cursor-pointer hover:bg-primary hover:text-white transition-colors" onClick={() => {
+                    <div className="flex gap-1 flex-wrap">
+                      {SMART_TAGS.slice(0, 6).map(tag => (
+                        <Badge key={tag} variant="secondary" className="text-[7px] py-0 px-1 cursor-pointer" onClick={() => {
                           const newT = [...localTemplates]
                           newT[idx] = { ...newT[idx], text: newT[idx].text + ` ${tag}` }
                           setLocalTemplates(newT)
@@ -916,57 +903,43 @@ export default function SMSPanelPage() {
           <Card className="max-w-2xl mx-auto border-none shadow-lg bg-white rounded-3xl overflow-hidden">
             <CardHeader className="bg-slate-900 text-white">
               <div className="flex items-center gap-3">
-                <div className="bg-primary/20 p-2 rounded-xl"><Key size={24} className="text-primary-foreground" /></div>
+                <div className="bg-primary/20 p-2 rounded-xl"><Key size={24} className="text-white" /></div>
                 <div>
-                  <CardTitle className="text-xl">Alpha Net BD SMS Gateway</CardTitle>
-                  <CardDescription className="text-slate-400">Configure your API credentials for automatic sending.</CardDescription>
+                  <CardTitle className="text-xl">Gateway Settings</CardTitle>
+                  <CardDescription className="text-slate-400">Alpha Net BD API credentials.</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="pt-8 space-y-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">API Key</Label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      type="password"
-                      placeholder="Your Alpha Net API Key" 
-                      className="pl-10 h-12 bg-slate-50 border-none shadow-inner"
-                      value={apiConfig.apikey}
-                      onChange={e => setApiConfig({...apiConfig, apikey: e.target.value})}
-                    />
-                  </div>
+                  <Label className="text-xs font-black uppercase text-muted-foreground ml-1">API Key</Label>
+                  <Input 
+                    type="password"
+                    placeholder="Your API Key" 
+                    className="h-12 bg-slate-50 border-none shadow-inner"
+                    value={apiConfig.apikey}
+                    onChange={e => setApiConfig({...apiConfig, apikey: e.target.value})}
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">Sender ID (Optional)</Label>
-                  <div className="relative">
-                    <Smartphone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      placeholder="e.g. 8801XXXX (Keep empty if not applied/approved)" 
-                      className="pl-10 h-12 bg-slate-50 border-none shadow-inner"
-                      value={apiConfig.senderid}
-                      onChange={e => setApiConfig({...apiConfig, senderid: e.target.value})}
-                    />
-                  </div>
-                  <div className="p-2 bg-blue-50 rounded-lg flex items-start gap-2 border border-blue-100">
-                    <Info size={14} className="text-blue-600 shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-blue-700 leading-tight">
-                      আপনি যদি এখনো Sender ID এর জন্য আবেদন না করে থাকেন, তবে এটি খালি রাখুন। সিস্টেম অটোমেটিক ডিফল্ট আইডি ব্যবহার করবে।
-                    </p>
-                  </div>
+                  <Label className="text-xs font-black uppercase text-muted-foreground ml-1">Sender ID (Optional)</Label>
+                  <Input 
+                    placeholder="e.g. 8801XXXX" 
+                    className="h-12 bg-slate-50 border-none shadow-inner"
+                    value={apiConfig.senderid}
+                    onChange={e => setApiConfig({...apiConfig, senderid: e.target.value})}
+                  />
                 </div>
               </div>
 
-              <Separator className="bg-slate-100" />
-
-              <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-3">
-                <h4 className="font-bold text-sm text-primary flex items-center gap-2">
-                  <ShieldCheck size={16} /> How it works?
+              <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-2">
+                <h4 className="font-bold text-xs text-primary flex items-center gap-2">
+                  <ShieldCheck size={14} /> System Logic
                 </h4>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  সিস্টেম যখনই কোনো মেসেজ পাঠাতে যাবে, সে প্রথমে ডাটাবেজের এই <b>apikey</b> ফিল্ডটি চেক করবে। আপনি যখনই কোনো পেমেন্ট রিসিভ করবেন বা ভর্তি কনফার্ম করবেন, Alpha Net গেটওয়ে ব্যবহার করে স্বয়ংক্রিয়ভাবে মেসেজ চলে যাবে।
+                <p className="text-[10px] text-slate-600 leading-relaxed">
+                  সিস্টেম কনফার্মেশন বা পেমেন্ট রিসিভ করার সময় এই apikey ব্যবহার করে স্বয়ংক্রিয়ভাবে মেসেজ পাঠাবে।
                 </p>
               </div>
 
@@ -976,7 +949,7 @@ export default function SMSPanelPage() {
                 className="w-full h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20 gap-2"
               >
                 {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={20} />}
-                Save API Gateway Settings
+                Save API Credentials
               </Button>
             </CardContent>
           </Card>
@@ -986,7 +959,7 @@ export default function SMSPanelPage() {
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
             <CardHeader className="border-b bg-slate-50/50">
               <CardTitle className="text-lg">Sending History</CardTitle>
-              <CardDescription>Track all messages sent from the system.</CardDescription>
+              <CardDescription>Recent messages sent from branch.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               {logsLoading ? (
@@ -995,8 +968,8 @@ export default function SMSPanelPage() {
                   <p className="text-xs font-bold text-muted-foreground">Loading history...</p>
                 </div>
               ) : (
-                <ScrollArea className="h-[600px]">
-                  <Table>
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[700px]">
                     <TableHeader className="bg-slate-50 sticky top-0 z-10">
                       <TableRow>
                         <TableHead>Date & Time</TableHead>
@@ -1008,12 +981,12 @@ export default function SMSPanelPage() {
                     </TableHeader>
                     <TableBody>
                       {smsLogs?.map((log) => (
-                        <TableRow key={log.id} className="group">
+                        <TableRow key={log.id}>
                           <TableCell className="text-[10px] font-medium text-slate-500 whitespace-nowrap">
                             {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'N/A'}
                           </TableCell>
-                          <TableCell className="font-mono text-xs font-bold text-slate-700">{log.to}</TableCell>
-                          <TableCell className="max-w-xs"><p className="text-xs line-clamp-2">{log.message}</p></TableCell>
+                          <TableCell className="font-mono text-[10px] font-bold text-slate-700">{log.to}</TableCell>
+                          <TableCell className="max-w-[200px]"><p className="text-[10px] line-clamp-2">{log.message}</p></TableCell>
                           <TableCell>
                             <Badge variant="outline" className={cn(
                               "text-[8px] uppercase font-bold",
@@ -1021,31 +994,25 @@ export default function SMSPanelPage() {
                             )}>
                               {log.status}
                             </Badge>
-                            {log.error && <p className="text-[8px] text-destructive mt-1 italic">{log.error}</p>}
                           </TableCell>
                           <TableCell className="text-right space-x-1 whitespace-nowrap">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" title="Resend" onClick={() => handleResend(log)} disabled={isSubmitting}>
-                              <RotateCcw size={14} />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleResend(log)} disabled={isSubmitting}>
+                              <RotateCcw size={12} />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Delete" onClick={() => handleDeleteLog(log.id)}>
-                              <Trash2 size={14} />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteLog(log.id)}>
+                              <Trash2 size={12} />
                             </Button>
                           </TableCell>
                         </TableRow>
                       ))}
                       {smsLogs?.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-24">
-                            <div className="opacity-20 space-y-2">
-                              <History size={48} className="mx-auto" />
-                              <p className="text-sm font-bold">No history records found.</p>
-                            </div>
-                          </TableCell>
+                          <TableCell colSpan={5} className="text-center py-24 text-muted-foreground italic">No logs found.</TableCell>
                         </TableRow>
                       )}
                     </TableBody>
                   </Table>
-                </ScrollArea>
+                </div>
               )}
             </CardContent>
           </Card>
