@@ -53,7 +53,7 @@ export default function ReceiptPage() {
         <div className="h-2 bg-primary w-full" />
         <div className="p-8 md:p-12 space-y-8">
           <div className="text-center space-y-1">
-            <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">সমীকরণ হোস্টেল</h1>
+            <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">সমীকরণ ছাত্রাবাস</h1>
             <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
               {payment.branch} ব্রাঞ্চ • অফিসিয়াল মানি রিসিট
             </p>
@@ -170,7 +170,7 @@ export default function ReceiptPage() {
       {/* OFFICIAL PROFESSIONAL PRINT RECEIPT (Visible ONLY when printing) */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
-          <h1 className="text-2xl font-black uppercase text-primary">সমীকরণ হোস্টেল</h1>
+          <h1 className="text-2xl font-black uppercase text-primary">সমীকরণ ছাত্রাবাস</h1>
           <p className="text-sm font-bold">{payment.branch} ব্রাঞ্চ • মানি রিসিট (Money Receipt)</p>
           <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[9pt] font-medium bg-slate-50/50">
             <div className="pl-4">

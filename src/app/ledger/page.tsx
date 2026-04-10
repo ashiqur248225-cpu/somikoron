@@ -173,7 +173,7 @@ export default function LedgerPage() {
       {/* OFFICIAL PRINT REPORT SECTION */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
-          <h1 className="text-2xl font-black uppercase text-primary">সমীকরণ হোস্টেল</h1>
+          <h1 className="text-2xl font-black uppercase text-primary">সমীকরণ ছাত্রাবাস</h1>
           <p className="text-sm font-bold text-slate-600">{userBranch} ব্রাঞ্চ • জেনারেল লেজার রিপোর্ট (Ledger)</p>
           <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[9pt] font-medium bg-slate-50/50 px-4">
             <div>
