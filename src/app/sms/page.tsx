@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,7 +35,9 @@ import {
   Building,
   RotateCcw,
   Eye,
-  ChevronDown
+  ChevronDown,
+  Clock,
+  ListFilter
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -197,7 +199,8 @@ export default function SMSPanelPage() {
     const todayStr = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`
 
     return students.filter(s => {
-      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.phone?.includes(searchTerm)
+      const search = searchTerm.toLowerCase()
+      const matchesSearch = s.name.toLowerCase().includes(search) || (s.phone || "").includes(search)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
       
       let matchesStatus = true
@@ -465,8 +468,8 @@ export default function SMSPanelPage() {
     try {
       await deleteDoc(doc(db, "smsLogs", id))
       toast({ title: "Log Deleted" })
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to delete log" })
     }
   }
 
@@ -525,7 +528,7 @@ export default function SMSPanelPage() {
         <TabsContent value="broadcast" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-white rounded-3xl">
-              <CardHeader className="bg-slate-50/50 border-b">
+              <CardHeader className="bg-slate-50/50 border-b p-4 md:p-6">
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                     <div>
@@ -575,7 +578,8 @@ export default function SMSPanelPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
+                {/* Desktop View Table */}
+                <div className="hidden md:block overflow-x-auto">
                   <Table className="min-w-[600px]">
                     <TableHeader className="bg-white sticky top-0 z-10 shadow-sm">
                       <TableRow>
@@ -615,22 +619,57 @@ export default function SMSPanelPage() {
                           </TableCell>
                         </TableRow>
                       ))}
-                      {filteredStudents.length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic">No students match current filters.</TableCell></TableRow>
-                      )}
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Mobile View Cards */}
+                <div className="md:hidden p-4 space-y-3">
+                  {filteredStudents.map((s) => (
+                    <Card key={s.id} className={cn("border shadow-none rounded-2xl overflow-hidden bg-white", selectedStudents.includes(s.id) && "border-primary ring-1 ring-primary/20")}>
+                      <CardContent className="p-4 flex items-start gap-4">
+                        <Checkbox 
+                          checked={selectedStudents.includes(s.id)}
+                          onCheckedChange={() => toggleStudent(s.id)}
+                          className="mt-1"
+                        />
+                        <div className="flex-1 space-y-2">
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-sm">{s.name}</h4>
+                            <p className="text-[10px] font-mono text-muted-foreground">{s.phone}</p>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase">
+                            <Building2 size={10} /> {s.buildingName} • Room {s.roomNumber}
+                          </div>
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <Badge variant="outline" className={cn("text-[8px] font-black uppercase", (s.totalDue || 0) > 0 ? "text-destructive" : "text-success")}>
+                              Rent: ৳{s.totalDue || 0}
+                            </Badge>
+                            {s.paymentSystem === 'non-package' && (
+                              <Badge variant="outline" className={cn("text-[8px] font-black uppercase", (s.foodDueAmount || 0) < 50 ? "text-orange-600" : "text-primary")}>
+                                Food: ৳{s.foodDueAmount || 0}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {filteredStudents.length === 0 && (
+                  <div className="text-center py-20 text-muted-foreground italic">No students match current filters.</div>
+                )}
               </CardContent>
             </Card>
 
             <div className="space-y-6">
               <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
-                <CardHeader className="bg-slate-900 text-white">
+                <CardHeader className="bg-slate-900 text-white p-4 md:p-6">
                   <CardTitle className="text-lg flex items-center gap-2"><Smartphone size={20}/> Composer</CardTitle>
                   <CardDescription className="text-slate-400">Type your custom message below.</CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 space-y-4">
+                <CardContent className="p-4 md:p-6 space-y-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase text-muted-foreground">Template</Label>
                     <Select value={selectedTemplateId} onValueChange={handleTemplateSelect}>
@@ -696,7 +735,7 @@ export default function SMSPanelPage() {
         <TabsContent value="birthdays" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-white rounded-3xl">
-              <CardHeader className="bg-primary/5 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+              <CardHeader className="bg-primary/5 border-b p-4 md:p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Cake className="text-primary" size={20} /> Birthday Scanner
@@ -713,7 +752,8 @@ export default function SMSPanelPage() {
                 </Button>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
+                {/* Desktop View Table */}
+                <div className="hidden md:block overflow-x-auto">
                   <Table className="min-w-[500px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
@@ -734,31 +774,53 @@ export default function SMSPanelPage() {
                           <TableCell className="text-right font-bold text-primary">{s.dob || 'N/A'}</TableCell>
                         </TableRow>
                       ))}
-                      {birthdayStudents.length === 0 && !isScanning && (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-24 text-muted-foreground italic">No birthdays found for today.</TableCell>
-                        </TableRow>
-                      )}
-                      {isScanning && (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-24">
-                            <Loader2 className="animate-spin h-8 w-8 mx-auto text-primary" />
-                            <p className="text-xs mt-2 font-bold animate-pulse">Scanning records...</p>
-                          </TableCell>
-                        </TableRow>
-                      )}
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Mobile View Cards */}
+                <div className="md:hidden p-4 space-y-3">
+                  {birthdayStudents.map((s) => (
+                    <Card key={s.id} className="border shadow-none rounded-2xl bg-white">
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-2">
+                            <div className="bg-primary/10 p-2 rounded-lg text-primary"><Gift size={16}/></div>
+                            <h4 className="font-bold text-sm">{s.name}</h4>
+                          </div>
+                          <Badge variant="secondary" className="bg-primary/5 text-primary border-none font-bold">Today</Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[10px] text-muted-foreground font-bold uppercase">
+                          <div className="flex items-center gap-1"><Building2 size={10}/> {s.buildingName} • R-{s.roomNumber}</div>
+                          <div className="flex items-center gap-1 justify-end"><Smartphone size={10}/> {s.phone}</div>
+                        </div>
+                        <div className="pt-2 border-t flex justify-between items-center">
+                          <span className="text-[10px] font-bold text-slate-400">BIRTH DATE</span>
+                          <span className="text-xs font-black text-primary">{s.dob || 'N/A'}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {birthdayStudents.length === 0 && !isScanning && (
+                  <div className="text-center py-24 text-muted-foreground italic">No birthdays found for today.</div>
+                )}
+                {isScanning && (
+                  <div className="text-center py-24">
+                    <Loader2 className="animate-spin h-8 w-8 mx-auto text-primary" />
+                    <p className="text-xs mt-2 font-bold animate-pulse">Scanning records...</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
-              <CardHeader className="bg-primary text-white">
+              <CardHeader className="bg-primary text-white p-4 md:p-6">
                 <CardTitle className="text-lg">Send Wishes</CardTitle>
                 <CardDescription className="text-primary-foreground/70">Automated wishes for today.</CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 space-y-6">
+              <CardContent className="p-4 md:p-6 space-y-6">
                 <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
                   <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Birthday Template</Label>
                   <p className="text-xs leading-relaxed text-slate-600 font-medium italic">
@@ -791,7 +853,7 @@ export default function SMSPanelPage() {
 
         <TabsContent value="templates" className="space-y-6">
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden">
-            <CardHeader className="border-b bg-slate-50/50 flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <CardHeader className="border-b bg-slate-50/50 p-4 md:p-6 flex flex-col md:flex-row justify-between md:items-center gap-4">
               <div>
                 <CardTitle className="text-lg flex items-center gap-2"><Settings2 className="text-primary"/> Templates Setup</CardTitle>
                 <CardDescription>Customize automated messages and brand name.</CardDescription>
@@ -838,7 +900,7 @@ export default function SMSPanelPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="p-6 space-y-8">
+            <CardContent className="p-4 md:p-6 space-y-8">
               <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 space-y-4">
                 <div className="flex items-center gap-2 text-primary font-bold uppercase text-[10px] tracking-widest">
                   <Building size={14} /> Hostel Brand Name
@@ -901,7 +963,7 @@ export default function SMSPanelPage() {
 
         <TabsContent value="api">
           <Card className="max-w-2xl mx-auto border-none shadow-lg bg-white rounded-3xl overflow-hidden">
-            <CardHeader className="bg-slate-900 text-white">
+            <CardHeader className="bg-slate-900 text-white p-4 md:p-6">
               <div className="flex items-center gap-3">
                 <div className="bg-primary/20 p-2 rounded-xl"><Key size={24} className="text-white" /></div>
                 <div>
@@ -910,7 +972,7 @@ export default function SMSPanelPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-8 space-y-6">
+            <CardContent className="p-4 md:p-8 space-y-6">
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase text-muted-foreground ml-1">API Key</Label>
@@ -957,7 +1019,7 @@ export default function SMSPanelPage() {
 
         <TabsContent value="logs">
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
-            <CardHeader className="border-b bg-slate-50/50">
+            <CardHeader className="border-b bg-slate-50/50 p-4 md:p-6">
               <CardTitle className="text-lg">Sending History</CardTitle>
               <CardDescription>Recent messages sent from branch.</CardDescription>
             </CardHeader>
@@ -968,51 +1030,85 @@ export default function SMSPanelPage() {
                   <p className="text-xs font-bold text-muted-foreground">Loading history...</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table className="min-w-[700px]">
-                    <TableHeader className="bg-slate-50 sticky top-0 z-10">
-                      <TableRow>
-                        <TableHead>Date & Time</TableHead>
-                        <TableHead>Recipient</TableHead>
-                        <TableHead>Message</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {smsLogs?.map((log) => (
-                        <TableRow key={log.id}>
-                          <TableCell className="text-[10px] font-medium text-slate-500 whitespace-nowrap">
-                            {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'N/A'}
-                          </TableCell>
-                          <TableCell className="font-mono text-[10px] font-bold text-slate-700">{log.to}</TableCell>
-                          <TableCell className="max-w-[200px]"><p className="text-[10px] line-clamp-2">{log.message}</p></TableCell>
-                          <TableCell>
+                <>
+                  {/* Desktop View Table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table className="min-w-[700px]">
+                      <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                        <TableRow>
+                          <TableHead>Date & Time</TableHead>
+                          <TableHead>Recipient</TableHead>
+                          <TableHead>Message</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {smsLogs?.map((log) => (
+                          <TableRow key={log.id}>
+                            <TableCell className="text-[10px] font-medium text-slate-500 whitespace-nowrap">
+                              {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'N/A'}
+                            </TableCell>
+                            <TableCell className="font-mono text-[10px] font-bold text-slate-700">{log.to}</TableCell>
+                            <TableCell className="max-w-[200px]"><p className="text-[10px] line-clamp-2">{log.message}</p></TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={cn(
+                                "text-[8px] uppercase font-bold",
+                                log.status === 'Success' ? "bg-success/5 text-success border-success/20" : "bg-destructive/5 text-destructive border-destructive/20"
+                              )}>
+                                {log.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right space-x-1 whitespace-nowrap">
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleResend(log)} disabled={isSubmitting}>
+                                <RotateCcw size={12} />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteLog(log.id)}>
+                                <Trash2 size={12} />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Mobile View Cards */}
+                  <div className="md:hidden p-4 space-y-3">
+                    {smsLogs?.map((log) => (
+                      <Card key={log.id} className="border shadow-none rounded-2xl bg-white overflow-hidden">
+                        <CardContent className="p-4 space-y-3">
+                          <div className="flex justify-between items-start">
+                            <span className="text-[10px] font-medium text-slate-400">
+                              {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'N/A'}
+                            </span>
                             <Badge variant="outline" className={cn(
                               "text-[8px] uppercase font-bold",
-                              log.status === 'Success' ? "bg-success/5 text-success border-success/20" : "bg-destructive/5 text-destructive border-destructive/20"
+                              log.status === 'Success' ? "text-success border-success/30 bg-success/5" : "text-destructive border-destructive/30 bg-destructive/5"
                             )}>
                               {log.status}
                             </Badge>
-                          </TableCell>
-                          <TableCell className="text-right space-x-1 whitespace-nowrap">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleResend(log)} disabled={isSubmitting}>
-                              <RotateCcw size={12} />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-black text-slate-700">RECIPIENT: {log.to}</p>
+                            <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed italic">"{log.message}"</p>
+                          </div>
+                          <div className="pt-2 border-t flex justify-end gap-2">
+                            <Button variant="outline" size="sm" className="h-8 rounded-lg text-[10px] font-bold gap-1" onClick={() => handleResend(log)} disabled={isSubmitting}>
+                              <RotateCcw size={12}/> Resend
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteLog(log.id)}>
-                              <Trash2 size={12} />
+                            <Button variant="ghost" size="sm" className="h-8 rounded-lg text-destructive text-[10px] font-bold" onClick={() => handleDeleteLog(log.id)}>
+                              Delete
                             </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {smsLogs?.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-24 text-muted-foreground italic">No logs found.</TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
+              {smsLogs?.length === 0 && !logsLoading && (
+                <div className="text-center py-24 text-muted-foreground italic">No logs found.</div>
               )}
             </CardContent>
           </Card>
