@@ -23,7 +23,8 @@ import {
   MoreVertical, Utensils, Clock,
   Smartphone, User, Zap, CircleDollarSign, Home, Trash2, Scale, Receipt, Printer, Send, FileText,
   X,
-  Briefcase
+  Briefcase,
+  ChevronRight
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -58,6 +59,13 @@ import { cn } from "@/lib/utils"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
+
+interface DueEntry {
+  id: string;
+  month: string;
+  year: string;
+  amount: string;
+}
 
 export default function StudentDetailsPage() {
   const params = useParams()
@@ -110,7 +118,6 @@ export default function StudentDetailsPage() {
     }
   }, [student])
 
-  // Helpers for location dropdowns in Edit Dialog
   const selectedBuildingForEdit = useMemo(() => 
     buildings?.find(b => b.id === editForm?.buildingId), 
     [buildings, editForm?.buildingId]
@@ -130,7 +137,6 @@ export default function StudentDetailsPage() {
 
   const emptySeatsForEdit = useMemo(() => {
     if (!selectedRoomForEdit) return []
-    // Filter empty seats but also include the student's CURRENT seat if we are in the same room
     const originalSeat = student?.seatNumber
     const originalRoom = student?.roomNumber
     const originalBuilding = student?.buildingId
@@ -142,7 +148,6 @@ export default function StudentDetailsPage() {
     }) || []
   }, [selectedRoomForEdit, student, editForm?.buildingId, editForm?.roomNumber])
 
-  // Sync rent in Edit Form when room changes
   useEffect(() => {
     if (selectedRoomForEdit && isEditDialogOpen) {
       const newRent = Number(selectedRoomForEdit.rentPerSeat || 0)
@@ -284,8 +289,6 @@ export default function StudentDetailsPage() {
     setIsUpdating(true)
     
     const batch = writeBatch(db)
-    
-    // Check if location changed
     const locationChanged = 
       student.buildingId !== editForm.buildingId || 
       student.roomNumber !== editForm.roomNumber || 
@@ -293,7 +296,6 @@ export default function StudentDetailsPage() {
 
     try {
       if (locationChanged) {
-        // 1. Release previous seat
         const oldBRef = doc(db, "buildings", student.buildingId)
         const oldBSnap = await getDoc(oldBRef)
         if (oldBSnap.exists()) {
@@ -325,7 +327,6 @@ export default function StudentDetailsPage() {
           })
         }
 
-        // 2. Occupy new seat
         const newBRef = doc(db, "buildings", editForm.buildingId)
         const newBSnap = await getDoc(newBRef)
         if (newBSnap.exists()) {
@@ -357,7 +358,6 @@ export default function StudentDetailsPage() {
             updatedAt: serverTimestamp()
           })
           
-          // Update buildingName and apartmentName in student profile
           editForm.buildingName = newBData.name
           editForm.apartmentName = newAptName
         }
@@ -370,7 +370,7 @@ export default function StudentDetailsPage() {
 
       await batch.commit()
       setIsEditDialogOpen(false)
-      toast({ title: "Profile Updated", description: locationChanged ? "Location shifted and rent adjusted." : "" })
+      toast({ title: "Profile Updated" })
       router.refresh();
     } catch (e: any) { 
       toast({ variant: "destructive", title: "Error", description: e.message }) 
@@ -449,6 +449,7 @@ export default function StudentDetailsPage() {
 
   return (
     <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 relative">
+      {/* Mobile Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
           <ChevronLeft size={24} />
@@ -476,6 +477,7 @@ export default function StudentDetailsPage() {
         </div>
       </div>
 
+      {/* Desktop Header */}
       <div className="hidden md:flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-6">
           <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
@@ -500,6 +502,7 @@ export default function StudentDetailsPage() {
         </div>
       </div>
 
+      {/* Main Info Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="border-none shadow-sm rounded-3xl p-6 bg-white flex flex-col justify-between">
           <div>
@@ -553,7 +556,8 @@ export default function StudentDetailsPage() {
         </TabsList>
 
         <TabsContent value="payments">
-          <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+          {/* DESKTOP TABLE */}
+          <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
               <TableBody>
@@ -571,10 +575,35 @@ export default function StudentDetailsPage() {
               </TableBody>
             </Table>
           </Card>
+
+          {/* MOBILE CARDS */}
+          <div className="md:hidden space-y-4">
+            {student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
+              <Card key={idx} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p>
+                    <h3 className="font-black text-slate-800">{p.month} {p.year}</h3>
+                  </div>
+                  <Badge className="bg-success font-black">৳{p.amount.toLocaleString()}</Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-2 bg-secondary/30 p-2 rounded-xl text-[9px] font-bold uppercase text-slate-500">
+                  <div className="text-center"><p className="opacity-60">Rent</p><p className="text-slate-800">৳{p.seatAmount || 0}</p></div>
+                  <div className="text-center"><p className="opacity-60">Food</p><p className="text-slate-800">৳{p.foodAmount || 0}</p></div>
+                  <div className="text-center"><p className="opacity-60">Adv.</p><p className="text-primary">৳{p.advanceAmount || 0}</p></div>
+                </div>
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="font-bold text-muted-foreground uppercase flex items-center gap-1"><Wallet size={10}/> {p.method}</span>
+                  <Button variant="ghost" size="sm" className="h-6 text-primary gap-1 font-bold">Receipt <ChevronRight size={12}/></Button>
+                </div>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
         <TabsContent value="dues">
-          <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+          {/* DESKTOP TABLE */}
+          <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table>
               <TableHeader className="bg-slate-50"><TableRow><TableHead>Month</TableHead><TableHead>Due Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
               <TableBody>
@@ -589,11 +618,25 @@ export default function StudentDetailsPage() {
               </TableBody>
             </Table>
           </Card>
+
+          {/* MOBILE CARDS */}
+          <div className="md:hidden space-y-4">
+            {stats?.dueBreakdownList.map((d, i) => (
+              <Card key={i} className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-destructive p-4 flex justify-between items-center">
+                <div>
+                  <h3 className="font-black text-slate-800">{d.month}</h3>
+                  <p className="text-xl font-black text-destructive">৳{d.amount.toLocaleString()}</p>
+                </div>
+                <Button size="sm" className="rounded-xl h-9 px-4 font-bold" onClick={() => setIsPaymentDialogOpen(true)}>Record</Button>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
         {student.paymentSystem === 'non-package' && (
           <TabsContent value="meals">
-            <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+            {/* DESKTOP TABLE */}
+            <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
               <Table>
                 <TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Month</TableHead><TableHead>Meal Count</TableHead><TableHead className="text-right">Total Cost</TableHead></TableRow></TableHeader>
                 <TableBody>
@@ -608,6 +651,22 @@ export default function StudentDetailsPage() {
                 </TableBody>
               </Table>
             </Card>
+
+            {/* MOBILE CARDS */}
+            <div className="md:hidden space-y-4">
+              {student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
+                <Card key={idx} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(m.date).toLocaleDateString()}</p>
+                    <Badge variant="secondary" className="font-black">{m.totalMeals} MEALS</Badge>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <h3 className="font-black text-slate-800">{m.month}</h3>
+                    <p className="text-xl font-black text-destructive">৳{m.totalCost?.toLocaleString()}</p>
+                  </div>
+                </Card>
+              ))}
+            </div>
           </TabsContent>
         )}
       </Tabs>
@@ -660,7 +719,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* FULL DETAILS DIALOG */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -749,7 +807,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* EDIT PROFILE DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -758,7 +815,6 @@ export default function StudentDetailsPage() {
           </DialogHeader>
           {editForm && (
             <div className="space-y-8 py-4">
-              {/* Communication */}
               <div className="space-y-4">
                 <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                   <Smartphone size={14}/> Communication & Contacts
@@ -783,7 +839,6 @@ export default function StudentDetailsPage() {
                 </div>
               </div>
 
-              {/* Location Shifting */}
               <div className="space-y-4">
                 <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                   <Building2 size={14}/> Location Shifting (Hierarchy)
@@ -812,7 +867,7 @@ export default function StudentDetailsPage() {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs">Available Seat</Label>
-                      <Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setEditForm({...editForm, seatNumber: val})}>
+                      <Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setApprovalForm({...editForm, seatNumber: val})}>
                         <SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Seat" /></SelectTrigger>
                         <SelectContent>
                           {emptySeatsForEdit.map((s: any) => (
@@ -835,7 +890,6 @@ export default function StudentDetailsPage() {
                 </div>
               </div>
 
-              {/* Permanent Address */}
               <div className="space-y-4">
                 <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                   <MapPin size={14}/> Permanent Address
@@ -858,7 +912,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* EXIT SETTLEMENT DIALOG */}
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
