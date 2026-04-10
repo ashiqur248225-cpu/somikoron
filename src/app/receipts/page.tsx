@@ -19,7 +19,9 @@ import {
   Smartphone, 
   RotateCcw,
   Building2,
-  Printer
+  Printer,
+  Clock,
+  ListFilter
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -37,10 +39,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, where, limit, orderBy } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
@@ -63,6 +67,7 @@ export default function ReceiptsHistoryPage() {
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [methodFilter, setMethodFilter] = useState("all")
+  const [timeView, setTimeView] = useState("all") // "all" or "today"
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -83,6 +88,8 @@ export default function ReceiptsHistoryPage() {
 
   const filteredReceipts = useMemo(() => {
     if (!payments) return []
+    const todayStr = new Date().toDateString()
+
     return payments.filter(p => {
       const search = searchTerm.toLowerCase()
       const receiptNo = `RCPT-${p.id?.substring(0, 8).toUpperCase()}`
@@ -96,10 +103,13 @@ export default function ReceiptsHistoryPage() {
       const matchesStartDate = !startDate || pDate >= new Date(startDate)
       const matchesEndDate = !endDate || pDate <= new Date(new Date(endDate).setHours(23, 59, 59))
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
+      
+      // Time View Filter (Today vs All)
+      const matchesTime = timeView === 'all' || pDate.toDateString() === todayStr
 
-      return matchesSearch && matchesStartDate && matchesEndDate && matchesMethod
+      return matchesSearch && matchesStartDate && matchesEndDate && matchesMethod && matchesTime
     })
-  }, [payments, searchTerm, startDate, endDate, methodFilter])
+  }, [payments, searchTerm, startDate, endDate, methodFilter, timeView])
 
   return (
     <div className="space-y-8 pb-20">
@@ -116,7 +126,7 @@ export default function ReceiptsHistoryPage() {
         
         <div className="ml-auto flex items-center gap-3">
           <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={() => setIsFilterDialogOpen(true)}>
-            <Filter size={16} /> Filter
+            <Filter size={16} /> <span className="hidden sm:inline">Advanced Filter</span>
           </Button>
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20">
@@ -126,15 +136,28 @@ export default function ReceiptsHistoryPage() {
         </div>
       </div>
 
-      {/* Main Search Bar */}
-      <div className="relative max-w-2xl mx-auto">
-        <Search className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-        <Input 
-          placeholder="Search by Receipt No (e.g. RCPT-XXXX) or Student Name..." 
-          className="pl-12 h-12 rounded-2xl border-none shadow-md bg-white text-lg" 
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-        />
+      {/* Main Filter & Tabs Section */}
+      <div className="flex flex-col gap-6 max-w-4xl mx-auto">
+        <div className="relative w-full">
+          <Search className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
+          <Input 
+            placeholder="Find by Receipt No (RCPT-XXXX) or Resident Name..." 
+            className="pl-12 h-12 rounded-2xl border-none shadow-md bg-white text-lg" 
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <Tabs value={timeView} onValueChange={setTimeView} className="w-full">
+          <TabsList className="bg-secondary/50 p-1 rounded-2xl w-full max-w-[400px] mx-auto grid grid-cols-2">
+            <TabsTrigger value="today" className="rounded-xl gap-2 h-10 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <Clock size={14}/> Today
+            </TabsTrigger>
+            <TabsTrigger value="all" className="rounded-xl gap-2 h-10 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <ListFilter size={14}/> All Receipts
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {isLoading ? (
@@ -146,12 +169,12 @@ export default function ReceiptsHistoryPage() {
             <Table>
               <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableHead>Receipt No</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Resident</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="font-bold">Receipt No</TableHead>
+                  <TableHead className="font-bold">Date</TableHead>
+                  <TableHead className="font-bold">Resident</TableHead>
+                  <TableHead className="font-bold">Method</TableHead>
+                  <TableHead className="text-right font-bold">Amount</TableHead>
+                  <TableHead className="text-right font-bold">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -168,14 +191,14 @@ export default function ReceiptsHistoryPage() {
                     <TableCell><Badge variant="outline" className="uppercase text-[9px] font-black">{p.method}</Badge></TableCell>
                     <TableCell className="text-right font-black text-slate-800 text-lg">৳{p.amount?.toLocaleString()}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" className="text-primary" onClick={() => router.push(`/receipts/${p.id}`)}>
+                      <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/5" onClick={() => router.push(`/receipts/${p.id}`)}>
                         <Printer size={18} />
                       </Button>
                     </TableCell>
                   </TableRow>
                 ))}
                 {filteredReceipts.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="text-center py-24 text-muted-foreground italic">No receipts found matching your search.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-24 text-muted-foreground italic">No receipts found for this selection.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -187,25 +210,28 @@ export default function ReceiptsHistoryPage() {
               <Card key={p.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/receipts/${p.id}`)}>
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start">
-                    <Badge variant="outline" className="text-[10px] font-black text-primary border-primary/20">
+                    <Badge variant="outline" className="text-[10px] font-black text-primary border-primary/20 bg-primary/5">
                       RCPT-{p.id?.substring(0, 8).toUpperCase()}
                     </Badge>
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(p.date)}</p>
                   </div>
                   
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-end">
                     <div>
                       <h3 className="font-black text-slate-800 text-lg leading-tight">{p.studentName}</h3>
                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{p.buildingName} • Room {p.roomNumber}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xl font-black text-success">৳{p.amount?.toLocaleString()}</p>
-                      <Badge variant="secondary" className="text-[8px] uppercase mt-1">{p.method}</Badge>
+                      <Badge variant="secondary" className="text-[8px] uppercase mt-1 px-2">{p.method}</Badge>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             ))}
+            {filteredReceipts.length === 0 && (
+              <div className="text-center py-20 text-muted-foreground italic text-sm">No receipts found matching criteria.</div>
+            )}
           </div>
         </>
       )}
@@ -214,8 +240,8 @@ export default function ReceiptsHistoryPage() {
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Advanced Search</DialogTitle>
-            <DialogDescription>Filter archived receipts by date and payment method.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Advanced Filter</DialogTitle>
+            <DialogDescription>Apply custom date and method filters to archive.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-1.5">
@@ -234,16 +260,16 @@ export default function ReceiptsHistoryPage() {
             <div className="space-y-1.5">
               <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Date Range</Label>
               <div className="flex gap-2">
-                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50 rounded-xl h-11" />
-                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 rounded-xl h-11" />
+                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50 rounded-xl h-11 text-xs" />
+                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 rounded-xl h-11 text-xs" />
               </div>
             </div>
           </div>
           <DialogFooter className="flex gap-2 sm:justify-between">
             <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setMethodFilter("all"); setStartDate(""); setEndDate(""); }}>
-              <RotateCcw size={14}/> Reset Filters
+              <RotateCcw size={14}/> Reset
             </Button>
-            <Button className="rounded-xl px-8 h-11 font-bold" onClick={() => setIsFilterDialogOpen(false)}>Apply Search</Button>
+            <Button className="rounded-xl px-8 h-11 font-bold shadow-lg" onClick={() => setIsFilterDialogOpen(false)}>Apply Search</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
