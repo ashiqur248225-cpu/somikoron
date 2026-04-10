@@ -214,8 +214,8 @@ export default function ExpenseHistoryPage() {
       {/* OFFICIAL PRINT REPORT SECTION */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
-          <h1 className="text-2xl font-black uppercase text-primary">{templatesData?.hostelName || "SOMIKORON HOSTEL"}</h1>
-          <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Expense Summary Report</p>
+          <h1 className="text-2xl font-black uppercase text-primary">সমীকরণ হোস্টেল</h1>
+          <p className="text-sm font-bold text-slate-600">{userBranch} ব্রাঞ্চ • খরচ সামারি রিপোর্ট (Expense)</p>
           <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[9pt] font-medium bg-slate-50/50 px-4">
             <div>
               <p><b>Period:</b> {startDate || 'Start'} to {endDate || 'Today'}</p>

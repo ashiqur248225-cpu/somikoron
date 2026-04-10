@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { History, Search, Filter, Download, Loader2, FileSpreadsheet, Printer, ArrowUpCircle, ArrowDownCircle, Wallet, XCircle, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, where } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
+import { collection, query, where, doc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
@@ -56,6 +56,9 @@ export default function LedgerPage() {
     return query(collection(db, "expenses"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: expenses, isLoading: eLoading } = useCollection(expensesQuery)
+
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
 
   const rawLedgerData = useMemo(() => {
     const combined = [
@@ -125,7 +128,6 @@ export default function LedgerPage() {
         </div>
       </div>
 
-      {/* FILTER DIALOG */}
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
@@ -168,52 +170,62 @@ export default function LedgerPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Official Ledger Print Format */}
+      {/* OFFICIAL PRINT REPORT SECTION */}
       <div className="print-only print-report-container">
         <div className="report-header text-center">
-          <h1 className="text-2xl font-black uppercase text-primary">SOMIKORON HOSTEL</h1>
-          <p className="text-sm font-bold">{userBranch} Branch • General Ledger</p>
-          <div className="mt-4 border-y py-2 grid grid-cols-2 text-left text-[10pt]">
-            <div><p><b>Account Type:</b> Cash / Bank / Digital</p><p><b>Filter:</b> {typeFilter.toUpperCase()}</p></div>
-            <div className="text-right"><p><b>Date Range:</b> {startDate || 'Start'} to {endDate || 'Today'}</p><p><b>Generated At:</b> {new Date().toLocaleString()}</p></div>
+          <h1 className="text-2xl font-black uppercase text-primary">সমীকরণ হোস্টেল</h1>
+          <p className="text-sm font-bold text-slate-600">{userBranch} ব্রাঞ্চ • জেনারেল লেজার রিপোর্ট (Ledger)</p>
+          <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[9pt] font-medium bg-slate-50/50 px-4">
+            <div>
+              <p><b>Period:</b> {startDate || 'Start'} to {endDate || 'Today'}</p>
+              <p><b>Account Type:</b> Cash / Bank / Digital</p>
+            </div>
+            <div className="text-right">
+              <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
+              <p><b>Staff:</b> {userName}</p>
+            </div>
           </div>
         </div>
-        <Table className="border">
-          <TableHeader>
-            <TableRow className="bg-slate-50">
-              <TableHead className="w-[12%] font-bold text-slate-900 border">Date</TableHead>
-              <TableHead className="w-[10%] font-bold text-slate-900 border">Type</TableHead>
-              <TableHead className="w-[20%] font-bold text-slate-900 border">Source / Category</TableHead>
-              <TableHead className="w-[18%] font-bold text-slate-900 border">Location</TableHead>
-              <TableHead className="w-[10%] font-bold text-slate-900 border text-right">Debit</TableHead>
-              <TableHead className="w-[10%] font-bold text-slate-900 border text-right">Credit</TableHead>
-              <TableHead className="w-[10%] font-bold text-slate-900 border text-right">Balance</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+
+        <table className="w-full border-collapse border mt-6 text-[9pt]">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Date</th>
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Type</th>
+              <th className="border border-slate-300 p-2 text-left font-black uppercase text-slate-700">Source / Category</th>
+              <th className="border border-slate-300 p-2 text-right font-black uppercase text-slate-700">Credit (+)</th>
+              <th className="border border-slate-300 p-2 text-right font-black uppercase text-slate-700">Debit (-)</th>
+              <th className="border border-slate-300 p-2 text-right font-black uppercase text-slate-700">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
             {filteredData.slice().reverse().map((tx: any) => (
-              <TableRow key={tx.id}>
-                <TableCell className="border">{formatCompactDate(tx.date)}</TableCell>
-                <TableCell className="capitalize text-[7pt] border">{tx.txType}</TableCell>
-                <TableCell className="font-bold border">{tx.studentName || tx.category}</TableCell>
-                <TableCell className="text-[7pt] border">{tx.buildingName} {tx.roomNumber ? `- R${tx.roomNumber}` : ''}</TableCell>
-                <TableCell className="text-right border">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()}` : '-'}</TableCell>
-                <TableCell className="text-right border">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()}` : '-'}</TableCell>
-                <TableCell className="text-right font-bold border">৳{tx.balance.toLocaleString()}</TableCell>
-              </TableRow>
+              <tr key={tx.id}>
+                <td className="border border-slate-200 p-2">{formatCompactDate(tx.date)}</td>
+                <td className="border border-slate-200 p-2 capitalize text-[8pt]">{tx.txType}</td>
+                <td className="border border-slate-200 p-2 font-bold">{tx.studentName || tx.category}</td>
+                <td className="border border-slate-200 p-2 text-right text-success font-bold">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()}` : '-'}</td>
+                <td className="border border-slate-200 p-2 text-right text-destructive font-bold">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()}` : '-'}</td>
+                <td className="border border-slate-200 p-2 text-right font-black">৳{tx.balance.toLocaleString()}</td>
+              </tr>
             ))}
-          </TableBody>
-        </Table>
-        <div className="summary-section">
-          <div className="bg-slate-50 p-4 border rounded-xl grid grid-cols-3 gap-4">
-            <div><p className="text-[8pt] uppercase font-bold text-success">Total Credit</p><p className="text-lg font-bold">৳{stats.income.toLocaleString()}</p></div>
-            <div><p className="text-[8pt] uppercase font-bold text-destructive">Total Debit</p><p className="text-lg font-bold">৳{stats.expense.toLocaleString()}</p></div>
-            <div className="text-right"><p className="text-[8pt] uppercase font-bold text-primary">Closing Balance</p><p className="text-2xl font-black text-primary">৳{stats.balance.toLocaleString()}</p></div>
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-900 text-white font-black">
+              <td colSpan={3} className="p-3 text-right uppercase text-[10pt]">Final Closing Balance</td>
+              <td className="p-3 text-right text-success-foreground text-[11pt]">৳{stats.income.toLocaleString()}</td>
+              <td className="p-3 text-right text-destructive-foreground text-[11pt]">৳{stats.expense.toLocaleString()}</td>
+              <td className="p-3 text-right text-[11pt]">৳{stats.balance.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div className="print-footer mt-24 flex justify-between px-10">
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[8pt] font-black uppercase text-slate-800">Accountant Signature</p>
           </div>
-          <div className="print-footer mt-10">
-            <div className="signature-box">Accountant Signature</div>
-            <div className="text-center self-end print-page-number"></div>
-            <div className="signature-box">Manager Signature</div>
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[8pt] font-black uppercase text-slate-800">Manager Signature</p>
           </div>
         </div>
       </div>
