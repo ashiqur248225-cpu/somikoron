@@ -39,7 +39,8 @@ import {
   UserCheck,
   Filter,
   Apple,
-  RotateCcw
+  RotateCcw,
+  Trash2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -52,7 +53,7 @@ import {
   DialogFooter
 } from "@/components/ui/dialog"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, query, limit, where } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, query, limit, where, getDocs, writeBatch } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -73,8 +74,6 @@ const EXPENSE_CATEGORIES = [
   { id: "others", label: "Others", icon: Wallet },
 ]
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
 const formatCompactDate = (date: any) => {
   const d = new Date(date)
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
@@ -87,40 +86,23 @@ export default function ExpenseHistoryPage() {
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
-  const [userRole, setUserRole] = useState("")
+  const [isDevMode, setIsDevMode] = useState(false)
 
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [deleteRange, setDeleteRange] = useState({ start: "", end: "" })
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
-  const [spentByFilter, setSpentByFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
-  
-  const [isEntryOpen, setIsEntryOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const [formData, setFormData] = useState({
-    category: "others",
-    buildingId: "none",
-    apartmentName: "",
-    roomNumber: "",
-    meterNo: "",
-    amount: "",
-    totalMeals: "",
-    method: "cash",
-    expensePartyName: "",
-    receiver: "",
-    month: MONTHS[new Date().getMonth()],
-    year: new Date().getFullYear().toString(),
-    description: "",
-    expenseDate: new Date().toISOString().split('T')[0]
-  })
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
-    setUserRole(localStorage.getItem("user_role") || "Manager")
+    setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
   }, [])
 
   const buildingsQuery = useMemoFirebase(() => {
@@ -129,70 +111,60 @@ export default function ExpenseHistoryPage() {
   }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  const staffQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "staff"), where("branch", "==", userBranch))
-  }, [db, userBranch])
-  const { data: staffList } = useCollection(staffQuery)
-
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "expenses"), where("branch", "==", userBranch), limit(1000))
   }, [db, userBranch])
   const { data: rawExpenses, isLoading: expensesLoading } = useCollection(expensesQuery)
 
-  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
-  const { data: templatesData } = useDoc(templatesRef)
-
   const filteredExpenses = useMemo(() => {
     if (!rawExpenses) return []
     return rawExpenses.filter(e => {
       const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
       const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
-      const matchesSpentBy = spentByFilter === "all" || e.expensePartyName === spentByFilter
       const matchesSearch = (e.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) || (e.description || "").toLowerCase().includes(searchTerm.toLowerCase())
       const eDate = new Date(e.expenseDate)
       const matchesStartDate = !startDate || eDate >= new Date(startDate)
       const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
-      return matchesCategory && matchesBuilding && matchesSpentBy && matchesSearch && matchesStartDate && matchesEndDate
+      return matchesCategory && matchesBuilding && matchesSearch && matchesStartDate && matchesEndDate
     }).sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime())
-  }, [rawExpenses, categoryFilter, buildingFilter, spentByFilter, searchTerm, startDate, endDate])
+  }, [rawExpenses, categoryFilter, buildingFilter, searchTerm, startDate, endDate])
 
   const stats = useMemo(() => {
     const total = filteredExpenses.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     return { total, count: filteredExpenses.length }
   }, [filteredExpenses])
 
-  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+  const handleBulkDelete = async () => {
+    if (!deleteRange.start || !deleteRange.end) return;
+    const confirm = window.confirm(`WARNING: Permanent delete ALL expenses from ${deleteRange.start} to ${deleteRange.end}. Proceed?`);
+    if (!confirm) return;
 
-  const handleCreateExpense = async () => {
-    if (!formData.amount || !formData.expensePartyName) return
-    setIsSubmitting(true)
+    setIsDeleting(true)
     try {
-      const selectedB = buildings?.find(b => b.id === formData.buildingId)
-      const expenseId = doc(collection(db, "expenses")).id
-      const expenseData = { 
-        ...formData, 
-        amount: Number(formData.amount), 
-        totalMeals: formData.category === 'food' ? Number(formData.totalMeals || 0) : 0,
-        branch: userBranch, 
-        buildingName: selectedB?.name || "General", 
-        updatedAt: serverTimestamp() 
-      }
-
-      if (userRole === 'Building Manager') {
-        const reqId = doc(collection(db, "managerRequests")).id
-        await setDoc(doc(db, "managerRequests", reqId), { ...expenseData, id: reqId, requestType: "expense", requestedBy: localStorage.getItem("somikoron_auth_id"), requestedByName: userName, createdAt: serverTimestamp() })
-        toast({ title: "Request Sent" })
-      } else {
-        await setDoc(doc(db, "expenses", expenseId), { ...expenseData, id: expenseId, createdAt: serverTimestamp() })
-        toast({ title: "Success" })
-      }
-      setIsEntryOpen(false)
+      const q = query(
+        collection(db, "expenses"),
+        where("branch", "==", userBranch),
+        where("expenseDate", ">=", deleteRange.start),
+        where("expenseDate", "<=", deleteRange.end)
+      );
+      
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      snapshot.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      
+      toast({ title: "Deleted Successfully", description: `${snapshot.size} records removed.` });
+      setIsDeleteOpen(false);
       router.refresh();
-    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
-    finally { setIsSubmitting(false) }
+    } catch (e: any) {
+      toast({ variant: "destructive", description: e.message });
+    } finally {
+      setIsDeleting(false)
+    }
   }
+
+  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
 
   return (
     <div className="space-y-8 pb-20 print:p-0 w-full overflow-hidden">
@@ -203,13 +175,40 @@ export default function ExpenseHistoryPage() {
           <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Expense</h1><p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Spending for <span className="font-bold text-foreground">{userBranch}</span>.</p></div>
         </div>
         <div className="ml-auto flex items-center gap-3">
+          {isDevMode && (
+            <Button size="sm" variant="destructive" className="gap-2 h-9 rounded-lg" onClick={() => setIsDeleteOpen(true)}>
+              <Trash2 size={16} /> <span className="hidden sm:inline">Bulk Delete</span>
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsFilterDialogOpen(true)}>
             <Filter size={16} /> <span className="hidden sm:inline">Filter</span>
           </Button>
-          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Download PDF</span></Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> <span className="hidden sm:inline">Print PDF</span></Button>
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
+
+      {/* Bulk Delete Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 /> Bulk Delete Expenses</DialogTitle>
+            <DialogDescription>Permanently remove records by date range.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold">Start Date</Label><Input type="date" value={deleteRange.start} onChange={e => setDeleteRange({...deleteRange, start: e.target.value})} /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] font-bold">End Date</Label><Input type="date" value={deleteRange.end} onChange={e => setDeleteRange({...deleteRange, end: e.target.value})} /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={isDeleting} className="rounded-xl font-bold">
+              {isDeleting ? <Loader2 className="animate-spin" /> : "Delete Selected"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* OFFICIAL PRINT REPORT SECTION */}
       <div className="print-only print-report-container">
@@ -269,70 +268,21 @@ export default function ExpenseHistoryPage() {
 
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Expenses</DialogTitle>
-            <DialogDescription>Search and filter spending records.</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Expenses</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label>
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Note or staff name..." className="pl-8 bg-slate-50" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-              </div>
-            </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Category</Label>
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    {EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
-                <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-                  <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Buildings</SelectItem>
-                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Spent By</Label>
-              <Select value={spentByFilter} onValueChange={setSpentByFilter}>
-                <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All Staff" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Staff</SelectItem>
-                  {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Date Range</Label>
-              <div className="flex gap-2">
-                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50" />
-                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50" />
-              </div>
-            </div>
+            <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50" /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50" /></div></div>
           </div>
-          <DialogFooter className="flex gap-2 sm:justify-between">
-            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setCategoryFilter("all"); setBuildingFilter("all"); setSpentByFilter("all"); setSearchTerm(""); setStartDate(""); setEndDate(""); }}>
-              <RotateCcw size={14}/> Reset
-            </Button>
-            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
-          </DialogFooter>
+          <DialogFooter><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden print:hidden">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-xs font-bold uppercase text-destructive">Total Filtered Expense</CardTitle><ArrowDownCircle className="h-4 w-4 text-destructive" /></CardHeader>
-        <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div><p className="text-[10px] text-muted-foreground font-bold mt-1 uppercase">Based on {stats.count} records</p></CardContent>
+        <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-destructive">Total Filtered Expense</CardTitle><ArrowDownCircle className="h-4 w-4 text-destructive" /></CardHeader>
+        <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
       </Card>
 
       {expensesLoading ? (
@@ -358,23 +308,6 @@ export default function ExpenseHistoryPage() {
           </div>
         </>
       )}
-
-      <Dialog open={isEntryOpen} onOpenChange={setIsEntryOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Record New Expense</DialogTitle></DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="space-y-4">
-              <div className="space-y-2"><Label>Category</Label><Select value={formData.category} onValueChange={val => setFormData({...formData, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: '', totalMeals: '', month: MONTHS[new Date().getMonth()]})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Spent By</Label><Select value={formData.expensePartyName} onValueChange={val => setFormData({...formData, expensePartyName: val})}><SelectTrigger><SelectValue placeholder="Who spent?" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-            </div>
-            <Separator />
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Amount</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} /></div><div className="space-y-2"><Label>Method</Label><Select value={formData.method} onValueChange={val => setFormData({...formData, method: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div></div>
-            <div className="space-y-2"><Label>Date</Label><Input type="date" value={formData.expenseDate} onChange={e => setFormData({...formData, expenseDate: e.target.value})} /></div>
-            <div className="space-y-2"><Label>Note</Label><Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
-          </div>
-          <DialogFooter><Button onClick={handleCreateExpense} disabled={isSubmitting} className="w-full h-12 bg-expense">{isSubmitting ? <Loader2 className="animate-spin" /> : "Save Expense"}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

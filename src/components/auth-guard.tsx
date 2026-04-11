@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react"
 import { useFirestore } from "@/firebase"
-import { collection, query, where, getDocs, limit } from "firebase/firestore"
+import { collection, query, where, getDocs, limit, doc, getDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,13 +19,33 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { toast } = useToast()
 
   useEffect(() => {
-    const auth = localStorage.getItem("somikoron_auth")
-    if (auth === "true") {
-      setIsAuthenticated(true)
-    } else {
-      setIsAuthenticated(false)
+    const checkSecuritySession = async () => {
+      // 1. Check if enhanced security is enabled in cloud
+      try {
+        const secSnap = await getDoc(doc(db, "configs", "securityConfig"));
+        const isEnhanced = secSnap.exists() ? secSnap.data().enhancedSecurity : false;
+
+        if (isEnhanced) {
+          // Check if this specific browser session is active
+          const sessionActive = sessionStorage.getItem("somikoron_session_active");
+          if (!sessionActive) {
+            // First load or tab was closed - force logout
+            localStorage.removeItem("somikoron_auth");
+            setIsAuthenticated(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Security config fetch failed, falling back to local storage.");
+      }
+
+      // 2. Fallback to standard check
+      const auth = localStorage.getItem("somikoron_auth")
+      setIsAuthenticated(auth === "true")
     }
-  }, [])
+
+    checkSecuritySession()
+  }, [db])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,9 +75,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         localStorage.setItem("user_name", userData.name)
         localStorage.setItem("assigned_building_id", userData.assignedBuildingId || "none")
         
-        // Save Permissions
-        localStorage.setItem("can_request_income", userData.canRequestIncome !== false ? "true" : "false")
-        localStorage.setItem("can_request_expense", userData.canRequestExpense !== false ? "true" : "false")
+        // Track session for enhanced security
+        sessionStorage.setItem("somikoron_session_active", "true");
         
         setIsAuthenticated(true)
         toast({ title: "Welcome to Somikoron", description: `Logged in as ${userData.role}` })
