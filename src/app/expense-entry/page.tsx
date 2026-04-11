@@ -86,6 +86,21 @@ export default function ExpenseEntryPage() {
   }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
 
+  // FILTERED STAFF: Only Management for Spent By
+  const managementStaff = useMemo(() => {
+    if (!staffList) return []
+    return staffList.filter(s => s.staffType === 'management' || !s.staffType)
+  }, [staffList])
+
+  // CATEGORY-SPECIFIC FILTERING: For Salary/Food, show ALL staff in receiver field
+  const receiverStaffList = useMemo(() => {
+    if (!staffList) return []
+    if (formData.category === 'salary' || formData.category === 'food') {
+      return staffList // All staff for salary or food
+    }
+    return managementStaff // Default to management for other categories
+  }, [staffList, managementStaff, formData.category])
+
   const handleCreateExpense = async () => {
     if (!formData.amount || !formData.spentBy) {
       toast({ variant: "destructive", title: "Error", description: "Amount and Spent By are required." })
@@ -209,7 +224,7 @@ export default function ExpenseEntryPage() {
                     <Label className="text-xs">Spent By (Staff)</Label>
                     <Select value={formData.spentBy} onValueChange={v => setFormData({...formData, spentBy: v})}>
                       <SelectTrigger className="bg-white h-12 rounded-xl shadow-sm"><SelectValue placeholder="Staff Name" /></SelectTrigger>
-                      <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>{managementStaff?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>
@@ -247,7 +262,7 @@ export default function ExpenseEntryPage() {
                         <Label className="text-xs">Staff Member</Label>
                         <Select value={formData.receiver} onValueChange={v => setFormData({...formData, receiver: v})}>
                           <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Recipient" /></SelectTrigger>
-                          <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                          <SelectContent>{receiverStaffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -265,7 +280,7 @@ export default function ExpenseEntryPage() {
                         <Label className="text-xs">Received By</Label>
                         <Select value={formData.receiver} onValueChange={v => setFormData({...formData, receiver: v})}>
                           <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Market Manager / Cook" /></SelectTrigger>
-                          <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                          <SelectContent>{receiverStaffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                     </div>

@@ -79,6 +79,12 @@ export default function PaymentEntryPage() {
   }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
 
+  // FILTERED STAFF FOR RECEIVER: Only Management
+  const managementStaff = useMemo(() => {
+    if (!staffList) return []
+    return staffList.filter(s => s.staffType === 'management' || !s.staffType)
+  }, [staffList])
+
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
   
@@ -118,7 +124,7 @@ export default function PaymentEntryPage() {
       await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       
       const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
-      const targetLabel = `${formData.month} ${formData.year}`;
+      const targetLabel = `${paymentData.month} ${paymentData.year}`;
       let remainingRentPaid = seatPaid;
 
       if (currentDues[targetLabel] && remainingRentPaid > 0) {
@@ -362,7 +368,7 @@ export default function PaymentEntryPage() {
               <Label className="text-xs">Receiver</Label>
               <Select value={formData.receiver} onValueChange={v => setFormData({...formData, receiver: v})}>
                 <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Staff"/></SelectTrigger>
-                <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{managementStaff?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
