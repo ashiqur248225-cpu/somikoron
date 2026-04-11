@@ -236,9 +236,26 @@ export default function StudentDetailsPage() {
       await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       await updateDoc(studentRef, { paymentsHistory: arrayUnion(pRecord), advanceAmount: increment(extraAdvance), totalDue: finalTotalDue, duesBreakdown: currentDues, foodDueAmount: increment(foodPaid), historicalTotalReceived: increment(totalAmt), updatedAt: serverTimestamp() })
       
+      // Update Synchronized netBalance
+      const balanceRef = doc(db, "netBalance", student.branch);
+      const methodKeyMap: Record<string, string> = {
+        'cash': 'totalCash',
+        'bkash': 'totalBkash',
+        'nagad': 'totalNagad',
+        'bank': 'totalBank'
+      };
+      const methodKey = methodKeyMap[paymentData.method] || 'totalCash';
+
+      await setDoc(balanceRef, {
+        branchId: student.branch,
+        [methodKey]: increment(totalAmt),
+        totalHandCash: increment(totalAmt),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+
       // SMS TRIGGER ON PROFILE PAYMENT
       if (apiConfig?.apikey) {
-        const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text || DEFAULT_TEMPLATES.find(t => t.id === 'payment')?.text;
+        const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text;
         if (template) {
           const foodVal = Number(student.foodDueAmount || 0) + foodPaid;
           const foodBalance = foodVal > 0 ? foodVal : 0;
@@ -527,7 +544,7 @@ export default function StudentDetailsPage() {
               </div>
               <div className="space-y-4"><Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Building2 size={14}/> Location Shifting (Hierarchy)</Label>
                 <div className="p-5 border-2 border-primary/10 bg-primary/5 rounded-3xl space-y-4">
-                  <div className="space-y-2"><Label className="text-xs">Select Building</Label><Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Choose Building" /></SelectTrigger><SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-2"><Label className="text-xs">Select Building</Label><Select value={editForm.buildingId} onValueChange={val => setFormData({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Choose Building" /></SelectTrigger><SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2"><Label className="text-xs">Room No.</Label><Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={val => setEditForm({...editForm, roomNumber: val, seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Room" /></SelectTrigger><SelectContent>{roomsInBuildingForEdit.map((r: any, idx: number) => (<SelectItem key={idx} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>))}</SelectContent></Select></div>
                     <div className="space-y-2"><Label className="text-xs">Available Seat</Label><Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setEditForm({...editForm, seatNumber: val})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Seat" /></SelectTrigger><SelectContent>{emptySeatsForEdit.map((s: any) => (<SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>))}</SelectContent></Select></div>

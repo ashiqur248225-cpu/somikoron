@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where, getDoc } from "firebase/firestore"
+import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where, getDoc, writeBatch } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -242,6 +242,23 @@ export default function RegistrationsPage() {
             date: new Date().toISOString(), createdAt: new Date().toISOString()
           }
           await setDoc(doc(db, "payments", pId), { ...initialPaymentRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
+
+          // Update Synchronized netBalance for Initial Collection
+          const balanceRef = doc(db, "netBalance", userBranch);
+          const methodKeyMap: Record<string, string> = {
+            'cash': 'totalCash',
+            'bkash': 'totalBkash',
+            'nagad': 'totalNagad',
+            'bank': 'totalBank'
+          };
+          const methodKey = methodKeyMap[approvalForm.method] || 'totalCash';
+
+          await setDoc(balanceRef, {
+            branchId: userBranch,
+            [methodKey]: increment(totalNewReceived),
+            totalHandCash: increment(totalNewReceived),
+            lastUpdated: serverTimestamp()
+          }, { merge: true });
         }
       }
 

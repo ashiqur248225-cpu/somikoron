@@ -120,7 +120,7 @@ export default function ExpenseEntryPage() {
       };
       const methodKey = methodKeyMap[formData.method] || 'totalCash';
 
-      setDoc(balanceRef, {
+      await setDoc(balanceRef, {
         branchId: userBranch,
         [methodKey]: increment(-amount),
         totalHandCash: increment(-amount),

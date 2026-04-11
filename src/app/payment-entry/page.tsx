@@ -174,7 +174,7 @@ export default function PaymentEntryPage() {
       };
       const methodKey = methodKeyMap[formData.method] || 'totalCash';
 
-      setDoc(balanceRef, {
+      await setDoc(balanceRef, {
         branchId: userBranch,
         [methodKey]: increment(totalAmt),
         totalHandCash: increment(totalAmt),
