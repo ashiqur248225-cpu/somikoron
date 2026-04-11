@@ -190,12 +190,23 @@ export default function SMSPanelPage() {
   }, [db, userBranch, userRole, buildingFilter])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
-  // Logs Query
+  // Logs Query - Removed orderBy from Firestore query to avoid composite index requirement
+  // This ensures history shows up even if indexes are not manually created.
   const logsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "smsLogs"), where("branch", "==", userBranch), orderBy("createdAt", "desc"), limit(200))
+    return query(collection(db, "smsLogs"), where("branch", "==", userBranch), limit(200))
   }, [db, userBranch])
-  const { data: smsLogs, isLoading: logsLoading } = useCollection(logsQuery)
+  const { data: rawSmsLogs, isLoading: logsLoading } = useCollection(logsQuery)
+
+  // Process logs client-side (sorting)
+  const smsLogs = useMemo(() => {
+    if (!rawSmsLogs) return []
+    return [...rawSmsLogs].sort((a, b) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0
+      return dateB - dateA
+    })
+  }, [rawSmsLogs])
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
