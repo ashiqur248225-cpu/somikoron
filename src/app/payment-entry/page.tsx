@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
@@ -77,6 +78,15 @@ export default function PaymentEntryPage() {
     return query(collection(db, "staff"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
+
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
+  
+  const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
+  const { data: apiConfig } = useDoc(apiConfigRef)
+
+  const mealConfigRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
+  const { data: mealConfig } = useDoc(mealConfigRef)
 
   const selectedStudent = useMemo(() => 
     students?.find(s => s.id === formData.studentId), 
@@ -153,6 +163,43 @@ export default function PaymentEntryPage() {
         historicalTotalReceived: increment(totalAmt),
         updatedAt: serverTimestamp()
       })
+
+      // INTELLIGENT SMS TRIGGER (PAYMENT RECEIPT)
+      if (apiConfig?.apikey) {
+        const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text || 
+                         DEFAULT_TEMPLATES.find(t => t.id === 'payment')?.text;
+        
+        if (template) {
+          const mealRate = Number(mealConfig?.rate || 0);
+          const foodVal = Number(selectedStudent.foodDueAmount || 0) + foodPaid;
+          const foodBalance = foodVal > 0 ? foodVal : 0;
+          const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
+          const totalPayable = finalTotalDue + foodDue;
+
+          const msg = template
+            .replaceAll('[নাম]', selectedStudent.name)
+            .replaceAll('[মাস]', `${formData.month} ${formData.year}`)
+            .replaceAll('[meal_rate]', mealRate.toString())
+            .replaceAll('[rent]', (selectedStudent.monthlyRent || 0).toString())
+            .replaceAll('[total_payable]', totalPayable.toString())
+            .replaceAll('[paid]', totalAmt.toString())
+            .replaceAll('[food_balance]', foodBalance.toString())
+            .replaceAll('[food_due]', foodDue.toString())
+            .replaceAll('[রুম]', selectedStudent.roomNumber)
+            .replaceAll('[building]', selectedStudent.buildingName)
+            .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch)
+            .replaceAll('[previous_due]', (selectedStudent.totalDue || 0).toString());
+
+          const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
+          
+          const logId = doc(collection(db, "smsLogs")).id;
+          await setDoc(doc(db, "smsLogs", logId), {
+            id: logId, to: selectedStudent.phone, message: msg, branch: userBranch, sentBy: userName,
+            status: smsResult.error === 0 ? 'Success' : 'Failed', error: smsResult.error !== 0 ? smsResult.msg : null,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
       
       toast({ title: "Payment Successful" })
       router.push(`/receipts/${pId}`)

@@ -81,7 +81,7 @@ const DEFAULT_TEMPLATES = [
 const SMART_TAGS = [
   '[নাম]', '[মাস]', '[meal_count]', '[meal_rate]', '[meal_bill]', 
   '[rent]', '[previous_due]', '[total_payable]', '[paid]', 
-  '[food_balance]', '[food_due]', '[রুম]', '[building]', '[Hostel Name]'
+  '[food_balance]', '[food_due]', '[রুম]', '[সিট]', '[building]', '[Hostel Name]'
 ];
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -180,7 +180,6 @@ export default function SMSPanelPage() {
   // Student Query
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    // Admins can see all active students if they choose "Global"
     if (userRole === 'Admin' && buildingFilter === 'global_all') {
       return query(collection(db, "students"), where("isActive", "==", true))
     }
@@ -224,18 +223,19 @@ export default function SMSPanelPage() {
     })
   }, [students, searchTerm, buildingFilter, statusFilter])
 
-  // Smart Tag Replacement Logic
+  // Smart Tag Replacement Logic (CENTRALIZED)
   const replaceTags = (message: string, student: any) => {
     if (!message || !student) return message;
     
     const now = new Date();
     const mealRate = Number(mealConfig?.rate || 0);
     const rentDue = Number(student.totalDue || 0);
-    const foodBal = Number(student.foodDueAmount || 0);
+    const foodVal = Number(student.foodDueAmount || 0);
     
-    const totalPayable = rentDue + (foodBal < 0 ? Math.abs(foodBal) : 0);
-    const foodDue = foodBal < 0 ? Math.abs(foodBal) : 0;
-    const foodBalance = foodBal > 0 ? foodBal : 0;
+    // Logic: [food_balance] is positive foodDueAmount, [food_due] is absolute negative foodDueAmount
+    const foodBalance = foodVal > 0 ? foodVal : 0;
+    const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
+    const totalPayable = rentDue + foodDue;
 
     return message
       .replaceAll('[নাম]', student.name || '')
@@ -246,12 +246,13 @@ export default function SMSPanelPage() {
       .replaceAll('[food_balance]', foodBalance.toString())
       .replaceAll('[food_due]', foodDue.toString())
       .replaceAll('[রুম]', student.roomNumber || '')
+      .replaceAll('[সিট]', student.seatNumber || '')
       .replaceAll('[building]', student.buildingName || '')
       .replaceAll('[Hostel Name]', hostelNameForSms || userBranch)
-      .replaceAll('[meal_count]', '0')
-      .replaceAll('[meal_bill]', '0')
+      .replaceAll('[meal_count]', '0') // Default for manual broadcast
+      .replaceAll('[meal_bill]', '0') // Default for manual broadcast
       .replaceAll('[previous_due]', rentDue.toString())
-      .replaceAll('[paid]', '0');
+      .replaceAll('[paid]', '0'); // Default for manual broadcast
   };
 
   const messagePreview = useMemo(() => {
@@ -953,6 +954,18 @@ export default function SMSPanelPage() {
                 </div>
               </div>
 
+              <div className="space-y-4">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Available Intelligent Tags</Label>
+                <div className="flex flex-wrap gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  {SMART_TAGS.map(tag => (
+                    <Badge key={tag} variant="secondary" className="px-3 py-1 cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors text-xs font-bold font-mono">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-[9px] text-muted-foreground italic ml-1">* Use these tags inside templates to auto-fill resident specific data.</p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {localTemplates.map((template: any, idx: number) => (
                   <div key={template.id} className="relative space-y-3 p-5 rounded-3xl bg-slate-50 border border-slate-100 shadow-sm">
@@ -973,17 +986,8 @@ export default function SMSPanelPage() {
                         newT[idx] = { ...newT[idx], text: e.target.value }
                         setLocalTemplates(newT)
                       }}
-                      className="min-h-[80px] bg-white border-slate-200 text-xs leading-relaxed rounded-xl"
+                      className="min-h-[100px] bg-white border-slate-200 text-xs leading-relaxed rounded-xl shadow-inner"
                     />
-                    <div className="flex gap-1 flex-wrap">
-                      {SMART_TAGS.slice(0, 6).map(tag => (
-                        <Badge key={tag} variant="secondary" className="text-[7px] py-0 px-1 cursor-pointer" onClick={() => {
-                          const newT = [...localTemplates]
-                          newT[idx] = { ...newT[idx], text: newT[idx].text + ` ${tag}` }
-                          setLocalTemplates(newT)
-                        }}>{tag}</Badge>
-                      ))}
-                    </div>
                   </div>
                 ))}
               </div>

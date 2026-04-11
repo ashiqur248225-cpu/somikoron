@@ -35,6 +35,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
@@ -91,6 +92,12 @@ export default function RegistrationsPage() {
   }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
 
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
+  
+  const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
+  const { data: apiConfig } = useDoc(apiConfigRef)
+
   // Approval Form State
   const [approvalForm, setApprovalForm] = useState({
     monthlyRent: "",
@@ -136,7 +143,6 @@ export default function RegistrationsPage() {
   const selectedRoom = useMemo(() => roomsInBuilding.find((r: any) => String(r.roomNo) === String(approvalForm.roomNumber)), [roomsInBuilding, approvalForm.roomNumber])
   const emptySeats = useMemo(() => selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || [], [selectedRoom])
 
-  // Auto-fill rent when room changes
   useEffect(() => {
     if (selectedRoom) {
       const rent = String(selectedRoom.rentPerSeat || 0)
@@ -149,7 +155,6 @@ export default function RegistrationsPage() {
     }
   }, [selectedRoom])
 
-  // Custom handler for rent change to sync advance and initial payment
   const handleMonthlyRentChange = (val: string) => {
     setApprovalForm(prev => ({
       ...prev,
@@ -199,9 +204,7 @@ export default function RegistrationsPage() {
       const finalDuesBreakdown: Record<string, any> = {}
       let initialTotalDue = 0;
       
-      // Calculate Dues Logic
       if (isOld) {
-        // Historical Dues for Old Students
         approvalForm.duesBreakdown.forEach(d => {
           const label = `${d.month} ${d.year}`;
           const amt = Number(d.amount);
@@ -209,22 +212,15 @@ export default function RegistrationsPage() {
           initialTotalDue += amt;
         });
       } else {
-        // Logic for New Students: Determine if current month is paid
         const rentPaid = Number(approvalForm.initialRentPayment || 0)
         const monthlyRent = Number(approvalForm.monthlyRent || 0)
-        
         if (rentPaid < monthlyRent) {
           const dueAmt = monthlyRent - rentPaid;
-          finalDuesBreakdown[currentMonthLabel] = {
-            month: currentMonth,
-            year: currentYear,
-            amount: dueAmt
-          };
+          finalDuesBreakdown[currentMonthLabel] = { month: currentMonth, year: currentYear, amount: dueAmt };
           initialTotalDue = dueAmt;
         }
       }
 
-      // Handle Initial Income for New Students
       let totalNewReceived = 0;
       let initialPaymentRecord: any = null;
 
@@ -238,73 +234,38 @@ export default function RegistrationsPage() {
         if (totalNewReceived > 0) {
           const pId = doc(collection(db, "payments")).id
           initialPaymentRecord = {
-            id: pId, 
-            amount: totalNewReceived, 
-            seatAmount: rentPaid, 
-            foodAmount: foodPaid,
-            advanceAmount: advAmount, 
-            serviceCharge: svcCharge, 
-            studentId, 
-            studentName: selectedReg.name,
-            buildingId: approvalForm.buildingId, 
-            buildingName: selectedBuilding?.name,
-            roomNumber: approvalForm.roomNumber,
-            branch: userBranch, 
-            type: "income", 
-            method: approvalForm.method,
-            receiver: approvalForm.receiver,
-            month: currentMonth,
-            year: currentYear,
-            date: new Date().toISOString(), 
-            createdAt: new Date().toISOString()
+            id: pId, amount: totalNewReceived, seatAmount: rentPaid, foodAmount: foodPaid,
+            advanceAmount: advAmount, serviceCharge: svcCharge, studentId, studentName: selectedReg.name,
+            buildingId: approvalForm.buildingId, buildingName: selectedBuilding?.name,
+            roomNumber: approvalForm.roomNumber, branch: userBranch, type: "income", 
+            method: approvalForm.method, receiver: approvalForm.receiver, month: currentMonth, year: currentYear,
+            date: new Date().toISOString(), createdAt: new Date().toISOString()
           }
-
-          await setDoc(doc(db, "payments", pId), {
-            ...initialPaymentRecord,
-            date: serverTimestamp(),
-            createdAt: serverTimestamp()
-          })
+          await setDoc(doc(db, "payments", pId), { ...initialPaymentRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
         }
       }
 
-      // 1. Create Student Profile
+      const foodDueAmount = isOld ? Number(approvalForm.foodDueAmount || 0) : Number(approvalForm.initialFoodPayment);
+
       await setDoc(doc(db, "students", studentId), {
-        id: studentId, 
-        name: selectedReg.name, 
-        phone: selectedReg.phone, 
-        branch: userBranch,
-        buildingId: approvalForm.buildingId, 
-        buildingName: selectedBuilding?.name,
-        roomNumber: approvalForm.roomNumber, 
-        seatNumber: approvalForm.seatNumber, 
-        apartmentName: aptName,
-        monthlyRent: Number(approvalForm.monthlyRent), 
-        advanceAmount: Number(approvalForm.advanceAmount),
-        serviceCharge: Number(approvalForm.serviceCharge), 
-        paymentSystem: approvalForm.paymentSystem,
-        foodDueAmount: isOld ? Number(approvalForm.foodDueAmount || 0) : Number(approvalForm.initialFoodPayment),
-        duesBreakdown: finalDuesBreakdown, 
-        totalDue: initialTotalDue,
+        id: studentId, name: selectedReg.name, phone: selectedReg.phone, branch: userBranch,
+        buildingId: approvalForm.buildingId, buildingName: selectedBuilding?.name,
+        roomNumber: approvalForm.roomNumber, seatNumber: approvalForm.seatNumber, apartmentName: aptName,
+        monthlyRent: Number(approvalForm.monthlyRent), advanceAmount: Number(approvalForm.advanceAmount),
+        serviceCharge: Number(approvalForm.serviceCharge), paymentSystem: approvalForm.paymentSystem,
+        foodDueAmount, duesBreakdown: finalDuesBreakdown, totalDue: initialTotalDue,
         historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : totalNewReceived,
-        isActive: true, 
-        billingStartDate: approvalForm.billingStartDate,
-        createdAt: serverTimestamp(), 
-        updatedAt: serverTimestamp(),
-        fatherName: selectedReg.fatherName || "",
-        motherName: selectedReg.motherName || "",
-        dob: selectedReg.dob || "",
-        bloodGroup: selectedReg.bloodGroup || "",
-        address: selectedReg.village || "",
-        occupation: selectedReg.occupation || "",
-        collegeUniversity: selectedReg.collegeUniversity || "",
-        department: selectedReg.department || "",
-        parentPhone: selectedReg.parentPhone || "",
-        guardianPhone: selectedReg.guardianPhone || "",
+        isActive: true, billingStartDate: approvalForm.billingStartDate,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        fatherName: selectedReg.fatherName || "", motherName: selectedReg.motherName || "",
+        dob: selectedReg.dob || "", bloodGroup: selectedReg.bloodGroup || "",
+        address: selectedReg.village || "", occupation: selectedReg.occupation || "",
+        collegeUniversity: selectedReg.collegeUniversity || "", department: selectedReg.department || "",
+        parentPhone: selectedReg.parentPhone || "", guardianPhone: selectedReg.guardianPhone || "",
         paymentsHistory: initialPaymentRecord ? [initialPaymentRecord] : [],
         mealsHistory: []
       })
 
-      // 2. Update Seat Status in Building
       if (selectedBuilding) {
         const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
           if (apt.name === aptName) {
@@ -314,9 +275,7 @@ export default function RegistrationsPage() {
                 if (String(room.roomNo) === String(approvalForm.roomNumber)) {
                   return { 
                     ...room, 
-                    seats: room.seats.map((s: any) => 
-                      s.seatNo === approvalForm.seatNumber ? { ...s, status: 'occupied' } : s
-                    ) 
+                    seats: room.seats.map((s: any) => s.seatNo === approvalForm.seatNumber ? { ...s, status: 'occupied' } : s) 
                   }
                 }
                 return room;
@@ -325,32 +284,50 @@ export default function RegistrationsPage() {
           }
           return apt;
         });
-
-        const total = updatedApts.reduce((acc: number, apt: any) => 
-          acc + apt.rooms.reduce((rAcc: number, r: any) => rAcc + r.seats.length, 0), 0)
-        const occupied = updatedApts.reduce((acc: number, apt: any) => 
-          acc + apt.rooms.reduce((rAcc: number, r: any) => rAcc + r.seats.filter((s: any) => s.status === 'occupied').length, 0), 0)
-
-        await updateDoc(doc(db, "buildings", approvalForm.buildingId), { 
-          apartmentsDetail: updatedApts, 
-          occupiedSeats: occupied, 
-          emptySeats: total - occupied, 
-          updatedAt: serverTimestamp() 
-        })
+        const total = updatedApts.reduce((acc: number, apt: any) => acc + apt.rooms.reduce((rAcc: number, r: any) => rAcc + r.seats.length, 0), 0)
+        const occupied = updatedApts.reduce((acc: number, apt: any) => acc + apt.rooms.reduce((rAcc: number, r: any) => rAcc + r.seats.filter((s: any) => s.status === 'occupied').length, 0), 0)
+        await updateDoc(doc(db, "buildings", approvalForm.buildingId), { apartmentsDetail: updatedApts, occupiedSeats: occupied, emptySeats: total - occupied, updatedAt: serverTimestamp() })
       }
 
-      // 3. Delete Registration Request
+      // INTELLIGENT SMS TRIGGER (ADMISSION SUCCESS)
+      if (apiConfig?.apikey) {
+        const template = templatesData?.templates?.find((t: any) => t.id === 'admission')?.text || 
+                         "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আমাদের সাথে থাকার জন্য ধন্যবাদ।";
+        
+        const foodBalance = foodDueAmount > 0 ? foodDueAmount : 0;
+        const foodDue = foodDueAmount < 0 ? Math.abs(foodDueAmount) : 0;
+        const totalPayable = initialTotalDue + foodDue;
+
+        const msg = template
+          .replaceAll('[নাম]', selectedReg.name)
+          .replaceAll('[মাস]', currentMonth)
+          .replaceAll('[rent]', approvalForm.monthlyRent)
+          .replaceAll('[total_payable]', totalPayable.toString())
+          .replaceAll('[paid]', totalNewReceived.toString())
+          .replaceAll('[food_balance]', foodBalance.toString())
+          .replaceAll('[food_due]', foodDue.toString())
+          .replaceAll('[রুম]', approvalForm.roomNumber)
+          .replaceAll('[সিট]', approvalForm.seatNumber)
+          .replaceAll('[building]', selectedBuilding?.name || '')
+          .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
+
+        const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
+        
+        const logId = doc(collection(db, "smsLogs")).id;
+        await setDoc(doc(db, "smsLogs", logId), {
+          id: logId, to: selectedReg.phone, message: msg, branch: userBranch, sentBy: userName,
+          status: smsResult.error === 0 ? 'Success' : 'Failed', error: smsResult.error !== 0 ? smsResult.msg : null,
+          createdAt: serverTimestamp()
+        });
+      }
+
       await deleteDoc(doc(db, "registrations", selectedReg.id))
-      
       toast({ title: "ভর্তি সম্পন্ন হয়েছে!", description: `${selectedReg.name} এখন একজন সচল রেসিডেন্ট।` })
       setIsDetailOpen(false)
       setSelectedReg(null)
       router.refresh();
-    } catch (e: any) { 
-      toast({ variant: "destructive", title: "Error", description: e.message }) 
-    } finally { 
-      setIsProcessing(false) 
-    }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
+    finally { setIsProcessing(false) }
   }
 
   const handleReject = async () => {
@@ -371,7 +348,6 @@ export default function RegistrationsPage() {
 
   return (
     <div className="space-y-8 pb-20">
-      {/* APP BAR */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -394,7 +370,6 @@ export default function RegistrationsPage() {
         <div className="flex justify-center py-12"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
       ) : (
         <>
-          {/* DESKTOP VIEW */}
           <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-3xl">
             <CardContent className="p-0">
               <Table>
@@ -448,7 +423,6 @@ export default function RegistrationsPage() {
             </CardContent>
           </Card>
 
-          {/* MOBILE VIEW */}
           <div className="md:hidden space-y-4">
             {registrations?.map((reg) => (
               <Card key={reg.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}>
@@ -482,7 +456,6 @@ export default function RegistrationsPage() {
         </>
       )}
 
-      {/* APPROVAL DIALOG */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto rounded-3xl p-0">
           <div className="h-2 bg-primary w-full" />
@@ -502,7 +475,6 @@ export default function RegistrationsPage() {
 
           <div className="p-8 space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              {/* SECTION 1: BASIC INFO */}
               <div className="lg:col-span-4 space-y-6">
                 <div className="space-y-4">
                   <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><User size={14}/> Section 1: Basic Info</h3>
@@ -522,7 +494,6 @@ export default function RegistrationsPage() {
                   </div>
                 </div>
 
-                {/* SECTION 2: SEAT SELECTION */}
                 <div className="space-y-4">
                   <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Building2 size={14}/> Section 2: Seat Selection</h3>
                   <div className="p-5 border-2 border-primary/10 bg-primary/5 rounded-3xl space-y-4">
@@ -564,7 +535,6 @@ export default function RegistrationsPage() {
                 </div>
               </div>
 
-              {/* SECTION 3: RENTAL PLAN */}
               <div className="lg:col-span-8 space-y-8">
                 <div className="space-y-4">
                   <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><LayoutGrid size={14}/> Section 3: Rental Plan & Financials</h3>
@@ -599,7 +569,6 @@ export default function RegistrationsPage() {
                   </div>
                 </div>
 
-                {/* SECTION 4: BALANCE LOGIC (CONDITIONAL) */}
                 <div className="space-y-4">
                   <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                     <Calculator size={14}/> Section 4: {selectedReg?.type === 'old' ? 'Migration History' : 'Initial Collection'}
@@ -680,7 +649,6 @@ export default function RegistrationsPage() {
                   )}
                 </div>
 
-                {/* SECTION 5: COLLECTION (NEW ONLY) */}
                 {selectedReg?.type !== 'old' && (
                   <div className="space-y-6">
                     <div className="space-y-4">
