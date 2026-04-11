@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -28,18 +28,18 @@ const OCCUPATIONS = [
   { id: "job_holder", label: "Job Holder" }
 ]
 
-export default function PublicRegisterPage({ searchParams }: { searchParams: Promise<{ branch?: string, type?: string }> }) {
+function RegistrationFormContent() {
   const { toast } = useToast()
   const db = useFirestore()
-  const resolvedSearchParams = React.use(searchParams)
+  const searchParams = useSearchParams()
   
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [agreedToRules, setAgreedToRules] = useState(false)
 
-  // Get Branch and Type from URL
-  const urlBranch = resolvedSearchParams.branch || ""
-  const urlType = resolvedSearchParams.type || "new"
+  // Get Branch and Type from URL via hook
+  const urlBranch = searchParams.get('branch') || ""
+  const urlType = searchParams.get('type') || "new"
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!urlBranch) return null
@@ -86,7 +86,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
     ) || []
   }, [selectedBuilding])
 
-  const selectedRoom = roomsInBuilding.find((r: any) => r.roomNo === formData.roomNumber)
+  const selectedRoom = roomsInBuilding.find((r: any) => String(r.roomNo) === String(formData.roomNumber))
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
   const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>, field: 'phone' | 'parentPhone' | 'guardianPhone') => {
@@ -107,7 +107,6 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
       return
     }
 
-    // Strict Field Validation
     const requiredFields = [
       'name', 'fatherName', 'motherName', 'dob', 'bloodGroup', 'phone', 
       'parentPhone', 'district', 'upazila', 'postOffice', 'village', 
@@ -121,7 +120,6 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
       }
     }
 
-    // MANDATORY check for old students
     if (formData.type === 'old') {
       if (!formData.buildingId || !formData.roomNumber || !formData.seatNumber) {
         toast({ variant: "destructive", title: "রুমের তথ্য প্রয়োজন", description: "পুরাতন স্টুডেন্টদের জন্য বর্তমান বিল্ডিং, রুম এবং সিট সিলেক্ট করা বাধ্যতামূলক।" })
@@ -129,7 +127,6 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
       }
     }
 
-    // Phone Number Validation (Exactly 11 digits)
     if (formData.phone.length !== 11 || formData.parentPhone.length !== 11) {
       toast({ variant: "destructive", title: "ভুল মোবাইল নাম্বার", description: "ফোন নাম্বার অবশ্যই ১১ সংখ্যার হতে হবে।" })
       return
@@ -196,7 +193,6 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
           </div>
         </div>
 
-        {/* Mobile Rules Accordion */}
         <div className="lg:hidden">
           <Accordion type="single" collapsible className="w-full">
             <AccordionItem value="rules" className="border-none">
@@ -217,7 +213,6 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Form Section */}
           <div className="lg:col-span-2 space-y-6">
             <form onSubmit={handleSubmit} className="space-y-6">
               <Card className="border-none shadow-xl overflow-hidden rounded-3xl">
@@ -361,7 +356,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
                       <Label>Room No.</Label>
                       <Select disabled={!formData.buildingId} value={formData.roomNumber} onValueChange={val => setFormData({...formData, roomNumber: val, seatNumber: ""})}>
                         <SelectTrigger className="bg-white border-2 border-slate-200 h-11 shadow-sm"><SelectValue placeholder="রুম নম্বর" /></SelectTrigger>
-                        <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`${r.aptName}-${r.roomNo}-${idx}`} value={r.roomNo}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
+                        <SelectContent>{roomsInBuilding.map((r: any, idx: number) => <SelectItem key={`${r.aptName}-${r.roomNo}-${idx}`} value={String(r.roomNo)}>Room {r.roomNo} ({r.aptName})</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
@@ -375,7 +370,6 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
                 </Card>
               )}
 
-              {/* Agreement Section */}
               <div className="p-6 bg-white rounded-3xl shadow-lg border-2 border-primary/10 space-y-4">
                 <div className="flex items-start gap-3">
                   <Checkbox 
@@ -397,7 +391,6 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
             </form>
           </div>
 
-          {/* Desktop Rules Sidebar */}
           <div className="hidden lg:block">
             <Card className="sticky top-8 border-none shadow-xl rounded-3xl overflow-hidden h-[calc(100vh-100px)] flex flex-col">
               <div className="h-2 bg-primary w-full" />
@@ -408,7 +401,7 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
                 </div>
                 <CardDescription className="text-[10px] font-bold uppercase tracking-widest">ভর্তি সম্পন্ন করার আগে অনুগ্রহ করে সব নিয়ম পড়ুন</CardDescription>
               </CardHeader>
-              <CardContent className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-primary/20">
+              <CardContent className="flex-1 overflow-y-auto p-6">
                 <div 
                   className="rich-text text-sm max-w-none text-slate-600 font-medium leading-relaxed"
                   dangerouslySetInnerHTML={{ __html: rulesData?.rulesText || "No rules defined by admin." }}
@@ -422,11 +415,15 @@ export default function PublicRegisterPage({ searchParams }: { searchParams: Pro
             </Card>
           </div>
         </div>
-        
-        <p className="text-center text-xs text-muted-foreground font-medium pb-8">
-          By submitting this form, you certify that the information provided is correct and all fields are filled.
-        </p>
       </div>
     </div>
+  )
+}
+
+export default function PublicRegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>}>
+      <RegistrationFormContent />
+    </Suspense>
   )
 }
