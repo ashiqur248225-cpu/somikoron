@@ -10,7 +10,7 @@ import {
   Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, 
   Link as LinkIcon, Copy, ExternalLink, ScrollText,
   Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered, History,
-  MoreVertical, ShieldCheck, Lock, ShieldAlert
+  MoreVertical, ShieldCheck, Lock, ShieldAlert, RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
@@ -36,6 +36,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
+import { cn } from "@/lib/utils"
 
 export default function SettingsPage() {
   const { toast } = useToast()
