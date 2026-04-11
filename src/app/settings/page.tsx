@@ -158,18 +158,31 @@ export default function SettingsPage() {
   }
 
   const handleToggleDeveloperMode = async () => {
+    if (isDevMode) {
+      // Turning OFF - no password required
+      localStorage.setItem("isDeveloperMode", "false");
+      setIsDevMode(false);
+      setIsDevDialogOpen(false);
+      setDevPassword("");
+      toast({ 
+        title: "Developer Mode Disabled",
+        description: "Bulk actions restricted."
+      });
+      return;
+    }
+
+    // Turning ON - password required
     const docSnap = await getDoc(doc(db, "configs", "devConfig"));
     const cloudPassword = docSnap.exists() ? docSnap.data().password : "123456789";
     
     if (devPassword === cloudPassword) {
-      const newState = !isDevMode;
-      localStorage.setItem("isDeveloperMode", newState ? "true" : "false");
-      setIsDevMode(newState);
+      localStorage.setItem("isDeveloperMode", "true");
+      setIsDevMode(true);
       setIsDevDialogOpen(false);
       setDevPassword("");
       toast({ 
-        title: newState ? "Developer Mode Active" : "Developer Mode Disabled",
-        description: newState ? "You can now perform bulk deletions." : "Management restricted."
+        title: "Developer Mode Active",
+        description: "You can now perform bulk deletions."
       });
     } else {
       toast({ variant: "destructive", title: "Incorrect Password" });
@@ -252,21 +265,27 @@ export default function SettingsPage() {
       <Dialog open={isDevDialogOpen} onOpenChange={setIsDevDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><ShieldAlert className="text-destructive"/> Developer Access</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><ShieldAlert className={isDevMode ? "text-slate-900" : "text-destructive"}/> Developer Access</DialogTitle>
             <DialogDescription>
-              {isDevMode ? "Entering password will disable developer privileges." : "Management restricted area. Enter admin password to proceed."}
+              {isDevMode 
+                ? "Developer mode is currently active. You can turn it off to restrict management tools." 
+                : "Management restricted area. Enter admin password to proceed."}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Password</Label>
-            <Input 
-              type="password" 
-              value={devPassword} 
-              onChange={e => setDevPassword(e.target.value)} 
-              placeholder="••••••••"
-              className="h-12 bg-slate-50 border-none shadow-inner rounded-2xl text-lg text-center font-black"
-            />
-          </div>
+          
+          {!isDevMode && (
+            <div className="py-4">
+              <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Password</Label>
+              <Input 
+                type="password" 
+                value={devPassword} 
+                onChange={e => setDevPassword(e.target.value)} 
+                placeholder="••••••••"
+                className="h-12 bg-slate-50 border-none shadow-inner rounded-2xl text-lg text-center font-black"
+              />
+            </div>
+          )}
+
           <DialogFooter>
             <Button onClick={handleToggleDeveloperMode} className={cn("w-full h-12 text-lg font-bold rounded-2xl", isDevMode ? "bg-slate-900" : "bg-destructive")}>
               {isDevMode ? "Deactivate Mode" : "Activate Mode"}
