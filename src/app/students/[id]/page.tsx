@@ -24,7 +24,8 @@ import {
   Smartphone, User, Zap, CircleDollarSign, Home, Trash2, Scale, Receipt, Printer, Send, FileText,
   X,
   Briefcase,
-  ChevronRight
+  ChevronRight,
+  UserCheck
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -84,6 +85,8 @@ export default function StudentDetailsPage() {
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
   const [settlementInput, setSettlementInput] = useState("")
+  const [exitMethod, setExitMethod] = useState("cash")
+  const [exitStaff, setExitStaff] = useState("")
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
@@ -316,9 +319,13 @@ export default function StudentDetailsPage() {
   }
 
   const handleConfirmExit = async () => {
-    if (!studentRef || !student) return
+    if (!studentRef || !student || !settlementCalculation || !exitStaff) {
+      toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "অনুগ্রহ করে স্টাফ মেম্বার সিলেক্ট করুন।" })
+      return
+    }
     setIsUpdating(true)
     try {
+      // 1. Release Seat
       const bRef = doc(db, "buildings", student.buildingId); const buildingSnap = await getDoc(bRef)
       if (buildingSnap.exists()) {
         const bData = buildingSnap.data(); const updatedApts = bData.apartmentsDetail.map((apt: any) => {
@@ -331,8 +338,39 @@ export default function StudentDetailsPage() {
         })
         await updateDoc(bRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1), updatedAt: serverTimestamp() })
       }
-      await updateDoc(studentRef, { isActive: false, leftAt: serverTimestamp(), finalSettlementAmount: Number(settlementInput), updatedAt: serverTimestamp() })
 
+      // 2. Mark Inactive
+      const settlementAmt = Number(settlementInput)
+      await updateDoc(studentRef, { 
+        isActive: false, 
+        leftAt: serverTimestamp(), 
+        finalSettlementAmount: settlementAmt,
+        finalSettlementMethod: exitMethod,
+        finalSettlementProcessedBy: exitStaff,
+        updatedAt: serverTimestamp() 
+      })
+
+      // 3. Update Sync netBalance
+      const balanceRef = doc(db, "netBalance", student.branch);
+      const methodKeyMap: Record<string, string> = {
+        'cash': 'totalCash',
+        'bkash': 'totalBkash',
+        'nagad': 'totalNagad',
+        'bank': 'totalBank'
+      };
+      const methodKey = methodKeyMap[exitMethod] || 'totalCash';
+
+      // Logic: If refund, decrement. If extra collect, increment.
+      const change = settlementCalculation.isRefund ? -settlementAmt : settlementAmt;
+
+      await setDoc(balanceRef, {
+        branchId: student.branch,
+        [methodKey]: increment(change),
+        totalHandCash: increment(change),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+
+      // 4. SMS Trigger
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'exit')?.text || "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।";
         const msg = template.replaceAll('[নাম]', student.name).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
@@ -564,7 +602,7 @@ export default function StudentDetailsPage() {
       </Dialog>
 
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
+        <DialogContent className="max-w-md rounded-3xl max-h-[95vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2 text-destructive"><UserMinus /> Exit & Settlement</DialogTitle><DialogDescription>Process resident checkout and final financial clearing.</DialogDescription></DialogHeader>
           {settlementCalculation && (
             <div className="space-y-6 py-4">
@@ -574,7 +612,38 @@ export default function StudentDetailsPage() {
                 <div className="flex justify-between text-sm"><span className="text-muted-foreground">Security Advance:</span><span className="font-bold text-primary">৳{settlementCalculation.advance.toLocaleString()}</span></div>
                 <Separator /><div className="flex justify-between items-center"><span className="font-black text-slate-800">Final Result:</span><div className="text-right"><p className={cn("text-2xl font-black", settlementCalculation.isRefund ? "text-success" : "text-destructive")}>৳{settlementCalculation.absResult.toLocaleString()}</p><p className="text-[10px] font-bold uppercase opacity-60">{settlementCalculation.isRefund ? "Refund to Resident" : "Collect from Resident"}</p></div></div>
               </div>
-              <div className="space-y-2"><Label className="text-xs font-bold uppercase">Final Amount Processed (৳)</Label><Input type="number" value={settlementInput} onChange={e => setSettlementInput(e.target.value)} className="h-12 text-lg font-black" /></div>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase">Final Amount Processed (৳)</Label>
+                  <Input type="number" value={settlementInput} onChange={e => setSettlementInput(e.target.value)} className="h-12 text-lg font-black" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase">Payment Method</Label>
+                    <Select value={exitMethod} onValueChange={setExitMethod}>
+                      <SelectTrigger className="bg-white h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="bkash">Bkash</SelectItem>
+                        <SelectItem value="nagad">Nagad</SelectItem>
+                        <SelectItem value="bank">Bank</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase">Processed By</Label>
+                    <Select value={exitStaff} onValueChange={setExitStaff}>
+                      <SelectTrigger className="bg-white h-11"><SelectValue placeholder="Staff Member" /></SelectTrigger>
+                      <SelectContent>
+                        {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
               <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex gap-3"><AlertCircle className="text-destructive h-5 w-5 shrink-0" /><p className="text-[10px] text-red-700 leading-tight">This action will release Seat {student.seatNumber} in Room {student.roomNumber} and mark the resident as inactive. This is irreversible.</p></div>
             </div>
           )}
