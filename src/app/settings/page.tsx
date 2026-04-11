@@ -38,6 +38,8 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
+const PRODUCTION_DOMAIN = "https://somikoron-one.vercel.app";
+
 export default function SettingsPage() {
   const { toast } = useToast()
   const db = useFirestore()
@@ -159,7 +161,6 @@ export default function SettingsPage() {
 
   const handleToggleDeveloperMode = async () => {
     if (isDevMode) {
-      // Turning OFF - no password required
       localStorage.setItem("isDeveloperMode", "false");
       setIsDevMode(false);
       setIsDevDialogOpen(false);
@@ -171,7 +172,6 @@ export default function SettingsPage() {
       return;
     }
 
-    // Turning ON - password required
     const docSnap = await getDoc(doc(db, "configs", "devConfig"));
     const cloudPassword = docSnap.exists() ? docSnap.data().password : "123456789";
     
@@ -207,11 +207,10 @@ export default function SettingsPage() {
     if (editorRef.current) setRules(editorRef.current.innerHTML);
   };
 
-  const copyToClipboard = (text: string) => {
-    const baseUrl = window.location.origin
-    const fullUrl = `${baseUrl}${text}`
+  const copyToClipboard = (path: string) => {
+    const fullUrl = `${PRODUCTION_DOMAIN}${path}`
     navigator.clipboard.writeText(fullUrl)
-    toast({ title: "Copied!" })
+    toast({ title: "Link Copied!", description: "Public URL is now in your clipboard." })
   }
 
   if (isConfigLoading || isBalancesLoading || isRulesLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
@@ -350,28 +349,32 @@ export default function SettingsPage() {
             <LinkIcon size={20} />
             <CardTitle>Public Registration Links</CardTitle>
           </div>
-          <CardDescription>Share these links with students.</CardDescription>
+          <CardDescription>Share these secure links with students.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {[
             { label: "New Student Registration", type: "new" },
             { label: "Existing Resident (Data Import)", type: "old" }
-          ].map((link) => (
-            <div key={link.type} className="flex flex-col md:flex-row gap-3 items-start md:items-center p-3 bg-background rounded-lg border shadow-sm">
-              <div className="flex-1">
-                <p className="text-sm font-bold">{link.label}</p>
-                <p className="text-[10px] text-muted-foreground truncate">/register?branch={encodeURIComponent(userBranch)}&type={link.type}</p>
+          ].map((link) => {
+            const path = `/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`;
+            const fullUrl = `${PRODUCTION_DOMAIN}${path}`;
+            return (
+              <div key={link.type} className="flex flex-col md:flex-row gap-3 items-start md:items-center p-3 bg-background rounded-lg border shadow-sm">
+                <div className="flex-1 overflow-hidden">
+                  <p className="text-sm font-bold">{link.label}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{fullUrl}</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => window.open(fullUrl, '_blank')}>
+                    <ExternalLink size={14} /> Open
+                  </Button>
+                  <Button size="sm" variant="secondary" className="gap-2" onClick={() => copyToClipboard(path)}>
+                    <Copy size={14} /> Copy
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="gap-2" onClick={() => window.open(`/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`, '_blank')}>
-                  <ExternalLink size={14} /> Open
-                </Button>
-                <Button size="sm" variant="secondary" className="gap-2" onClick={() => copyToClipboard(`/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`)}>
-                  <Copy size={14} /> Copy
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
