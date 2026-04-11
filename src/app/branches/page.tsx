@@ -180,11 +180,6 @@ export default function BranchesPage() {
                         <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-0.5">Hostel Branch</p>
                       </div>
                     </div>
-                    {userRole === 'Admin' && (
-                      <Button variant="ghost" size="icon" className="text-destructive -mt-1 -mr-2" onClick={() => handleDelete(b.id)}>
-                        <Trash2 size={16} />
-                      </Button>
-                    )}
                   </div>
                   <Separator className="opacity-50" />
                   <div className="flex items-start gap-2 text-xs text-muted-foreground">
