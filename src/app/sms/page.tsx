@@ -42,7 +42,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, doc, setDoc, query, where, serverTimestamp, deleteDoc, limit, orderBy } from "firebase/firestore"
+import { collection, doc, setDoc, query, where, serverTimestamp, deleteDoc, limit, orderBy, writeBatch } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
@@ -96,6 +96,9 @@ export default function SMSPanelPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [smsBalance, setSmsBalance] = useState<string | null>(null)
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false)
+
+  // Selection States for Logs
+  const [selectedLogs, setSelectedLogs] = useState<string[]>([])
 
   // New Template Dialog State
   const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false)
@@ -190,7 +193,7 @@ export default function SMSPanelPage() {
   // Logs Query
   const logsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "smsLogs"), where("branch", "==", userBranch), orderBy("createdAt", "desc"), limit(100))
+    return query(collection(db, "smsLogs"), where("branch", "==", userBranch), orderBy("createdAt", "desc"), limit(200))
   }, [db, userBranch])
   const { data: smsLogs, isLoading: logsLoading } = useCollection(logsQuery)
 
@@ -223,7 +226,6 @@ export default function SMSPanelPage() {
     })
   }, [students, searchTerm, buildingFilter, statusFilter])
 
-  // Smart Tag Replacement Logic (CENTRALIZED)
   const replaceTags = (message: string, student: any) => {
     if (!message || !student) return message;
     
@@ -232,7 +234,6 @@ export default function SMSPanelPage() {
     const rentDue = Number(student.totalDue || 0);
     const foodVal = Number(student.foodDueAmount || 0);
     
-    // Logic: [food_balance] is positive foodDueAmount, [food_due] is absolute negative foodDueAmount
     const foodBalance = foodVal > 0 ? foodVal : 0;
     const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
     const totalPayable = rentDue + foodDue;
@@ -249,10 +250,10 @@ export default function SMSPanelPage() {
       .replaceAll('[সিট]', student.seatNumber || '')
       .replaceAll('[building]', student.buildingName || '')
       .replaceAll('[Hostel Name]', hostelNameForSms || userBranch)
-      .replaceAll('[meal_count]', '0') // Default for manual broadcast
-      .replaceAll('[meal_bill]', '0') // Default for manual broadcast
+      .replaceAll('[meal_count]', '0')
+      .replaceAll('[meal_bill]', '0')
       .replaceAll('[previous_due]', rentDue.toString())
-      .replaceAll('[paid]', '0'); // Default for manual broadcast
+      .replaceAll('[paid]', '0');
   };
 
   const messagePreview = useMemo(() => {
@@ -501,19 +502,78 @@ export default function SMSPanelPage() {
     }
   }
 
+  const handleDeleteSelectedLogs = async () => {
+    if (selectedLogs.length === 0) return;
+    const confirm = window.confirm(`Delete ${selectedLogs.length} selected logs?`);
+    if (!confirm) return;
+
+    setIsSubmitting(true);
+    try {
+      const batch = writeBatch(db);
+      selectedLogs.forEach(id => {
+        batch.delete(doc(db, "smsLogs", id));
+      });
+      await batch.commit();
+      toast({ title: "Deleted", description: `${selectedLogs.length} logs removed.` });
+      setSelectedLogs([]);
+      router.refresh();
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteAllLogs = async () => {
+    if (!smsLogs || smsLogs.length === 0) return;
+    const confirm = window.confirm("Delete ALL logs in this view? This action is permanent.");
+    if (!confirm) return;
+
+    setIsSubmitting(true);
+    try {
+      const batch = writeBatch(db);
+      smsLogs.forEach(log => {
+        batch.delete(doc(db, "smsLogs", log.id));
+      });
+      await batch.commit();
+      toast({ title: "History Cleared", description: "All logs removed successfully." });
+      setSelectedLogs([]);
+      router.refresh();
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const toggleStudent = (id: string) => {
     setSelectedStudents(prev => 
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
     )
   }
 
-  const selectAll = () => {
+  const selectAllStudents = () => {
     if (selectedStudents.length === filteredStudents.length && filteredStudents.length > 0) {
       setSelectedStudents([])
     } else {
       setSelectedStudents(filteredStudents.map(s => s.id))
     }
   }
+
+  const toggleLog = (id: string) => {
+    setSelectedLogs(prev => 
+      prev.includes(id) ? prev.filter(l => l !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllLogs = () => {
+    if (!smsLogs) return;
+    if (selectedLogs.length === smsLogs.length && smsLogs.length > 0) {
+      setSelectedLogs([]);
+    } else {
+      setSelectedLogs(smsLogs.map(l => l.id));
+    }
+  };
 
   return (
     <div className="space-y-8 pb-20 w-full overflow-hidden">
@@ -563,7 +623,7 @@ export default function SMSPanelPage() {
                       <CardTitle className="text-lg">Recipient Selector</CardTitle>
                       <CardDescription>Filter and select residents for broadcast.</CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" onClick={selectAll} className="font-bold text-[10px] uppercase h-9 border-primary/30 text-primary">
+                    <Button variant="outline" size="sm" onClick={selectAllStudents} className="font-bold text-[10px] uppercase h-9 border-primary/30 text-primary">
                       {selectedStudents.length === filteredStudents.length && filteredStudents.length > 0 ? 'Unselect All' : 'Select All Filtered'}
                     </Button>
                   </div>
@@ -607,7 +667,6 @@ export default function SMSPanelPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                {/* Desktop View Table */}
                 <div className="hidden md:block overflow-x-auto">
                   <Table className="min-w-[600px]">
                     <TableHeader className="bg-white sticky top-0 z-10 shadow-sm">
@@ -652,7 +711,6 @@ export default function SMSPanelPage() {
                   </Table>
                 </div>
 
-                {/* Mobile View Cards */}
                 <div className="md:hidden p-4 space-y-3">
                   {filteredStudents.map((s) => (
                     <Card key={s.id} className={cn("border shadow-none rounded-2xl overflow-hidden bg-white", selectedStudents.includes(s.id) && "border-primary ring-1 ring-primary/20")}>
@@ -783,7 +841,6 @@ export default function SMSPanelPage() {
                 </Button>
               </CardHeader>
               <CardContent className="p-0">
-                {/* Desktop View Table */}
                 <div className="hidden md:block overflow-x-auto">
                   <Table className="min-w-[500px]">
                     <TableHeader className="bg-slate-50">
@@ -809,7 +866,6 @@ export default function SMSPanelPage() {
                   </Table>
                 </div>
 
-                {/* Mobile View Cards */}
                 <div className="md:hidden p-4 space-y-3">
                   {birthdayStudents.map((s) => (
                     <Card key={s.id} className="border shadow-none rounded-2xl bg-white">
@@ -1053,9 +1109,23 @@ export default function SMSPanelPage() {
 
         <TabsContent value="logs">
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
-            <CardHeader className="border-b bg-slate-50/50 p-4 md:p-6">
-              <CardTitle className="text-lg">Sending History</CardTitle>
-              <CardDescription>Recent messages sent from branch.</CardDescription>
+            <CardHeader className="border-b bg-slate-50/50 p-4 md:p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+              <div>
+                <CardTitle className="text-lg">Sending History</CardTitle>
+                <CardDescription>Recent messages sent from branch.</CardDescription>
+              </div>
+              <div className="flex gap-2 w-full sm:w-auto">
+                {selectedLogs.length > 0 && (
+                  <Button variant="destructive" size="sm" className="h-9 px-4 rounded-xl gap-2 font-bold animate-in zoom-in-95" onClick={handleDeleteSelectedLogs} disabled={isSubmitting}>
+                    <Trash2 size={14}/> Delete Selected ({selectedLogs.length})
+                  </Button>
+                )}
+                {smsLogs && smsLogs.length > 0 && (
+                  <Button variant="ghost" size="sm" className="h-9 px-4 rounded-xl gap-2 font-bold text-destructive hover:bg-destructive/10" onClick={handleDeleteAllLogs} disabled={isSubmitting}>
+                    <XCircle size={14}/> Clear All History
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {logsLoading ? (
@@ -1065,11 +1135,16 @@ export default function SMSPanelPage() {
                 </div>
               ) : (
                 <>
-                  {/* Desktop View Table */}
                   <div className="hidden md:block overflow-x-auto">
                     <Table className="min-w-[700px]">
                       <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <TableRow>
+                          <TableHead className="w-[50px]">
+                            <Checkbox 
+                              checked={smsLogs && selectedLogs.length === smsLogs.length && smsLogs.length > 0}
+                              onCheckedChange={selectAllLogs}
+                            />
+                          </TableHead>
                           <TableHead>Date & Time</TableHead>
                           <TableHead>Recipient</TableHead>
                           <TableHead>Message</TableHead>
@@ -1079,7 +1154,13 @@ export default function SMSPanelPage() {
                       </TableHeader>
                       <TableBody>
                         {smsLogs?.map((log) => (
-                          <TableRow key={log.id}>
+                          <TableRow key={log.id} className={cn(selectedLogs.includes(log.id) && "bg-primary/5")}>
+                            <TableCell>
+                              <Checkbox 
+                                checked={selectedLogs.includes(log.id)}
+                                onCheckedChange={() => toggleLog(log.id)}
+                              />
+                            </TableCell>
                             <TableCell className="text-[10px] font-medium text-slate-500 whitespace-nowrap">
                               {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'N/A'}
                             </TableCell>
@@ -1097,7 +1178,7 @@ export default function SMSPanelPage() {
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => handleResend(log)} disabled={isSubmitting}>
                                 <RotateCcw size={12} />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteLog(log.id)}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteLog(log.id)} disabled={isSubmitting}>
                                 <Trash2 size={12} />
                               </Button>
                             </TableCell>
@@ -1107,15 +1188,20 @@ export default function SMSPanelPage() {
                     </Table>
                   </div>
 
-                  {/* Mobile View Cards */}
                   <div className="md:hidden p-4 space-y-3">
                     {smsLogs?.map((log) => (
-                      <Card key={log.id} className="border shadow-none rounded-2xl bg-white overflow-hidden">
+                      <Card key={log.id} className={cn("border shadow-none rounded-2xl overflow-hidden bg-white", selectedLogs.includes(log.id) && "border-primary ring-1 ring-primary/20")}>
                         <CardContent className="p-4 space-y-3">
                           <div className="flex justify-between items-start">
-                            <span className="text-[10px] font-medium text-slate-400">
-                              {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'N/A'}
-                            </span>
+                            <div className="flex items-center gap-3">
+                              <Checkbox 
+                                checked={selectedLogs.includes(log.id)}
+                                onCheckedChange={() => toggleLog(log.id)}
+                              />
+                              <span className="text-[10px] font-medium text-slate-400">
+                                {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'N/A'}
+                              </span>
+                            </div>
                             <Badge variant="outline" className={cn(
                               "text-[8px] uppercase font-bold",
                               log.status === 'Success' ? "text-success border-success/30 bg-success/5" : "text-destructive border-destructive/30 bg-destructive/5"
@@ -1131,7 +1217,7 @@ export default function SMSPanelPage() {
                             <Button variant="outline" size="sm" className="h-8 rounded-lg text-[10px] font-bold gap-1" onClick={() => handleResend(log)} disabled={isSubmitting}>
                               <RotateCcw size={12}/> Resend
                             </Button>
-                            <Button variant="ghost" size="sm" className="h-8 rounded-lg text-destructive text-[10px] font-bold" onClick={() => handleDeleteLog(log.id)}>
+                            <Button variant="ghost" size="sm" className="h-8 rounded-lg text-destructive text-[10px] font-bold" onClick={() => handleDeleteLog(log.id)} disabled={isSubmitting}>
                               Delete
                             </Button>
                           </div>
@@ -1141,7 +1227,7 @@ export default function SMSPanelPage() {
                   </div>
                 </>
               )}
-              {smsLogs?.length === 0 && !logsLoading && (
+              {(!smsLogs || smsLogs.length === 0) && !logsLoading && (
                 <div className="text-center py-24 text-muted-foreground italic">No logs found.</div>
               )}
             </CardContent>
