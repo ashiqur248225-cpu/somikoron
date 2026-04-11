@@ -94,7 +94,7 @@ export default function StudentDetailsPage() {
   const { data: student, isLoading: studentLoading } = useDoc(studentRef)
 
   const buildingsQuery = useMemoFirebase(() => collection(db, "buildings"), [db])
-  const { data: buildings } = useCollection(buildingsQuery)
+  const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
 
   const staffListQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffListQuery)
@@ -236,7 +236,6 @@ export default function StudentDetailsPage() {
       await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       await updateDoc(studentRef, { paymentsHistory: arrayUnion(pRecord), advanceAmount: increment(extraAdvance), totalDue: finalTotalDue, duesBreakdown: currentDues, foodDueAmount: increment(foodPaid), historicalTotalReceived: increment(totalAmt), updatedAt: serverTimestamp() })
       
-      // Update Synchronized netBalance
       const balanceRef = doc(db, "netBalance", student.branch);
       const methodKeyMap: Record<string, string> = {
         'cash': 'totalCash',
@@ -253,7 +252,6 @@ export default function StudentDetailsPage() {
         lastUpdated: serverTimestamp()
       }, { merge: true });
 
-      // SMS TRIGGER ON PROFILE PAYMENT
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text;
         if (template) {
@@ -335,7 +333,6 @@ export default function StudentDetailsPage() {
       }
       await updateDoc(studentRef, { isActive: false, leftAt: serverTimestamp(), finalSettlementAmount: Number(settlementInput), updatedAt: serverTimestamp() })
 
-      // INTELLIGENT SMS TRIGGER (EXIT MESSAGE)
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'exit')?.text || "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।";
         const msg = template.replaceAll('[নাম]', student.name).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
@@ -347,6 +344,14 @@ export default function StudentDetailsPage() {
       toast({ title: "Resident Released" }); setIsExitDialogOpen(false); router.refresh(); router.push("/students");
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
     finally { setIsUpdating(false) }
+  }
+
+  if (studentLoading || buildingsLoading) {
+    return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
+  }
+
+  if (!student) {
+    return <div className="text-center p-20">Resident not found.</div>
   }
 
   const financialCards = [
@@ -544,7 +549,7 @@ export default function StudentDetailsPage() {
               </div>
               <div className="space-y-4"><Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Building2 size={14}/> Location Shifting (Hierarchy)</Label>
                 <div className="p-5 border-2 border-primary/10 bg-primary/5 rounded-3xl space-y-4">
-                  <div className="space-y-2"><Label className="text-xs">Select Building</Label><Select value={editForm.buildingId} onValueChange={val => setFormData({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Choose Building" /></SelectTrigger><SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-2"><Label className="text-xs">Select Building</Label><Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Choose Building" /></SelectTrigger><SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2"><Label className="text-xs">Room No.</Label><Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={val => setEditForm({...editForm, roomNumber: val, seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Room" /></SelectTrigger><SelectContent>{roomsInBuildingForEdit.map((r: any, idx: number) => (<SelectItem key={idx} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>))}</SelectContent></Select></div>
                     <div className="space-y-2"><Label className="text-xs">Available Seat</Label><Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setEditForm({...editForm, seatNumber: val})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Seat" /></SelectTrigger><SelectContent>{emptySeatsForEdit.map((s: any) => (<SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>))}</SelectContent></Select></div>
