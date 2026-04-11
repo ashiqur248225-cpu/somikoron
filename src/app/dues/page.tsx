@@ -37,6 +37,7 @@ export default function DuesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [roomFilter, setRoomFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("active")
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
@@ -58,9 +59,6 @@ export default function DuesPage() {
   }, [db, userBranch])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
-  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
-  const { data: templatesData } = useDoc(templatesRef)
-
   const processedData = useMemo(() => {
     if (!students) return []
     return students.map(s => {
@@ -75,14 +73,16 @@ export default function DuesPage() {
 
       return { ...s, foodBalance, displayTotalDue, isPaid: displayTotalDue <= 0 }
     }).filter(s => {
-      if (!s.isActive) return false 
+      const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
+      if (!matchesStatus) return false
+
       const search = searchTerm.toLowerCase()
       const matchesSearch = s.name.toLowerCase().includes(search) || (s.phone || "").includes(search)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
       const matchesRoom = roomFilter === "all" || s.roomNumber === roomFilter
       return matchesSearch && matchesBuilding && matchesRoom && s.displayTotalDue > 0
     }).sort((a, b) => b.displayTotalDue - a.displayTotalDue)
-  }, [students, searchTerm, buildingFilter, roomFilter])
+  }, [students, searchTerm, buildingFilter, roomFilter, statusFilter])
 
   const stats = useMemo(() => {
     const totalDue = processedData.reduce((acc, curr) => acc + curr.displayTotalDue, 0)
@@ -107,8 +107,8 @@ export default function DuesPage() {
 
   const handleExportCSV = () => {
     try {
-      const headers = ["Student Name", "Building & Room", "Total Due", "Food Balance", "Monthly Rent"];
-      const rows = processedData.map(s => [s.name, `${s.buildingName} R${s.roomNumber}`, s.displayTotalDue, s.foodBalance, s.monthlyRent]);
+      const headers = ["Student Name", "Building & Room", "Total Due", "Food Balance", "Monthly Rent", "Status"];
+      const rows = processedData.map(s => [s.name, `${s.buildingName} R${s.roomNumber}`, s.displayTotalDue, s.foodBalance, s.monthlyRent, s.isActive ? 'Active' : 'Left']);
       const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
@@ -174,9 +174,20 @@ export default function DuesPage() {
                 </Select>
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Resident Status</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Staying (Active)</SelectItem>
+                  <SelectItem value="left">Left Hostel (Inactive)</SelectItem>
+                  <SelectItem value="all">All Records</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter className="flex gap-2 sm:justify-between">
-            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); }}>
+            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setStatusFilter("active"); }}>
               <RotateCcw size={14}/> Reset
             </Button>
             <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
@@ -192,10 +203,11 @@ export default function DuesPage() {
           <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[9pt] font-medium bg-slate-50/50 px-4">
             <div>
               <p><b>Filter Building:</b> {buildingFilter === 'all' ? 'All' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+              <p><b>Status:</b> {statusFilter.toUpperCase()}</p>
               <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
             </div>
             <div className="text-right">
-              <p><b>Total Residents with Due:</b> {stats.count}</p>
+              <p><b>Total Records:</b> {stats.count}</p>
               <p><b>Staff:</b> {userName}</p>
             </div>
           </div>
@@ -216,7 +228,7 @@ export default function DuesPage() {
               <tr key={s.id}>
                 <td className="border border-slate-200 p-2">
                   <div className="font-bold">{s.name}</div>
-                  <div className="text-[7pt] text-slate-500">{s.phone}</div>
+                  <div className="text-[7pt] text-slate-500">{s.phone} {!s.isActive && "(LEFT)"}</div>
                 </td>
                 <td className="border border-slate-200 p-2 text-xs">{s.buildingName} • R-{s.roomNumber}</td>
                 <td className="border border-slate-200 p-2 text-right">৳{(s.totalDue || 0).toLocaleString()}</td>
@@ -259,7 +271,7 @@ export default function DuesPage() {
             <CardContent className="p-0">
               <Table>
                 <TableHeader className="bg-secondary/30"><TableRow><TableHead>Resident</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Total Due</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
-                <TableBody>{processedData.map((s: any) => (<TableRow key={s.id}><TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone}</span></TableCell><TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell><TableCell className="text-right font-black text-destructive text-lg">৳{s.displayTotalDue.toLocaleString()}</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button></TableCell></TableRow>))}</TableBody>
+                <TableBody>{processedData.map((s: any) => (<TableRow key={s.id}><TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone} {!s.isActive && <Badge variant="destructive" className="h-3 px-1 text-[7px]">LEFT</Badge>}</span></TableCell><TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell><TableCell className="text-right font-black text-destructive text-lg">৳{s.displayTotalDue.toLocaleString()}</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button></TableCell></TableRow>))}</TableBody>
               </Table>
             </CardContent>
           </Card>
@@ -268,7 +280,15 @@ export default function DuesPage() {
             {processedData.map((s: any) => (
               <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
                 <CardContent className="p-4 space-y-4">
-                  <div className="flex justify-between items-start"><div><h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3><p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p></div><Badge variant="destructive" className="text-[10px]">Due</Badge></div>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3>
+                      <p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p>
+                    </div>
+                    <Badge variant={s.isActive ? "destructive" : "secondary"} className="text-[10px]">
+                      {s.isActive ? "Due" : "Left & Due"}
+                    </Badge>
+                  </div>
                   <div className="bg-secondary/30 p-3 rounded-xl border border-secondary"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold text-muted-foreground uppercase">Property</span><span className="text-xs font-bold text-slate-700">{s.buildingName} • R-{s.roomNumber}</span></div><div className="flex justify-between items-center pt-2 border-t border-white/50"><span className="text-[10px] font-bold text-destructive uppercase">Total Outstanding</span><span className="text-xl font-black text-destructive">৳{s.displayTotalDue.toLocaleString()}</span></div></div>
                   <div className="grid grid-cols-2 gap-2 text-[10px] font-medium text-slate-500"><p>Rent Due: ৳{(s.totalDue || 0).toLocaleString()}</p><p className={cn("text-right", s.foodBalance < 0 ? "text-destructive font-bold" : "text-success")}>Food Bal: ৳{s.foodBalance.toLocaleString()}</p></div>
                   <Button variant="outline" className="w-full h-10 rounded-xl font-bold gap-2 text-xs" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} /> View Full Profile</Button>
