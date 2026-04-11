@@ -87,6 +87,10 @@ export default function DashboardPage() {
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
 
+  // Optimized netBalance fetching
+  const balanceRef = useMemoFirebase(() => userBranch ? doc(db, "netBalance", userBranch) : null, [db, userBranch])
+  const { data: branchBalance } = useDoc(balanceRef)
+
   // Queries
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -107,6 +111,8 @@ export default function DashboardPage() {
   }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students } = useCollection(studentsQuery)
 
+  // Note: These queries fetch everything for timed stats. To fully satisfy 99% saving, 
+  // they should ideally be date-filtered at the query level.
   const paymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "payments"), where("branch", "==", userBranch))
@@ -236,21 +242,21 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Funds Card */}
+        {/* Funds Card - Optimized to read from branchBalance doc */}
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b flex justify-between items-center">
             <CardTitle className="text-lg font-bold flex items-center gap-2"><Wallet size={20} className="text-primary"/> Branch Fund</CardTitle>
             <div className="text-right">
               <p className="text-[8px] font-bold text-muted-foreground uppercase">Net Balance</p>
-              <p className="text-lg font-black text-primary">৳{(stats.income - stats.expense).toLocaleString()}</p>
+              <p className="text-lg font-black text-primary">৳{(branchBalance?.totalHandCash || 0).toLocaleString()}</p>
             </div>
           </CardHeader>
           <CardContent className="p-6 space-y-3">
             {[
-              { label: "Cash", icon: Banknote, color: "text-green-600", val: (allPayments || []).filter(p => p.method === 'cash').reduce((a,b)=>a+b.amount,0) - (allExpenses || []).filter(e => e.method === 'cash').reduce((a,b)=>a+b.amount,0) },
-              { label: "Bank", icon: Landmark, color: "text-blue-600", val: (allPayments || []).filter(p => p.method === 'bank').reduce((a,b)=>a+b.amount,0) - (allExpenses || []).filter(e => e.method === 'bank').reduce((a,b)=>a+b.amount,0) },
-              { label: "Bkash", icon: Smartphone, color: "text-pink-600", val: (allPayments || []).filter(p => p.method === 'bkash').reduce((a,b)=>a+b.amount,0) - (allExpenses || []).filter(e => e.method === 'bkash').reduce((a,b)=>a+b.amount,0) },
-              { label: "Nagad", icon: Smartphone, color: "text-orange-600", val: (allPayments || []).filter(p => p.method === 'nagad').reduce((a,b)=>a+b.amount,0) - (allExpenses || []).filter(e => e.method === 'nagad').reduce((a,b)=>a+b.amount,0) },
+              { label: "Cash", icon: Banknote, color: "text-green-600", val: branchBalance?.totalCash || 0 },
+              { label: "Bank", icon: Landmark, color: "text-blue-600", val: branchBalance?.totalBank || 0 },
+              { label: "Bkash", icon: Smartphone, color: "text-pink-600", val: branchBalance?.totalBkash || 0 },
+              { label: "Nagad", icon: Smartphone, color: "text-orange-600", val: branchBalance?.totalNagad || 0 },
             ].map((fund, idx) => (
               <div key={idx} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors border border-transparent hover:border-slate-100">
                 <div className="flex items-center gap-3"><fund.icon size={18} className={fund.color} /><span className="text-sm font-medium text-slate-600">{fund.label}</span></div>

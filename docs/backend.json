@@ -158,6 +158,20 @@
         "createdByName": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "NetBalance": {
+      "title": "Net Balance",
+      "type": "object",
+      "description": "Pre-calculated balances for a branch to optimize dashboard reads.",
+      "properties": {
+        "branchId": { "type": "string" },
+        "totalCash": { "type": "number" },
+        "totalBkash": { "type": "number" },
+        "totalNagad": { "type": "number" },
+        "totalBank": { "type": "number" },
+        "totalHandCash": { "type": "number" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -174,6 +188,7 @@
     "/managerRequests/{requestId}": { "schema": "ManagerRequest", "description": "Pending approval requests" },
     "/registrations/{regId}": { "schema": "object", "description": "Public admission forms" },
     "/configs/{configId}": { "schema": "object", "description": "Global settings" },
-    "/foodCostBreakdown/{id}": { "schema": "FoodCostBreakdown", "description": "Daily food cost analysis" }
+    "/foodCostBreakdown/{id}": { "schema": "FoodCostBreakdown", "description": "Daily food cost analysis" },
+    "/netBalance/{branchName}": { "schema": "NetBalance", "description": "Consolidated balances per branch" }
   }
 }

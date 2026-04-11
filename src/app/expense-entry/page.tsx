@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, query, where } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, query, where, increment } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -109,6 +109,23 @@ export default function ExpenseEntryPage() {
       }
 
       await setDoc(doc(db, "expenses", expenseId), expenseData)
+
+      // Update Synchronized netBalance (Decrement)
+      const balanceRef = doc(db, "netBalance", userBranch);
+      const methodKeyMap: Record<string, string> = {
+        'cash': 'totalCash',
+        'bkash': 'totalBkash',
+        'nagad': 'totalNagad',
+        'bank': 'totalBank'
+      };
+      const methodKey = methodKeyMap[formData.method] || 'totalCash';
+
+      setDoc(balanceRef, {
+        branchId: userBranch,
+        [methodKey]: increment(-amount),
+        totalHandCash: increment(-amount),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
 
       if (formData.category === 'food') {
         const breakdownId = doc(collection(db, "foodCostBreakdown")).id

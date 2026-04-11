@@ -164,10 +164,27 @@ export default function PaymentEntryPage() {
         updatedAt: serverTimestamp()
       })
 
+      // Update Synchronized netBalance
+      const balanceRef = doc(db, "netBalance", userBranch);
+      const methodKeyMap: Record<string, string> = {
+        'cash': 'totalCash',
+        'bkash': 'totalBkash',
+        'nagad': 'totalNagad',
+        'bank': 'totalBank'
+      };
+      const methodKey = methodKeyMap[formData.method] || 'totalCash';
+
+      setDoc(balanceRef, {
+        branchId: userBranch,
+        [methodKey]: increment(totalAmt),
+        totalHandCash: increment(totalAmt),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+
       // INTELLIGENT SMS TRIGGER (PAYMENT RECEIPT)
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text || 
-                         DEFAULT_TEMPLATES.find(t => t.id === 'payment')?.text;
+                         "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[paid] টাকা। বর্তমান মোট বকেয়া: ৳[total_payable]। ধন্যবাদ। [Hostel Name]";
         
         if (template) {
           const mealRate = Number(mealConfig?.rate || 0);
