@@ -10,7 +10,7 @@ import {
   Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, 
   Link as LinkIcon, Copy, ExternalLink, ScrollText,
   Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered, History,
-  MoreVertical, ShieldCheck, Lock, ShieldAlert, RefreshCw, QrCode, Download, Printer
+  MoreVertical, ShieldCheck, Lock, ShieldAlert, RefreshCw, QrCode, Download, Printer, MapPin
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
