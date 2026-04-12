@@ -10,7 +10,7 @@ import {
   Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, 
   Link as LinkIcon, Copy, ExternalLink, ScrollText,
   Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered, History,
-  MoreVertical, ShieldCheck, Lock, ShieldAlert, RefreshCw
+  MoreVertical, ShieldCheck, Lock, ShieldAlert, RefreshCw, QrCode, Download, Printer
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
@@ -56,6 +56,9 @@ export default function SettingsPage() {
   const [isDevMode, setIsDevMode] = useState(false)
   const [enhancedSecurity, setEnhancedSecurity] = useState(false)
   
+  // Print Flyer State
+  const [activeFlyer, setActiveFlyer] = useState<{label: string, url: string, bengaliLabel: string} | null>(null)
+
   const editorRef = useRef<HTMLDivElement>(null)
   
   useEffect(() => {
@@ -213,6 +216,14 @@ export default function SettingsPage() {
     toast({ title: "Link Copied!", description: "Public URL is now in your clipboard." })
   }
 
+  const handlePrintFlyer = (label: string, url: string, bengaliLabel: string) => {
+    setActiveFlyer({ label, url, bengaliLabel });
+    // Small delay to allow state to propagate to DOM before printing
+    setTimeout(() => {
+      window.print();
+    }, 200);
+  }
+
   if (isConfigLoading || isBalancesLoading || isRulesLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
 
   return (
@@ -314,7 +325,7 @@ export default function SettingsPage() {
       </Dialog>
 
       {/* Meal Configuration Section */}
-      <Card className="border-none shadow-sm overflow-hidden">
+      <Card className="border-none shadow-sm overflow-hidden print:hidden">
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-primary">
@@ -343,7 +354,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Registration Links Section */}
-      <Card className="border-none shadow-sm border-l-4 border-l-primary bg-primary/5">
+      <Card className="border-none shadow-sm border-l-4 border-l-primary bg-primary/5 print:hidden">
         <CardHeader>
           <div className="flex items-center gap-2 text-primary">
             <LinkIcon size={20} />
@@ -353,24 +364,45 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {[
-            { label: "New Student Registration", type: "new" },
-            { label: "Existing Resident (Data Import)", type: "old" }
+            { label: "New Student Registration", bengaliLabel: "নতুন স্টুডেন্ট এডমিশন ফর্ম", type: "new" },
+            { label: "Existing Resident (Data Import)", bengaliLabel: "পুরাতন স্টুডেন্ট এডমিশন ফর্ম", type: "old" }
           ].map((link) => {
             const path = `/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`;
             const fullUrl = `${PRODUCTION_DOMAIN}${path}`;
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(fullUrl)}`;
+            
             return (
-              <div key={link.type} className="flex flex-col md:flex-row gap-3 items-start md:items-center p-3 bg-background rounded-lg border shadow-sm">
-                <div className="flex-1 overflow-hidden">
-                  <p className="text-sm font-bold">{link.label}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">{fullUrl}</p>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button size="sm" variant="outline" className="gap-2" onClick={() => window.open(fullUrl, '_blank')}>
-                    <ExternalLink size={14} /> Open
-                  </Button>
-                  <Button size="sm" variant="secondary" className="gap-2" onClick={() => copyToClipboard(path)}>
-                    <Copy size={14} /> Copy
-                  </Button>
+              <div key={link.type} className="flex flex-col gap-4 p-4 bg-background rounded-3xl border shadow-sm">
+                <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
+                  <div className="flex-1 overflow-hidden">
+                    <p className="text-sm font-bold">{link.label}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{fullUrl}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[10px] font-bold uppercase" onClick={() => window.open(fullUrl, '_blank')}>
+                      <ExternalLink size={14} /> Open
+                    </Button>
+                    <Button size="sm" variant="secondary" className="h-8 gap-1.5 text-[10px] font-bold uppercase" onClick={() => copyToClipboard(path)}>
+                      <Copy size={14} /> Copy
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-8 gap-1.5 text-[10px] font-bold uppercase text-primary border-primary/20"
+                      asChild
+                    >
+                      <a href={qrUrl} download={`qr_${link.type}.png`}>
+                        <Download size={14} /> QR Image
+                      </a>
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      className="h-8 gap-1.5 text-[10px] font-bold uppercase"
+                      onClick={() => handlePrintFlyer(link.label, fullUrl, link.bengaliLabel)}
+                    >
+                      <Printer size={14} /> Print Flyer
+                    </Button>
+                  </div>
                 </div>
               </div>
             );
@@ -379,7 +411,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Rules & Regulations Editor Section */}
-      <Card className="border-none shadow-sm overflow-hidden">
+      <Card className="border-none shadow-sm overflow-hidden print:hidden">
         <CardHeader>
           <div className="flex items-center gap-2 text-primary">
             <ScrollText size={20} />
@@ -427,7 +459,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Opening Balances Section */}
-      <Card className="border-none shadow-sm">
+      <Card className="border-none shadow-sm print:hidden">
         <CardHeader>
           <div className="flex items-center gap-2 text-primary">
             <Wallet size={20} />
@@ -447,6 +479,45 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* PRINT FLYER AREA (A4 Design) */}
+      {activeFlyer && (
+        <div className="print-only print-report-container flex flex-col items-center justify-center h-[297mm] w-[210mm] border-[10mm] border-primary">
+          <div className="text-center space-y-6 p-12 flex flex-col items-center">
+            <h1 className="text-6xl font-black text-primary uppercase tracking-tighter mb-4">সমীকরণ ছাত্রাবাস</h1>
+            <div className="bg-primary text-white px-12 py-4 rounded-full text-3xl font-black uppercase tracking-widest shadow-xl">
+              অনলাইন ভর্তি ফর্ম
+            </div>
+            
+            <div className="pt-12 flex flex-col items-center space-y-8">
+              <div className="p-8 border-[3px] border-dashed border-primary rounded-[3rem] bg-white shadow-inner">
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=450x450&data=${encodeURIComponent(activeFlyer.url)}`}
+                  alt="Registration QR Code"
+                  className="w-[120mm] h-[120mm]"
+                />
+              </div>
+              
+              <div className="space-y-4">
+                <h2 className="text-4xl font-black text-slate-800">{activeFlyer.bengaliLabel}</h2>
+                <p className="text-2xl font-bold text-slate-500 uppercase tracking-widest">
+                  Scan to enroll now
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-20 text-center space-y-4">
+              <p className="text-xl font-bold text-primary flex items-center justify-center gap-3">
+                <MapPin size={24} /> {userBranch} Branch
+              </p>
+              <div className="h-1 w-48 bg-primary/20 mx-auto rounded-full" />
+              <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">
+                Powered by Somikoron Digital System
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
