@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button"
 import { 
   Utensils, Save, Loader2, Wallet, Banknote, Smartphone, Landmark, 
   Link as LinkIcon, Copy, ExternalLink, ScrollText,
-  Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Type, Eraser, Highlighter, ListOrdered, History,
-  MoreVertical, ShieldCheck, Lock, ShieldAlert, RefreshCw, QrCode, Download, Printer, MapPin
+  Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Eraser,
+  MoreVertical, ShieldCheck, Lock, ShieldAlert, RefreshCw, Download, Printer, MapPin
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
@@ -66,6 +66,26 @@ export default function SettingsPage() {
     setUserName(localStorage.getItem("user_name") || "User")
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
   }, [])
+
+  // Print synchronization effect
+  useEffect(() => {
+    if (activeFlyer) {
+      // Wait for React to render the print-only div and for the QR image to load
+      const timer = setTimeout(() => {
+        window.print();
+      }, 1000);
+      
+      const handleAfterPrint = () => {
+        setActiveFlyer(null);
+      };
+      
+      window.addEventListener('afterprint', handleAfterPrint);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('afterprint', handleAfterPrint);
+      };
+    }
+  }, [activeFlyer]);
 
   // Opening Balances State
   const [balances, setBalances] = useState({
@@ -218,17 +238,12 @@ export default function SettingsPage() {
 
   const handlePrintFlyer = (label: string, url: string, bengaliLabel: string) => {
     setActiveFlyer({ label, url, bengaliLabel });
-    // Small delay to allow state to propagate to DOM before printing
-    setTimeout(() => {
-      window.print();
-    }, 200);
   }
 
   if (isConfigLoading || isBalancesLoading || isRulesLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-20">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -482,19 +497,19 @@ export default function SettingsPage() {
 
       {/* PRINT FLYER AREA (A4 Design) */}
       {activeFlyer && (
-        <div className="print-only print-report-container flex flex-col items-center justify-center h-[297mm] w-[210mm] border-[10mm] border-primary">
+        <div className="print-only print-report-container flex flex-col items-center justify-center h-[297mm] w-[210mm] border-[10mm] border-primary bg-white">
           <div className="text-center space-y-6 p-12 flex flex-col items-center">
-            <h1 className="text-6xl font-black text-primary uppercase tracking-tighter mb-4">সমীকরণ ছাত্রাবাস</h1>
-            <div className="bg-primary text-white px-12 py-4 rounded-full text-3xl font-black uppercase tracking-widest shadow-xl">
+            <h1 className="text-6xl font-black text-primary uppercase tracking-tighter mb-4" style={{ color: 'hsl(var(--primary)) !important' }}>সমীকরণ ছাত্রাবাস</h1>
+            <div className="bg-primary text-white px-12 py-4 rounded-full text-3xl font-black uppercase tracking-widest shadow-xl" style={{ backgroundColor: 'hsl(var(--primary)) !important', color: 'white !important' }}>
               অনলাইন ভর্তি ফর্ম
             </div>
             
             <div className="pt-12 flex flex-col items-center space-y-8">
-              <div className="p-8 border-[3px] border-dashed border-primary rounded-[3rem] bg-white shadow-inner">
+              <div className="p-8 border-[3px] border-dashed border-primary rounded-[3rem] bg-white shadow-inner" style={{ borderColor: 'hsl(var(--primary)) !important' }}>
                 <img 
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=450x450&data=${encodeURIComponent(activeFlyer.url)}`}
                   alt="Registration QR Code"
-                  className="w-[120mm] h-[120mm]"
+                  className="w-[120mm] h-[120mm] block"
                 />
               </div>
               
@@ -507,10 +522,10 @@ export default function SettingsPage() {
             </div>
 
             <div className="pt-20 text-center space-y-4">
-              <p className="text-xl font-bold text-primary flex items-center justify-center gap-3">
+              <p className="text-xl font-bold text-primary flex items-center justify-center gap-3" style={{ color: 'hsl(var(--primary)) !important' }}>
                 <MapPin size={24} /> {userBranch} Branch
               </p>
-              <div className="h-1 w-48 bg-primary/20 mx-auto rounded-full" />
+              <div className="h-1 w-48 bg-primary/20 mx-auto rounded-full" style={{ backgroundColor: 'rgba(41, 110, 179, 0.2) !important' }} />
               <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">
                 Powered by Somikoron Digital System
               </p>
