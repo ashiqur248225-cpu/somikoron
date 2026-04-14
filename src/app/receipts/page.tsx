@@ -75,7 +75,7 @@ export default function ReceiptsHistoryPage() {
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [methodFilter, setMethodFilter] = useState("all")
-  const [timeView, setTimeView] = useState("all")
+  const [timeView, setTimeView] = useState("today")
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
