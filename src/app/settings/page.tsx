@@ -148,7 +148,10 @@ export default function SettingsPage() {
   }
 
   const handleSaveBalances = async () => {
-    if (!userBranch) return;
+    if (!userBranch) {
+      toast({ variant: "destructive", title: "Error", description: "Active branch not identified." })
+      return;
+    }
     setIsUpdating(true)
     try {
       const cash = Number(balances.cash || 0)
@@ -157,7 +160,7 @@ export default function SettingsPage() {
       const nagad = Number(balances.nagad || 0)
       const total = cash + bank + bkash + nagad
 
-      // 1. Save to openingBalances config
+      // 1. Save to openingBalances config (Global log)
       await setDoc(balancesRef, {
         cash,
         bank,
@@ -166,7 +169,7 @@ export default function SettingsPage() {
         updatedAt: serverTimestamp()
       })
 
-      // 2. Sync to netBalance collection for the branch
+      // 2. Sync to netBalance collection for the branch (Operational balance)
       const netBalanceRef = doc(db, "netBalance", userBranch)
       await setDoc(netBalanceRef, {
         branchId: userBranch,
@@ -174,7 +177,7 @@ export default function SettingsPage() {
         totalBank: bank,
         totalBkash: bkash,
         totalNagad: nagad,
-        totalHandCash: total,
+        totalHandCash: total, // Sum of all accounts
         lastUpdated: serverTimestamp()
       }, { merge: true })
 
