@@ -8,7 +8,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { 
   Printer, Loader2, Building2, Filter, Calculator, 
-  ArrowUpRight, ArrowDownRight, TrendingUp, PieChart as PieChartIcon, BarChart3,
+  ArrowUpRight, ArrowDownRight, ArrowDownCircle, TrendingUp, PieChart as PieChartIcon, BarChart3,
   Lightbulb, AlertTriangle, CheckCircle2, Target, Zap, ShieldCheck, RotateCcw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,7 @@ export default function ReportsPage() {
   const db = useFirestore()
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   
-  // Default to current month range
+  // Default to current month range: 1st of current month to today
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
   const [buildingFilter, setBuildingFilter] = useState("all")
