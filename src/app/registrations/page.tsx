@@ -15,7 +15,7 @@ import {
   User, ChevronRight, LayoutGrid, CircleDollarSign
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where, getDoc, writeBatch } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
