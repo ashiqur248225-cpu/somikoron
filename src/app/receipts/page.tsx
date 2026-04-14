@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, where, limit, getDocs, writeBatch, Timestamp } from "firebase/firestore"
+import { collection, query, where, limit, getDocs, writeBatch, Timestamp, orderBy } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
@@ -72,8 +72,9 @@ export default function ReceiptsHistoryPage() {
   const [deleteRange, setDeleteRange] = useState({ start: "", end: "" })
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
+  // Default to current month range for background logic consistency
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
   const [methodFilter, setMethodFilter] = useState("all")
   const [timeView, setTimeView] = useState("today")
 
@@ -83,13 +84,13 @@ export default function ReceiptsHistoryPage() {
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
   }, [])
 
-  // FIXED: Removed orderBy to avoid index requirement and ensure receipts show up instantly
-  // This correctly pulls all digital receipts from the payments collection
+  // FIXED: Added orderBy to ensure we fetch the most recent receipts
   const paymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(
       collection(db, "payments"), 
       where("branch", "==", userBranch),
+      orderBy("date", "desc"),
       limit(1000)
     )
   }, [db, userBranch])
@@ -98,22 +99,24 @@ export default function ReceiptsHistoryPage() {
 
   const filteredReceipts = useMemo(() => {
     if (!payments) return []
-    const todayStr = new Date().toDateString()
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
     return payments.filter(p => {
       const search = searchTerm.toLowerCase()
       const receiptNo = `RCPT-${p.id?.substring(0, 8).toUpperCase()}`
       const matchesSearch = receiptNo.toLowerCase().includes(search) || (p.studentName || "").toLowerCase().includes(search)
+      
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
-      const matchesStartDate = !startDate || pDate >= new Date(startDate)
-      const matchesEndDate = !endDate || pDate <= new Date(new Date(endDate).setHours(23, 59, 59))
+      
+      const matchesStartDate = !startDate || pDate >= new Date(startDate + "T00:00:00")
+      const matchesEndDate = !endDate || pDate <= new Date(endDate + "T23:59:59")
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
-      const matchesTime = timeView === 'all' || pDate.toDateString() === todayStr
+      
+      // More robust today check
+      const matchesTime = timeView === 'all' || pDate >= today
+      
       return matchesSearch && matchesStartDate && matchesEndDate && matchesMethod && matchesTime
-    }).sort((a, b) => {
-      const dateA = a.date?.toDate ? a.date.toDate().getTime() : new Date(a.date).getTime()
-      const dateB = b.date?.toDate ? b.date.toDate().getTime() : new Date(b.date).getTime()
-      return dateB - dateA
     })
   }, [payments, searchTerm, startDate, endDate, methodFilter, timeView])
 
