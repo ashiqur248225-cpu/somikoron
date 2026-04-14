@@ -72,7 +72,7 @@ export default function ReceiptsHistoryPage() {
   const [deleteRange, setDeleteRange] = useState({ start: "", end: "" })
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Default to current month range for background logic consistency
+  // Default range: 1st of month to Today
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
   const [methodFilter, setMethodFilter] = useState("all")
@@ -84,7 +84,6 @@ export default function ReceiptsHistoryPage() {
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
   }, [])
 
-  // FIXED: Removed orderBy to avoid composite index error. Sorting is now done client-side.
   const paymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(
@@ -98,8 +97,10 @@ export default function ReceiptsHistoryPage() {
 
   const filteredReceipts = useMemo(() => {
     if (!payments) return []
+    
     const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    // Local YYYY-MM-DD for current day
+    const todayYMD = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`
 
     return payments.filter(p => {
       const search = searchTerm.toLowerCase()
@@ -107,15 +108,20 @@ export default function ReceiptsHistoryPage() {
       const matchesSearch = receiptNo.toLowerCase().includes(search) || (p.studentName || "").toLowerCase().includes(search)
       
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
-      
-      const matchesStartDate = !startDate || pDate >= new Date(startDate + "T00:00:00")
-      const matchesEndDate = !endDate || pDate <= new Date(endDate + "T23:59:59")
+      if (isNaN(pDate.getTime())) return false
+
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
       
-      // More robust today check
-      const matchesTime = timeView === 'all' || pDate >= today
-      
-      return matchesSearch && matchesStartDate && matchesEndDate && matchesMethod && matchesTime
+      if (timeView === 'today') {
+        // Strict same-day comparison (local)
+        const pYMD = `${pDate.getFullYear()}-${(pDate.getMonth() + 1).toString().padStart(2, '0')}-${pDate.getDate().toString().padStart(2, '0')}`
+        return matchesSearch && matchesMethod && pYMD === todayYMD
+      } else {
+        // "All Receipts" tab uses the custom date range filters (defaulting to current month)
+        const matchesStartDate = !startDate || pDate >= new Date(startDate + "T00:00:00")
+        const matchesEndDate = !endDate || pDate <= new Date(endDate + "T23:59:59")
+        return matchesSearch && matchesMethod && matchesStartDate && matchesEndDate
+      }
     }).sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate().getTime() : new Date(a.date).getTime()
       const dateB = b.date?.toDate ? b.date.toDate().getTime() : new Date(b.date).getTime()
@@ -176,7 +182,6 @@ export default function ReceiptsHistoryPage() {
         </div>
       </div>
 
-      {/* Bulk Delete Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
