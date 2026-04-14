@@ -101,7 +101,7 @@ export default function StudentsPage() {
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
-          <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Residents</h1></div>
+          <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Students</h1></div>
         </div>
         <div className="ml-auto flex items-center gap-3">
           <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsFilterDialogOpen(true)}><Filter size={16} /> Filter</Button>
