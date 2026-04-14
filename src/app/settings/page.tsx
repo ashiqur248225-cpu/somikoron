@@ -148,16 +148,37 @@ export default function SettingsPage() {
   }
 
   const handleSaveBalances = async () => {
+    if (!userBranch) return;
     setIsUpdating(true)
     try {
+      const cash = Number(balances.cash || 0)
+      const bank = Number(balances.bank || 0)
+      const bkash = Number(balances.bkash || 0)
+      const nagad = Number(balances.nagad || 0)
+      const total = cash + bank + bkash + nagad
+
+      // 1. Save to openingBalances config
       await setDoc(balancesRef, {
-        cash: Number(balances.cash),
-        bank: Number(balances.bank),
-        bkash: Number(balances.bkash),
-        nagad: Number(balances.nagad),
+        cash,
+        bank,
+        bkash,
+        nagad,
         updatedAt: serverTimestamp()
       })
-      toast({ title: "Balances Saved" })
+
+      // 2. Sync to netBalance collection for the branch
+      const netBalanceRef = doc(db, "netBalance", userBranch)
+      await setDoc(netBalanceRef, {
+        branchId: userBranch,
+        totalCash: cash,
+        totalBank: bank,
+        totalBkash: bkash,
+        totalNagad: nagad,
+        totalHandCash: total,
+        lastUpdated: serverTimestamp()
+      }, { merge: true })
+
+      toast({ title: "Balances Saved", description: "Initial funds synchronized with dashboard." })
     } catch (e: any) {
       toast({ variant: "destructive", description: e.message })
     } finally {
