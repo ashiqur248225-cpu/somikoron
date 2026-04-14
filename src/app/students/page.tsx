@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -7,32 +6,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Building2, DoorOpen, Loader2, Eye, XCircle, Printer, FileSpreadsheet, Filter, CheckCircle2, UserMinus, UserCheck, LayoutGrid, Bed, RotateCcw } from "lucide-react"
+import { Users, Search, Building2, Loader2, Eye, Printer, Filter } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, query, where, doc } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { collection, query, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { useToast } from "@/hooks/use-toast"
-
-const formatCompactDate = (date: any) => {
-  if (!date) return 'N/A'
-  const d = date?.toDate ? date.toDate() : new Date(date)
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
-}
 
 export default function StudentsPage() {
-  const { toast } = useToast()
   const router = useRouter()
   const db = useFirestore()
   
-  // States
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
@@ -63,14 +53,12 @@ export default function StudentsPage() {
     if (!students) return []
     return students.map(s => {
       const rentDue = s.totalDue || 0;
-      const historicalFoodDue = Number(s.foodDueAmount) || 0
-      const foodBalance = historicalFoodDue 
-      const totalReceived = s.historicalTotalReceived || 0
-      const totalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0)
-      return { ...s, rentDue, foodBalance, totalDue, totalReceived }
+      const foodDue = Number(s.foodDueAmount) || 0;
+      const totalReceived = s.historicalTotalReceived || 0;
+      const totalDue = rentDue + (foodDue < 0 ? Math.abs(foodDue) : 0);
+      return { ...s, totalReceived, rentDue, foodBalance: foodDue, totalDue }
     }).filter(s => {
-      const search = searchTerm.toLowerCase()
-      const matchesSearch = s.name.toLowerCase().includes(search) || (s.phone || "").includes(search)
+      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
       const matchesPlan = planFilter === "all" || s.paymentSystem === planFilter
@@ -78,31 +66,16 @@ export default function StudentsPage() {
     }).sort((a, b) => a.name.localeCompare(b.name))
   }, [students, searchTerm, buildingFilter, statusFilter, planFilter])
 
-  const printStats = useMemo(() => {
-    return {
-      totalCount: processedStudents.length,
-      totalRent: processedStudents.reduce((acc, curr) => acc + (curr.monthlyRent || 0), 0),
-      totalReceived: processedStudents.reduce((acc, curr) => acc + (curr.totalReceived || 0), 0),
-      totalDue: processedStudents.reduce((acc, curr) => acc + (curr.totalDue || 0), 0),
-    }
-  }, [processedStudents])
-
   const handlePrint = () => { 
     if (typeof window !== "undefined") { 
-      setTimeout(() => {
-        window.print(); 
-      }, 500);
+      setTimeout(() => { window.print(); }, 500);
     } 
   }
 
   return (
-    <div className="space-y-8 pb-20 print:p-0 w-full">
+    <div className="space-y-8 pb-20 w-full">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
-        <div className="flex items-center gap-2">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
-          <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Students</h1></div>
-        </div>
+        <div className="flex items-center gap-2"><SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mr-2 h-4 md:hidden" /><div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Students</h1></div></div>
         <div className="ml-auto flex items-center gap-3">
           <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsFilterDialogOpen(true)}><Filter size={16} /> Filter</Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> Download PDF</Button>
@@ -110,33 +83,60 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* OFFICIAL PRINT REPORT SECTION */}
+      {/* OFFICIAL A4 PRINT REPORT */}
       <div className="print-only print-report-container">
         <div className="report-header">
-          <h1 className="text-2xl font-black uppercase text-primary">সমীকরণ ছাত্রাবাস</h1>
-          <p className="text-sm font-bold text-slate-600">{userBranch} Branch • Resident Directory Report</p>
+          <h1>সমীকরণ ছাত্রাবাস</h1>
+          <p className="branch-title">{userBranch} Branch • Student Directory Report</p>
+          <div className="flex justify-between items-end mt-4 px-2 text-[8pt] font-bold text-slate-500">
+            <div>
+              <p>Filter: {buildingFilter === 'all' ? 'Entire Branch' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+              <p>Count: {processedStudents.length} Students</p>
+            </div>
+            <div className="text-right">
+              <p>Generated: {new Date().toLocaleString()}</p>
+              <p>Staff: {userName}</p>
+            </div>
+          </div>
         </div>
 
-        <table className="w-full border-collapse mt-6">
+        <table>
           <thead>
             <tr>
               <th>Name</th>
               <th>Location</th>
               <th className="text-right">Monthly Rent</th>
-              <th className="text-right">Total Due</th>
+              <th className="text-right">Total Received</th>
+              <th className="text-right">Rent Due</th>
+              <th className="text-right">Food Balance</th>
             </tr>
           </thead>
           <tbody>
             {processedStudents.map((s: any) => (
               <tr key={s.id}>
-                <td className="font-bold">{s.name}</td>
-                <td>{s.buildingName} - R{s.roomNumber}</td>
+                <td className="font-bold">{s.name}<br/><span className="text-[7pt] font-normal text-slate-500">{s.phone}</span></td>
+                <td>{s.buildingName} • R-{s.roomNumber}</td>
                 <td className="text-right">৳{s.monthlyRent}</td>
-                <td className="text-right font-black">৳{s.totalDue.toLocaleString()}</td>
+                <td className="text-right">৳{s.totalReceived.toLocaleString()}</td>
+                <td className="text-right font-bold text-destructive">৳{s.rentDue.toLocaleString()}</td>
+                <td className="text-right">
+                  {s.paymentSystem === 'non-package' ? `৳${s.foodBalance.toLocaleString()}` : '—'}
+                </td>
               </tr>
-            ))}
-          </tbody>
+            </tbody>
+          <tfoot>
+            <tr className="total-row">
+              <td colSpan={4} className="text-right uppercase">Total Due Overview</td>
+              <td className="text-right">৳{processedStudents.reduce((a, b) => a + b.rentDue, 0).toLocaleString()}</td>
+              <td className="text-right"></td>
+            </tr>
+          </tfoot>
         </table>
+
+        <div className="print-footer">
+          <div className="page-number"></div>
+          <div className="signature-box">Manager Signature</div>
+        </div>
       </div>
 
       <div className="print:hidden">
@@ -155,6 +155,20 @@ export default function StudentsPage() {
           </Card>
         )}
       </div>
+
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader><DialogTitle>Filter Students</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-1.5"><Label>Search</Label><Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="left">Left</SelectItem><SelectItem value="all">Both</SelectItem></SelectContent></Select></div>
+            </div>
+          </div>
+          <DialogFooter><Button onClick={() => setIsFilterDialogOpen(false)}>Apply</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
