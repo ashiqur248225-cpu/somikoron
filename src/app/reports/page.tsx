@@ -5,13 +5,18 @@ import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
   AreaChart, Area, XAxis, YAxis, Tooltip as RechartTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend
+  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend, Tooltip
 } from 'recharts';
 import { Badge } from "@/components/ui/badge"
 import { 
   Printer, Loader2, Calendar, LayoutGrid, Filter, XCircle, 
   TrendingUp, TrendingDown, AlertCircle, Info, Calculator, 
-  ArrowUpRight, ArrowDownRight, Zap, Wrench, Building2, UserCircle, Receipt, Utensils, Wifi, Wallet, RotateCcw
+  ArrowUpRight, ArrowDownRight, Zap, Wrench, Building2, UserCircle, Receipt, Utensils, Wifi, Wallet, RotateCcw,
+  CircleDollarSign,
+  PieChart as PieChartIcon,
+  BarChart3,
+  TrendingUp as TrendingUpIcon,
+  ArrowRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -48,10 +53,12 @@ export default function ReportsPage() {
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
+  const [userRole, setUserRole] = useState("")
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
+    setUserRole(localStorage.getItem("user_role") || "Manager")
   }, [])
 
   const buildingsQuery = useMemoFirebase(() => {
@@ -90,6 +97,7 @@ export default function ReportsPage() {
     const totalIncome = filteredData.income.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     const totalExpense = filteredData.expense.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     const netProfit = totalIncome - totalExpense
+    const totalEfficiency = totalExpense > 0 ? (totalIncome / totalExpense) * 100 : (totalIncome > 0 ? 100 : 0)
     
     // Occupancy
     const totalSeats = (buildings || []).filter(b => buildingFilter === "all" || b.id === buildingFilter).reduce((acc, b) => acc + (b.totalSeats || 0), 0)
@@ -128,31 +136,34 @@ export default function ReportsPage() {
     })
 
     filteredData.income.forEach(p => {
-      if (p.buildingId && buildingMap[p.buildingId]) {
+      if (p.buildingId) {
+        if (!buildingMap[p.buildingId]) buildingMap[p.buildingId] = { name: p.buildingName || 'Unknown', expense: 0, income: 0 }
         buildingMap[p.buildingId].income += p.amount
       }
     })
 
     const expensesByCategory = Object.entries(categoryMap).map(([name, value]) => ({ name: name.toUpperCase(), value }))
-    const expensesByBuilding = Object.values(buildingMap).map(b => ({
-      name: b.name,
-      expense: b.expense,
-      income: b.income,
-      efficiency: b.expense > 0 ? (b.income / b.expense).toFixed(2) : '0'
-    })).sort((a, b) => b.expense - a.expense)
-
-    const expensesByRoom = Object.values(roomMap).sort((a, b) => b.expense - a.expense).slice(0, 10)
     
+    const buildingComparison = Object.entries(buildingMap).map(([id, data]) => ({
+      name: data.name,
+      income: data.income,
+      expense: data.expense,
+      profit: data.income - data.expense,
+      isLoss: data.expense > data.income
+    })).sort((a, b) => b.income - a.income)
+
+    const highCostCategory = expensesByCategory.length > 0 ? [...expensesByCategory].sort((a, b) => b.value - a.value)[0] : null
+    const mostProfitable = buildingComparison.length > 0 ? [...buildingComparison].sort((a, b) => b.profit - a.profit)[0] : null
+    const mostLossMaking = buildingComparison.length > 0 ? [...buildingComparison].sort((a, b) => a.profit - b.profit)[0] : null
+
     const insights: string[] = []
-    if (expensesByBuilding.length > 0) {
-      insights.push(`${expensesByBuilding[0].name} has the highest operational cost in this period.`)
-    }
-    const topCategory = expensesByCategory.sort((a, b) => b.value - a.value)[0]
-    if (topCategory) insights.push(`${topCategory.name} is the leading expense driver.`)
+    buildingComparison.forEach(b => {
+      if (b.isLoss) insights.push(`Building "${b.name}" is currently operating in loss (৳${Math.abs(b.profit).toLocaleString()}).`)
+    })
 
     return { 
-      totalIncome, totalExpense, netProfit, occupancyRate, healthScore, 
-      trendData, expensesByCategory, expensesByBuilding, expensesByRoom, insights 
+      totalIncome, totalExpense, netProfit, occupancyRate, healthScore, totalEfficiency,
+      trendData, expensesByCategory, buildingComparison, highCostCategory, mostProfitable, mostLossMaking, insights 
     }
   }, [filteredData, buildings, buildingFilter])
 
@@ -208,6 +219,45 @@ export default function ReportsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Financial Health Summary Section */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:hidden">
+        <Card className="border-none shadow-lg bg-primary/5 border border-primary/10 rounded-3xl overflow-hidden flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-black uppercase text-primary tracking-widest flex items-center gap-2">
+              <TrendingUpIcon size={14}/> Total Efficiency
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="text-4xl font-black text-primary">{stats.totalEfficiency.toFixed(1)}%</div>
+            <p className="text-[9px] text-muted-foreground font-bold mt-1 uppercase">Income relative to expenses</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-lg bg-orange-50 border border-orange-100 rounded-3xl overflow-hidden flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-black uppercase text-orange-700 tracking-widest flex items-center gap-2">
+              <Receipt size={14}/> High-Cost Category
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="text-2xl font-black text-orange-800 truncate">{stats.highCostCategory?.name || 'N/A'}</div>
+            <p className="text-[9px] text-orange-600 font-bold mt-1 uppercase">৳{stats.highCostCategory?.value.toLocaleString()} Spent</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-lg bg-success/5 border border-success/10 rounded-3xl overflow-hidden flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-black uppercase text-success tracking-widest flex items-center gap-2">
+              <Building2 size={14}/> Best Performance
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="text-2xl font-black text-success truncate">{stats.mostProfitable?.name || 'General'}</div>
+            <p className="text-[9px] text-success/70 font-bold mt-1 uppercase">৳{stats.mostProfitable?.profit.toLocaleString()} Net Profit</p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Summary Row */}
       <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:hidden">
         <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden group hover:shadow-md transition-all">
@@ -228,7 +278,9 @@ export default function ReportsPage() {
         </Card>
       </div>
 
+      {/* Main Charts Section */}
       <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 print:hidden">
+        {/* Health Score Card */}
         <Card className="rounded-3xl border-none shadow-sm overflow-hidden flex flex-col justify-center items-center p-8 bg-white">
           <div className="text-5xl font-black text-slate-800">{stats.healthScore}%</div>
           <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mt-2">Overall Hostel Health</p>
@@ -237,6 +289,8 @@ export default function ReportsPage() {
             <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden"><div className={cn("h-full", stats.healthScore > 70 ? "bg-success" : "bg-orange-500")} style={{ width: `${stats.healthScore}%` }} /></div>
           </div>
         </Card>
+
+        {/* Financial Trend Area Chart */}
         <Card className="lg:col-span-2 rounded-3xl border-none shadow-sm overflow-hidden bg-white">
           <CardHeader><CardTitle className="text-lg font-bold flex items-center gap-2"><TrendingUp size={20} className="text-primary"/> Financial Trend</CardTitle></CardHeader>
           <CardContent className="h-[250px] pt-4">
@@ -255,6 +309,194 @@ export default function ReportsPage() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Advanced Visualizations Row */}
+      <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 print:hidden">
+        {/* Expense Breakdown Pie Chart */}
+        <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
+          <CardHeader>
+            <CardTitle className="text-lg font-bold flex items-center gap-2"><PieChartIcon size={20} className="text-primary"/> Expense Breakdown</CardTitle>
+            <CardDescription>Category-wise spending analysis.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px] flex items-center justify-center p-0">
+            {stats.expensesByCategory.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={stats.expensesByCategory}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {stats.expensesByCategory.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                    formatter={(value: any) => [`৳${value.toLocaleString()}`, 'Amount']}
+                  />
+                  <Legend verticalAlign="bottom" height={36}/>
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-muted-foreground italic text-sm">No expense data available for this range.</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Building-wise Profit/Loss Bar Chart */}
+        <Card className="lg:col-span-2 rounded-3xl border-none shadow-sm bg-white overflow-hidden">
+          <CardHeader>
+            <CardTitle className="text-lg font-bold flex items-center gap-2"><BarChart3 size={20} className="text-primary"/> Building Comparison</CardTitle>
+            <CardDescription>Income vs Expense per infrastructure unit.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px] pt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.buildingComparison} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
+                <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `৳${val/1000}k`} />
+                <Tooltip 
+                  cursor={{ fill: 'transparent' }}
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                />
+                <Legend iconType="circle" />
+                <Bar dataKey="income" fill="#296EB3" radius={[4, 4, 0, 0]} name="Income" />
+                <Bar dataKey="expense" radius={[4, 4, 0, 0]} name="Expense">
+                  {stats.buildingComparison.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.isLoss ? "#EF4444" : "#F06A6A"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+          {stats.insights.length > 0 && (
+            <div className="px-6 pb-6 space-y-2">
+              <Separator />
+              {stats.insights.map((insight, i) => (
+                <div key={i} className="flex gap-2 items-start text-xs text-destructive font-medium bg-red-50 p-3 rounded-xl">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  <p>{insight}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Existing Building Efficiency List */}
+      <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-white print:hidden">
+        <CardHeader className="bg-slate-50/50 border-b">
+          <CardTitle className="text-lg flex items-center gap-2"><LayoutGrid size={20} className="text-primary"/> Operational Efficiency by Building</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-slate-50">
+              <TableRow>
+                <TableHead className="font-bold">Building Name</TableHead>
+                <TableHead className="text-right font-bold">Income</TableHead>
+                <TableHead className="text-right font-bold">Expense</TableHead>
+                <TableHead className="text-right font-bold">Efficiency Ratio</TableHead>
+                <TableHead className="text-right font-bold">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {stats.buildingComparison.map((b, idx) => (
+                <TableRow key={idx}>
+                  <TableCell className="font-bold">{b.name}</TableCell>
+                  <TableCell className="text-right font-bold text-success">৳{b.income.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-bold text-destructive">৳{b.expense.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-black">
+                    {(b.expense > 0 ? (b.income / b.expense) : 0).toFixed(2)}x
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Badge className={cn("rounded-lg text-[10px] font-black", b.isLoss ? "bg-destructive" : "bg-success")}>
+                      {b.isLoss ? "LOSS" : "PROFIT"}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {stats.buildingComparison.length === 0 && (
+                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground italic">No building records found for current filter.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* OFFICIAL PRINT REPORT SECTION */}
+      <div className="print-only print-report-container">
+        <div className="report-header text-center">
+          <h1 className="text-2xl font-black uppercase text-primary">সমীকরণ ছাত্রাবাস</h1>
+          <p className="text-sm font-bold text-slate-600">{userBranch} ব্রাঞ্চ • বিস্তারিত এনালিটিক্স রিপোর্ট</p>
+          <div className="mt-4 border-y-2 border-slate-200 py-3 grid grid-cols-2 text-left text-[9pt] font-medium bg-slate-50/50 px-4">
+            <div>
+              <p><b>Period:</b> {startDate} to {endDate}</p>
+              <p><b>Filter Building:</b> {buildingFilter === 'all' ? 'All' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
+            </div>
+            <div className="text-right">
+              <p><b>Generated At:</b> {new Date().toLocaleString()}</p>
+              <p><b>Staff:</b> {userName}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-4 my-8">
+          <div className="border border-slate-300 p-3 rounded-xl text-center">
+            <p className="text-[8pt] font-black text-muted-foreground uppercase mb-1">Total Income</p>
+            <p className="text-md font-black">৳{stats.totalIncome.toLocaleString()}</p>
+          </div>
+          <div className="border border-slate-300 p-3 rounded-xl text-center">
+            <p className="text-[8pt] font-black text-muted-foreground uppercase mb-1">Total Expense</p>
+            <p className="text-md font-black">৳{stats.totalExpense.toLocaleString()}</p>
+          </div>
+          <div className="border border-slate-300 p-3 rounded-xl text-center">
+            <p className="text-[8pt] font-black text-muted-foreground uppercase mb-1">Net Balance</p>
+            <p className="text-md font-black">৳{stats.netProfit.toLocaleString()}</p>
+          </div>
+          <div className="border border-slate-300 p-3 rounded-xl text-center">
+            <p className="text-[8pt] font-black text-muted-foreground uppercase mb-1">Health Score</p>
+            <p className="text-md font-black">{stats.healthScore}%</p>
+          </div>
+        </div>
+
+        <h3 className="text-sm font-black uppercase border-b-2 border-slate-900 pb-1 mb-4">Building-wise Financial Summary</h3>
+        <table className="w-full border-collapse border text-[9pt]">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="border border-slate-300 p-2 text-left">Building Name</th>
+              <th className="border border-slate-300 p-2 text-right">Income</th>
+              <th className="border border-slate-300 p-2 text-right">Expense</th>
+              <th className="border border-slate-300 p-2 text-right">Efficiency</th>
+              <th className="border border-slate-300 p-2 text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.buildingComparison.map((b: any, idx: number) => (
+              <tr key={idx}>
+                <td className="border border-slate-200 p-2 font-bold">{b.name}</td>
+                <td className="border border-slate-200 p-2 text-right">৳{b.income.toLocaleString()}</td>
+                <td className="border border-slate-200 p-2 text-right">৳{b.expense.toLocaleString()}</td>
+                <td className="border border-slate-200 p-2 text-right">{(b.income / (b.expense || 1)).toFixed(2)}x</td>
+                <td className="border border-slate-200 p-2 text-center font-black uppercase text-[7pt]">{b.isLoss ? 'Loss' : 'Profit'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="print-footer mt-24 flex justify-between px-10">
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[8pt] font-black uppercase text-slate-800">Accountant Signature</p>
+          </div>
+          <div className="signature-box w-48 text-center border-t border-slate-900 pt-2">
+            <p className="text-[8pt] font-black uppercase text-slate-800">Branch Manager Signature</p>
+          </div>
+        </div>
       </div>
     </div>
   )
