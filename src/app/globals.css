@@ -65,7 +65,7 @@
 @media print {
   @page {
     size: A4;
-    margin: 10mm; /* Removes browser header/footer noise */
+    margin: 0 !important; /* CRITICAL: Removes browser header (Date/Title) and footer (URL) */
   }
 
   /* Force color printing across all browsers */
@@ -112,7 +112,8 @@
   .print-report-container {
     width: 100% !important;
     max-width: 100% !important;
-    padding: 0 !important;
+    padding: 15mm !important; /* Internal safety margin for printer non-printable area */
+    box-sizing: border-box !important;
   }
 
   /* Professional Table Styles */
@@ -153,7 +154,7 @@
   .report-header { 
     margin-bottom: 20px; 
     text-align: center; 
-    border-bottom: 2pt solid #296EB3; 
+    border-bottom: 2pt solid #211 63% 43% !important; 
     padding-bottom: 10px; 
   }
   .report-header h1 { 

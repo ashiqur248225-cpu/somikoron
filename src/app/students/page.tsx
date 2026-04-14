@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -121,7 +120,7 @@ export default function StudentsPage() {
                 <td className="text-right">৳{s.totalReceived.toLocaleString()}</td>
                 <td className="text-right font-bold text-destructive">৳{s.rentDue.toLocaleString()}</td>
                 <td className="text-right">
-                  {s.paymentSystem === 'non-package' ? `৳${s.foodBalance.toLocaleString()}` : '—'}
+                  {s.paymentSystem === 'non-package' ? "৳" + s.foodBalance.toLocaleString() : "-"}
                 </td>
               </tr>
             ))}

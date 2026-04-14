@@ -23,6 +23,7 @@ export default function ReceiptPage() {
 
   const handlePrint = () => {
     if (typeof window !== "undefined") {
+      // Safety delay to ensure layout is ready and margin:0 is applied
       setTimeout(() => { window.print(); }, 500);
     }
   }
