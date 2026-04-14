@@ -12,7 +12,7 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Wallet, Loader2, Search, Filter, Printer, ArrowUpCircle, RotateCcw, Trash2 } from "lucide-react"
+import { Wallet, Loader2, Search, Filter, Printer, ArrowUpCircle, RotateCcw, Trash2, Calendar, Smartphone, MapPin, UserCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, limit, where, getDocs, writeBatch, Timestamp } from "firebase/firestore"
@@ -212,14 +212,80 @@ export default function IncomeHistoryPage() {
         {paymentsLoading ? (
           <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
         ) : (
-          <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl">
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-secondary/30"><TableRow><TableHead>Date</TableHead><TableHead>Student</TableHead><TableHead>Location</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
-                <TableBody>{filteredPayments.map((p: any) => (<TableRow key={p.id}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(p.date)}</TableCell><TableCell className="font-black text-slate-800">{p.studentName}</TableCell><TableCell className="text-xs text-muted-foreground">{p.buildingName} • R-{p.roomNumber}</TableCell><TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell><TableCell className="text-right font-black text-income">৳{p.amount?.toLocaleString()}</TableCell></TableRow>))}</TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <>
+            {/* Desktop Table View */}
+            <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-secondary/30">
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Student</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead>RECEIVED BY</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPayments.map((p: any) => (
+                      <TableRow key={p.id} className="cursor-pointer hover:bg-slate-50/50" onClick={() => router.push(`/receipts/${p.id}`)}>
+                        <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(p.date)}</TableCell>
+                        <TableCell className="font-black text-slate-800">{p.studentName}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{p.buildingName} • R-{p.roomNumber}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell>
+                        <TableCell className="text-xs font-medium text-slate-600">{p.receiver}</TableCell>
+                        <TableCell className="text-right font-black text-income text-lg">৳{p.amount?.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+              {filteredPayments.map((p: any) => (
+                <Card 
+                  key={p.id} 
+                  className="border-none shadow-sm rounded-2xl overflow-hidden bg-white active:scale-[0.98] transition-transform"
+                  onClick={() => router.push(`/receipts/${p.id}`)}
+                >
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-success/10 p-2 rounded-lg text-success"><Wallet size={18}/></div>
+                        <h3 className="font-black text-slate-800 leading-tight">{p.studentName}</h3>
+                      </div>
+                      <Badge variant="outline" className="text-[8px] font-black uppercase text-success border-success/30 bg-success/5">
+                        {p.method}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-[10px] font-bold uppercase text-muted-foreground">
+                      <div className="flex items-center gap-1.5"><Calendar size={12}/> {formatCompactDate(p.date)}</div>
+                      <div className="flex items-center gap-1.5 justify-end"><MapPin size={12}/> R-{p.roomNumber}</div>
+                    </div>
+
+                    <Separator className="opacity-50" />
+
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+                        <UserCircle size={12} className="text-primary"/> Recv: {p.receiver}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase leading-none mb-1">Total Amount</p>
+                        <p className="text-xl font-black text-success">৳{p.amount?.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {filteredPayments.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground italic">No income records found.</div>
+              )}
+            </div>
+          </>
         )}
       </div>
 

@@ -13,7 +13,7 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Loader2, Printer, ArrowDownCircle, Filter, Trash2, RotateCcw } from "lucide-react"
+import { Loader2, Printer, ArrowDownCircle, Filter, Trash2, RotateCcw, Receipt, Calendar, UserCheck, Wallet, ChevronRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -26,6 +26,7 @@ import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const formatCompactDate = (date: any) => {
+  if (!date) return 'N/A'
   const d = new Date(date)
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
@@ -189,14 +190,76 @@ export default function ExpenseHistoryPage() {
         {expensesLoading ? (
           <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
         ) : (
-          <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl">
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-secondary/30"><TableRow><TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Spent By</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
-                <TableBody>{filteredExpenses.map((e: any) => (<TableRow key={e.id} className="cursor-pointer" onClick={() => router.push(`/expenses/${e.id}`)}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(e.expenseDate)}</TableCell><TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell><TableCell className="font-bold text-slate-700">{e.expensePartyName || e.spentBy}</TableCell><TableCell className="text-right font-black text-destructive">৳{e.amount?.toLocaleString()}</TableCell></TableRow>))}</TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <>
+            {/* Desktop Table View */}
+            <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-secondary/30">
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Spent By</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredExpenses.map((e: any) => (
+                      <TableRow key={e.id} className="cursor-pointer hover:bg-slate-50/50" onClick={() => router.push(`/expenses/${e.id}`)}>
+                        <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(e.expenseDate)}</TableCell>
+                        <TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell>
+                        <TableCell className="font-bold text-slate-700">{e.expensePartyName || e.spentBy}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{e.method}</Badge></TableCell>
+                        <TableCell className="text-right font-black text-destructive text-lg">৳{e.amount?.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+              {filteredExpenses.map((e: any) => (
+                <Card 
+                  key={e.id} 
+                  className="border-none shadow-sm rounded-2xl overflow-hidden bg-white active:scale-[0.98] transition-transform"
+                  onClick={() => router.push(`/expenses/${e.id}`)}
+                >
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-destructive/10 p-2 rounded-lg text-destructive"><Receipt size={18}/></div>
+                        <h3 className="font-black text-slate-800 leading-tight capitalize">{e.category}</h3>
+                      </div>
+                      <Badge variant="outline" className="text-[8px] font-black uppercase text-destructive border-destructive/20 bg-destructive/5">
+                        {e.method}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-[10px] font-bold uppercase text-muted-foreground">
+                      <div className="flex items-center gap-1.5"><Calendar size={12}/> {formatCompactDate(e.expenseDate)}</div>
+                      <div className="flex items-center gap-1.5"><UserCheck size={12}/> By: {e.spentBy || e.expensePartyName}</div>
+                    </div>
+
+                    <Separator className="opacity-50" />
+
+                    <div className="flex justify-between items-center">
+                      <p className="text-[10px] text-slate-500 italic line-clamp-1 flex-1 pr-4">{e.description || 'No description'}</p>
+                      <div className="text-right shrink-0">
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase leading-none mb-1">Cost</p>
+                        <p className="text-xl font-black text-destructive">৳{e.amount?.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {filteredExpenses.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground italic">No expense records found.</div>
+              )}
+            </div>
+          </>
         )}
       </div>
 

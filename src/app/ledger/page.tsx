@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Printer, Filter, ArrowUpCircle, ArrowDownCircle, Wallet, RotateCcw } from "lucide-react"
+import { Loader2, Printer, Filter, ArrowUpCircle, ArrowDownCircle, Wallet, RotateCcw, Calendar, History, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, where } from "firebase/firestore"
@@ -183,14 +183,92 @@ export default function LedgerPage() {
         {(pLoading || eLoading) ? (
           <div className="flex justify-center py-20"><Loader2 className="animate-spin" /></div>
         ) : (
-          <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl">
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-slate-50/50"><TableRow><TableHead>Date</TableHead><TableHead>Source / Category</TableHead><TableHead className="text-right">Credit</TableHead><TableHead className="text-right">Debit</TableHead><TableHead className="text-right">Balance</TableHead></TableRow></TableHeader>
-                <TableBody>{filteredData.map((tx: any, idx: number) => (<TableRow key={idx}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(tx.date)}</TableCell><TableCell className="font-bold">{tx.studentName || tx.category}</TableCell><TableCell className="text-right text-success">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()}` : '-'}</TableCell><TableCell className="text-right text-destructive">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()}` : '-'}</TableCell><TableCell className="text-right font-black">৳{tx.balance.toLocaleString()}</TableCell></TableRow>))}</TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <>
+            {/* Desktop Table View */}
+            <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-slate-50/50">
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Source / Category</TableHead>
+                      <TableHead className="text-right">Credit (+)</TableHead>
+                      <TableHead className="text-right">Debit (-)</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredData.map((tx: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(tx.date)}</TableCell>
+                        <TableCell className="font-bold text-slate-700">{tx.studentName || tx.category || "General"}</TableCell>
+                        <TableCell className="text-right text-success font-medium">{tx.credit > 0 ? `৳${tx.credit.toLocaleString()} (+)` : '-'}</TableCell>
+                        <TableCell className="text-right text-destructive font-medium">{tx.debit > 0 ? `৳${tx.debit.toLocaleString()} (-)` : '-'}</TableCell>
+                        <TableCell className="text-right font-black text-slate-900">৳{tx.balance.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+              {filteredData.map((tx: any, idx: number) => (
+                <Card 
+                  key={idx} 
+                  className={cn(
+                    "border-none shadow-sm rounded-2xl overflow-hidden bg-white border-l-4",
+                    tx.txType === 'income' ? "border-l-success" : "border-l-destructive"
+                  )}
+                >
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        <div className={cn("p-2 rounded-lg", tx.txType === 'income' ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
+                          {tx.txType === 'income' ? <ArrowUpCircle size={18}/> : <ArrowDownCircle size={18}/>}
+                        </div>
+                        <h3 className="font-black text-slate-800 leading-tight truncate max-w-[150px]">
+                          {tx.studentName || tx.category || "General"}
+                        </h3>
+                      </div>
+                      <Badge variant="outline" className={cn(
+                        "text-[8px] font-black uppercase",
+                        tx.txType === 'income' ? "text-success border-success/20 bg-success/5" : "text-destructive border-destructive/20 bg-destructive/5"
+                      )}>
+                        {tx.txType}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 bg-secondary/30 p-3 rounded-xl border border-secondary">
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Transaction Info</p>
+                        <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-700">
+                          <Calendar size={10} className="text-primary"/> {formatCompactDate(tx.date)}
+                        </div>
+                      </div>
+                      <div className="space-y-1 text-right">
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Type Sum</p>
+                        <p className={cn("text-xs font-black", tx.txType === 'income' ? "text-success" : "text-destructive")}>
+                          {tx.txType === 'income' ? `৳${tx.credit.toLocaleString()} (+)` : `৳${tx.debit.toLocaleString()} (-)`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-1 border-t border-dashed flex justify-between items-center">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase">
+                        <History size={12}/> Running Balance
+                      </div>
+                      <p className="text-lg font-black text-primary">৳{tx.balance.toLocaleString()}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {filteredData.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground italic">No transactions match filters.</div>
+              )}
+            </div>
+          </>
         )}
       </div>
 

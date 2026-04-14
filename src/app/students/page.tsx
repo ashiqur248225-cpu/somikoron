@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Building2, Loader2, Eye, Printer, Filter, RotateCcw } from "lucide-react"
+import { Users, Search, Building2, Loader2, Eye, Printer, Filter, RotateCcw, Smartphone, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
@@ -50,7 +50,6 @@ export default function StudentsPage() {
   }, [db, userBranch])
   const { data: students, isLoading } = useCollection(studentsQuery)
 
-  // Extract unique rooms from current students for dropdown
   const uniqueRooms = useMemo(() => {
     if (!students) return []
     const rooms = Array.from(new Set(students.map(s => s.roomNumber))).filter(Boolean).sort()
@@ -161,16 +160,112 @@ export default function StudentsPage() {
         {isLoading ? (
           <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
         ) : (
-          <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl">
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-secondary/30"><TableRow><TableHead>Student</TableHead><TableHead>Location</TableHead><TableHead>Monthly Rent</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
-                <TableBody>{processedStudents.map((s: any) => (
-                  <TableRow key={s.id} className="cursor-pointer hover:bg-slate-50/50" onClick={() => router.push(`/students/${s.id}`)}><TableCell><div className="font-bold">{s.name}</div><div className="text-[10px] text-muted-foreground">{s.phone}</div></TableCell><TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell><TableCell className="font-black text-slate-700">৳{s.monthlyRent?.toLocaleString()}</TableCell><TableCell className="text-right"><Button variant="ghost" size="icon"><Eye size={16}/></Button></TableCell></TableRow>
-                ))}</TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <>
+            {/* Desktop Table View */}
+            <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader className="bg-secondary/30">
+                    <TableRow>
+                      <TableHead>Student</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Monthly Rent</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {processedStudents.map((s: any) => (
+                      <TableRow 
+                        key={s.id} 
+                        className="cursor-pointer hover:bg-slate-50/50" 
+                        onClick={() => router.push(`/students/${s.id}`)}
+                      >
+                        <TableCell>
+                          <div className="font-bold text-slate-800">{s.name}</div>
+                          <div className="text-[10px] text-muted-foreground flex items-center gap-1"><Smartphone size={10}/> {s.phone}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs font-medium text-slate-600">{s.buildingName}</div>
+                          <div className="text-[10px] text-muted-foreground uppercase font-bold">Room {s.roomNumber}</div>
+                        </TableCell>
+                        <TableCell className="font-black text-slate-700">৳{s.monthlyRent?.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn("text-[9px] uppercase font-bold", s.paymentSystem === 'package' ? "text-primary border-primary/20" : "text-orange-600 border-orange-200")}>
+                            {s.paymentSystem}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={cn("text-[9px] font-black uppercase rounded-full", s.isActive ? "bg-success" : "bg-destructive")}>
+                            {s.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-primary">
+                            <Eye size={16}/>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+              {processedStudents.map((s: any) => (
+                <Card 
+                  key={s.id} 
+                  className="border-none shadow-sm rounded-2xl overflow-hidden bg-white group active:scale-[0.98] transition-transform"
+                  onClick={() => router.push(`/students/${s.id}`)}
+                >
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black uppercase text-xs">
+                          {s.name.substring(0, 2)}
+                        </div>
+                        <div>
+                          <h3 className="font-black text-slate-800 leading-tight">{s.name}</h3>
+                          <p className="text-[10px] text-muted-foreground font-bold flex items-center gap-1 mt-0.5"><Smartphone size={10}/> {s.phone}</p>
+                        </div>
+                      </div>
+                      <Badge className={cn("text-[8px] font-black uppercase rounded-full", s.isActive ? "bg-success" : "bg-destructive")}>
+                        {s.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 bg-secondary/30 p-3 rounded-xl border border-secondary">
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Location</p>
+                        <div className="flex items-center gap-1 text-[10px] font-black text-slate-700">
+                          <Building2 size={10} className="text-primary"/> {s.buildingName} • R-{s.roomNumber}
+                        </div>
+                      </div>
+                      <div className="space-y-1 text-right">
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Monthly Rent</p>
+                        <p className="text-xs font-black text-slate-900">৳{s.monthlyRent?.toLocaleString()}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-1">
+                      <Badge variant="secondary" className="text-[8px] font-black uppercase bg-primary/5 text-primary border-none">
+                        {s.paymentSystem} PLAN
+                      </Badge>
+                      <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold uppercase gap-1 text-primary">
+                        View Profile <ChevronRight size={12}/>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {processedStudents.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground italic">No students found matching filters.</div>
+              )}
+            </div>
+          </>
         )}
       </div>
 
