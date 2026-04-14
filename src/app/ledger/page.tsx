@@ -276,12 +276,17 @@ export default function LedgerPage() {
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Filter Ledger</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-1.5"><Label>Quick Search</Label><Input placeholder="Name, category or notes..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>TX Type</Label><Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Types</SelectItem><SelectItem value="income">Income Only</SelectItem><SelectItem value="expense">Expense Only</SelectItem></SelectContent></Select></div>
               <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
-            <div className="space-y-1.5"><Label>Date Threshold</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
+            <div className="space-y-1.5">
+              <Label>Date Range (From date to To date)</Label>
+              <div className="flex gap-2">
+                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+              </div>
+            </div>
           </div>
           <DialogFooter className="flex gap-2">
             <Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button>
