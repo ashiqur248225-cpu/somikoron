@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeftRight, Search, Plus, Loader2, ArrowRight, Wallet, History, ArrowUpRight, ArrowDownRight } from "lucide-react"
+import { ArrowLeftRight, Search, Plus, Loader2, ArrowRight, Wallet, History, ArrowUpRight, ArrowDownRight, Filter, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { 
   Dialog, 
@@ -44,10 +44,15 @@ export default function TransfersPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
+
+  // Date Filter State - Defaults to current month
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -68,18 +73,24 @@ export default function TransfersPage() {
 
   const transfersQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "transfers"), where("branch", "==", userBranch), limit(200))
+    return query(collection(db, "transfers"), where("branch", "==", userBranch), limit(500))
   }, [db, userBranch])
   const { data: rawTransfers, isLoading } = useCollection(transfersQuery)
 
-  const sortedTransfers = useMemo(() => {
+  const filteredTransfers = useMemo(() => {
     if (!rawTransfers) return []
-    return [...rawTransfers].sort((a, b) => {
+    
+    return rawTransfers.filter(t => {
+      const tDate = t.date?.toDate ? t.date.toDate() : (t.date ? new Date(t.date) : new Date(0))
+      const matchesStartDate = !startDate || tDate >= new Date(startDate)
+      const matchesEndDate = !endDate || tDate <= new Date(new Date(endDate).setHours(23, 59, 59))
+      return matchesStartDate && matchesEndDate
+    }).sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate() : (a.date ? new Date(a.date) : new Date(0))
       const dateB = b.date?.toDate ? b.date.toDate() : (b.date ? new Date(b.date) : new Date(0))
       return dateB.getTime() - dateA.getTime()
     })
-  }, [rawTransfers])
+  }, [rawTransfers, startDate, endDate])
 
   const handleCreate = async () => {
     if (!formData.amount || !formData.senderId || !formData.receiverId) {
@@ -147,6 +158,11 @@ export default function TransfersPage() {
     }
   }
 
+  const handleReset = () => {
+    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+    setEndDate(new Date().toISOString().split('T')[0])
+  }
+
   return (
     <div className="space-y-8 pb-20">
       {/* Sticky App Bar */}
@@ -161,11 +177,15 @@ export default function TransfersPage() {
         </div>
         
         <div className="ml-auto flex items-center gap-3">
+          <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={() => setIsFilterDialogOpen(true)}>
+            <Filter size={16} /> <span className="hidden sm:inline">Filter</span>
+          </Button>
+          
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="gap-2"><Plus size={18} /> <span className="hidden sm:inline">New Transfer</span></Button>
+              <Button size="sm" className="gap-2 h-10 rounded-xl font-bold"><Plus size={18} /> <span className="hidden sm:inline">New Transfer</span></Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md rounded-3xl">
               <DialogHeader><DialogTitle>Record Fund Movement</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -211,7 +231,7 @@ export default function TransfersPage() {
                   <Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Reason for transfer..." />
                 </div>
 
-                <Button onClick={handleCreate} disabled={isSubmitting} className="w-full h-12 font-bold text-lg">
+                <Button onClick={handleCreate} disabled={isSubmitting} className="w-full h-12 font-bold text-lg rounded-2xl">
                   {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Confirm & Save Transfer"}
                 </Button>
               </div>
@@ -227,6 +247,26 @@ export default function TransfersPage() {
           </Link>
         </div>
       </div>
+
+      {/* FILTER DIALOG */}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader><DialogTitle>Filter Transfers</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Date Range (From date to To date)</Label>
+              <div className="flex gap-2">
+                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50" />
+                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filter</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
@@ -245,7 +285,7 @@ export default function TransfersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedTransfers?.map((t) => (
+                  {filteredTransfers?.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="text-xs font-bold text-slate-500">
                         {t.date?.toDate ? t.date.toDate().toLocaleDateString() : 'Processing'}
@@ -272,7 +312,7 @@ export default function TransfersPage() {
 
           {/* Cards for Mobile */}
           <div className="md:hidden space-y-4">
-            {sortedTransfers?.map((t) => (
+            {filteredTransfers?.map((t) => (
               <Card key={t.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start">
@@ -309,8 +349,8 @@ export default function TransfersPage() {
                 </CardContent>
               </Card>
             ))}
-            {sortedTransfers?.length === 0 && (
-              <div className="text-center py-12 text-muted-foreground italic">No transfers found.</div>
+            {filteredTransfers?.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground italic">No transfers found for selected period.</div>
             )}
           </div>
         </>
