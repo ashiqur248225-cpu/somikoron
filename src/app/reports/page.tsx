@@ -97,6 +97,8 @@ export default function ReportsPage() {
     const totalIncome = filteredData.income.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     const totalExpense = filteredData.expense.reduce((acc, curr) => acc + (curr.amount || 0), 0)
     const netProfit = totalIncome - totalExpense
+    
+    // Efficiency
     const totalEfficiency = totalExpense > 0 ? (totalIncome / totalExpense) * 100 : (totalIncome > 0 ? 100 : 0)
     
     // Occupancy
@@ -254,32 +256,164 @@ export default function ReportsPage() {
 
       <div className="print:hidden space-y-8">
         <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden"><CardHeader className="pb-2 flex flex-row items-center justify-between"><CardTitle className="text-[10px] font-bold uppercase text-success">Total Income</CardTitle><ArrowUpRight className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-2xl font-black">৳{stats.totalIncome.toLocaleString()}</div></CardContent></Card>
-          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden"><CardHeader className="pb-2 flex flex-row items-center justify-between"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Expenses</CardTitle><ArrowDownRight className="h-4 w-4 text-destructive" /></CardHeader><CardContent><div className="text-2xl font-black">৳{stats.totalExpense.toLocaleString()}</div></CardContent></Card>
-          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-primary rounded-2xl overflow-hidden"><CardHeader className="pb-2 flex flex-row items-center justify-between"><CardTitle className="text-[10px] font-bold uppercase text-primary">Net Result</CardTitle><Calculator className="h-4 w-4 text-primary" /></CardHeader><CardContent><div className={cn("text-2xl font-black", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>৳{Math.abs(stats.netProfit).toLocaleString()}</div></CardContent></Card>
-          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-orange-500 rounded-2xl overflow-hidden"><CardHeader className="pb-2 flex flex-row items-center justify-between"><CardTitle className="text-[10px] font-bold uppercase text-orange-600">Occupancy</CardTitle><Building2 className="h-4 w-4 text-orange-600" /></CardHeader><CardContent><div className="text-2xl font-black">{stats.occupancyRate.toFixed(1)}%</div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden group hover:shadow-md transition-all"><CardHeader className="pb-2 flex flex-row items-center justify-between"><CardTitle className="text-[10px] font-bold uppercase text-success">Total Income</CardTitle><ArrowUpRight className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-2xl font-black">৳{stats.totalIncome.toLocaleString()}</div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden group hover:shadow-md transition-all"><CardHeader className="pb-2 flex flex-row items-center justify-between"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Expenses</CardTitle><ArrowDownRight className="h-4 w-4 text-destructive" /></CardHeader><CardContent><div className="text-2xl font-black">৳{stats.totalExpense.toLocaleString()}</div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-primary rounded-2xl overflow-hidden group hover:shadow-md transition-all"><CardHeader className="pb-2 flex flex-row items-center justify-between"><CardTitle className="text-[10px] font-bold uppercase text-primary">Net Result</CardTitle><Calculator className="h-4 w-4 text-primary" /></CardHeader><CardContent><div className={cn("text-2xl font-black", stats.netProfit >= 0 ? "text-primary" : "text-destructive")}>৳{Math.abs(stats.netProfit).toLocaleString()}</div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-orange-500 rounded-2xl overflow-hidden group hover:shadow-md transition-all"><CardHeader className="pb-2 flex flex-row items-center justify-between"><CardTitle className="text-[10px] font-bold uppercase text-orange-600">Occupancy</CardTitle><Building2 className="h-4 w-4 text-orange-600" /></CardHeader><CardContent><div className="text-2xl font-black">{stats.occupancyRate.toFixed(1)}%</div></CardContent></Card>
         </div>
 
-        <div className="grid gap-8 grid-cols-1 lg:grid-cols-3">
-          <Card className="rounded-3xl border-none shadow-sm overflow-hidden flex flex-col justify-center items-center p-8 bg-white"><div className="text-5xl font-black text-slate-800">{stats.healthScore}%</div><p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mt-2">Overall Hostel Health</p></Card>
-          <Card className="lg:col-span-2 rounded-3xl border-none shadow-sm overflow-hidden bg-white"><CardHeader><CardTitle className="text-lg font-bold flex items-center gap-2"><TrendingUp size={20} className="text-primary"/> Financial Trend</CardTitle></CardHeader>
-            <CardContent className="h-[250px] pt-4">
+        {/* HOSTEL HEALTH SUMMARY SECTION */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <Card className="rounded-3xl border-none shadow-sm overflow-hidden flex flex-col justify-center items-center p-8 bg-white group hover:shadow-md transition-all">
+            <div className="text-5xl font-black text-slate-800">{stats.healthScore}%</div>
+            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mt-2">Overall Hostel Health</p>
+            <div className="w-full mt-6 space-y-4">
+              <div className="flex justify-between items-center px-4 py-3 bg-slate-50 rounded-2xl">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Total Efficiency</span>
+                <span className="font-black text-primary">{stats.totalEfficiency.toFixed(1)}%</span>
+              </div>
+              <div className="flex justify-between items-center px-4 py-3 bg-slate-50 rounded-2xl">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">High Cost Area</span>
+                <Badge variant="outline" className="text-[9px] font-black border-destructive text-destructive">{stats.highCostCategory?.name || 'N/A'}</Badge>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="lg:col-span-2 rounded-3xl border-none shadow-sm overflow-hidden bg-white">
+            <CardHeader className="bg-slate-50/50 border-b">
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <TrendingUpIcon size={20} className="text-primary"/> Financial Trend
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="h-[250px] pt-6">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stats.trendData}><XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} /><YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `৳${val/1000}k`} /><Tooltip /><Area type="monotone" dataKey="income" stroke="#296EB3" strokeWidth={3} fillOpacity={0.1} fill="#296EB3" /><Area type="monotone" dataKey="expense" stroke="#F06A6A" strokeWidth={3} fillOpacity={0.1} fill="#F06A6A" /></AreaChart>
+                <AreaChart data={stats.trendData}>
+                  <defs>
+                    <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#296EB3" stopOpacity={0.1}/><stop offset="95%" stopColor="#296EB3" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#F06A6A" stopOpacity={0.1}/><stop offset="95%" stopColor="#F06A6A" stopOpacity={0}/></linearGradient>
+                  </defs>
+                  <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
+                  <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `৳${val/1000}k`} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="income" stroke="#296EB3" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" />
+                  <Area type="monotone" dataKey="expense" stroke="#F06A6A" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
+                </AreaChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         </div>
+
+        {/* CHARTS SECTION */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Expense Breakdown Pie Chart */}
+          <Card className="rounded-3xl border-none shadow-sm overflow-hidden bg-white">
+            <CardHeader className="bg-slate-50/50 border-b">
+              <CardTitle className="text-lg font-bold flex items-center gap-2"><PieChartIcon size={20} className="text-primary"/> Expense Breakdown</CardTitle>
+              <CardDescription>Category-wise spending analysis.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[350px] flex items-center justify-center pt-6">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={stats.expensesByCategory}
+                    cx="50%" cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {stats.expensesByCategory.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} strokeWidth={0} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => `৳${value.toLocaleString()}`} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Building Comparison Bar Chart */}
+          <Card className="rounded-3xl border-none shadow-sm overflow-hidden bg-white">
+            <CardHeader className="bg-slate-50/50 border-b">
+              <CardTitle className="text-lg font-bold flex items-center gap-2"><BarChart3 size={20} className="text-primary"/> Building Performance</CardTitle>
+              <CardDescription>Income vs Expense per building.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[350px] pt-6">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats.buildingComparison} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
+                  <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `৳${val/1000}k`} />
+                  <Tooltip formatter={(value: number) => `৳${value.toLocaleString()}`} />
+                  <Legend />
+                  <Bar dataKey="income" fill="#296EB3" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Bar dataKey="expense" fill="#F06A6A" radius={[4, 4, 0, 0]} barSize={20} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Loss Alerts */}
+        {stats.insights.length > 0 && (
+          <div className="space-y-3">
+            {stats.insights.map((insight, i) => (
+              <div key={i} className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-left-2">
+                <AlertCircle size={18} className="text-destructive shrink-0" />
+                <p className="text-sm font-bold text-red-800">{insight}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Building List Table */}
+        <Card className="border-none shadow-sm overflow-hidden bg-white rounded-3xl">
+          <CardHeader className="bg-slate-50/50 border-b">
+            <CardTitle className="text-lg font-bold flex items-center gap-2"><LayoutGrid size={20} className="text-primary"/> Building Comparison Matrix</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-50/50">
+                <TableRow>
+                  <TableHead className="font-bold">Building Name</TableHead>
+                  <TableHead className="text-right font-bold">Income</TableHead>
+                  <TableHead className="text-right font-bold">Expense</TableHead>
+                  <TableHead className="text-right font-bold">Efficiency</TableHead>
+                  <TableHead className="text-center font-bold">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stats.buildingComparison.map((b: any, idx: number) => (
+                  <TableRow key={idx}>
+                    <TableCell className="font-bold text-slate-700">{b.name}</TableCell>
+                    <TableCell className="text-right font-bold text-success">৳{b.income.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-bold text-destructive">৳{b.expense.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">{(b.income / (b.expense || 1)).toFixed(2)}x</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className={cn(
+                        "text-[9px] font-black uppercase",
+                        b.isLoss ? "border-destructive text-destructive bg-red-50" : "border-success text-success bg-green-50"
+                      )}>
+                        {b.isLoss ? 'Loss' : 'Profit'}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
 
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Report Parameters</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1.5"><Label>Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
+            <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
           </div>
-          <DialogFooter><Button onClick={() => setIsFilterDialogOpen(false)}>Apply</Button></DialogFooter>
+          <DialogFooter><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Search</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
