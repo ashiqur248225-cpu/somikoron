@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -123,7 +124,8 @@ export default function StudentsPage() {
                   {s.paymentSystem === 'non-package' ? `৳${s.foodBalance.toLocaleString()}` : '—'}
                 </td>
               </tr>
-            </tbody>
+            ))}
+          </tbody>
           <tfoot>
             <tr className="total-row">
               <td colSpan={4} className="text-right uppercase">Total Due Overview</td>
