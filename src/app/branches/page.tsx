@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -156,9 +155,7 @@ export default function BranchesPage() {
                       <TableCell><div className="flex items-center gap-3 font-bold text-primary"><MapPin size={18}/>{b.name}</div></TableCell>
                       <TableCell className="text-sm text-muted-foreground">{b.address}</TableCell>
                       <TableCell className="text-right">
-                        {userRole === 'Admin' && (
-                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(b.id)}><Trash2 size={16} /></Button>
-                        )}
+                        {/* Delete button removed as requested */}
                       </TableCell>
                     </TableRow>
                   ))}
