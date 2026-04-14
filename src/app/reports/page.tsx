@@ -1,15 +1,16 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
-  AreaChart, Area, XAxis, YAxis, Tooltip as RechartTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend, Tooltip
+  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend, Tooltip, ResponsiveContainer, XAxis, YAxis
 } from 'recharts';
 import { Badge } from "@/components/ui/badge"
 import { 
   Printer, Loader2, Building2, Filter, Calculator, 
-  ArrowUpRight, ArrowDownRight, TrendingUp, PieChart as PieChartIcon, BarChart3
+  ArrowUpRight, ArrowDownRight, TrendingUp, PieChart as PieChartIcon, BarChart3,
+  Lightbulb, AlertTriangle, CheckCircle2, Target, Zap, ShieldCheck
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -99,12 +100,38 @@ export default function ReportsPage() {
       name: b.name || 'General',
       income: b.income || 0,
       expense: b.expense || 0,
+      net: (b.income || 0) - (b.expense || 0),
       status: (b.income || 0) >= (b.expense || 0) ? 'Profit' : 'Loss'
     }))
 
-    const expensesByCategory = Object.entries(categoryMap).map(([name, value]) => ({ name: name.toUpperCase(), value }))
+    const expensesByCategory = Object.entries(categoryMap).map(([name, value]) => ({ 
+      name: name.toUpperCase(), 
+      value,
+      percentage: totalExpense > 0 ? ((value / totalExpense) * 100).toFixed(1) : 0
+    }))
 
-    return { totalIncome, totalExpense, buildingComparison, expensesByCategory }
+    // Advanced Intelligence Logic
+    const sortedCategories = [...expensesByCategory].sort((a, b) => b.value - a.value)
+    const topExpenseCategory = sortedCategories[0] || { name: 'None', value: 0, percentage: 0 }
+    
+    const sortedBuildingsByIncome = [...buildingComparison].sort((a, b) => b.income - a.income)
+    const topIncomeBuilding = sortedBuildingsByIncome[0] || { name: 'N/A', income: 0 }
+
+    const sortedBuildingsByExpense = [...buildingComparison].sort((a, b) => b.expense - a.expense)
+    const topExpenseBuilding = sortedBuildingsByExpense[0] || { name: 'N/A', expense: 0 }
+
+    const healthScore = totalIncome > 0 ? Math.min(100, Math.max(0, ((totalIncome - totalExpense) / totalIncome) * 100)) : 0
+
+    return { 
+      totalIncome, 
+      totalExpense, 
+      buildingComparison, 
+      expensesByCategory, 
+      topExpenseCategory,
+      topIncomeBuilding,
+      topExpenseBuilding,
+      healthScore
+    }
   }, [payments, expenses, startDate, endDate, buildingFilter])
 
   const handlePrint = () => { 
@@ -205,6 +232,113 @@ export default function ReportsPage() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+        </div>
+
+        {/* NEW INTELLIGENCE & STRATEGY SECTION (Added Below) */}
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <Separator className="opacity-50" />
+          <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight">
+            <Lightbulb className="text-primary" /> Strategic Intelligence Summary
+          </h2>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Health Score Card */}
+            <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden group hover:scale-[1.01] transition-transform">
+              <CardHeader className="bg-slate-900 text-white pb-6">
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-400">Financial Health Score</CardTitle>
+                  <ShieldCheck size={20} className="text-success" />
+                </div>
+                <div className="mt-4 flex items-end gap-3">
+                  <span className="text-5xl font-black">{stats?.healthScore.toFixed(0)}%</span>
+                  <Badge className={cn(
+                    "mb-2 font-bold",
+                    stats?.healthScore > 70 ? "bg-success" : (stats?.healthScore > 40 ? "bg-orange-500" : "bg-destructive")
+                  )}>
+                    {stats?.healthScore > 70 ? "Excellent" : (stats?.healthScore > 40 ? "Stable" : "Requires Attention")}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground">
+                    <span>Performance Rating</span>
+                    <span>Efficiency</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className={cn("h-full transition-all duration-1000", stats?.healthScore > 70 ? "bg-success" : "bg-primary")} 
+                      style={{ width: `${stats?.healthScore}%` }} 
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed italic">
+                  *Based on Net Profit Margin and Operating Efficiency for the selected period.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Insight Analysis Grid */}
+            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="border-none shadow-sm bg-white rounded-3xl p-6 border-t-4 border-t-destructive">
+                <div className="flex gap-4">
+                  <div className="h-12 w-12 rounded-2xl bg-destructive/10 flex items-center justify-center text-destructive shrink-0"><Zap size={24}/></div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Main Cost Driver</p>
+                    <h3 className="text-lg font-black text-slate-800 capitalize">{stats?.topExpenseCategory.name}</h3>
+                    <p className="text-sm text-slate-600 font-medium">
+                      Accounts for <span className="text-destructive font-black">{stats?.topExpenseCategory.percentage}%</span> of your total spending.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="border-none shadow-sm bg-white rounded-3xl p-6 border-t-4 border-t-success">
+                <div className="flex gap-4">
+                  <div className="h-12 w-12 rounded-2xl bg-success/10 flex items-center justify-center text-success shrink-0"><Target size={24}/></div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Revenue Leader</p>
+                    <h3 className="text-lg font-black text-slate-800">{stats?.topIncomeBuilding.name}</h3>
+                    <p className="text-sm text-slate-600 font-medium">
+                      Highest contributing location with <span className="text-success font-black">৳{stats?.topIncomeBuilding.income.toLocaleString()}</span> collection.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="border-none shadow-sm bg-white rounded-3xl p-6 border-t-4 border-t-primary">
+                <div className="flex gap-4">
+                  <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0"><BarChart3 size={24}/></div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">High Expense Property</p>
+                    <h3 className="text-lg font-black text-slate-800">{stats?.topExpenseBuilding.name}</h3>
+                    <p className="text-sm text-slate-600 font-medium">
+                      Consumption leader at <span className="text-primary font-black">৳{stats?.topExpenseBuilding.expense.toLocaleString()}</span>. Monitor utility usage here.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="border-none shadow-sm bg-slate-50 rounded-3xl p-6 border-dashed border-2 border-slate-200">
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                    <Lightbulb size={12} className="text-orange-500" /> Growth Recommendation
+                  </p>
+                  <p className="text-xs font-bold text-slate-700 leading-relaxed">
+                    {stats?.healthScore < 50 
+                      ? `Your expenses are high relative to income. Focus on reducing ${stats?.topExpenseCategory.name} or reviewing building rents.`
+                      : `Performance is strong. Consider optimizing vacant seats in ${stats?.topExpenseBuilding.name} to maximize revenue.`
+                    }
+                  </p>
+                  <div className="pt-2">
+                    <Button variant="link" className="p-0 h-auto text-[10px] font-black uppercase text-primary" asChild>
+                      <Link href="/buildings">Improve Occupancy &rarr;</Link>
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
         </div>
       </div>
 
