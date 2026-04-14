@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, serverTimestamp, doc, updateDoc, arrayUnion, increment, writeBatch, query, where } from "firebase/firestore"
+import { collection, serverTimestamp, doc, updateDoc, arrayUnion, increment, writeBatch, query, where, setDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,6 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
@@ -64,6 +65,12 @@ export default function BulkMealEntryPage() {
   const mealConfigRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
   const { data: mealConfig } = useDoc(mealConfigRef)
 
+  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
+  const { data: templatesData } = useDoc(templatesRef)
+  
+  const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
+  const { data: apiConfig } = useDoc(apiConfigRef)
+
   const filteredStudents = useMemo(() => {
     if (!students) return []
     return students.filter(s => 
@@ -79,6 +86,7 @@ export default function BulkMealEntryPage() {
     const batch = writeBatch(db);
     const mealRate = Number(mealConfig.rate);
     const monthLabel = `${mealLogFilter.month} ${mealLogFilter.year}`;
+    const updatedRecords: any[] = [];
 
     try {
       filteredStudents.forEach(s => {
@@ -99,10 +107,59 @@ export default function BulkMealEntryPage() {
           foodDueAmount: increment(-totalCost),
           updatedAt: serverTimestamp()
         });
+
+        updatedRecords.push({ student: s, count, bill: totalCost });
       });
 
       await batch.commit();
-      toast({ title: "Bulk Entries Submitted", description: "Student balances updated successfully." });
+
+      // SMS NOTIFICATION LOGIC
+      if (apiConfig?.apikey && updatedRecords.length > 0) {
+        const template = templatesData?.templates?.find((t: any) => t.id === 'meal_summary')?.text || 
+                         "প্রিয় [নাম], [মাস] মাসে আপনি মোট [meal_count] টি meal গ্রহণ করেছেন। মোট খাবার বিল ৳[meal_bill]। ধন্যবাদ। [Hostel Name]";
+        
+        for (const item of updatedRecords) {
+          const s = item.student;
+          const count = item.count;
+          const bill = item.bill;
+          
+          // Calculate new estimated balance for SMS
+          const currentFoodDue = Number(s.foodDueAmount || 0);
+          const newFoodVal = currentFoodDue - bill;
+          const foodBalance = newFoodVal > 0 ? newFoodVal : 0;
+          const foodDue = newFoodVal < 0 ? Math.abs(newFoodVal) : 0;
+
+          const msg = template
+            .replaceAll('[নাম]', s.name)
+            .replaceAll('[মাস]', monthLabel)
+            .replaceAll('[meal_count]', count.toString())
+            .replaceAll('[meal_rate]', mealRate.toString())
+            .replaceAll('[meal_bill]', bill.toString())
+            .replaceAll('[food_balance]', foodBalance.toString())
+            .replaceAll('[food_due]', foodDue.toString())
+            .replaceAll('[রুম]', s.roomNumber || '')
+            .replaceAll('[building]', s.buildingName || '')
+            .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
+
+          // Trigger Send
+          const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg);
+          
+          // Log to Firestore
+          const logId = doc(collection(db, "smsLogs")).id;
+          await setDoc(doc(db, "smsLogs", logId), {
+            id: logId,
+            to: s.phone,
+            message: msg,
+            branch: userBranch,
+            sentBy: userName,
+            status: smsResult.error === 0 ? 'Success' : 'Failed',
+            error: smsResult.error !== 0 ? smsResult.msg : null,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+
+      toast({ title: "Bulk Entries Submitted", description: "Student balances updated and SMS notifications sent." });
       router.push('/food-history');
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message });
