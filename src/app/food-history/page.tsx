@@ -100,7 +100,9 @@ export default function FoodHistoryPage() {
 
   const handlePrint = () => {
     if (typeof window !== "undefined") {
-      window.print();
+      setTimeout(() => {
+        window.print();
+      }, 500);
     }
   }
 
@@ -114,7 +116,7 @@ export default function FoodHistoryPage() {
           </Button>
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Daily Food History</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Food cost History</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
               Food cost analysis for <span className="font-bold text-foreground">{userBranch}</span>.
             </p>
@@ -265,7 +267,7 @@ export default function FoodHistoryPage() {
         <CardHeader className="bg-slate-50/50 border-b px-6 py-4">
           <div className="flex justify-between items-center">
             <CardTitle className="text-lg font-bold flex items-center gap-2">
-              <RefreshCw className="h-5 w-5 text-primary" /> Daily Cost breakdown
+              <RefreshCw className="h-5 w-5 text-primary" /> Cost breakdown
             </CardTitle>
             <Badge variant="outline" className="bg-white text-[10px] font-bold uppercase tracking-widest">{analytics.totalDays} Days Found</Badge>
           </div>
