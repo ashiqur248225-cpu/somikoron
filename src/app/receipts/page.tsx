@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, where, limit, getDocs, writeBatch, Timestamp, orderBy } from "firebase/firestore"
+import { collection, query, where, limit, getDocs, writeBatch, Timestamp, doc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
@@ -84,13 +84,12 @@ export default function ReceiptsHistoryPage() {
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
   }, [])
 
-  // FIXED: Added orderBy to ensure we fetch the most recent receipts
+  // FIXED: Removed orderBy to avoid composite index error. Sorting is now done client-side.
   const paymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(
       collection(db, "payments"), 
       where("branch", "==", userBranch),
-      orderBy("date", "desc"),
       limit(1000)
     )
   }, [db, userBranch])
@@ -117,6 +116,10 @@ export default function ReceiptsHistoryPage() {
       const matchesTime = timeView === 'all' || pDate >= today
       
       return matchesSearch && matchesStartDate && matchesEndDate && matchesMethod && matchesTime
+    }).sort((a, b) => {
+      const dateA = a.date?.toDate ? a.date.toDate().getTime() : new Date(a.date).getTime()
+      const dateB = b.date?.toDate ? b.date.toDate().getTime() : new Date(b.date).getTime()
+      return dateB - dateA
     })
   }, [payments, searchTerm, startDate, endDate, methodFilter, timeView])
 
