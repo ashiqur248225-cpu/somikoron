@@ -352,7 +352,7 @@ export default function SettingsPage() {
           </div>
           <Link href="/food-history">
             <Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg border-primary/20 text-primary font-bold">
-              <History size={14} /> Daily Food History
+              <History size={14} /> meals ret
             </Button>
           </Link>
         </CardHeader>
