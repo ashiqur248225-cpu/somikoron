@@ -57,9 +57,6 @@ export default function LedgerPage() {
   }, [db, userBranch])
   const { data: expenses, isLoading: eLoading } = useCollection(expensesQuery)
 
-  const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
-  const { data: templatesData } = useDoc(templatesRef)
-
   const rawLedgerData = useMemo(() => {
     const combined = [
       ...(payments || []).map(p => ({ ...p, txType: 'income', debit: 0, credit: p.amount })),
@@ -93,7 +90,13 @@ export default function LedgerPage() {
     return { income, expense, balance: income - expense, count: filteredData.length }
   }, [filteredData])
 
-  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+  const handlePrint = () => { 
+    if (typeof window !== "undefined") { 
+      setTimeout(() => {
+        window.print(); 
+      }, 500);
+    } 
+  }
 
   const handleExportCSV = () => {
     try {
@@ -111,7 +114,7 @@ export default function LedgerPage() {
   }
 
   return (
-    <div className="space-y-8 pb-20 print:p-0 w-full overflow-hidden">
+    <div className="space-y-8 pb-20 print:p-0 w-full">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -127,48 +130,6 @@ export default function LedgerPage() {
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
-
-      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Ledger</DialogTitle>
-            <DialogDescription>Track every transaction across your branch.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Search Entries</Label>
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Student, category, source..." className="pl-8 bg-slate-50" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Transaction Type</Label>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Both Income & Expense</SelectItem>
-                  <SelectItem value="income">Income Only</SelectItem>
-                  <SelectItem value="expense">Expense Only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Date Range</Label>
-              <div className="flex gap-2">
-                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50" />
-                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50" />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="flex gap-2 sm:justify-between">
-            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setSearchTerm(""); setTypeFilter("all"); setStartDate(""); setEndDate(""); }}>
-              <RotateCcw size={14}/> Reset
-            </Button>
-            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* OFFICIAL PRINT REPORT SECTION */}
       <div className="print-only print-report-container">
@@ -230,35 +191,35 @@ export default function LedgerPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:hidden">
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-success">Total Income</CardTitle>
-            <ArrowUpCircle className="h-4 w-4 text-success" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-slate-900">৳{stats.income.toLocaleString()}</div></CardContent>
-        </Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-destructive">Total Expense</CardTitle>
-            <ArrowDownCircle className="h-4 w-4 text-destructive" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-slate-900">৳{stats.expense.toLocaleString()}</div></CardContent>
-        </Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-primary rounded-2xl overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-primary">Closing Balance</CardTitle>
-            <Wallet className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-primary">৳{stats.balance.toLocaleString()}</div></CardContent>
-        </Card>
-      </div>
+      <div className="print:hidden space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs font-bold uppercase text-success">Total Income</CardTitle>
+              <ArrowUpCircle className="h-4 w-4 text-success" />
+            </CardHeader>
+            <CardContent><div className="text-2xl font-bold text-slate-900">৳{stats.income.toLocaleString()}</div></CardContent>
+          </Card>
+          <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs font-bold uppercase text-destructive">Total Expense</CardTitle>
+              <ArrowDownCircle className="h-4 w-4 text-destructive" />
+            </CardHeader>
+            <CardContent><div className="text-2xl font-bold text-slate-900">৳{stats.expense.toLocaleString()}</div></CardContent>
+          </Card>
+          <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-primary rounded-2xl overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs font-bold uppercase text-primary">Closing Balance</CardTitle>
+              <Wallet className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent><div className="text-2xl font-bold text-primary">৳{stats.balance.toLocaleString()}</div></CardContent>
+          </Card>
+        </div>
 
-      {(pLoading || eLoading) ? (
-        <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-      ) : (
-        <>
-          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
+        {(pLoading || eLoading) ? (
+          <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+        ) : (
+          <Card className="border-none shadow-sm overflow-hidden bg-white rounded-2xl">
             <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader className="bg-slate-50/50">
@@ -284,43 +245,22 @@ export default function LedgerPage() {
               </Table>
             </CardContent>
           </Card>
+        )}
+      </div>
 
-          <div className="md:hidden space-y-4 print:hidden">
-            {filteredData.map((tx: any) => (
-              <Card key={tx.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
-                <CardContent className="p-4 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(tx.date)}</p>
-                      <h3 className="font-bold text-slate-800 mt-1">{tx.studentName || tx.category}</h3>
-                    </div>
-                    <Badge className={cn("text-[8px] uppercase font-bold", tx.txType === 'income' ? "bg-success" : "bg-destructive")}>
-                      {tx.txType}
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-2.5 rounded-xl bg-secondary/30 border border-secondary">
-                      <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Transaction</p>
-                      <p className={cn("text-xs font-black", tx.txType === 'income' ? "text-success" : "text-destructive")}>
-                        {tx.txType === 'income' ? "+" : "-"} ৳{(tx.credit || tx.debit).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10">
-                      <p className="text-[9px] font-bold text-primary uppercase mb-1">Running Balance</p>
-                      <p className="text-xs font-black text-primary">৳{tx.balance?.toLocaleString()}</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] text-muted-foreground font-bold uppercase">
-                    <span className="flex items-center gap-1"><Wallet size={10} /> {tx.method}</span>
-                    <span>{tx.buildingName}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {filteredData.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No ledger entries found.</div>}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader><DialogTitle>Filter Ledger</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-1.5"><Label>Search</Label><Input placeholder="..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label>Type</Label><Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="income">Income</SelectItem><SelectItem value="expense">Expense</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Date Range</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
+            </div>
           </div>
-        </>
-      )}
+          <DialogFooter><Button onClick={() => setIsFilterDialogOpen(false)}>Apply</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

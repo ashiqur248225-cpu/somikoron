@@ -147,10 +147,17 @@ export default function IncomeHistoryPage() {
     }
   }
 
-  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+  const handlePrint = () => { 
+    if (typeof window !== "undefined") { 
+      // Add a delay to ensure everything is rendered before opening the print dialog
+      setTimeout(() => {
+        window.print(); 
+      }, 500);
+    } 
+  }
 
   return (
-    <div className="space-y-8 pb-20 print:p-0 w-full overflow-hidden">
+    <div className="space-y-8 pb-20 print:p-0 w-full">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -173,28 +180,6 @@ export default function IncomeHistoryPage() {
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
-
-      {/* Bulk Delete Dialog */}
-      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 /> Bulk Delete Payments</DialogTitle>
-            <DialogDescription>Documents within this range will be permanently removed.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Start Date</Label><Input type="date" value={deleteRange.start} onChange={e => setDeleteRange({...deleteRange, start: e.target.value})} /></div>
-              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">End Date</Label><Input type="date" value={deleteRange.end} onChange={e => setDeleteRange({...deleteRange, end: e.target.value})} /></div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteOpen(false)} className="rounded-xl">Cancel</Button>
-            <Button variant="destructive" onClick={handleBulkDelete} disabled={isDeleting} className="rounded-xl font-bold">
-              {isDeleting ? <Loader2 className="animate-spin" /> : "Execute Deletion"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* OFFICIAL PRINT REPORT SECTION */}
       <div className="print-only print-report-container">
@@ -252,6 +237,40 @@ export default function IncomeHistoryPage() {
         </div>
       </div>
 
+      <div className="print:hidden space-y-8">
+        {/* Main UI Cards */}
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-success">Total Filtered Income</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader>
+          <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
+        </Card>
+
+        {paymentsLoading ? (
+          <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+        ) : (
+          <>
+            <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-secondary/30"><TableRow><TableHead>Date</TableHead><TableHead>Student</TableHead><TableHead>Location</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+                  <TableBody>{filteredPayments.map((p: any) => (<TableRow key={p.id}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(p.date)}</TableCell><TableCell className="font-black text-slate-800">{p.studentName}</TableCell><TableCell className="text-xs text-muted-foreground">{p.buildingName} • R-{p.roomNumber}</TableCell><TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell><TableCell className="text-right font-black text-income">৳{p.amount?.toLocaleString()}</TableCell></TableRow>))}</TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+            <div className="md:hidden space-y-4">
+              {filteredPayments.map((p: any) => (
+                <Card key={p.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(p.date)}</p><h3 className="font-black text-slate-800 text-lg mt-1">{p.studentName}</h3></div><Badge variant="outline" className="uppercase font-bold text-[9px]">{p.method}</Badge></div>
+                    <div className="bg-secondary/30 p-3 rounded-xl border border-secondary flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-bold text-muted-foreground uppercase">Location</p><p className="text-xs font-bold text-slate-700">{p.buildingName} • R-{p.roomNumber}</p></div><div className="text-right"><p className="text-[10px] font-bold text-muted-foreground uppercase">Collected</p><p className="text-xl font-black text-income">৳{p.amount?.toLocaleString()}</p></div></div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Dialogs */}
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Income Records</DialogTitle></DialogHeader>
@@ -266,35 +285,26 @@ export default function IncomeHistoryPage() {
         </DialogContent>
       </Dialog>
 
-      <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden print:hidden">
-        <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-success">Total Filtered Income</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader>
-        <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
-      </Card>
-
-      {paymentsLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
-      ) : (
-        <>
-          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-secondary/30"><TableRow><TableHead>Date</TableHead><TableHead>Student</TableHead><TableHead>Location</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
-                <TableBody>{filteredPayments.map((p: any) => (<TableRow key={p.id}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(p.date)}</TableCell><TableCell className="font-black text-slate-800">{p.studentName}</TableCell><TableCell className="text-xs text-muted-foreground">{p.buildingName} • R-{p.roomNumber}</TableCell><TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell><TableCell className="text-right font-black text-income">৳{p.amount?.toLocaleString()}</TableCell></TableRow>))}</TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-          <div className="md:hidden space-y-4 print:hidden">
-            {filteredPayments.map((p: any) => (
-              <Card key={p.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
-                <CardContent className="p-4 space-y-4">
-                  <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(p.date)}</p><h3 className="font-black text-slate-800 text-lg mt-1">{p.studentName}</h3></div><Badge variant="outline" className="uppercase font-bold text-[9px]">{p.method}</Badge></div>
-                  <div className="bg-secondary/30 p-3 rounded-xl border border-secondary flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-bold text-muted-foreground uppercase">Location</p><p className="text-xs font-bold text-slate-700">{p.buildingName} • R-{p.roomNumber}</p></div><div className="text-right"><p className="text-[10px] font-bold text-muted-foreground uppercase">Collected</p><p className="text-xl font-black text-income">৳{p.amount?.toLocaleString()}</p></div></div>
-                </CardContent>
-              </Card>
-            ))}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 /> Bulk Delete Payments</DialogTitle>
+            <DialogDescription>Documents within this range will be permanently removed.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Start Date</Label><Input type="date" value={deleteRange.start} onChange={e => setDeleteRange({...deleteRange, start: e.target.value})} /></div>
+              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">End Date</Label><Input type="date" value={deleteRange.end} onChange={e => setDeleteRange({...deleteRange, end: e.target.value})} /></div>
+            </div>
           </div>
-        </>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={isDeleting} className="rounded-xl font-bold">
+              {isDeleting ? <Loader2 className="animate-spin" /> : "Execute Deletion"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

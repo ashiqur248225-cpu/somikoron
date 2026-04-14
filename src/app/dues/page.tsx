@@ -62,20 +62,13 @@ export default function DuesPage() {
   const processedData = useMemo(() => {
     if (!students) return []
     return students.map(s => {
-      // Persistent totalDue field from the DB (Rent only)
       const totalDueFromDB = s.totalDue || 0;
-
-      // foodDueAmount is now the direct "Net Balance" field
       const foodBalance = s.foodDueAmount || 0;
-
-      // The final display due is what's in the DB totalDue plus any negative food balance (debt)
       const displayTotalDue = totalDueFromDB + (foodBalance < 0 ? Math.abs(foodBalance) : 0);
-
       return { ...s, foodBalance, displayTotalDue, isPaid: displayTotalDue <= 0 }
     }).filter(s => {
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
       if (!matchesStatus) return false
-
       const search = searchTerm.toLowerCase()
       const matchesSearch = s.name.toLowerCase().includes(search) || (s.phone || "").includes(search)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
@@ -103,7 +96,13 @@ export default function DuesPage() {
     return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
   }, [buildings, buildingFilter])
 
-  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+  const handlePrint = () => { 
+    if (typeof window !== "undefined") { 
+      setTimeout(() => {
+        window.print(); 
+      }, 500);
+    } 
+  }
 
   const handleExportCSV = () => {
     try {
@@ -121,7 +120,7 @@ export default function DuesPage() {
   }
 
   return (
-    <div className="space-y-8 pb-20 print:p-0">
+    <div className="space-y-8 pb-20 w-full">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -137,63 +136,6 @@ export default function DuesPage() {
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
-
-      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Dues</DialogTitle>
-            <DialogDescription>Locate specific debts by student or property.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Search</Label>
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Name or phone..." className="pl-8 bg-slate-50" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Building</Label>
-                <Select value={buildingFilter} onValueChange={val => { setBuildingFilter(val); setRoomFilter("all"); }}>
-                  <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Buildings</SelectItem>
-                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room</Label>
-                <Select value={roomFilter} onValueChange={setRoomFilter}>
-                  <SelectTrigger className="bg-slate-50"><SelectValue placeholder="All" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Rooms</SelectItem>
-                    {availableRooms.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Resident Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="bg-slate-50"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Staying (Active)</SelectItem>
-                  <SelectItem value="left">Left Hostel (Inactive)</SelectItem>
-                  <SelectItem value="all">All Records</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter className="flex gap-2 sm:justify-between">
-            <Button variant="ghost" className="gap-2 font-bold text-xs" onClick={() => { setSearchTerm(""); setBuildingFilter("all"); setRoomFilter("all"); setStatusFilter("active"); }}>
-              <RotateCcw size={14}/> Reset
-            </Button>
-            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* OFFICIAL PRINT REPORT SECTION */}
       <div className="print-only print-report-container">
@@ -257,48 +199,56 @@ export default function DuesPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 grid-cols-1 md:grid-cols-3 print:hidden">
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Outstanding</CardTitle><TrendingUp className="h-4 w-4 text-destructive" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">৳{stats.totalDue.toLocaleString()}</div><p className="text-[10px] text-muted-foreground">Across {stats.count} accounts</p></CardContent></Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-success">Low Dues</CardTitle><UserCheck className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">{processedData.filter(s => s.displayTotalDue < 1000).length}</div></CardContent></Card>
-        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-orange-500 rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-orange-600">High Dues</CardTitle><UserMinus className="h-4 w-4 text-orange-600" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">{processedData.filter(s => s.displayTotalDue >= 5000).length}</div></CardContent></Card>
+      <div className="print:hidden space-y-8">
+        <div className="grid gap-6 grid-cols-1 md:grid-cols-3">
+          <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Outstanding</CardTitle><TrendingUp className="h-4 w-4 text-destructive" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">৳{stats.totalDue.toLocaleString()}</div><p className="text-[10px] text-muted-foreground">Across {stats.count} accounts</p></CardContent></Card>
+          <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-success">Low Dues</CardTitle><UserCheck className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">{processedData.filter(s => s.displayTotalDue < 1000).length}</div></CardContent></Card>
+          <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-orange-500 rounded-2xl"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-bold uppercase text-orange-600">High Dues</CardTitle><UserMinus className="h-4 w-4 text-orange-600" /></CardHeader><CardContent><div className="text-2xl font-black text-slate-900">{processedData.filter(s => s.displayTotalDue >= 5000).length}</div></CardContent></Card>
+        </div>
+
+        {studentsLoading ? (
+          <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+        ) : (
+          <>
+            <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader className="bg-secondary/30"><TableRow><TableHead>Resident</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Total Due</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+                  <TableBody>{processedData.map((s: any) => (<TableRow key={s.id}><TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone} {!s.isActive && <Badge variant="destructive" className="h-3 px-1 text-[7px]">LEFT</Badge>}</span></TableCell><TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell><TableCell className="text-right font-black text-destructive text-lg">৳{s.displayTotalDue.toLocaleString()}</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button></TableCell></TableRow>))}</TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+            <div className="md:hidden space-y-4">
+              {processedData.map((s: any) => (
+                <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div><h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3><p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p></div>
+                      <Badge variant={s.isActive ? "destructive" : "secondary"} className="text-[10px]">{s.isActive ? "Due" : "Left & Due"}</Badge>
+                    </div>
+                    <div className="bg-secondary/30 p-3 rounded-xl border border-secondary flex justify-between items-center"><span className="text-[10px] font-bold text-destructive uppercase">Total Outstanding</span><span className="text-xl font-black text-destructive">৳{s.displayTotalDue.toLocaleString()}</span></div>
+                    <Button variant="outline" className="w-full h-10 rounded-xl font-bold gap-2 text-xs" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} /> Profile</Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
-      {studentsLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
-      ) : (
-        <>
-          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-secondary/30"><TableRow><TableHead>Resident</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Total Due</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
-                <TableBody>{processedData.map((s: any) => (<TableRow key={s.id}><TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone} {!s.isActive && <Badge variant="destructive" className="h-3 px-1 text-[7px]">LEFT</Badge>}</span></TableCell><TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell><TableCell className="text-right font-black text-destructive text-lg">৳{s.displayTotalDue.toLocaleString()}</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button></TableCell></TableRow>))}</TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <div className="md:hidden space-y-4 print:hidden">
-            {processedData.map((s: any) => (
-              <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
-                <CardContent className="p-4 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3>
-                      <p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p>
-                    </div>
-                    <Badge variant={s.isActive ? "destructive" : "secondary"} className="text-[10px]">
-                      {s.isActive ? "Due" : "Left & Due"}
-                    </Badge>
-                  </div>
-                  <div className="bg-secondary/30 p-3 rounded-xl border border-secondary"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold text-muted-foreground uppercase">Property</span><span className="text-xs font-bold text-slate-700">{s.buildingName} • R-{s.roomNumber}</span></div><div className="flex justify-between items-center pt-2 border-t border-white/50"><span className="text-[10px] font-bold text-destructive uppercase">Total Outstanding</span><span className="text-xl font-black text-destructive">৳{s.displayTotalDue.toLocaleString()}</span></div></div>
-                  <div className="grid grid-cols-2 gap-2 text-[10px] font-medium text-slate-500"><p>Rent Due: ৳{(s.totalDue || 0).toLocaleString()}</p><p className={cn("text-right", s.foodBalance < 0 ? "text-destructive font-bold" : "text-success")}>Food Bal: ৳{s.foodBalance.toLocaleString()}</p></div>
-                  <Button variant="outline" className="w-full h-10 rounded-xl font-bold gap-2 text-xs" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} /> View Full Profile</Button>
-                </CardContent>
-              </Card>
-            ))}
-            {processedData.length === 0 && <div className="text-center py-12 text-muted-foreground italic text-sm">No accounts found.</div>}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader><DialogTitle>Filter Dues</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-1.5"><Label>Search</Label><Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="left">Left</SelectItem><SelectItem value="all">Both</SelectItem></SelectContent></Select></div>
+            </div>
           </div>
-        </>
-      )}
+          <DialogFooter><Button onClick={() => setIsFilterDialogOpen(false)}>Apply</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

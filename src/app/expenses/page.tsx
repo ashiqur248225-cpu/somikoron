@@ -164,10 +164,16 @@ export default function ExpenseHistoryPage() {
     }
   }
 
-  const handlePrint = () => { if (typeof window !== "undefined") { window.print(); } }
+  const handlePrint = () => { 
+    if (typeof window !== "undefined") { 
+      setTimeout(() => {
+        window.print(); 
+      }, 500);
+    } 
+  }
 
   return (
-    <div className="space-y-8 pb-20 print:p-0 w-full overflow-hidden">
+    <div className="space-y-8 pb-20 print:p-0 w-full">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -187,28 +193,6 @@ export default function ExpenseHistoryPage() {
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
-
-      {/* Bulk Delete Dialog */}
-      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 /> Bulk Delete Expenses</DialogTitle>
-            <DialogDescription>Permanently remove records by date range.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold">Start Date</Label><Input type="date" value={deleteRange.start} onChange={e => setDeleteRange({...deleteRange, start: e.target.value})} /></div>
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold">End Date</Label><Input type="date" value={deleteRange.end} onChange={e => setDeleteRange({...deleteRange, end: e.target.value})} /></div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteOpen(false)} className="rounded-xl">Cancel</Button>
-            <Button variant="destructive" onClick={handleBulkDelete} disabled={isDeleting} className="rounded-xl font-bold">
-              {isDeleting ? <Loader2 className="animate-spin" /> : "Delete Selected"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* OFFICIAL PRINT REPORT SECTION */}
       <div className="print-only print-report-container">
@@ -266,6 +250,37 @@ export default function ExpenseHistoryPage() {
         </div>
       </div>
 
+      <div className="print:hidden space-y-8">
+        <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-destructive">Total Filtered Expense</CardTitle><ArrowDownCircle className="h-4 w-4 text-destructive" /></CardHeader>
+          <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
+        </Card>
+
+        {expensesLoading ? (
+          <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+        ) : (
+          <>
+            <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-secondary/30"><TableRow><TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Spent By</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+                  <TableBody>{filteredExpenses.map((e: any) => (<TableRow key={e.id} className="cursor-pointer" onClick={() => router.push(`/expenses/${e.id}`)}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(e.expenseDate)}</TableCell><TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell><TableCell className="font-bold text-slate-700">{e.expensePartyName}</TableCell><TableCell className="text-right font-black text-expense">৳{e.amount?.toLocaleString()}</TableCell></TableRow>))}</TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+            <div className="md:hidden space-y-4">
+              {filteredExpenses.map((e: any) => (
+                <Card key={e.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/expenses/${e.id}`)}>
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(e.expenseDate)}</p><Badge variant="secondary" className="capitalize text-[10px] font-bold mt-1">{e.category}</Badge></div><div className="text-right"><p className="text-xl font-black text-expense">৳{e.amount?.toLocaleString()}</p></div></div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Filter className="text-primary" size={20}/> Filter Expenses</DialogTitle></DialogHeader>
@@ -279,35 +294,6 @@ export default function ExpenseHistoryPage() {
           <DialogFooter><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden print:hidden">
-        <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-destructive">Total Filtered Expense</CardTitle><ArrowDownCircle className="h-4 w-4 text-destructive" /></CardHeader>
-        <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
-      </Card>
-
-      {expensesLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
-      ) : (
-        <>
-          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl print:hidden">
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-secondary/30"><TableRow><TableHead>Date</TableHead><TableHead>Category</TableHead><TableHead>Spent By</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
-                <TableBody>{filteredExpenses.map((e: any) => (<TableRow key={e.id} className="cursor-pointer" onClick={() => router.push(`/expenses/${e.id}`)}><TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(e.expenseDate)}</TableCell><TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell><TableCell className="font-bold text-slate-700">{e.expensePartyName}</TableCell><TableCell className="text-right font-black text-expense">৳{e.amount?.toLocaleString()}</TableCell></TableRow>))}</TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-          <div className="md:hidden space-y-4 print:hidden">
-            {filteredExpenses.map((e: any) => (
-              <Card key={e.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/expenses/${e.id}`)}>
-                <CardContent className="p-4 space-y-4">
-                  <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(e.expenseDate)}</p><Badge variant="secondary" className="capitalize text-[10px] font-bold mt-1">{e.category}</Badge></div><div className="text-right"><p className="text-xl font-black text-expense">৳{e.amount?.toLocaleString()}</p></div></div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   )
 }
