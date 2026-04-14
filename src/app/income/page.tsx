@@ -49,8 +49,10 @@ export default function IncomeHistoryPage() {
   const [roomFilter, setRoomFilter] = useState("all")
   const [methodFilter, setMethodFilter] = useState("all")
   const [receiverFilter, setReceiverFilter] = useState("all")
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
+  
+  // Default to current month range
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -127,8 +129,8 @@ export default function IncomeHistoryPage() {
     setRoomFilter("all")
     setMethodFilter("all")
     setReceiverFilter("all")
-    setStartDate("")
-    setEndDate("")
+    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+    setEndDate(new Date().toISOString().split('T')[0])
   }
 
   return (
@@ -206,7 +208,7 @@ export default function IncomeHistoryPage() {
       <div className="print:hidden space-y-8">
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-success">Total Filtered Income</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader>
-          <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
+          <CardContent><div className="text-xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
         </Card>
 
         {paymentsLoading ? (

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -10,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Printer, Loader2, Building2, Filter, Calculator, 
   ArrowUpRight, ArrowDownRight, TrendingUp, PieChart as PieChartIcon, BarChart3,
-  Lightbulb, AlertTriangle, CheckCircle2, Target, Zap, ShieldCheck
+  Lightbulb, AlertTriangle, CheckCircle2, Target, Zap, ShieldCheck, RotateCcw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,15 +27,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 
 const COLORS = ['#296EB3', '#F06A6A', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#64748B'];
 
-const formatCompactDate = (date: any) => {
-  if (!date) return 'N/A'
-  const d = date?.toDate ? date.toDate() : new Date(date)
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
-}
-
 export default function ReportsPage() {
   const db = useFirestore()
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
+  
+  // Default to current month range
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
   const [buildingFilter, setBuildingFilter] = useState("all")
@@ -110,7 +105,6 @@ export default function ReportsPage() {
       percentage: totalExpense > 0 ? ((value / totalExpense) * 100).toFixed(1) : 0
     }))
 
-    // Advanced Intelligence Logic
     const sortedCategories = [...expensesByCategory].sort((a, b) => b.value - a.value)
     const topExpenseCategory = sortedCategories[0] || { name: 'None', value: 0, percentage: 0 }
     
@@ -138,6 +132,12 @@ export default function ReportsPage() {
     if (typeof window !== "undefined") { 
       setTimeout(() => { window.print(); }, 500);
     } 
+  }
+
+  const handleReset = () => {
+    setBuildingFilter("all")
+    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+    setEndDate(new Date().toISOString().split('T')[0])
   }
 
   if (pLoading || eLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
@@ -210,9 +210,9 @@ export default function ReportsPage() {
       {/* SCREEN VIEW (Preserved UI) */}
       <div className="print:hidden space-y-8">
         <div className="grid gap-6 grid-cols-1 sm:grid-cols-3">
-          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="pb-2 flex justify-between"><CardTitle className="text-[10px] font-bold uppercase text-success">Total Income</CardTitle><ArrowUpRight className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-2xl font-black">৳{stats?.totalIncome.toLocaleString()}</div></CardContent></Card>
-          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-destructive rounded-2xl"><CardHeader className="pb-2 flex justify-between"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Expenses</CardTitle><ArrowDownRight className="h-4 w-4 text-destructive" /></CardHeader><CardContent><div className="text-2xl font-black">৳{stats?.totalExpense.toLocaleString()}</div></CardContent></Card>
-          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-primary rounded-2xl"><CardHeader className="pb-2 flex justify-between"><CardTitle className="text-[10px] font-bold uppercase text-primary">Net Result</CardTitle><Calculator className="h-4 w-4 text-primary" /></CardHeader><CardContent><div className="text-2xl font-black">৳{(stats?.totalIncome - stats?.totalExpense).toLocaleString()}</div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="pb-2 flex justify-between"><CardTitle className="text-[10px] font-bold uppercase text-success">Total Income</CardTitle><ArrowUpRight className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-xl font-black">৳{stats?.totalIncome.toLocaleString()}</div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-destructive rounded-2xl"><CardHeader className="pb-2 flex justify-between"><CardTitle className="text-[10px] font-bold uppercase text-destructive">Total Expenses</CardTitle><ArrowDownCircle className="h-4 w-4 text-destructive" /></CardHeader><CardContent><div className="text-xl font-black">৳{stats?.totalExpense.toLocaleString()}</div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-primary rounded-2xl"><CardHeader className="pb-2 flex justify-between"><CardTitle className="text-[10px] font-bold uppercase text-primary">Net Result</CardTitle><Calculator className="h-4 w-4 text-primary" /></CardHeader><CardContent><div className="text-xl font-black">৳{(stats?.totalIncome - stats?.totalExpense).toLocaleString()}</div></CardContent></Card>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -234,7 +234,6 @@ export default function ReportsPage() {
           </Card>
         </div>
 
-        {/* NEW INTELLIGENCE & STRATEGY SECTION (Added Below) */}
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <Separator className="opacity-50" />
           <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight">
@@ -242,7 +241,6 @@ export default function ReportsPage() {
           </h2>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Health Score Card */}
             <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden group hover:scale-[1.01] transition-transform">
               <CardHeader className="bg-slate-900 text-white pb-6">
                 <div className="flex justify-between items-center">
@@ -278,7 +276,6 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
 
-            {/* Insight Analysis Grid */}
             <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="border-none shadow-sm bg-white rounded-3xl p-6 border-t-4 border-t-destructive">
                 <div className="flex gap-4">
@@ -349,7 +346,10 @@ export default function ReportsPage() {
             <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
           </div>
-          <DialogFooter><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Search</Button></DialogFooter>
+          <DialogFooter className="flex gap-2">
+            <Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Search</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

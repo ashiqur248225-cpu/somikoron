@@ -55,9 +55,11 @@ export default function ExpenseHistoryPage() {
   const [methodFilter, setMethodFilter] = useState("all")
   const [spentByFilter, setSpentByFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
+
+  // Default to current month range
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -114,8 +116,8 @@ export default function ExpenseHistoryPage() {
     setMethodFilter("all")
     setSpentByFilter("all")
     setSearchTerm("")
-    setStartDate("")
-    setEndDate("")
+    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+    setEndDate(new Date().toISOString().split('T')[0])
   }
 
   return (
@@ -184,7 +186,7 @@ export default function ExpenseHistoryPage() {
       <div className="print:hidden space-y-8">
         <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-destructive rounded-2xl overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-destructive">Total Filtered Expense</CardTitle><ArrowDownCircle className="h-4 w-4 text-destructive" /></CardHeader>
-          <CardContent><div className="text-3xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
+          <CardContent><div className="text-xl font-black text-slate-900">৳{stats.total.toLocaleString()}</div></CardContent>
         </Card>
 
         {expensesLoading ? (
