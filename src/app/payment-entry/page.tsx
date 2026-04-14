@@ -124,7 +124,7 @@ export default function PaymentEntryPage() {
       await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       
       const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
-      const targetLabel = `${paymentData.month} ${paymentData.year}`;
+      const targetLabel = `${formData.month} ${formData.year}`;
       let remainingRentPaid = seatPaid;
 
       if (currentDues[targetLabel] && remainingRentPaid > 0) {
