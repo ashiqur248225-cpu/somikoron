@@ -108,6 +108,12 @@ export default function StudentDetailsPage() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
+  // FILTERED STAFF FOR RECEIVER: Only Management
+  const managementStaff = useMemo(() => {
+    if (!staffList) return []
+    return staffList.filter(s => s.staffType === 'management' || !s.staffType)
+  }, [staffList])
+
   const [paymentData, setPaymentData] = useState({
     month: MONTHS[new Date().getMonth()],
     year: new Date().getFullYear().toString(),
@@ -536,7 +542,7 @@ export default function StudentDetailsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1"><Label>Method</Label><Select value={paymentData.method} onValueChange={v => setPaymentData({...paymentData, method: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
-              <div className="space-y-1"><Label>Receiver</Label><Select value={paymentData.receiver} onValueChange={v => setPaymentData({...paymentData, receiver: v})}><SelectTrigger><SelectValue placeholder="Staff"/></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1"><Label>Receiver</Label><Select value={paymentData.receiver} onValueChange={v => setPaymentData({...paymentData, receiver: v})}><SelectTrigger><SelectValue placeholder="Select Staff Member"/></SelectTrigger><SelectContent>{managementStaff?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
           </div>
           <DialogFooter><Button className="w-full h-14 rounded-2xl text-lg font-black" onClick={handlePaymentSubmit} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
@@ -635,9 +641,9 @@ export default function StudentDetailsPage() {
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase">Processed By</Label>
                     <Select value={exitStaff} onValueChange={setExitStaff}>
-                      <SelectTrigger className="bg-white h-11"><SelectValue placeholder="Staff Member" /></SelectTrigger>
+                      <SelectTrigger className="bg-white h-11"><SelectValue placeholder="Select Staff Member" /></SelectTrigger>
                       <SelectContent>
-                        {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                        {managementStaff?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>

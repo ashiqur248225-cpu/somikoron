@@ -98,6 +98,12 @@ export default function RegistrationsPage() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
+  // FILTERED STAFF FOR RECEIVER: Only Management
+  const managementStaff = useMemo(() => {
+    if (!staffList) return []
+    return staffList.filter(s => s.staffType === 'management' || !s.staffType)
+  }, [staffList])
+
   // Approval Form State
   const [approvalForm, setApprovalForm] = useState({
     monthlyRent: "",
@@ -676,7 +682,7 @@ export default function RegistrationsPage() {
                           <Select value={approvalForm.receiver} onValueChange={v => setApprovalForm({...approvalForm, receiver: v})}>
                             <SelectTrigger className="h-11"><SelectValue placeholder="Select Staff Member" /></SelectTrigger>
                             <SelectContent>
-                              {staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                              {managementStaff?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </div>
