@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, query, where, limit } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, query, where, limit, increment } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import Link from "next/link"
@@ -97,11 +97,12 @@ export default function TransfersPage() {
       const sender = staff?.find(s => s.id === formData.senderId)
       const receiver = staff?.find(s => s.id === formData.receiverId)
       const transferRef = doc(collection(db, "transfers"))
+      const transferAmount = Number(formData.amount)
       
       const transferData = {
         id: transferRef.id,
         branch: userBranch,
-        amount: Number(formData.amount),
+        amount: transferAmount,
         fromAccount: formData.fromAccount,
         toAccount: formData.toAccount,
         senderId: formData.senderId,
@@ -114,6 +115,27 @@ export default function TransfersPage() {
       }
 
       await setDoc(transferRef, transferData)
+
+      // Update Synchronized netBalance
+      const balanceRef = doc(db, "netBalance", userBranch);
+      const methodKeyMap: Record<string, string> = {
+        'cash': 'totalCash',
+        'bank': 'totalBank',
+        'bkash': 'totalBkash',
+        'nagad': 'totalNagad'
+      };
+      
+      const fromKey = methodKeyMap[formData.fromAccount];
+      const toKey = methodKeyMap[formData.toAccount];
+      
+      if (fromKey && toKey) {
+        await setDoc(balanceRef, {
+          branchId: userBranch,
+          [fromKey]: increment(-transferAmount),
+          [toKey]: increment(transferAmount),
+          lastUpdated: serverTimestamp()
+        }, { merge: true });
+      }
       
       toast({ title: "Success", description: "Transfer recorded successfully." })
       setFormData({ amount: "", fromAccount: "cash", toAccount: "bank", senderId: "", receiverId: "", description: "" })
