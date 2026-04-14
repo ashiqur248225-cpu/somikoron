@@ -13,7 +13,7 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Loader2, Printer, ArrowDownCircle, Filter, Trash2 } from "lucide-react"
+import { Loader2, Printer, ArrowDownCircle, Filter, Trash2, RotateCcw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -51,6 +51,8 @@ export default function ExpenseHistoryPage() {
   const [userName, setUserName] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
+  const [methodFilter, setMethodFilter] = useState("all")
+  const [spentByFilter, setSpentByFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -67,6 +69,12 @@ export default function ExpenseHistoryPage() {
   }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
+  const staffQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "staff"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: staffList } = useCollection(staffQuery)
+
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "expenses"), where("branch", "==", userBranch), limit(1000))
@@ -78,13 +86,15 @@ export default function ExpenseHistoryPage() {
     return rawExpenses.filter(e => {
       const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
       const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
+      const matchesMethod = methodFilter === "all" || e.method === methodFilter
+      const matchesSpentBy = spentByFilter === "all" || e.spentBy === spentByFilter || e.expensePartyName === spentByFilter
       const matchesSearch = (e.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) || (e.description || "").toLowerCase().includes(searchTerm.toLowerCase())
       const eDate = new Date(e.expenseDate)
       const matchesStartDate = !startDate || eDate >= new Date(startDate)
       const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
-      return matchesCategory && matchesBuilding && matchesSearch && matchesStartDate && matchesEndDate
+      return matchesCategory && matchesBuilding && matchesMethod && matchesSpentBy && matchesSearch && matchesStartDate && matchesEndDate
     }).sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime())
-  }, [rawExpenses, categoryFilter, buildingFilter, searchTerm, startDate, endDate])
+  }, [rawExpenses, categoryFilter, buildingFilter, methodFilter, spentByFilter, searchTerm, startDate, endDate])
 
   const stats = useMemo(() => {
     const total = filteredExpenses.reduce((acc, curr) => acc + (curr.amount || 0), 0)
@@ -95,6 +105,16 @@ export default function ExpenseHistoryPage() {
     if (typeof window !== "undefined") { 
       setTimeout(() => { window.print(); }, 500);
     } 
+  }
+
+  const handleReset = () => {
+    setCategoryFilter("all")
+    setBuildingFilter("all")
+    setMethodFilter("all")
+    setSpentByFilter("all")
+    setSearchTerm("")
+    setStartDate("")
+    setEndDate("")
   }
 
   return (
@@ -185,12 +205,19 @@ export default function ExpenseHistoryPage() {
           <DialogHeader><DialogTitle>Filter Expenses</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold">Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-1.5"><Label className="text-[10px] font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Categories</SelectItem>{EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
-            <div className="space-y-1.5"><Label className="text-[10px] font-bold">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label>Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Methods</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Spent By</Label><Select value={spentByFilter} onValueChange={setSpentByFilter}><SelectTrigger><SelectValue placeholder="Any Staff" /></SelectTrigger><SelectContent><SelectItem value="all">Any Staff</SelectItem>{staffList?.filter(s => s.staffType === 'management' || !s.staffType).map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+            <div className="space-y-1.5"><Label>Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
           </div>
-          <DialogFooter><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button></DialogFooter>
+          <DialogFooter className="flex gap-2">
+            <Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filter</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -64,6 +64,12 @@ export default function IncomeHistoryPage() {
   }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
+  const staffQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "staff"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: staffList } = useCollection(staffQuery)
+
   const incomeQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "payments"), where("branch", "==", userBranch), limit(1000))
@@ -77,7 +83,7 @@ export default function IncomeHistoryPage() {
       const matchesStartDate = !startDate || pDate >= new Date(startDate)
       const matchesEndDate = !endDate || pDate <= new Date(new Date(endDate).setHours(23, 59, 59))
       const matchesBuilding = buildingFilter === "all" || p.buildingId === buildingFilter
-      const matchesRoom = roomFilter === "all" || p.roomNumber === roomFilter
+      const matchesRoom = roomFilter === "all" || String(p.roomNumber) === roomFilter
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
       const matchesReceiver = receiverFilter === "all" || p.receiver === receiverFilter
       return matchesStartDate && matchesEndDate && matchesBuilding && matchesRoom && matchesMethod && matchesReceiver
@@ -114,6 +120,15 @@ export default function IncomeHistoryPage() {
     if (typeof window !== "undefined") { 
       setTimeout(() => { window.print(); }, 500);
     } 
+  }
+
+  const handleReset = () => {
+    setBuildingFilter("all")
+    setRoomFilter("all")
+    setMethodFilter("all")
+    setReceiverFilter("all")
+    setStartDate("")
+    setEndDate("")
   }
 
   return (
@@ -213,12 +228,16 @@ export default function IncomeHistoryPage() {
           <DialogHeader><DialogTitle>Filter Income</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Methods</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
             </div>
-            <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
+            <div className="space-y-1.5"><Label>Received By</Label><Select value={receiverFilter} onValueChange={setReceiverFilter}><SelectTrigger><SelectValue placeholder="Any Staff" /></SelectTrigger><SelectContent><SelectItem value="all">Any Staff</SelectItem>{staffList?.filter(s => s.staffType === 'management' || !s.staffType).map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
           </div>
-          <DialogFooter><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button></DialogFooter>
+          <DialogFooter className="flex gap-2">
+            <Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filter</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

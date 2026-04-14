@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Building2, Loader2, Eye, Printer, Filter } from "lucide-react"
+import { Users, Search, Building2, Loader2, Eye, Printer, Filter, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
@@ -26,6 +26,7 @@ export default function StudentsPage() {
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
+  const [roomFilter, setRoomFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
   const [planFilter, setPlanFilter] = useState("all")
   
@@ -49,6 +50,13 @@ export default function StudentsPage() {
   }, [db, userBranch])
   const { data: students, isLoading } = useCollection(studentsQuery)
 
+  // Extract unique rooms from current students for dropdown
+  const uniqueRooms = useMemo(() => {
+    if (!students) return []
+    const rooms = Array.from(new Set(students.map(s => s.roomNumber))).filter(Boolean).sort()
+    return rooms
+  }, [students])
+
   const processedStudents = useMemo(() => {
     if (!students) return []
     return students.map(s => {
@@ -60,16 +68,25 @@ export default function StudentsPage() {
     }).filter(s => {
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
+      const matchesRoom = roomFilter === "all" || String(s.roomNumber) === roomFilter
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
       const matchesPlan = planFilter === "all" || s.paymentSystem === planFilter
-      return matchesSearch && matchesBuilding && matchesStatus && matchesPlan
+      return matchesSearch && matchesBuilding && matchesRoom && matchesStatus && matchesPlan
     }).sort((a, b) => a.name.localeCompare(b.name))
-  }, [students, searchTerm, buildingFilter, statusFilter, planFilter])
+  }, [students, searchTerm, buildingFilter, roomFilter, statusFilter, planFilter])
 
   const handlePrint = () => { 
     if (typeof window !== "undefined") { 
       setTimeout(() => { window.print(); }, 500);
     } 
+  }
+
+  const handleReset = () => {
+    setSearchTerm("")
+    setBuildingFilter("all")
+    setRoomFilter("all")
+    setStatusFilter("active")
+    setPlanFilter("all")
   }
 
   return (
@@ -161,13 +178,20 @@ export default function StudentsPage() {
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Filter Students</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-1.5"><Label>Search</Label><Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Search</Label><Input placeholder="Name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Room No.</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Rooms</SelectItem>{uniqueRooms.map(r => <SelectItem key={r} value={String(r)}>Room {r}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="left">Left</SelectItem><SelectItem value="all">Both</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Plan Type</Label><Select value={planFilter} onValueChange={setPlanFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Plans</SelectItem><SelectItem value="package">Package</SelectItem><SelectItem value="non-package">Non-Package</SelectItem></SelectContent></Select></div>
             </div>
           </div>
-          <DialogFooter><Button onClick={() => setIsFilterDialogOpen(false)}>Apply</Button></DialogFooter>
+          <DialogFooter className="flex gap-2">
+            <Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filter</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

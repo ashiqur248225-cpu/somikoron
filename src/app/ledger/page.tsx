@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Printer, Filter, ArrowUpCircle, ArrowDownCircle, Wallet } from "lucide-react"
+import { Loader2, Printer, Filter, ArrowUpCircle, ArrowDownCircle, Wallet, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, where } from "firebase/firestore"
@@ -28,6 +28,7 @@ export default function LedgerPage() {
   const db = useFirestore()
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
+  const [buildingFilter, setBuildingFilter] = useState("all")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
@@ -39,6 +40,12 @@ export default function LedgerPage() {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
   }, [])
+
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: buildings } = useCollection(buildingsQuery)
 
   const paymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -71,12 +78,13 @@ export default function LedgerPage() {
       const matchesDate = (!startDate || txDate >= new Date(startDate)) && (!endDate || txDate <= new Date(new Date(endDate).setHours(23, 59, 59)))
       const matchesSearch = (tx.studentName || tx.expensePartyName || tx.category || "").toLowerCase().includes(searchTerm.toLowerCase())
       const matchesType = typeFilter === "all" || tx.txType === typeFilter
-      return matchesDate && matchesSearch && matchesType
+      const matchesBuilding = buildingFilter === "all" || tx.buildingId === buildingFilter
+      return matchesDate && matchesSearch && matchesType && matchesBuilding
     }).map(tx => {
       runningBalance += (tx.credit - tx.debit)
       return { ...tx, balance: runningBalance }
     }).reverse()
-  }, [rawLedgerData, searchTerm, typeFilter, startDate, endDate])
+  }, [rawLedgerData, searchTerm, typeFilter, buildingFilter, startDate, endDate])
 
   const stats = useMemo(() => {
     const income = filteredData.reduce((a, b) => a + b.credit, 0)
@@ -88,6 +96,14 @@ export default function LedgerPage() {
     if (typeof window !== "undefined") { 
       setTimeout(() => { window.print(); }, 500);
     } 
+  }
+
+  const handleReset = () => {
+    setSearchTerm("")
+    setTypeFilter("all")
+    setBuildingFilter("all")
+    setStartDate("")
+    setEndDate("")
   }
 
   return (
@@ -182,13 +198,17 @@ export default function LedgerPage() {
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Filter Ledger</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-1.5"><Label>Search</Label><Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Quick Search</Label><Input placeholder="Name, category or notes..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Type</Label><Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="income">Income</SelectItem><SelectItem value="expense">Expense</SelectItem></SelectContent></Select></div>
-              <div className="space-y-1.5"><Label>Date Range</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>TX Type</Label><Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Types</SelectItem><SelectItem value="income">Income Only</SelectItem><SelectItem value="expense">Expense Only</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
             </div>
+            <div className="space-y-1.5"><Label>Date Threshold</Label><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></div>
           </div>
-          <DialogFooter><Button onClick={() => setIsFilterDialogOpen(false)}>Apply</Button></DialogFooter>
+          <DialogFooter className="flex gap-2">
+            <Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filter</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
