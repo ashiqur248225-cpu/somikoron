@@ -55,17 +55,20 @@ export function AppSidebar() {
   const [userName, setUserName] = React.useState("")
   const [userBranch, setUserBranch] = React.useState("")
   const [authId, setAuthId] = React.useState("")
+  const [assignedBuildingId, setAssignedBuildingId] = React.useState("")
 
   React.useEffect(() => {
     const role = localStorage.getItem("user_role") || "Manager"
     const name = localStorage.getItem("user_name") || "User"
     const branch = localStorage.getItem("user_branch") || "Main Branch"
     const id = localStorage.getItem("somikoron_auth_id") || ""
+    const bId = localStorage.getItem("assigned_building_id") || "none"
     
     setUserRole(role)
     setUserName(name)
     setUserBranch(branch)
     setAuthId(id)
+    setAssignedBuildingId(bId)
   }, [])
 
   // Fetch current user's direct entry permissions
@@ -88,12 +91,17 @@ export function AppSidebar() {
     return students.filter(s => s.dob?.endsWith(todayStr)).length
   }, [students])
 
+  // Intelligent URL for Buildings based on role
+  const buildingsUrl = (userRole === 'Building Manager' && assignedBuildingId !== 'none') 
+    ? `/buildings/${assignedBuildingId}` 
+    : "/buildings";
+
   // Menu Definition with strict role access
   const items = [
     { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["Admin", "Branch Manager"] },
     { title: "Payment Entry", url: "/payment-entry", icon: PlusCircle, roles: ["Building Manager"] },
     { title: "Expense Entry", url: "/expense-entry", icon: Receipt, roles: ["Building Manager"] },
-    { title: "Buildings", url: "/buildings", icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Buildings", url: buildingsUrl, icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
     { title: "Manager Requests", url: "/manager-requests", icon: BellRing, roles: ["Admin", "Branch Manager"] },
