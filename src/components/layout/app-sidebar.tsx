@@ -32,15 +32,12 @@ import {
   SidebarMenuItem,
   SidebarGroup,
   SidebarFooter,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
 } from "@/components/ui/sidebar"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, where } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
+import { collection, query, where, doc } from "firebase/firestore"
 import {
   Select,
   SelectContent,
@@ -48,12 +45,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import { Badge } from "@/components/ui/badge"
 
 export function AppSidebar() {
   const pathname = usePathname()
@@ -63,21 +54,23 @@ export function AppSidebar() {
   const [userRole, setUserRole] = React.useState("")
   const [userName, setUserName] = React.useState("")
   const [userBranch, setUserBranch] = React.useState("")
+  const [authId, setAuthId] = React.useState("")
 
   React.useEffect(() => {
     const role = localStorage.getItem("user_role") || "Manager"
     const name = localStorage.getItem("user_name") || "User"
-    let branch = localStorage.getItem("user_branch")
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const id = localStorage.getItem("somikoron_auth_id") || ""
     
-    if (!branch) {
-      branch = "Main Branch"
-      localStorage.setItem("user_branch", branch)
-    }
-
     setUserRole(role)
     setUserName(name)
     setUserBranch(branch)
+    setAuthId(id)
   }, [])
+
+  // Fetch current user's direct entry permissions
+  const staffRef = useMemoFirebase(() => authId ? doc(db, "staff", authId) : null, [db, authId])
+  const { data: staffData } = useDoc(staffRef)
 
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
   const { data: branches } = useCollection(branchesQuery)
@@ -117,7 +110,19 @@ export function AppSidebar() {
     { title: "Settings", url: "/settings", icon: Settings, roles: ["Admin"] },
   ]
 
-  const filteredItems = items.filter(item => item.roles.includes(userRole))
+  const filteredItems = items.filter(item => {
+    // 1. Base Role Check
+    const hasRole = item.roles.includes(userRole)
+    if (!hasRole) return false
+
+    // 2. Permission Check for Building Manager (Direct Entry Buttons)
+    if (userRole === 'Building Manager') {
+      if (item.title === "Payment Entry" && staffData?.canDirectEntryIncome !== true) return false
+      if (item.title === "Expense Entry" && staffData?.canDirectEntryExpense !== true) return false
+    }
+
+    return true
+  })
 
   const handleLogout = () => {
     localStorage.clear()
