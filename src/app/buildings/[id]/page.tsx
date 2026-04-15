@@ -276,9 +276,11 @@ export default function BuildingDetailsPage({
     <div className="space-y-8 pb-20 relative">
       {/* Mobile App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
-          <ChevronLeft size={24} />
-        </Button>
+        {userRole !== 'Building Manager' && (
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
+            <ChevronLeft size={24} />
+          </Button>
+        )}
         <div className="flex-1 overflow-hidden">
           <h1 className="text-lg font-bold truncate">{building.name}</h1>
         </div>
@@ -296,7 +298,7 @@ export default function BuildingDetailsPage({
               <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
                 <Edit size={16} className="text-primary" /> Edit Building
               </DropdownMenuItem>
-              {userRole !== 'Admin' && userRole !== 'Branch Manager' && (
+              {userRole !== 'Admin' && userRole !== 'Branch Manager' && userRole !== 'Building Manager' && (
                 <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
                   <Trash2 size={16} /> Delete Building
                 </DropdownMenuItem>
@@ -438,7 +440,7 @@ export default function BuildingDetailsPage({
              </DialogContent>
            </Dialog>
 
-           {userRole !== 'Admin' && userRole !== 'Branch Manager' && (
+           {userRole !== 'Admin' && userRole !== 'Branch Manager' && userRole !== 'Building Manager' && (
              <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                <AlertDialogTrigger asChild>
                  <Button variant="destructive" size="icon" className="h-11 w-11 rounded-xl shadow-lg shadow-destructive/20">
@@ -459,7 +461,9 @@ export default function BuildingDetailsPage({
                </AlertDialogContent>
              </AlertDialog>
            )}
-           <Button variant="ghost" onClick={() => router.push("/buildings")} className="h-11 rounded-xl px-6">Back</Button>
+           {userRole !== 'Building Manager' && (
+             <Button variant="ghost" onClick={() => router.push("/buildings")} className="h-11 rounded-xl px-6">Back</Button>
+           )}
         </div>
       </div>
 
