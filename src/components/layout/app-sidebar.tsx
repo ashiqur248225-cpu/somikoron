@@ -109,12 +109,12 @@ export function AppSidebar() {
     { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },
-    { title: "SMS Panel", url: "/sms", icon: MessageSquareQuote, roles: ["Admin", "Branch Manager"], badge: birthdayCount > 0 ? birthdayCount : null },
+    { title: "SMS Panel", url: "/sms", icon: MessageSquareQuote, roles: ["Admin"], badge: birthdayCount > 0 ? birthdayCount : null },
     { title: "Staff & Roles", url: "/staff", icon: UserCog, roles: ["Admin"] },
     { title: "Branches", url: "/branches", icon: MapPin, roles: ["Admin"] },
     { title: "Transfers", url: "/transfers", icon: ArrowLeftRight, roles: ["Admin", "Branch Manager"] },
     { title: "Reports", url: "/reports", icon: BarChart3, roles: ["Admin", "Branch Manager"] },
-    { title: "Settings", url: "/settings", icon: Settings, roles: ["Admin", "Branch Manager"] },
+    { title: "Settings", url: "/settings", icon: Settings, roles: ["Admin"] },
   ]
 
   const filteredItems = items.filter(item => item.roles.includes(userRole))

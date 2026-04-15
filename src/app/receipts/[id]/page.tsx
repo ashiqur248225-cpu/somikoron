@@ -99,7 +99,7 @@ export default function ReceiptPage() {
             <tbody>
               {payment.seatAmount > 0 && (
                 <tr>
-                  <td className="font-bold">Rent / Seat Fare</td>
+                  <td className="font-bold">Rent</td>
                   <td>{payment.month} {payment.year}</td>
                   <td className="uppercase">{payment.method}</td>
                   <td className="text-right font-bold">৳{payment.seatAmount.toLocaleString()}</td>
@@ -123,7 +123,7 @@ export default function ReceiptPage() {
               )}
               {payment.serviceCharge > 0 && (
                 <tr>
-                  <td className="font-bold">Admission Service Charge</td>
+                  <td className="font-bold">Service Charge</td>
                   <td>One-time</td>
                   <td className="uppercase">{payment.method}</td>
                   <td className="text-right font-bold">৳{payment.serviceCharge.toLocaleString()}</td>
