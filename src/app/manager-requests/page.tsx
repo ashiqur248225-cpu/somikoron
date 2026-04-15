@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where } from "firebase/firestore"
+import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where, getDocs, limit, arrayUnion } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -87,10 +87,33 @@ export default function ManagerRequestsPage() {
         await setDoc(doc(db, "expenses", expenseId), {
           ...selectedReq,
           id: expenseId,
+          expensePartyName: selectedReq.spentBy,
           approvedAt: serverTimestamp(),
           approvedBy: localStorage.getItem("user_name"),
           createdAt: serverTimestamp()
         })
+
+        // Update Salary History if it's a salary expense
+        if (selectedReq.category === 'salary' && selectedReq.receiver) {
+          const staffQuery = query(
+            collection(db, "staff"), 
+            where("name", "==", selectedReq.receiver), 
+            where("branch", "==", selectedReq.branch),
+            limit(1)
+          );
+          const staffSnap = await getDocs(staffQuery);
+          if (!staffSnap.empty) {
+            await updateDoc(staffSnap.docs[0].ref, {
+              salaryHistory: arrayUnion({
+                amount: selectedReq.amount,
+                month: selectedReq.month,
+                year: selectedReq.year,
+                date: new Date().toISOString(),
+                method: selectedReq.method
+              })
+            })
+          }
+        }
       }
 
       await deleteDoc(doc(db, "managerRequests", selectedReq.id))
@@ -262,7 +285,7 @@ export default function ManagerRequestsPage() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold uppercase text-muted-foreground">Entity:</span>
-                  <span className="font-bold text-primary">{selectedReq.studentName || selectedReq.expensePartyName || selectedReq.category}</span>
+                  <span className="font-bold text-primary">{selectedReq.studentName || selectedReq.category}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold uppercase text-muted-foreground">Location:</span>

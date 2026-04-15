@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, query, where, increment } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, query, where, increment, updateDoc, arrayUnion } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -179,11 +179,28 @@ export default function ExpenseEntryPage() {
         totalMeals: formData.category === 'food' ? Number(formData.totalMeals || 0) : 0,
         branch: userBranch, 
         buildingName: selectedB?.name || "General", 
+        expensePartyName: formData.spentBy,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp() 
       }
 
       await setDoc(doc(db, "expenses", expenseId), expenseData)
+
+      // Update Salary History if applicable
+      if (formData.category === 'salary' && formData.receiver) {
+        const targetStaff = staffList?.find(s => s.name === formData.receiver)
+        if (targetStaff) {
+          await updateDoc(doc(db, "staff", targetStaff.id), {
+            salaryHistory: arrayUnion({
+              amount,
+              month: formData.month,
+              year: formData.year,
+              date: new Date().toISOString(),
+              method: formData.method
+            })
+          })
+        }
+      }
 
       // Update balance
       const balanceRef = doc(db, "netBalance", userBranch);
