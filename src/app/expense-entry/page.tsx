@@ -30,7 +30,7 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const YEARS = ["2024", "2025", "2026", "2027", "2028"];
+const YEARS = ["2024", "2025", "2026", "2027", "2028", "2029", "2030", "2031", "2032", "2033" ,"2034", "2035", "2036", "2037", "2038"];
 
 const EXPENSE_CATEGORIES = [
   { id: "rent", label: "Building Rent" },
@@ -101,11 +101,9 @@ export default function ExpenseEntryPage() {
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
-      return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
-    }
+    // NO DATA FILTER FOR BUILDING MANAGER: Show all buildings in branch
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const staffQuery = useMemoFirebase(() => {
@@ -285,7 +283,7 @@ export default function ExpenseEntryPage() {
                 <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 space-y-5 min-h-[400px] shadow-inner">
                   {['rent', 'electricity', 'water', 'maintenance', 'others', 'internet'].includes(formData.category) && (
                     <div className="space-y-4">
-                      <div className="space-y-1.5"><Label className="text-xs">Target Building</Label><Select value={formData.buildingId} onValueChange={v => setFormData({...formData, buildingId: v, apartmentName: "", roomNumber: "", meterNo: ""})}><SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Building" /></SelectTrigger><SelectContent>{userRole !== 'Building Manager' && <SelectItem value="none">General / No Building</SelectItem>}{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+                      <div className="space-y-1.5"><Label className="text-xs">Target Building</Label><Select value={formData.buildingId} onValueChange={v => setFormData({...formData, buildingId: v, apartmentName: "", roomNumber: "", meterNo: ""})}><SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Building" /></SelectTrigger><SelectContent><SelectItem value="none">General / No Building</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
                       {formData.category === 'electricity' && (
                         <div className="space-y-1.5">
                           <Label className="text-xs">Meter Number</Label>
