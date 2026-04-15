@@ -199,7 +199,7 @@ export default function DashboardPage() {
       {/* Main Stats Cards */}
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-success rounded-2xl group hover:shadow-md transition-all">
-          <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-black uppercase text-success tracking-widest">Income</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-black uppercase text-success tracking-widest">Income</CardTitle><ArrowUpRight className="h-4 w-4 text-success" /></CardHeader>
           <CardContent><div className="text-xl font-black text-slate-900">৳{stats.income.toLocaleString()}</div></CardContent>
         </Card>
         <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-destructive rounded-2xl group hover:shadow-md transition-all">
@@ -256,7 +256,7 @@ export default function DashboardPage() {
               { label: "Cash", icon: Banknote, color: "text-green-600", val: branchBalance?.totalCash || 0 },
               { label: "Bank", icon: Landmark, color: "text-blue-600", val: branchBalance?.totalBank || 0 },
               { label: "Bkash", icon: Smartphone, color: "text-pink-600", val: branchBalance?.totalBkash || 0 },
-              { label: "Nagad", icon: Smartphone, color: "text-orange-600", val: branchBalance?.totalBank || 0 }, // Note: stored in totalBank in some logic or totalNagad
+              { label: "Nagad", icon: Smartphone, color: "text-orange-600", val: branchBalance?.totalNagad || 0 },
             ].map((fund, idx) => (
               <div key={idx} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors border border-transparent hover:border-slate-100">
                 <div className="flex items-center gap-3"><fund.icon size={18} className={fund.color} /><span className="text-sm font-medium text-slate-600">{fund.label}</span></div>
