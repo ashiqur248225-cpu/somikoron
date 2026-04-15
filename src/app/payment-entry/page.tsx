@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -29,6 +28,7 @@ import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { sendSMS } from "@/app/actions/sms"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
@@ -278,9 +278,13 @@ export default function PaymentEntryPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-8 pb-20">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ChevronLeft />
-        </Button>
+        {userRole === 'Building Manager' ? (
+          <SidebarTrigger className="-ml-2 md:hidden" />
+        ) : (
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ChevronLeft />
+          </Button>
+        )}
         <div>
           <h1 className="text-3xl font-bold text-primary tracking-tight">Payment Entry</h1>
           <p className="text-muted-foreground text-sm">Record incoming resident payment for {userBranch}.</p>
