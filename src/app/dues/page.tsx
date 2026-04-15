@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -57,7 +58,11 @@ export default function DuesPage() {
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
-      return matchesStatus && matchesSearch && matchesBuilding && s.displayTotalDue > 0
+      
+      // Strict rule: Show only if has due
+      const hasDue = s.displayTotalDue > 0
+      
+      return matchesStatus && matchesSearch && matchesBuilding && hasDue
     }).sort((a, b) => b.displayTotalDue - a.displayTotalDue)
   }, [students, searchTerm, buildingFilter, statusFilter])
 

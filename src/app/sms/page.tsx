@@ -38,7 +38,8 @@ import {
   Eye,
   ChevronDown,
   Clock,
-  ListFilter
+  ListFilter,
+  UserCheck
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -114,6 +115,7 @@ export default function SMSPanelPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all") 
+  const [residentActiveFilter, setResidentStatusFilter] = useState("active") // New status filter
   const [selectedStudents, setSelectedStudents] = useState<string[]>([])
   const [customMessage, setCustomMessage] = useState("")
   const [selectedTemplateId, setSelectedTemplateId] = useState("manual")
@@ -180,25 +182,23 @@ export default function SMSPanelPage() {
   const mealConfigRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
   const { data: mealConfig } = useDoc(mealConfigRef)
 
-  // Student Query
+  // Student Query - Allow fetching all to filter by active/inactive
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Admin' && buildingFilter === 'global_all') {
-      return query(collection(db, "students"), where("isActive", "==", true))
+      return query(collection(db, "students"))
     }
-    return query(collection(db, "students"), where("branch", "==", userBranch), where("isActive", "==", true))
+    return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole, buildingFilter])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
-  // Logs Query - Removed orderBy from Firestore query to avoid composite index requirement
-  // This ensures history shows up even if indexes are not manually created.
+  // Logs Query
   const logsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "smsLogs"), where("branch", "==", userBranch), limit(200))
   }, [db, userBranch])
   const { data: rawSmsLogs, isLoading: logsLoading } = useCollection(logsQuery)
 
-  // Process logs client-side (sorting)
   const smsLogs = useMemo(() => {
     if (!rawSmsLogs) return []
     return [...rawSmsLogs].sort((a, b) => {
@@ -233,9 +233,13 @@ export default function SMSPanelPage() {
       if (statusFilter === 'due') matchesStatus = (s.totalDue || 0) > 0
       if (statusFilter === 'low_balance') matchesStatus = (s.foodDueAmount || 0) < 50 && s.paymentSystem === 'non-package'
 
-      return matchesSearch && matchesBuilding && matchesStatus
+      let matchesResidentActive = true
+      if (residentActiveFilter === 'active') matchesResidentActive = s.isActive === true
+      if (residentActiveFilter === 'inactive') matchesResidentActive = s.isActive === false
+
+      return matchesSearch && matchesBuilding && matchesStatus && matchesResidentActive
     })
-  }, [students, searchTerm, buildingFilter, statusFilter])
+  }, [students, searchTerm, buildingFilter, statusFilter, residentActiveFilter])
 
   const replaceTags = (message: string, student: any) => {
     if (!message || !student) return message;
@@ -639,7 +643,7 @@ export default function SMSPanelPage() {
                     </Button>
                   </div>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Select value={buildingFilter} onValueChange={setBuildingFilter}>
                       <SelectTrigger className="bg-white h-9 text-xs">
                         <Building2 size={12} className="mr-2" />
@@ -652,13 +656,25 @@ export default function SMSPanelPage() {
                       </SelectContent>
                     </Select>
                     
+                    <Select value={residentActiveFilter} onValueChange={setResidentStatusFilter}>
+                      <SelectTrigger className="bg-white h-9 text-xs">
+                        <UserCheck size={12} className="mr-2" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active Residents</SelectItem>
+                        <SelectItem value="inactive">Inactive (Left)</SelectItem>
+                        <SelectItem value="all">Both Status</SelectItem>
+                      </SelectContent>
+                    </Select>
+
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
                       <SelectTrigger className="bg-white h-9 text-xs">
                         <Filter size={12} className="mr-2" />
                         <SelectValue placeholder="Quick Filters" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Students</SelectItem>
+                        <SelectItem value="all">Any Account Status</SelectItem>
                         <SelectItem value="birthday">Today's Birthday</SelectItem>
                         <SelectItem value="due">Total Due &gt; 0</SelectItem>
                         <SelectItem value="low_balance">Low Food Bal (&lt; 50)</SelectItem>
@@ -698,7 +714,10 @@ export default function SMSPanelPage() {
                             />
                           </TableCell>
                           <TableCell className="font-bold text-slate-700">
-                            {s.name}
+                            <div className="flex items-center gap-2">
+                              {s.name}
+                              {!s.isActive && <Badge variant="destructive" className="text-[7px] h-3 px-1 uppercase">Left</Badge>}
+                            </div>
                             <div className="text-[10px] font-mono text-muted-foreground">{s.phone}</div>
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
@@ -732,9 +751,12 @@ export default function SMSPanelPage() {
                           className="mt-1"
                         />
                         <div className="flex-1 space-y-2">
-                          <div>
-                            <h4 className="font-bold text-slate-800 text-sm">{s.name}</h4>
-                            <p className="text-[10px] font-mono text-muted-foreground">{s.phone}</p>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-bold text-slate-800 text-sm">{s.name}</h4>
+                              <p className="text-[10px] font-mono text-muted-foreground">{s.phone}</p>
+                            </div>
+                            {!s.isActive && <Badge variant="destructive" className="text-[7px] px-1 uppercase">Left</Badge>}
                           </div>
                           <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase">
                             <Building2 size={10} /> {s.buildingName} • Room {s.roomNumber}

@@ -330,24 +330,98 @@ export default function StudentDetailsPage() {
       return
     }
     setIsUpdating(true)
+    const batch = writeBatch(db)
+    
     try {
-      // 1. Release Seat
-      const bRef = doc(db, "buildings", student.buildingId); const buildingSnap = await getDoc(bRef)
+      // 1. Release Seat Logic
+      const bRef = doc(db, "buildings", student.buildingId)
+      const buildingSnap = await getDoc(bRef)
       if (buildingSnap.exists()) {
-        const bData = buildingSnap.data(); const updatedApts = bData.apartmentsDetail.map((apt: any) => {
+        const bData = buildingSnap.data()
+        const updatedApts = bData.apartmentsDetail.map((apt: any) => {
           if (apt.name === student.apartmentName) {
-            return { ...apt, rooms: apt.rooms.map((room: any) => {
-              if (String(room.roomNo) === String(student.roomNumber)) { return { ...room, seats: room.seats.map((seat: any) => seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat) } }
-              return room
-            })}
-          } return apt
+            return {
+              ...apt,
+              rooms: apt.rooms.map((room: any) => {
+                if (String(room.roomNo) === String(student.roomNumber)) {
+                  return { 
+                    ...room, 
+                    seats: room.seats.map((seat: any) => seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat) 
+                  }
+                }
+                return room
+              })
+            }
+          }
+          return apt
         })
-        await updateDoc(bRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1), updatedAt: serverTimestamp() })
+        batch.update(bRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1), updatedAt: serverTimestamp() })
       }
 
-      // 2. Mark Inactive
+      // 2. Settlement Entry (Income or Expense)
       const settlementAmt = Number(settlementInput)
-      await updateDoc(studentRef, { 
+      const balanceRef = doc(db, "netBalance", student.branch)
+      const methodKeyMap: Record<string, string> = {
+        'cash': 'totalCash',
+        'bkash': 'totalBkash',
+        'nagad': 'totalNagad',
+        'bank': 'totalBank'
+      }
+      const methodKey = methodKeyMap[exitMethod] || 'totalCash'
+
+      if (settlementCalculation.isRefund && settlementAmt > 0) {
+        // HOSTEL REFUNDS STUDENT -> Record as EXPENSE
+        const expenseId = doc(collection(db, "expenses")).id
+        batch.set(doc(db, "expenses", expenseId), {
+          id: expenseId,
+          category: "Student Refund",
+          amount: settlementAmt,
+          expenseDate: new Date().toISOString().split('T')[0],
+          method: exitMethod,
+          spentBy: exitStaff,
+          branch: student.branch,
+          buildingId: student.buildingId,
+          buildingName: student.buildingName,
+          description: `Security deposit refund to ${student.name} (${student.phone}) at exit settlement. Location: ${student.buildingName} R-${student.roomNumber}.`,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        })
+        // Decrement balance
+        batch.set(balanceRef, {
+          [methodKey]: increment(-settlementAmt),
+          totalHandCash: increment(-settlementAmt),
+          lastUpdated: serverTimestamp()
+        }, { merge: true })
+      } else if (!settlementCalculation.isRefund && settlementAmt > 0) {
+        // STUDENT PAYS HOSTEL -> Record as INCOME (Payment)
+        const paymentId = doc(collection(db, "payments")).id
+        batch.set(doc(db, "payments", paymentId), {
+          id: paymentId,
+          type: "income",
+          category: "Settlement Income",
+          amount: settlementAmt,
+          studentId: student.id,
+          studentName: student.name,
+          buildingId: student.buildingId,
+          buildingName: student.buildingName,
+          roomNumber: student.roomNumber,
+          branch: student.branch,
+          method: exitMethod,
+          receiver: exitStaff,
+          date: serverTimestamp(),
+          description: `Due clearance collection from ${student.name} at exit settlement.`,
+          createdAt: serverTimestamp()
+        })
+        // Increment balance
+        batch.set(balanceRef, {
+          [methodKey]: increment(settlementAmt),
+          totalHandCash: increment(settlementAmt),
+          lastUpdated: serverTimestamp()
+        }, { merge: true })
+      }
+
+      // 3. Mark Student Inactive but keep dues
+      batch.update(studentRef, { 
         isActive: false, 
         leftAt: serverTimestamp(), 
         finalSettlementAmount: settlementAmt,
@@ -356,38 +430,34 @@ export default function StudentDetailsPage() {
         updatedAt: serverTimestamp() 
       })
 
-      // 3. Update Sync netBalance
-      const balanceRef = doc(db, "netBalance", student.branch);
-      const methodKeyMap: Record<string, string> = {
-        'cash': 'totalCash',
-        'bkash': 'totalBkash',
-        'nagad': 'totalNagad',
-        'bank': 'totalBank'
-      };
-      const methodKey = methodKeyMap[exitMethod] || 'totalCash';
+      // 4. Execution
+      await batch.commit()
 
-      // Logic: If refund, decrement. If extra collect, increment.
-      const change = settlementCalculation.isRefund ? -settlementAmt : settlementAmt;
-
-      await setDoc(balanceRef, {
-        branchId: student.branch,
-        [methodKey]: increment(change),
-        totalHandCash: increment(change),
-        lastUpdated: serverTimestamp()
-      }, { merge: true });
-
-      // 4. SMS Trigger
+      // 5. SMS Trigger
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'exit')?.text || "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।";
         const msg = template.replaceAll('[নাম]', student.name).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
         const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
         const logId = doc(collection(db, "smsLogs")).id;
-        await setDoc(doc(db, "smsLogs", logId), { id: logId, to: student.phone, message: msg, status: smsResult.error === 0 ? 'Success' : 'Failed', branch: student.branch, sentBy: userName, createdAt: serverTimestamp() });
+        await setDoc(doc(db, "smsLogs", logId), { 
+          id: logId, 
+          to: student.phone, 
+          message: msg, 
+          status: smsResult.error === 0 ? 'Success' : 'Failed', 
+          branch: student.branch, 
+          sentBy: userName, 
+          createdAt: serverTimestamp() 
+        });
       }
 
-      toast({ title: "Resident Released" }); setIsExitDialogOpen(false); router.refresh(); router.push("/students");
-    } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
-    finally { setIsUpdating(false) }
+      toast({ title: "Resident Released", description: "Settlement recorded and seat released." });
+      setIsExitDialogOpen(false);
+      router.push("/students");
+    } catch (e: any) { 
+      toast({ variant: "destructive", title: "Error", description: e.message }) 
+    } finally { 
+      setIsUpdating(false) 
+    }
   }
 
   if (studentLoading || buildingsLoading) {
