@@ -262,7 +262,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase">Expense Category</Label>
-                  <Select value={editForm.category} onValueChange={val => setEditForm({...editForm, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', receiver: ''})}>
+                  <Select value={editForm.category} onValueChange={val => setEditForm({...editForm, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', meterNo: '', receiver: ''})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent>
                   </Select>
@@ -285,7 +285,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-bold uppercase">Target Building</Label>
-                      <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, apartmentName: "", roomNumber: ""})}>
+                      <Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, apartmentName: "", roomNumber: "", meterNo: ""})}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">General / No Building</SelectItem>
@@ -324,7 +324,18 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                     {editForm.category === 'electricity' && (
                       <div className="space-y-2">
                         <Label className="text-xs font-bold uppercase flex items-center gap-1"><Zap size={12}/> Meter Number</Label>
-                        <Input value={editForm.meterNo} onChange={e => setEditForm({...editForm, meterNo: e.target.value})} />
+                        <Select 
+                          disabled={editForm.buildingId === 'none'} 
+                          value={editForm.meterNo} 
+                          onValueChange={val => setEditForm({...editForm, meterNo: val})}
+                        >
+                          <SelectTrigger className="bg-white"><SelectValue placeholder="Select Meter" /></SelectTrigger>
+                          <SelectContent>
+                            {selectedBuildingForEdit?.apartmentsDetail?.map((apt: any, idx: number) => (
+                              <SelectItem key={idx} value={apt.meterNo || `meter-${idx}`}>{apt.meterNo} ({apt.name})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
                   </div>
