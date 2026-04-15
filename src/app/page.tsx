@@ -87,9 +87,9 @@ export default function DashboardPage() {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
 
-    // Redirect Building Manager if they land on Dashboard
+    // Redirect Building Manager if they land on Dashboard to Students list
     if (role === 'Building Manager') {
-      router.push('/buildings')
+      router.push('/students')
     }
   }, [router])
 

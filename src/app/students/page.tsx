@@ -7,7 +7,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Building2, Loader2, Eye, Printer, Filter, RotateCcw, Smartphone, MapPin, ChevronRight } from "lucide-react"
+import { 
+  Users, 
+  Search, 
+  Building2, 
+  Loader2, 
+  Eye, 
+  Printer, 
+  Filter, 
+  RotateCcw, 
+  Smartphone, 
+  MapPin, 
+  ChevronRight,
+  MoreVertical,
+  Wallet,
+  Receipt
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
@@ -16,6 +31,12 @@ import { collection, query, where } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -189,31 +210,50 @@ export default function StudentsPage() {
                       <TableRow 
                         key={s.id} 
                         className="cursor-pointer hover:bg-slate-50/50" 
-                        onClick={() => router.push(`/students/${s.id}`)}
                       >
-                        <TableCell>
+                        <TableCell onClick={() => router.push(`/students/${s.id}`)}>
                           <div className="font-bold text-slate-800">{s.name}</div>
                           <div className="text-[10px] text-muted-foreground flex items-center gap-1"><Smartphone size={10}/> {s.phone}</div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={() => router.push(`/students/${s.id}`)}>
                           <div className="text-xs font-medium text-slate-600">{s.buildingName}</div>
                           <div className="text-[10px] text-muted-foreground uppercase font-bold">Room {s.roomNumber}</div>
                         </TableCell>
-                        <TableCell className="font-black text-slate-700">৳{s.monthlyRent?.toLocaleString()}</TableCell>
-                        <TableCell>
+                        <TableCell className="font-black text-slate-700" onClick={() => router.push(`/students/${s.id}`)}>৳{s.monthlyRent?.toLocaleString()}</TableCell>
+                        <TableCell onClick={() => router.push(`/students/${s.id}`)}>
                           <Badge variant="outline" className={cn("text-[9px] uppercase font-bold", s.paymentSystem === 'package' ? "text-primary border-primary/20" : "text-orange-600 border-orange-200")}>
                             {s.paymentSystem}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={() => router.push(`/students/${s.id}`)}>
                           <Badge className={cn("text-[9px] font-black uppercase rounded-full", s.isActive ? "bg-success" : "bg-destructive")}>
                             {s.isActive ? "Active" : "Inactive"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-primary">
-                            <Eye size={16}/>
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary">
+                                <MoreVertical size={16}/>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
+                              <DropdownMenuItem onClick={() => router.push(`/students/${s.id}`)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                                <Eye size={14} className="text-primary" /> View Profile
+                              </DropdownMenuItem>
+                              {userRole === 'Building Manager' && (
+                                <>
+                                  <Separator className="my-1" />
+                                  <DropdownMenuItem onClick={() => router.push(`/payment-entry?studentId=${s.id}`)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                                    <Wallet size={14} className="text-success" /> Payment Entry
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => router.push('/expense-entry')} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                                    <Receipt size={14} className="text-destructive" /> Expense Entry
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -227,11 +267,10 @@ export default function StudentsPage() {
                 <Card 
                   key={s.id} 
                   className="border-none shadow-sm rounded-2xl overflow-hidden bg-white group active:scale-[0.98] transition-transform"
-                  onClick={() => router.push(`/students/${s.id}`)}
                 >
                   <CardContent className="p-4 space-y-4">
                     <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3" onClick={() => router.push(`/students/${s.id}`)}>
                         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black uppercase text-xs">
                           {s.name.substring(0, 2)}
                         </div>
@@ -240,12 +279,37 @@ export default function StudentsPage() {
                           <p className="text-[10px] text-muted-foreground font-bold flex items-center gap-1 mt-0.5"><Smartphone size={10}/> {s.phone}</p>
                         </div>
                       </div>
-                      <Badge className={cn("text-[8px] font-black uppercase rounded-full", s.isActive ? "bg-success" : "bg-destructive")}>
-                        {s.isActive ? "Active" : "Inactive"}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={cn("text-[8px] font-black uppercase rounded-full", s.isActive ? "bg-success" : "bg-destructive")}>
+                          {s.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2">
+                              <MoreVertical size={16} className="text-muted-foreground" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
+                            <DropdownMenuItem onClick={() => router.push(`/students/${s.id}`)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                              <Eye size={14} className="text-primary" /> View Profile
+                            </DropdownMenuItem>
+                            {userRole === 'Building Manager' && (
+                              <>
+                                <Separator className="my-1" />
+                                <DropdownMenuItem onClick={() => router.push(`/payment-entry?studentId=${s.id}`)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                                  <Wallet size={14} className="text-success" /> Payment Entry
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => router.push('/expense-entry')} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                                  <Receipt size={14} className="text-destructive" /> Expense Entry
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 bg-secondary/30 p-3 rounded-xl border border-secondary">
+                    <div className="grid grid-cols-2 gap-3 bg-secondary/30 p-3 rounded-xl border border-secondary" onClick={() => router.push(`/students/${s.id}`)}>
                       <div className="space-y-1">
                         <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Location</p>
                         <div className="flex items-center gap-1 text-[10px] font-black text-slate-700">
@@ -258,7 +322,7 @@ export default function StudentsPage() {
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center pt-1">
+                    <div className="flex justify-between items-center pt-1" onClick={() => router.push(`/students/${s.id}`)}>
                       <Badge variant="secondary" className="text-[8px] font-black uppercase bg-primary/5 text-primary border-none">
                         {s.paymentSystem} PLAN
                       </Badge>

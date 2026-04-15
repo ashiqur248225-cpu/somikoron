@@ -97,18 +97,19 @@ export function AppSidebar() {
     : "/buildings";
 
   // Menu Definition with strict role access
+  // Order: Dashboard, Students, Buildings, Due, Entries...
   const items = [
     { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["Admin", "Branch Manager"] },
+    { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Buildings", url: buildingsUrl, icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Payment Entry", url: "/payment-entry", icon: PlusCircle, roles: ["Building Manager"] },
     { title: "Expense Entry", url: "/expense-entry", icon: Receipt, roles: ["Building Manager"] },
-    { title: "Buildings", url: buildingsUrl, icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
-    { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
     { title: "Manager Requests", url: "/manager-requests", icon: BellRing, roles: ["Admin", "Branch Manager"] },
     { title: "Income", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager"] },
     { title: "Receipts", url: "/receipts", icon: ScrollText, roles: ["Admin", "Branch Manager"] },
     { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager"] },
-    { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },
     { title: "SMS Panel", url: "/sms", icon: MessageSquareQuote, roles: ["Admin"], badge: birthdayCount > 0 ? birthdayCount : null },
     { title: "Staff & Roles", url: "/staff", icon: UserCog, roles: ["Admin"] },
