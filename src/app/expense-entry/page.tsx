@@ -114,6 +114,19 @@ export default function ExpenseEntryPage() {
     return managementStaff
   }, [staffList, managementStaff, formData.category])
 
+  // Helper to get rooms from selected building
+  const roomList = useMemo(() => {
+    const selectedB = buildings?.find(b => b.id === formData.buildingId)
+    if (!selectedB) return []
+    const rooms: string[] = []
+    selectedB.apartmentsDetail?.forEach((apt: any) => {
+      apt.rooms?.forEach((room: any) => {
+        if (room.roomNo && !rooms.includes(String(room.roomNo))) rooms.push(String(room.roomNo))
+      })
+    })
+    return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }, [buildings, formData.buildingId])
+
   const handleCreateExpense = async () => {
     if (!formData.amount || !formData.spentBy) {
       toast({ variant: "destructive", title: "Error", description: "Amount and Spent By are required." })
@@ -238,7 +251,7 @@ export default function ExpenseEntryPage() {
               <div className="space-y-4">
                 <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Zap size={14}/> Context Fields</Label>
                 <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 space-y-5 min-h-[400px] shadow-inner">
-                  {['rent', 'electricity', 'water', 'maintenance', 'others'].includes(formData.category) && (
+                  {['rent', 'electricity', 'water', 'maintenance', 'others', 'internet'].includes(formData.category) && (
                     <div className="space-y-4">
                       <div className="space-y-1.5"><Label className="text-xs">Target Building</Label><Select value={formData.buildingId} onValueChange={v => setFormData({...formData, buildingId: v, apartmentName: "", roomNumber: "", meterNo: ""})}><SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Building" /></SelectTrigger><SelectContent><SelectItem value="none">General / No Building</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
                       {formData.category === 'electricity' && (
@@ -265,7 +278,47 @@ export default function ExpenseEntryPage() {
                           </Select>
                         </div>
                       )}
-                      {['maintenance', 'others'].includes(formData.category) && (<div className="space-y-1.5"><Label className="text-xs">Room / Unit</Label><Input value={formData.roomNumber} onChange={e => setFormData({...formData, roomNumber: e.target.value})} className="bg-white h-11 rounded-xl shadow-sm" /></div>)}
+                      {formData.category === 'internet' && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Apartment (Optional)</Label>
+                          <Select 
+                            disabled={formData.buildingId === 'none'} 
+                            value={formData.apartmentName} 
+                            onValueChange={v => setFormData({...formData, apartmentName: v})}
+                          >
+                            <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm">
+                              <SelectValue placeholder="Select Apartment" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {buildings?.find(b => b.id === formData.buildingId)?.apartmentsDetail?.map((apt: any, idx: number) => (
+                                <SelectItem key={idx} value={apt.name}>
+                                  {apt.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      {['maintenance', 'others', 'internet'].includes(formData.category) && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Room / Unit (Optional)</Label>
+                          <Select 
+                            disabled={formData.buildingId === 'none'} 
+                            value={formData.roomNumber} 
+                            onValueChange={v => setFormData({...formData, roomNumber: v})}
+                          >
+                            <SelectTrigger className="bg-white h-11 rounded-xl shadow-sm">
+                              <SelectValue placeholder="Select Room" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {roomList.map(r => (
+                                <SelectItem key={r} value={r}>Room {r}</SelectItem>
+                              ))}
+                              {roomList.length === 0 && <SelectItem disabled value="none">No rooms found</SelectItem>}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                   )}
                   {formData.category === 'salary' && (

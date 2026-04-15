@@ -158,7 +158,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
     const rooms: string[] = []
     selectedBuildingForEdit.apartmentsDetail?.forEach((apt: any) => {
       apt.rooms?.forEach((room: any) => {
-        if (room.roomNo && !rooms.includes(room.roomNo)) rooms.push(room.roomNo)
+        if (room.roomNo && !rooms.includes(String(room.roomNo))) rooms.push(String(room.roomNo))
       })
     })
     return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
@@ -312,10 +312,16 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                     {(editForm.category === 'maintenance' || editForm.category === 'internet' || editForm.category === 'others') && editForm.buildingId !== 'none' && (
                       <div className="space-y-2">
                         <Label className="text-xs font-bold uppercase">Room Number (Optional)</Label>
-                        <Select value={editForm.roomNumber} onValueChange={val => setEditForm({...editForm, roomNumber: val})}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Select 
+                          value={editForm.roomNumber} 
+                          onValueChange={val => setEditForm({...editForm, roomNumber: val})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Room" />
+                          </SelectTrigger>
                           <SelectContent>
                             {roomList.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+                            {roomList.length === 0 && <SelectItem disabled value="none">No rooms found</SelectItem>}
                           </SelectContent>
                         </Select>
                       </div>
