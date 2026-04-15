@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, updateDoc, deleteDoc, serverTimestamp, collection, query, where } from "firebase/firestore"
@@ -68,6 +68,11 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [userRole, setUserRole] = useState("")
+
+  useEffect(() => {
+    setUserRole(localStorage.getItem("user_role") || "Manager")
+  }, [])
 
   const expenseRef = useMemoFirebase(() => id ? doc(db, "expenses", id) : null, [db, id])
   const { data: expense, isLoading } = useDoc(expenseRef)
@@ -171,24 +176,28 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
           <ArrowLeft size={16} /> Back to History
         </Button>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setIsEditDialogOpen(true)}>
-            <Edit size={16} /> Edit
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="icon"><Trash2 size={16}/></Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this expense record?</AlertDialogTitle>
-                <AlertDialogDescription>This action cannot be undone. The accounting history will be modified.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} className="bg-destructive">Delete Permanently</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          {userRole !== 'Branch Manager' && (
+            <Button variant="outline" className="gap-2" onClick={() => setIsEditDialogOpen(true)}>
+              <Edit size={16} /> Edit
+            </Button>
+          )}
+          {userRole !== 'Admin' && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="icon"><Trash2 size={16}/></Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this expense record?</AlertDialogTitle>
+                  <AlertDialogDescription>This action cannot be undone. The accounting history will be modified.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete} className="bg-destructive">Delete Permanently</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
 
