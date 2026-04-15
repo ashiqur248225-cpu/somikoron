@@ -189,13 +189,26 @@ export default function StudentDetailsPage() {
     return { rentDue, foodBalance, totalDue: rentDue, totalReceived, advanceRemaining: student.advanceAmount || 0, dueBreakdownList }
   }, [student])
 
+  // NEW SETTLEMENT CALCULATION LOGIC
   const settlementCalculation = useMemo(() => {
     if (!stats || !student) return null;
-    const pendingRent = stats.rentDue;
-    const foodDue = stats.foodBalance < 0 ? Math.abs(stats.foodBalance) : 0;
-    const advance = student.advanceAmount || 0;
-    const netResult = (pendingRent + foodDue) - advance;
-    return { pendingRent, foodDue, advance, netResult, isRefund: netResult < 0, absResult: Math.abs(netResult) };
+    
+    const securityAdvance = Number(student.advanceAmount || 0);
+    const unpaidRent = stats.rentDue;
+    const foodDueAmount = student.paymentSystem === 'non-package' ? Number(student.foodDueAmount || 0) : 0;
+    
+    // Formula: (Security Advance) + (Food Balance/Debt) - (Unpaid Rent)
+    // Note: Food balance is already signed (+ for balance, - for debt)
+    const netResult = securityAdvance + foodDueAmount - unpaidRent;
+    
+    return { 
+      pendingRent: unpaidRent, 
+      foodDue: foodDueAmount, 
+      advance: securityAdvance, 
+      netResult, 
+      isRefund: netResult > 0, 
+      absResult: Math.abs(netResult) 
+    };
   }, [stats, student]);
 
   useEffect(() => {
@@ -358,73 +371,70 @@ export default function StudentDetailsPage() {
         batch.update(bRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1), updatedAt: serverTimestamp() })
       }
 
-      // 2. Settlement Entry (Income or Expense)
-      const settlementAmt = Number(settlementInput)
+      // 2. Advanced Settlement Math & Transaction Flow
+      const processedAmt = Number(settlementInput)
       const balanceRef = doc(db, "netBalance", student.branch)
       const methodKeyMap: Record<string, string> = {
-        'cash': 'totalCash',
-        'bkash': 'totalBkash',
-        'nagad': 'totalNagad',
-        'bank': 'totalBank'
+        'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
       }
       const methodKey = methodKeyMap[exitMethod] || 'totalCash'
 
-      if (settlementCalculation.isRefund && settlementAmt > 0) {
-        // HOSTEL REFUNDS STUDENT -> Record as EXPENSE
-        const expenseId = doc(collection(db, "expenses")).id
-        batch.set(doc(db, "expenses", expenseId), {
-          id: expenseId,
-          category: "Student Refund",
-          amount: settlementAmt,
-          expenseDate: new Date().toISOString().split('T')[0],
-          method: exitMethod,
-          spentBy: exitStaff,
-          branch: student.branch,
-          buildingId: student.buildingId,
-          buildingName: student.buildingName,
-          description: `Security deposit refund to ${student.name} (${student.phone}) at exit settlement. Location: ${student.buildingName} R-${student.roomNumber}.`,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        })
-        // Decrement balance
-        batch.set(balanceRef, {
-          [methodKey]: increment(-settlementAmt),
-          totalHandCash: increment(-settlementAmt),
-          lastUpdated: serverTimestamp()
-        }, { merge: true })
-      } else if (!settlementCalculation.isRefund && settlementAmt > 0) {
-        // STUDENT PAYS HOSTEL -> Record as INCOME (Payment)
-        const paymentId = doc(collection(db, "payments")).id
-        batch.set(doc(db, "payments", paymentId), {
-          id: paymentId,
-          type: "income",
-          category: "Settlement Income",
-          amount: settlementAmt,
-          studentId: student.id,
-          studentName: student.name,
-          buildingId: student.buildingId,
-          buildingName: student.buildingName,
-          roomNumber: student.roomNumber,
-          branch: student.branch,
-          method: exitMethod,
-          receiver: exitStaff,
-          date: serverTimestamp(),
-          description: `Due clearance collection from ${student.name} at exit settlement.`,
-          createdAt: serverTimestamp()
-        })
-        // Increment balance
-        batch.set(balanceRef, {
-          [methodKey]: increment(settlementAmt),
-          totalHandCash: increment(settlementAmt),
-          lastUpdated: serverTimestamp()
-        }, { merge: true })
+      // NEW LOGIC: Calculate final remaining due or advance
+      // Theoretical position is settlementCalculation.netResult
+      // positive = hostel owes student, negative = student owes hostel
+      let finalTotalDue = 0;
+      let finalAdvance = 0;
+
+      if (settlementCalculation.isRefund) {
+        // CASE: Hostel refunds student
+        if (processedAmt > 0) {
+          const expenseId = doc(collection(db, "expenses")).id
+          batch.set(doc(db, "expenses", expenseId), {
+            id: expenseId, category: "Student Refund", amount: processedAmt,
+            expenseDate: new Date().toISOString().split('T')[0], method: exitMethod, spentBy: exitStaff,
+            branch: student.branch, buildingId: student.buildingId, buildingName: student.buildingName,
+            description: `Exit refund settlement for ${student.name} (${student.phone}). Room: ${student.buildingName} R-${student.roomNumber}.`,
+            createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+          })
+          batch.set(balanceRef, { [methodKey]: increment(-processedAmt), totalHandCash: increment(-processedAmt), lastUpdated: serverTimestamp() }, { merge: true })
+        }
+        
+        // Calculate remaining credit/debt
+        const delta = settlementCalculation.netResult - processedAmt;
+        if (delta > 0) finalAdvance = delta; // Hostel still owes student
+        else if (delta < 0) finalTotalDue = Math.abs(delta); // Student now owes hostel
+      } else {
+        // CASE: Student pays hostel (Income)
+        if (processedAmt > 0) {
+          const paymentId = doc(collection(db, "payments")).id
+          batch.set(doc(db, "payments", paymentId), {
+            id: paymentId, type: "income", category: "Settlement Income", amount: processedAmt,
+            studentId: student.id, studentName: student.name, buildingId: student.buildingId,
+            buildingName: student.buildingName, roomNumber: student.roomNumber, branch: student.branch,
+            method: exitMethod, receiver: exitStaff, date: serverTimestamp(),
+            description: `Exit due clearance for ${student.name}.`,
+            createdAt: serverTimestamp()
+          })
+          batch.set(balanceRef, { [methodKey]: increment(processedAmt), totalHandCash: increment(processedAmt), lastUpdated: serverTimestamp() }, { merge: true })
+        }
+
+        // Calculate remaining debt/credit
+        // Theoretical result is negative (e.g., -1000 means student owes 1000)
+        // processedAmt is what student paid (e.g., 400)
+        const delta = Math.abs(settlementCalculation.netResult) - processedAmt;
+        if (delta > 0) finalTotalDue = delta; // Student still owes hostel
+        else if (delta < 0) finalAdvance = Math.abs(delta); // Student overpaid, hostel owes them
       }
 
-      // 3. Mark Student Inactive but keep dues
+      // 3. Mark Student Inactive & PERSIST remaining dues
       batch.update(studentRef, { 
         isActive: false, 
         leftAt: serverTimestamp(), 
-        finalSettlementAmount: settlementAmt,
+        totalDue: finalTotalDue,
+        advanceAmount: finalAdvance,
+        foodDueAmount: 0, // Cleared as it's merged into totalDue
+        duesBreakdown: {}, // Cleared as it's settled into one "Due" value
+        finalSettlementAmount: processedAmt,
         finalSettlementMethod: exitMethod,
         finalSettlementProcessedBy: exitStaff,
         updatedAt: serverTimestamp() 
@@ -439,18 +449,10 @@ export default function StudentDetailsPage() {
         const msg = template.replaceAll('[নাম]', student.name).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
         const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
         const logId = doc(collection(db, "smsLogs")).id;
-        await setDoc(doc(db, "smsLogs", logId), { 
-          id: logId, 
-          to: student.phone, 
-          message: msg, 
-          status: smsResult.error === 0 ? 'Success' : 'Failed', 
-          branch: student.branch, 
-          sentBy: userName, 
-          createdAt: serverTimestamp() 
-        });
+        await setDoc(doc(db, "smsLogs", logId), { id: logId, to: student.phone, message: msg, status: smsResult.error === 0 ? 'Success' : 'Failed', branch: student.branch, sentBy: userName, createdAt: serverTimestamp() });
       }
 
-      toast({ title: "Resident Released", description: "Settlement recorded and seat released." });
+      toast({ title: "Settlement Complete", description: `Seat released. Remaining Due: ৳${finalTotalDue}` });
       setIsExitDialogOpen(false);
       router.push("/students");
     } catch (e: any) { 
@@ -684,15 +686,28 @@ export default function StudentDetailsPage() {
             <div className="space-y-6 py-4">
               <div className="p-5 bg-slate-50 rounded-2xl border-2 border-slate-100 space-y-4">
                 <div className="flex justify-between text-sm"><span className="text-muted-foreground">Unpaid Rent:</span><span className="font-bold text-destructive">৳{settlementCalculation.pendingRent.toLocaleString()}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Food Debt:</span><span className="font-bold text-destructive">৳{settlementCalculation.foodDue}</span></div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">{settlementCalculation.foodDue >= 0 ? "Food Balance (Credit):" : "Food Debt:"}</span>
+                  <span className={cn("font-bold", settlementCalculation.foodDue >= 0 ? "text-success" : "text-destructive")}>
+                    ৳{Math.abs(settlementCalculation.foodDue).toLocaleString()}
+                  </span>
+                </div>
                 <div className="flex justify-between text-sm"><span className="text-muted-foreground">Security Advance:</span><span className="font-bold text-primary">৳{settlementCalculation.advance.toLocaleString()}</span></div>
-                <Separator /><div className="flex justify-between items-center"><span className="font-black text-slate-800">Final Result:</span><div className="text-right"><p className={cn("text-2xl font-black", settlementCalculation.isRefund ? "text-success" : "text-destructive")}>৳{settlementCalculation.absResult.toLocaleString()}</p><p className="text-[10px] font-bold uppercase opacity-60">{settlementCalculation.isRefund ? "Refund to Resident" : "Collect from Resident"}</p></div></div>
+                <Separator />
+                <div className="flex justify-between items-center">
+                  <span className="font-black text-slate-800">Theoretical Result:</span>
+                  <div className="text-right">
+                    <p className={cn("text-2xl font-black", settlementCalculation.isRefund ? "text-success" : "text-destructive")}>৳{settlementCalculation.absResult.toLocaleString()}</p>
+                    <p className="text-[10px] font-bold uppercase opacity-60">{settlementCalculation.isRefund ? "Hostel Pays Resident (Refund)" : "Resident Pays Hostel (Due Clearance)"}</p>
+                  </div>
+                </div>
               </div>
               
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase">Final Amount Processed (৳)</Label>
                   <Input type="number" value={settlementInput} onChange={e => setSettlementInput(e.target.value)} className="h-12 text-lg font-black" />
+                  <p className="text-[9px] text-muted-foreground italic">Note: If processed amount is less than result, the remainder stays as "Due" in profile.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -720,10 +735,10 @@ export default function StudentDetailsPage() {
                 </div>
               </div>
 
-              <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex gap-3"><AlertCircle className="text-destructive h-5 w-5 shrink-0" /><p className="text-[10px] text-red-700 leading-tight">This action will release Seat {student.seatNumber} in Room {student.roomNumber} and mark the resident as inactive. This is irreversible.</p></div>
+              <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex gap-3"><AlertCircle className="text-destructive h-5 w-5 shrink-0" /><p className="text-[10px] text-red-700 leading-tight">This action will release Seat {student.seatNumber} in Room {student.roomNumber} and mark the resident as inactive. Remaining dues will be preserved.</p></div>
             </div>
           )}
-          <DialogFooter className="grid grid-cols-2 gap-4"><Button variant="outline" className="rounded-xl" onClick={() => setIsExitDialogOpen(false)}>Cancel</Button><Button variant="destructive" className="rounded-xl font-bold" onClick={handleConfirmExit} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm Exit"}</Button></DialogFooter>
+          <DialogFooter className="grid grid-cols-2 gap-4"><Button variant="outline" className="rounded-xl" onClick={() => setIsExitDialogOpen(false)}>Cancel</Button><Button variant="destructive" className="rounded-xl font-bold" onClick={handleConfirmExit} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm & Process"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
