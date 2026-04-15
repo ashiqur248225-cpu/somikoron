@@ -165,7 +165,7 @@ export default function PaymentEntryPage() {
           createdAt: serverTimestamp()
         })
         toast({ title: "Request Sent", description: "Your income entry is pending for Admin approval." })
-        router.push('/')
+        router.push('/students')
         return
       }
 
@@ -289,7 +289,7 @@ export default function PaymentEntryPage() {
     <div className="max-w-2xl mx-auto space-y-8 pb-20">
       <div className="flex items-center gap-4">
         {userRole === 'Building Manager' ? (
-          <SidebarTrigger className="-ml-2 md:hidden" />
+          <SidebarTrigger className="-ml-2" />
         ) : (
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ChevronLeft />

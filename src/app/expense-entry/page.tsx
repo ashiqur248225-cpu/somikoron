@@ -22,7 +22,8 @@ import {
   ChevronLeft,
   LayoutGrid,
   Wallet,
-  Zap
+  Zap,
+  PanelLeft
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -176,7 +177,7 @@ export default function ExpenseEntryPage() {
           createdAt: serverTimestamp()
         })
         toast({ title: "Request Sent", description: "Your expense entry is pending for Admin approval." })
-        router.push('/')
+        router.push('/students')
         return
       }
 
@@ -244,7 +245,7 @@ export default function ExpenseEntryPage() {
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div className="flex items-center gap-4">
         {userRole === 'Building Manager' ? (
-          <SidebarTrigger className="-ml-2 md:hidden" />
+          <SidebarTrigger className="-ml-2" />
         ) : (
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ChevronLeft />
