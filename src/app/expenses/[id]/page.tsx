@@ -181,7 +181,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               <Edit size={16} /> Edit
             </Button>
           )}
-          {userRole !== 'Admin' && (
+          {userRole !== 'Admin' && userRole !== 'Branch Manager' && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="icon"><Trash2 size={16}/></Button>
