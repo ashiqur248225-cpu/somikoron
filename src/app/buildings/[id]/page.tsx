@@ -296,9 +296,11 @@ export default function BuildingDetailsPage({
               <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
                 <Edit size={16} className="text-primary" /> Edit Building
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
-                <Trash2 size={16} /> Delete Building
-              </DropdownMenuItem>
+              {userRole !== 'Admin' && userRole !== 'Branch Manager' && (
+                <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
+                  <Trash2 size={16} /> Delete Building
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -436,25 +438,27 @@ export default function BuildingDetailsPage({
              </DialogContent>
            </Dialog>
 
-           <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-             <AlertDialogTrigger asChild>
-               <Button variant="destructive" size="icon" className="h-11 w-11 rounded-xl shadow-lg shadow-destructive/20">
-                 <Trash2 size={18}/>
-               </Button>
-             </AlertDialogTrigger>
-             <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Building?</AlertDialogTitle>
-                  <AlertDialogDescription>Hierarchy Apartment &rarr; Room &rarr; Seat will be lost. This action is permanent.</AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 font-bold">
-                    {isUpdating ? <Loader2 className="animate-spin" /> : "Delete Permanently"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-             </AlertDialogContent>
-           </AlertDialog>
+           {userRole !== 'Admin' && userRole !== 'Branch Manager' && (
+             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+               <AlertDialogTrigger asChild>
+                 <Button variant="destructive" size="icon" className="h-11 w-11 rounded-xl shadow-lg shadow-destructive/20">
+                   <Trash2 size={18}/>
+                 </Button>
+               </AlertDialogTrigger>
+               <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Building?</AlertDialogTitle>
+                    <AlertDialogDescription>Hierarchy Apartment &rarr; Room &rarr; Seat will be lost. This action is permanent.</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 font-bold">
+                      {isUpdating ? <Loader2 className="animate-spin" /> : "Delete Permanently"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+               </AlertDialogContent>
+             </AlertDialog>
+           )}
            <Button variant="ghost" onClick={() => router.push("/buildings")} className="h-11 rounded-xl px-6">Back</Button>
         </div>
       </div>
