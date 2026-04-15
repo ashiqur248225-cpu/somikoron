@@ -52,6 +52,7 @@ import { cn } from "@/lib/utils"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 
 interface SeatDetail {
   seatNo: string;
@@ -276,7 +277,9 @@ export default function BuildingDetailsPage({
     <div className="space-y-8 pb-20 relative">
       {/* Mobile App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
-        {userRole !== 'Building Manager' && (
+        {userRole === 'Building Manager' ? (
+          <SidebarTrigger className="-ml-2" />
+        ) : (
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
             <ChevronLeft size={24} />
           </Button>
@@ -373,7 +376,7 @@ export default function BuildingDetailsPage({
                             </div>
                           </div>
                           <div className="ml-4 pl-4 border-l-2 border-primary/20 space-y-4">
-                             {apt.rooms.map((room, rIdx) => (
+                             {apt.rooms.map((room, roomIdx) => (
                                <div key={`${room.roomNo}-${rIdx}`} className="p-3 bg-background border rounded-lg space-y-3">
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                      <div className="flex items-center gap-2">
