@@ -377,7 +377,7 @@ export default function BuildingDetailsPage({
                           </div>
                           <div className="ml-4 pl-4 border-l-2 border-primary/20 space-y-4">
                              {apt.rooms.map((room, roomIdx) => (
-                               <div key={`${room.roomNo}-${rIdx}`} className="p-3 bg-background border rounded-lg space-y-3">
+                               <div key={`${room.roomNo}-${roomIdx}`} className="p-3 bg-background border rounded-lg space-y-3">
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                      <div className="flex items-center gap-2">
                                         <span className="text-xs font-bold uppercase">Room {room.roomNo}</span>
@@ -387,7 +387,7 @@ export default function BuildingDetailsPage({
                                         <Label className="text-[9px] uppercase font-bold text-primary">Rent Per Seat (৳)</Label>
                                         <Input type="number" className="h-7 text-xs w-24" value={room.rentPerSeat || ""} onChange={e => {
                                           const updated = [...editApts]
-                                          updated[aIdx].rooms[rIdx].rentPerSeat = Number(e.target.value)
+                                          updated[aIdx].rooms[roomIdx].rentPerSeat = Number(e.target.value)
                                           setEditApts(updated)
                                         }} />
                                      </div>
@@ -399,11 +399,11 @@ export default function BuildingDetailsPage({
                                       {['AC', 'Balcony', 'Attached Washroom'].map((fac) => (
                                         <div key={fac} className="flex items-center gap-1.5">
                                           <Checkbox 
-                                            id={`edit-fac-${aIdx}-${rIdx}-${fac}`}
+                                            id={`edit-fac-${aIdx}-${roomIdx}-${fac}`}
                                             checked={room.facilities?.includes(fac)}
-                                            onCheckedChange={() => toggleFacility(aIdx, rIdx, fac)}
+                                            onCheckedChange={() => toggleFacility(aIdx, roomIdx, fac)}
                                           />
-                                          <Label htmlFor={`edit-fac-${aIdx}-${rIdx}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label>
+                                          <Label htmlFor={`edit-fac-${aIdx}-${roomIdx}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label>
                                         </div>
                                       ))}
                                     </div>
@@ -415,8 +415,8 @@ export default function BuildingDetailsPage({
                                         key={sIdx}
                                         onClick={() => {
                                           const updated = [...editApts]
-                                          const current = updated[aIdx].rooms[rIdx].seats[sIdx].status
-                                          updated[aIdx].rooms[rIdx].seats[sIdx].status = current === 'empty' ? 'occupied' : 'empty'
+                                          const current = updated[aIdx].rooms[roomIdx].seats[sIdx].status
+                                          updated[aIdx].rooms[roomIdx].seats[sIdx].status = current === 'empty' ? 'occupied' : 'empty'
                                           setEditApts(updated)
                                         }}
                                         className={cn(
