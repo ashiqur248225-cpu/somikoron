@@ -59,10 +59,20 @@ export default function PaymentEntryPage() {
   })
 
   useEffect(() => {
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
-    setUserName(localStorage.getItem("user_name") || "User")
-    setUserRole(localStorage.getItem("user_role") || "Manager")
-    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const name = localStorage.getItem("user_name") || "User"
+    const role = localStorage.getItem("user_role") || "Manager"
+    const bId = localStorage.getItem("assigned_building_id") || "none"
+
+    setUserBranch(branch)
+    setUserName(name)
+    setUserRole(role)
+    setAssignedBuildingId(bId)
+
+    // AUTO SELECT FOR BUILDING MANAGER
+    if (role === 'Building Manager' && bId !== 'none') {
+      setFormData(prev => ({ ...prev, buildingId: bId }))
+    }
   }, [])
 
   // Check permissions for Building Manager
@@ -306,7 +316,7 @@ export default function PaymentEntryPage() {
               <Select value={formData.buildingId} onValueChange={val => setFormData({...formData, buildingId: val, roomNumber: "all", studentId: ""})}>
                 <SelectTrigger className="bg-slate-50 border-none h-11 rounded-xl shadow-inner font-bold"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Any Building</SelectItem>
+                  {userRole !== 'Building Manager' && <SelectItem value="all">Any Building</SelectItem>}
                   {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
                 </SelectContent>
               </Select>
