@@ -40,6 +40,7 @@ const EXPENSE_CATEGORIES = [
   { id: "market", label: "General Market" },
   { id: "internet", label: "Internet Bill" },
   { id: "salary", label: "Staff Salary" },
+  { id: "Student Refund", label: "Student Refund" },
   { id: "others", label: "Others" },
 ]
 
