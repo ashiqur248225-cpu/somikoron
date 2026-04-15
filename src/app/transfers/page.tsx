@@ -50,9 +50,19 @@ export default function TransfersPage() {
   const [userBranch, setUserBranch] = useState("Main Branch")
   const [userName, setUserName] = useState("")
 
-  // Date Filter State - Defaults to current month
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  // Local date helpers
+  const getLocalYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  }
+  const getFirstDayOfMonthYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-01`;
+  }
+
+  // Date Filter State - Defaults to current month (Local Time)
+  const [startDate, setStartDate] = useState(getFirstDayOfMonthYMD())
+  const [endDate, setEndDate] = useState(getLocalYMD())
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -79,11 +89,14 @@ export default function TransfersPage() {
 
   const filteredTransfers = useMemo(() => {
     if (!rawTransfers) return []
+    const sDate = startDate ? new Date(startDate.replace(/-/g, '/')) : null
+    const eDate = endDate ? new Date(endDate.replace(/-/g, '/')) : null
+    if (eDate) eDate.setHours(23, 59, 59)
     
     return rawTransfers.filter(t => {
-      const tDate = t.date?.toDate ? t.date.toDate() : (t.date ? new Date(t.date) : new Date(0))
-      const matchesStartDate = !startDate || tDate >= new Date(startDate)
-      const matchesEndDate = !endDate || tDate <= new Date(new Date(endDate).setHours(23, 59, 59))
+      const tDate = t.date?.toDate ? t.date.toDate() : (t.date && typeof t.date === 'string' && t.date.includes('-') ? new Date(t.date.replace(/-/g, '/')) : (t.date ? new Date(t.date) : new Date(0)))
+      const matchesStartDate = !sDate || tDate >= sDate
+      const matchesEndDate = !eDate || tDate <= eDate
       return matchesStartDate && matchesEndDate
     }).sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate() : (a.date ? new Date(a.date) : new Date(0))
@@ -159,8 +172,8 @@ export default function TransfersPage() {
   }
 
   const handleReset = () => {
-    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-    setEndDate(new Date().toISOString().split('T')[0])
+    setStartDate(getFirstDayOfMonthYMD())
+    setEndDate(getLocalYMD())
   }
 
   return (
@@ -288,7 +301,7 @@ export default function TransfersPage() {
                   {filteredTransfers?.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="text-xs font-bold text-slate-500">
-                        {t.date?.toDate ? t.date.toDate().toLocaleDateString() : 'Processing'}
+                        {t.date?.toDate ? t.date.toDate().toLocaleDateString() : (t.date && typeof t.date === 'string' && t.date.includes('-') ? new Date(t.date.replace(/-/g, '/')).toLocaleDateString() : 'Processing')}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -321,7 +334,7 @@ export default function TransfersPage() {
                       <div>
                         <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest leading-none">Internal Transfer</p>
                         <p className="text-xs font-bold text-slate-400 mt-1">
-                          {t.date?.toDate ? t.date.toDate().toLocaleDateString() : 'Processing'}
+                          {t.date?.toDate ? t.date.toDate().toLocaleDateString() : (t.date && typeof t.date === 'string' && t.date.includes('-') ? new Date(t.date.replace(/-/g, '/')).toLocaleDateString() : 'Processing')}
                         </p>
                       </div>
                     </div>

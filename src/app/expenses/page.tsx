@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -27,7 +28,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const formatCompactDate = (date: any) => {
   if (!date) return 'N/A'
-  const d = new Date(date)
+  // Parse date correctly considering local time for YYYY-MM-DD strings
+  const d = typeof date === 'string' && date.includes('-') ? new Date(date.replace(/-/g, '/')) : new Date(date)
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
@@ -58,9 +60,19 @@ export default function ExpenseHistoryPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
-  // Default to current month range
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  // Local date helpers
+  const getLocalYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  }
+  const getFirstDayOfMonthYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-01`;
+  }
+
+  // Default to current month range (Local Time)
+  const [startDate, setStartDate] = useState(getFirstDayOfMonthYMD())
+  const [endDate, setEndDate] = useState(getLocalYMD())
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -87,17 +99,23 @@ export default function ExpenseHistoryPage() {
 
   const filteredExpenses = useMemo(() => {
     if (!rawExpenses) return []
+    const sDate = startDate ? new Date(startDate.replace(/-/g, '/')) : null
+    const eDate = endDate ? new Date(endDate.replace(/-/g, '/')) : null
+    if (eDate) eDate.setHours(23, 59, 59)
+
     return rawExpenses.filter(e => {
       const matchesCategory = categoryFilter === "all" || e.category === categoryFilter
       const matchesBuilding = buildingFilter === "all" || e.buildingId === buildingFilter
       const matchesMethod = methodFilter === "all" || e.method === methodFilter
       const matchesSpentBy = spentByFilter === "all" || e.spentBy === spentByFilter || e.expensePartyName === spentByFilter
       const matchesSearch = (e.expensePartyName || "").toLowerCase().includes(searchTerm.toLowerCase()) || (e.description || "").toLowerCase().includes(searchTerm.toLowerCase())
-      const eDate = new Date(e.expenseDate)
-      const matchesStartDate = !startDate || eDate >= new Date(startDate)
-      const matchesEndDate = !endDate || eDate <= new Date(new Date(endDate).setHours(23, 59, 59))
+      
+      const recordDate = new Date(e.expenseDate.replace(/-/g, '/'))
+      const matchesStartDate = !sDate || recordDate >= sDate
+      const matchesEndDate = !eDate || recordDate <= eDate
+      
       return matchesCategory && matchesBuilding && matchesMethod && matchesSpentBy && matchesSearch && matchesStartDate && matchesEndDate
-    }).sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime())
+    }).sort((a, b) => new Date(b.expenseDate.replace(/-/g, '/')).getTime() - new Date(a.expenseDate.replace(/-/g, '/')).getTime())
   }, [rawExpenses, categoryFilter, buildingFilter, methodFilter, spentByFilter, searchTerm, startDate, endDate])
 
   const stats = useMemo(() => {
@@ -117,8 +135,8 @@ export default function ExpenseHistoryPage() {
     setMethodFilter("all")
     setSpentByFilter("all")
     setSearchTerm("")
-    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-    setEndDate(new Date().toISOString().split('T')[0])
+    setStartDate(getFirstDayOfMonthYMD())
+    setEndDate(getLocalYMD())
   }
 
   return (

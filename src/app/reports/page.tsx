@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -31,9 +32,19 @@ export default function ReportsPage() {
   const db = useFirestore()
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   
-  // Default to current month range: 1st of current month to today
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  // Local date helpers
+  const getLocalYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  }
+  const getFirstDayOfMonthYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-01`;
+  }
+
+  // Default to current month range (Local Time)
+  const [startDate, setStartDate] = useState(getFirstDayOfMonthYMD())
+  const [endDate, setEndDate] = useState(getLocalYMD())
   const [buildingFilter, setBuildingFilter] = useState("all")
   
   const [userBranch, setUserBranch] = useState("")
@@ -64,14 +75,16 @@ export default function ReportsPage() {
 
   const stats = useMemo(() => {
     if (!payments || !expenses) return null
-    const sDate = new Date(startDate)
-    const eDate = new Date(new Date(endDate).setHours(23, 59, 59))
+    const sDate = startDate ? new Date(startDate.replace(/-/g, '/')) : new Date(0)
+    const eDate = endDate ? new Date(endDate.replace(/-/g, '/')) : new Date()
+    eDate.setHours(23, 59, 59)
+
     const income = payments.filter(p => {
-      const d = p.date?.toDate ? p.date.toDate() : new Date(p.date)
+      const d = p.date?.toDate ? p.date.toDate() : (typeof p.date === 'string' && p.date.includes('-') ? new Date(p.date.replace(/-/g, '/')) : new Date(p.date))
       return d >= sDate && d <= eDate && (buildingFilter === "all" || p.buildingId === buildingFilter)
     })
     const expense = expenses.filter(e => {
-      const d = new Date(e.expenseDate)
+      const d = new Date(e.expenseDate.replace(/-/g, '/'))
       return d >= sDate && d <= eDate && (buildingFilter === "all" || e.buildingId === buildingFilter)
     })
 
@@ -136,8 +149,8 @@ export default function ReportsPage() {
 
   const handleReset = () => {
     setBuildingFilter("all")
-    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-    setEndDate(new Date().toISOString().split('T')[0])
+    setStartDate(getFirstDayOfMonthYMD())
+    setEndDate(getLocalYMD())
   }
 
   if (pLoading || eLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>

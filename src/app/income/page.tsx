@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -27,7 +28,7 @@ import { useRouter } from "next/navigation"
 
 const formatCompactDate = (date: any) => {
   if (!date) return 'N/A'
-  const d = date?.toDate ? date.toDate() : new Date(date)
+  const d = date?.toDate ? date.toDate() : (typeof date === 'string' && date.includes('-') ? new Date(date.replace(/-/g, '/')) : new Date(date))
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
@@ -50,9 +51,19 @@ export default function IncomeHistoryPage() {
   const [methodFilter, setMethodFilter] = useState("all")
   const [receiverFilter, setReceiverFilter] = useState("all")
   
-  // Default to current month range
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  // Local date helpers
+  const getLocalYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  }
+  const getFirstDayOfMonthYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-01`;
+  }
+
+  // Default to current month range (Local Time)
+  const [startDate, setStartDate] = useState(getFirstDayOfMonthYMD())
+  const [endDate, setEndDate] = useState(getLocalYMD())
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -80,10 +91,14 @@ export default function IncomeHistoryPage() {
 
   const filteredPayments = useMemo(() => {
     if (!rawPayments) return []
+    const sDate = startDate ? new Date(startDate.replace(/-/g, '/')) : null
+    const eDate = endDate ? new Date(endDate.replace(/-/g, '/')) : null
+    if (eDate) eDate.setHours(23, 59, 59)
+
     return rawPayments.filter(p => {
-      const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
-      const matchesStartDate = !startDate || pDate >= new Date(startDate)
-      const matchesEndDate = !endDate || pDate <= new Date(new Date(endDate).setHours(23, 59, 59))
+      const pDate = p.date?.toDate ? p.date.toDate() : (typeof p.date === 'string' && p.date.includes('-') ? new Date(p.date.replace(/-/g, '/')) : new Date(p.date))
+      const matchesStartDate = !sDate || pDate >= sDate
+      const matchesEndDate = !eDate || pDate <= eDate
       const matchesBuilding = buildingFilter === "all" || p.buildingId === buildingFilter
       const matchesRoom = roomFilter === "all" || String(p.roomNumber) === roomFilter
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
@@ -107,7 +122,7 @@ export default function IncomeHistoryPage() {
     if (!confirm) return;
     setIsDeleting(true)
     try {
-      const q = query(collection(db, "payments"), where("branch", "==", userBranch), where("date", ">=", Timestamp.fromDate(new Date(deleteRange.start))), where("date", "<=", Timestamp.fromDate(new Date(deleteRange.end + "T23:59:59"))));
+      const q = query(collection(db, "payments"), where("branch", "==", userBranch), where("date", ">=", Timestamp.fromDate(new Date(deleteRange.start.replace(/-/g, '/')))), where("date", "<=", Timestamp.fromDate(new Date(deleteRange.end.replace(/-/g, '/') + "T23:59:59"))));
       const snapshot = await getDocs(q);
       const batch = writeBatch(db);
       snapshot.docs.forEach(d => batch.delete(d.ref));
@@ -129,8 +144,8 @@ export default function IncomeHistoryPage() {
     setRoomFilter("all")
     setMethodFilter("all")
     setReceiverFilter("all")
-    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-    setEndDate(new Date().toISOString().split('T')[0])
+    setStartDate(getFirstDayOfMonthYMD())
+    setEndDate(getLocalYMD())
   }
 
   return (

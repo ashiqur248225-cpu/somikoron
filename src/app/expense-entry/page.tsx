@@ -52,10 +52,16 @@ export default function ExpenseEntryPage() {
   const [userName, setUserName] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Local date helper
+  const getLocalYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  }
+
   const [formData, setFormData] = useState({
     category: "others",
     amount: "",
-    expenseDate: new Date().toISOString().split('T')[0],
+    expenseDate: getLocalYMD(),
     method: "cash",
     spentBy: "",
     buildingId: "none",

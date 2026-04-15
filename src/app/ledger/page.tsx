@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -20,7 +21,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const formatCompactDate = (date: any) => {
   if (!date) return 'N/A'
-  const d = date?.toDate ? date.toDate() : new Date(date)
+  const d = date?.toDate ? date.toDate() : (typeof date === 'string' && date.includes('-') ? new Date(date.replace(/-/g, '/')) : new Date(date))
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
@@ -31,9 +32,19 @@ export default function LedgerPage() {
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   
-  // Default to current month range
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  // Local date helpers
+  const getLocalYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  }
+  const getFirstDayOfMonthYMD = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-01`;
+  }
+
+  // Default to current month range (Local Time)
+  const [startDate, setStartDate] = useState(getFirstDayOfMonthYMD())
+  const [endDate, setEndDate] = useState(getLocalYMD())
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
@@ -67,17 +78,21 @@ export default function LedgerPage() {
       ...(expenses || []).map(e => ({ ...e, txType: 'expense', debit: e.amount, credit: 0, date: e.expenseDate }))
     ]
     return combined.sort((a, b) => {
-      const d1 = a.date?.toDate ? a.date.toDate() : new Date(a.date)
-      const d2 = b.date?.toDate ? b.date.toDate() : new Date(b.date)
+      const d1 = a.date?.toDate ? a.date.toDate() : (typeof a.date === 'string' && a.date.includes('-') ? new Date(a.date.replace(/-/g, '/')) : new Date(a.date))
+      const d2 = b.date?.toDate ? b.date.toDate() : (typeof b.date === 'string' && b.date.includes('-') ? new Date(b.date.replace(/-/g, '/')) : new Date(b.date))
       return d1.getTime() - d2.getTime()
     })
   }, [payments, expenses])
 
   const filteredData = useMemo(() => {
     let runningBalance = 0
+    const sDate = startDate ? new Date(startDate.replace(/-/g, '/')) : null
+    const eDate = endDate ? new Date(endDate.replace(/-/g, '/')) : null
+    if (eDate) eDate.setHours(23, 59, 59)
+
     return rawLedgerData.filter(tx => {
-      const txDate = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date)
-      const matchesDate = (!startDate || txDate >= new Date(startDate)) && (!endDate || txDate <= new Date(new Date(endDate).setHours(23, 59, 59)))
+      const txDate = tx.date?.toDate ? tx.date.toDate() : (typeof tx.date === 'string' && tx.date.includes('-') ? new Date(tx.date.replace(/-/g, '/')) : new Date(tx.date))
+      const matchesDate = (!sDate || txDate >= sDate) && (!eDate || txDate <= eDate)
       const matchesSearch = (tx.studentName || tx.expensePartyName || tx.category || "").toLowerCase().includes(searchTerm.toLowerCase())
       const matchesType = typeFilter === "all" || tx.txType === typeFilter
       const matchesBuilding = buildingFilter === "all" || tx.buildingId === buildingFilter
@@ -104,8 +119,8 @@ export default function LedgerPage() {
     setSearchTerm("")
     setTypeFilter("all")
     setBuildingFilter("all")
-    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
-    setEndDate(new Date().toISOString().split('T')[0])
+    setStartDate(getFirstDayOfMonthYMD())
+    setEndDate(getLocalYMD())
   }
 
   return (
