@@ -97,7 +97,7 @@ export function AppSidebar() {
 
   // Menu Definition with strict role access
   const items = [
-    { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["Admin", "Branch Manager"] },
     { title: "Payment Entry", url: "/payment-entry", icon: PlusCircle, roles: ["Building Manager"] },
     { title: "Expense Entry", url: "/expense-entry", icon: Receipt, roles: ["Building Manager"] },
     { title: "Buildings", url: "/buildings", icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },

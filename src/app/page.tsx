@@ -81,11 +81,17 @@ export default function DashboardPage() {
   const [timeRange, setTimeRange] = useState("this_month")
 
   useEffect(() => {
-    setUserRole(localStorage.getItem("user_role") || "Manager")
+    const role = localStorage.getItem("user_role") || "Manager"
+    setUserRole(role)
     setUserName(localStorage.getItem("user_name") || "User")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
-  }, [])
+
+    // Redirect Building Manager if they land on Dashboard
+    if (role === 'Building Manager') {
+      router.push('/buildings')
+    }
+  }, [router])
 
   // Optimized netBalance fetching
   const balanceRef = useMemoFirebase(() => userBranch ? doc(db, "netBalance", userBranch) : null, [db, userBranch])
@@ -167,6 +173,15 @@ export default function DashboardPage() {
       totalDue
     }
   }, [allPayments, allExpenses, students, timeRange])
+
+  // Prevent UI rendering for Building Managers before redirect
+  if (userRole === 'Building Manager') {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="animate-spin h-10 w-10 text-primary" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8 pb-20">
