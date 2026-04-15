@@ -111,18 +111,22 @@ export default function DashboardPage() {
   }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students } = useCollection(studentsQuery)
 
-  // Note: These queries fetch everything for timed stats. To fully satisfy 99% saving, 
-  // they should ideally be date-filtered at the query level.
   const paymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "payments"), where("buildingId", "==", assignedBuildingId))
+    }
     return query(collection(db, "payments"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: allPayments } = useCollection(paymentsQuery)
 
   const expensesQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "expenses"), where("buildingId", "==", assignedBuildingId))
+    }
     return query(collection(db, "expenses"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: allExpenses } = useCollection(expensesQuery)
 
   // Statistics Calculation
@@ -196,7 +200,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Main Stats Cards */}
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-success rounded-2xl group hover:shadow-md transition-all">
           <CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-[10px] font-black uppercase text-success tracking-widest">Income</CardTitle><ArrowUpRight className="h-4 w-4 text-success" /></CardHeader>
@@ -217,7 +220,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Buildings Card */}
         <Card className="lg:col-span-2 border-none shadow-sm rounded-3xl bg-white overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between">
             <div className="space-y-1">
@@ -242,7 +244,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Funds Card - Optimized to read from branchBalance doc */}
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b flex justify-between items-center">
             <CardTitle className="text-lg font-bold flex items-center gap-2"><Wallet size={20} className="text-primary"/> Branch Fund</CardTitle>
@@ -267,7 +268,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* FAB */}
       <div className="fixed bottom-8 right-8 z-50">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -278,7 +278,9 @@ export default function DashboardPage() {
           <DropdownMenuContent align="end" className="w-60 rounded-2xl p-2 shadow-xl mb-4 border-slate-100">
             <DropdownMenuItem onClick={() => router.push('/payment-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-success/10"><Wallet size={18} className="text-success"/> Payment Entry</DropdownMenuItem>
             <DropdownMenuItem onClick={() => router.push('/expense-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-destructive/10"><Receipt size={18} className="text-destructive"/> Expense Entry</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push('/bulk-meal-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-primary/10"><Utensils size={18} className="text-primary"/> Monthly Bulk Meal Entry</DropdownMenuItem>
+            {(userRole === 'Admin' || userRole === 'Branch Manager') && (
+              <DropdownMenuItem onClick={() => router.push('/bulk-meal-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-primary/10"><Utensils size={18} className="text-primary"/> Monthly Bulk Meal Entry</DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

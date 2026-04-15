@@ -40,6 +40,8 @@ export default function PaymentEntryPage() {
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
+  const [userRole, setUserRole] = useState("")
+  const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -59,18 +61,31 @@ export default function PaymentEntryPage() {
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
+    setUserRole(localStorage.getItem("user_role") || "Manager")
+    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
+
+  // Check permissions for Building Manager
+  const staffId = typeof window !== 'undefined' ? localStorage.getItem("somikoron_auth_id") : ""
+  const staffRef = useMemoFirebase(() => staffId ? doc(db, "staff", staffId) : null, [db, staffId])
+  const { data: staffData } = useDoc(staffRef)
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
+    }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "students"), where("buildingId", "==", assignedBuildingId), where("isActive", "==", true))
+    }
+    return query(collection(db, "students"), where("branch", "==", userBranch), where("isActive", "==", true))
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students } = useCollection(studentsQuery)
 
   const staffQuery = useMemoFirebase(() => {
@@ -79,7 +94,6 @@ export default function PaymentEntryPage() {
   }, [db, userBranch])
   const { data: staffList } = useCollection(staffQuery)
 
-  // FILTERED STAFF FOR RECEIVER: Only Management
   const managementStaff = useMemo(() => {
     if (!staffList) return []
     return staffList.filter(s => s.staffType === 'management' || !s.staffType)
@@ -106,12 +120,47 @@ export default function PaymentEntryPage() {
     }
     setIsSubmitting(true)
     try {
-      const pId = doc(collection(db, "payments")).id
       const seatPaid = Number(formData.seatAmount || 0)
       const foodPaid = Number(formData.foodAmount || 0)
       const extraAdvance = Number(formData.addAdvanceAmount || 0)
       const totalAmt = seatPaid + foodPaid + extraAdvance
-      
+
+      // ROLE BASED BRANCHING: Request vs Direct Entry
+      const isBM = userRole === 'Building Manager'
+      const needsApproval = isBM && (staffData?.canRequestIncome === true || !staffData?.canDirectEntryIncome)
+
+      if (needsApproval) {
+        // Create Request
+        const reqId = doc(collection(db, "managerRequests")).id
+        await setDoc(doc(db, "managerRequests", reqId), {
+          id: reqId,
+          requestType: "income",
+          amount: totalAmt,
+          seatAmount: seatPaid,
+          foodAmount: foodPaid,
+          advanceAmount: extraAdvance,
+          studentId: selectedStudent.id,
+          studentName: selectedStudent.name,
+          buildingId: selectedStudent.buildingId,
+          buildingName: selectedStudent.buildingName,
+          roomNumber: selectedStudent.roomNumber,
+          branch: userBranch,
+          month: formData.month,
+          year: formData.year,
+          method: formData.method,
+          receiver: formData.receiver,
+          description: formData.description,
+          requestedBy: staffId,
+          requestedByName: userName,
+          createdAt: serverTimestamp()
+        })
+        toast({ title: "Request Sent", description: "Your income entry is pending for Admin approval." })
+        router.push('/')
+        return
+      }
+
+      // Direct Entry (Admin, Branch Manager, or BM with Direct Entry Permission)
+      const pId = doc(collection(db, "payments")).id
       const pRecord = {
         id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
         studentName: selectedStudent.name, studentId: selectedStudent.id, 
@@ -187,41 +236,34 @@ export default function PaymentEntryPage() {
         lastUpdated: serverTimestamp()
       }, { merge: true });
 
-      // INTELLIGENT SMS TRIGGER (PAYMENT RECEIPT)
+      // SMS TRIGGER
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text || 
                          "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[paid] টাকা। বর্তমান মোট বকেয়া: ৳[total_payable]। ধন্যবাদ। [Hostel Name]";
         
-        if (template) {
-          const mealRate = Number(mealConfig?.rate || 0);
-          const foodVal = Number(selectedStudent.foodDueAmount || 0) + foodPaid;
-          const foodBalance = foodVal > 0 ? foodVal : 0;
-          const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
-          const totalPayable = finalTotalDue + foodDue;
+        const foodVal = Number(selectedStudent.foodDueAmount || 0) + foodPaid;
+        const foodBalance = foodVal > 0 ? foodVal : 0;
+        const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
+        const totalPayable = finalTotalDue + foodDue;
 
-          const msg = template
-            .replaceAll('[নাম]', selectedStudent.name)
-            .replaceAll('[মাস]', `${formData.month} ${formData.year}`)
-            .replaceAll('[meal_rate]', mealRate.toString())
-            .replaceAll('[rent]', (selectedStudent.monthlyRent || 0).toString())
-            .replaceAll('[total_payable]', totalPayable.toString())
-            .replaceAll('[paid]', totalAmt.toString())
-            .replaceAll('[food_balance]', foodBalance.toString())
-            .replaceAll('[food_due]', foodDue.toString())
-            .replaceAll('[রুম]', selectedStudent.roomNumber)
-            .replaceAll('[building]', selectedStudent.buildingName)
-            .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch)
-            .replaceAll('[previous_due]', (selectedStudent.totalDue || 0).toString());
+        const msg = template
+          .replaceAll('[নাম]', selectedStudent.name)
+          .replaceAll('[মাস]', `${formData.month} ${formData.year}`)
+          .replaceAll('[total_payable]', totalPayable.toString())
+          .replaceAll('[paid]', totalAmt.toString())
+          .replaceAll('[food_balance]', foodBalance.toString())
+          .replaceAll('[food_due]', foodDue.toString())
+          .replaceAll('[রুম]', selectedStudent.roomNumber)
+          .replaceAll('[building]', selectedStudent.buildingName)
+          .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
 
-          const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
-          
-          const logId = doc(collection(db, "smsLogs")).id;
-          await setDoc(doc(db, "smsLogs", logId), {
-            id: logId, to: selectedStudent.phone, message: msg, branch: userBranch, sentBy: userName,
-            status: smsResult.error === 0 ? 'Success' : 'Failed', error: smsResult.error !== 0 ? smsResult.msg : null,
-            createdAt: serverTimestamp()
-          });
-        }
+        const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
+        
+        const logId = doc(collection(db, "smsLogs")).id;
+        await setDoc(doc(db, "smsLogs", logId), {
+          id: logId, to: selectedStudent.phone, message: msg, branch: userBranch, sentBy: userName,
+          status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp()
+        });
       }
       
       toast({ title: "Payment Successful" })
@@ -286,8 +328,7 @@ export default function PaymentEntryPage() {
               <SelectContent>
                 {students?.filter(s => 
                   (formData.buildingId === 'all' || s.buildingId === formData.buildingId) && 
-                  (formData.roomNumber === 'all' || s.roomNumber === formData.roomNumber) && 
-                  s.isActive
+                  (formData.roomNumber === 'all' || s.roomNumber === formData.roomNumber)
                 ).map(s => <SelectItem key={s.id} value={s.id}>{s.name} (R-{s.roomNumber})</SelectItem>)}
               </SelectContent>
             </Select>
@@ -376,7 +417,7 @@ export default function PaymentEntryPage() {
         </CardContent>
         <CardFooter className="p-8 bg-slate-50 border-t">
           <Button onClick={handleCreatePayment} disabled={isSubmitting || !formData.studentId} className="w-full h-16 rounded-2xl text-xl font-black bg-success hover:bg-success/90 shadow-2xl shadow-success/20">
-            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2"/>} Confirm & Generate Receipt
+            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2"/>} Confirm Payment
           </Button>
         </CardFooter>
       </Card>

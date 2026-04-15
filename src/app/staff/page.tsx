@@ -71,7 +71,9 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
     branch: "",
     assignedBuildingId: "none",
     canRequestIncome: false,
-    canRequestExpense: false
+    canRequestExpense: false,
+    canDirectEntryIncome: false,
+    canDirectEntryExpense: false
   })
 
   // Queries
@@ -80,8 +82,9 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
 
   const staffQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Admin') return query(collection(db, "staff"))
     return query(collection(db, "staff"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole])
   const { data: staff, isLoading } = useCollection(staffQuery)
 
   const buildingsQuery = useMemoFirebase(() => {
@@ -120,7 +123,9 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
       branch: userBranch,
       assignedBuildingId: "none",
       canRequestIncome: false,
-      canRequestExpense: false
+      canRequestExpense: false,
+      canDirectEntryIncome: false,
+      canDirectEntryExpense: false
     })
     setIsAddOpen(true)
   }
@@ -147,6 +152,8 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
         salaryHistory: [],
         canRequestIncome: formData.role === 'Building Manager' ? formData.canRequestIncome : true,
         canRequestExpense: formData.role === 'Building Manager' ? formData.canRequestExpense : true,
+        canDirectEntryIncome: formData.role === 'Building Manager' ? formData.canDirectEntryIncome : true,
+        canDirectEntryExpense: formData.role === 'Building Manager' ? formData.canDirectEntryExpense : true,
       })
       toast({ title: "Success", description: "Staff member added." })
       setIsAddOpen(false)
@@ -220,7 +227,7 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-slate-600">{s.branch}</span>
-                            {s.assignedBuildingId !== 'none' && <span className="text-[10px] text-muted-foreground">Building: {buildings?.find(b => b.id === s.assignedBuildingId)?.name || 'Loading...'}</span>}
+                            {s.assignedBuildingId !== 'none' && <span className="text-[10px] text-muted-foreground">Building ID: {s.assignedBuildingId}</span>}
                           </div>
                         </TableCell>
                         <TableCell className="font-black text-slate-700">৳{s.monthlySalary?.toLocaleString()}</TableCell>
@@ -376,17 +383,17 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <Label className="text-sm">Can Request Income</Label>
-                      <p className="text-[10px] text-muted-foreground">Allows sending collection requests for approval.</p>
+                      <Label className="text-sm">Direct Payment Entry</Label>
+                      <p className="text-[10px] text-muted-foreground">Skip approval for income entries.</p>
                     </div>
-                    <Switch checked={formData.canRequestIncome} onCheckedChange={val => setFormData({...formData, canRequestIncome: val})} />
+                    <Switch checked={formData.canDirectEntryIncome} onCheckedChange={val => setFormData({...formData, canDirectEntryIncome: val, canRequestIncome: !val})} />
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <Label className="text-sm">Can Request Expense</Label>
-                      <p className="text-[10px] text-muted-foreground">Allows sending spending requests for approval.</p>
+                      <Label className="text-sm">Direct Expense Entry</Label>
+                      <p className="text-[10px] text-muted-foreground">Skip approval for expense entries.</p>
                     </div>
-                    <Switch checked={formData.canRequestExpense} onCheckedChange={val => setFormData({...formData, canRequestExpense: val})} />
+                    <Switch checked={formData.canDirectEntryExpense} onCheckedChange={val => setFormData({...formData, canDirectEntryExpense: val, canRequestExpense: !val})} />
                   </div>
                 </div>
               </div>

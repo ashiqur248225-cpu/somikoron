@@ -27,24 +27,35 @@ export default function DuesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
+  
+  const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
+  const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
   useEffect(() => {
+    setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
+    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
+    }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
+    }
     return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
   const processedData = useMemo(() => {
@@ -58,8 +69,6 @@ export default function DuesPage() {
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
-      
-      // Strict rule: Show only if has due
       const hasDue = s.displayTotalDue > 0
       
       return matchesStatus && matchesSearch && matchesBuilding && hasDue
@@ -92,7 +101,6 @@ export default function DuesPage() {
         </div>
       </div>
 
-      {/* OFFICIAL A4 PRINT REPORT */}
       <div className="print-only print-report-container">
         <div className="report-header">
           <h1>সমীকরণ ছাত্রাবাস</h1>

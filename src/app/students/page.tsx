@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -30,24 +31,34 @@ export default function StudentsPage() {
   const [statusFilter, setStatusFilter] = useState("active")
   const [planFilter, setPlanFilter] = useState("all")
   
+  const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
+  const [assignedBuildingId, setAssignedBuildingId] = useState("")
 
   useEffect(() => {
+    setUserRole(localStorage.getItem("user_role") || "Manager")
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
+    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
   }, [])
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
+    }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
+    }
     return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students, isLoading } = useCollection(studentsQuery)
 
   const uniqueRooms = useMemo(() => {
@@ -99,7 +110,6 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* OFFICIAL A4 PRINT REPORT */}
       <div className="print-only print-report-container">
         <div className="report-header">
           <h1>সমীকরণ ছাত্রাবাস</h1>
@@ -161,7 +171,6 @@ export default function StudentsPage() {
           <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
         ) : (
           <>
-            {/* Desktop Table View */}
             <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
               <CardContent className="p-0">
                 <Table>
@@ -213,7 +222,6 @@ export default function StudentsPage() {
               </CardContent>
             </Card>
 
-            {/* Mobile Card View */}
             <div className="md:hidden space-y-4">
               {processedStudents.map((s: any) => (
                 <Card 

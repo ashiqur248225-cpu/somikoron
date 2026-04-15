@@ -20,7 +20,8 @@ import {
   BellRing,
   ChevronRight,
   MessageSquareQuote,
-  ScrollText
+  ScrollText,
+  PlusCircle
 } from "lucide-react"
 import {
   Sidebar,
@@ -81,7 +82,6 @@ export function AppSidebar() {
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
   const { data: branches } = useCollection(branchesQuery)
 
-  // Logic for Birthday Badge
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "students"), where("branch", "==", userBranch), where("isActive", "==", true))
@@ -95,16 +95,18 @@ export function AppSidebar() {
     return students.filter(s => s.dob?.endsWith(todayStr)).length
   }, [students])
 
-  // Strict Menu Access Definition
+  // Menu Definition with strict role access
   const items = [
     { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Payment Entry", url: "/payment-entry", icon: PlusCircle, roles: ["Building Manager"] },
+    { title: "Expense Entry", url: "/expense-entry", icon: Receipt, roles: ["Building Manager"] },
     { title: "Buildings", url: "/buildings", icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
     { title: "Manager Requests", url: "/manager-requests", icon: BellRing, roles: ["Admin", "Branch Manager"] },
-    { title: "Income", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager", "Building Manager"] },
-    { title: "Receipts", url: "/receipts", icon: ScrollText, roles: ["Admin", "Branch Manager", "Building Manager"] },
-    { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Income", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager"] },
+    { title: "Receipts", url: "/receipts", icon: ScrollText, roles: ["Admin", "Branch Manager"] },
+    { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },
     { title: "SMS Panel", url: "/sms", icon: MessageSquareQuote, roles: ["Admin", "Branch Manager"], badge: birthdayCount > 0 ? birthdayCount : null },
@@ -139,52 +141,23 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarMenu>
             {filteredItems.map((item) => (
-              <React.Fragment key={item.title}>
-                {item.subItems ? (
-                  <Collapsible asChild defaultOpen={pathname.startsWith(item.url)} className="group/collapsible">
-                    <SidebarMenuItem>
-                      <CollapsibleTrigger asChild>
-                        <SidebarMenuButton tooltip={item.title}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                          <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                        </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <SidebarMenuSub>
-                          {item.subItems.map((subItem) => (
-                            <SidebarMenuSubItem key={subItem.title}>
-                              <SidebarMenuSubButton asChild isActive={pathname === subItem.url}>
-                                <Link href={subItem.url}>
-                                  <span>{subItem.title}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                        </SidebarMenuSub>
-                      </CollapsibleContent>
-                    </SidebarMenuItem>
-                  </Collapsible>
-                ) : (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton 
-                      asChild 
-                      isActive={pathname === item.url}
-                      tooltip={item.title}
-                    >
-                      <Link href={item.url} className="flex items-center w-full">
-                        <item.icon />
-                        <span>{item.title}</span>
-                        {item.badge && (
-                          <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-black text-destructive-foreground animate-pulse">
-                            {item.badge}
-                          </span>
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-              </React.Fragment>
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton 
+                  asChild 
+                  isActive={pathname === item.url}
+                  tooltip={item.title}
+                >
+                  <Link href={item.url} className="flex items-center w-full">
+                    <item.icon />
+                    <span>{item.title}</span>
+                    {item.badge && (
+                      <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-black text-destructive-foreground animate-pulse">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             ))}
           </SidebarMenu>
         </SidebarGroup>
