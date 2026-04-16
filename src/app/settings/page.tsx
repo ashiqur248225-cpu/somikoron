@@ -11,7 +11,9 @@ import {
   Link as LinkIcon, Copy, ExternalLink, ScrollText,
   Bold, Heading1, Heading2, List, Palette, Eye, Edit3, Eraser,
   MoreVertical, ShieldCheck, Lock, ShieldAlert, RefreshCw, Download, Printer, MapPin,
-  History
+  History,
+  Calculator,
+  Zap
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
@@ -57,6 +59,12 @@ export default function SettingsPage() {
   const [isDevMode, setIsDevMode] = useState(false)
   const [enhancedSecurity, setEnhancedSecurity] = useState(false)
   
+  // Financial Estimates State
+  const [financialEstimates, setFinancialEstimates] = useState({
+    packageFoodCost: "4500",
+    utilityEstimateCost: "500"
+  })
+
   // Print Flyer State
   const [activeFlyer, setActiveFlyer] = useState<{label: string, url: string, bengaliLabel: string} | null>(null)
 
@@ -71,7 +79,6 @@ export default function SettingsPage() {
   // Print synchronization effect
   useEffect(() => {
     if (activeFlyer) {
-      // Wait for React to render the print-only div and for the QR image to load
       const timer = setTimeout(() => {
         window.print();
       }, 1000);
@@ -108,6 +115,9 @@ export default function SettingsPage() {
   const securityRef = useMemoFirebase(() => doc(db, "configs", "securityConfig"), [db])
   const { data: securityData } = useDoc(securityRef)
 
+  const estimatesRef = useMemoFirebase(() => doc(db, "configs", "financialEstimates"), [db])
+  const { data: estimatesData } = useDoc(estimatesRef)
+
   useEffect(() => {
     if (config) setRate(config.rate?.toString() || "")
   }, [config])
@@ -131,6 +141,15 @@ export default function SettingsPage() {
     if (securityData) setEnhancedSecurity(securityData.enhancedSecurity || false)
   }, [securityData])
 
+  useEffect(() => {
+    if (estimatesData) {
+      setFinancialEstimates({
+        packageFoodCost: (estimatesData.packageFoodCost || 4500).toString(),
+        utilityEstimateCost: (estimatesData.utilityEstimateCost || 500).toString()
+      })
+    }
+  }, [estimatesData])
+
   const handleSaveRate = async () => {
     if (!rate || isNaN(Number(rate))) {
       toast({ variant: "destructive", title: "Error", description: "Please enter a valid meal rate." })
@@ -140,6 +159,22 @@ export default function SettingsPage() {
     try {
       await setDoc(configRef, { rate: Number(rate), updatedAt: serverTimestamp() })
       toast({ title: "Settings Saved" })
+    } catch (e: any) {
+      toast({ variant: "destructive", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleSaveEstimates = async () => {
+    setIsUpdating(true)
+    try {
+      await setDoc(estimatesRef, {
+        packageFoodCost: Number(financialEstimates.packageFoodCost),
+        utilityEstimateCost: Number(financialEstimates.utilityEstimateCost),
+        updatedAt: serverTimestamp()
+      })
+      toast({ title: "Estimation Constants Saved", description: "Profit calculations will now reflect these values." })
     } catch (e: any) {
       toast({ variant: "destructive", description: e.message })
     } finally {
@@ -160,7 +195,6 @@ export default function SettingsPage() {
       const nagad = Number(balances.nagad || 0)
       const total = cash + bank + bkash + nagad
 
-      // 1. Save to openingBalances config (Global log)
       await setDoc(balancesRef, {
         cash,
         bank,
@@ -169,7 +203,6 @@ export default function SettingsPage() {
         updatedAt: serverTimestamp()
       })
 
-      // 2. Sync to netBalance collection for the branch (Operational balance)
       const netBalanceRef = doc(db, "netBalance", userBranch)
       await setDoc(netBalanceRef, {
         branchId: userBranch,
@@ -177,7 +210,7 @@ export default function SettingsPage() {
         totalBank: bank,
         totalBkash: bkash,
         totalNagad: nagad,
-        totalHandCash: total, // Sum of all accounts
+        totalHandCash: total,
         lastUpdated: serverTimestamp()
       }, { merge: true })
 
@@ -213,10 +246,7 @@ export default function SettingsPage() {
       setIsDevMode(false);
       setIsDevDialogOpen(false);
       setDevPassword("");
-      toast({ 
-        title: "Developer Mode Disabled",
-        description: "Bulk actions restricted."
-      });
+      toast({ title: "Developer Mode Disabled" });
       return;
     }
 
@@ -228,10 +258,7 @@ export default function SettingsPage() {
       setIsDevMode(true);
       setIsDevDialogOpen(false);
       setDevPassword("");
-      toast({ 
-        title: "Developer Mode Active",
-        description: "You can now perform bulk deletions."
-      });
+      toast({ title: "Developer Mode Active" });
     } else {
       toast({ variant: "destructive", title: "Incorrect Password" });
     }
@@ -258,7 +285,7 @@ export default function SettingsPage() {
   const copyToClipboard = (path: string) => {
     const fullUrl = `${PRODUCTION_DOMAIN}${path}`
     navigator.clipboard.writeText(fullUrl)
-    toast({ title: "Link Copied!", description: "Public URL is now in your clipboard." })
+    toast({ title: "Link Copied!" })
   }
 
   const handlePrintFlyer = (label: string, url: string, bengaliLabel: string) => {
@@ -275,12 +302,9 @@ export default function SettingsPage() {
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Settings</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
-              Configure parameters for <span className="font-bold text-foreground">{userBranch}</span>.
-            </p>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Configure parameters for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
-        
         <div className="ml-auto flex items-center gap-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -300,12 +324,9 @@ export default function SettingsPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
           <Link href="/profile">
             <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary transition-all cursor-pointer shadow-sm">
-              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">
-                {userName ? userName.substring(0, 2) : "U"}
-              </AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold text-xs uppercase">{userName ? userName.substring(0, 2) : "U"}</AvatarFallback>
             </Avatar>
           </Link>
         </div>
@@ -316,92 +337,92 @@ export default function SettingsPage() {
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><ShieldAlert className={isDevMode ? "text-slate-900" : "text-destructive"}/> Developer Access</DialogTitle>
-            <DialogDescription>
-              {isDevMode 
-                ? "Developer mode is currently active. You can turn it off to restrict management tools." 
-                : "Management restricted area. Enter admin password to proceed."}
-            </DialogDescription>
+            <DialogDescription>{isDevMode ? "Developer mode is currently active." : "Management restricted area. Enter admin password to proceed."}</DialogDescription>
           </DialogHeader>
-          
           {!isDevMode && (
             <div className="py-4">
               <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Password</Label>
-              <Input 
-                type="password" 
-                value={devPassword} 
-                onChange={e => setDevPassword(e.target.value)} 
-                placeholder="••••••••"
-                className="h-12 bg-slate-50 border-none shadow-inner rounded-2xl text-lg text-center font-black"
-              />
+              <Input type="password" value={devPassword} onChange={e => setDevPassword(e.target.value)} placeholder="••••••••" className="h-12 bg-slate-50 border-none shadow-inner rounded-2xl text-lg text-center font-black" />
             </div>
           )}
-
-          <DialogFooter>
-            <Button onClick={handleToggleDeveloperMode} className={cn("w-full h-12 text-lg font-bold rounded-2xl", isDevMode ? "bg-slate-900" : "bg-destructive")}>
-              {isDevMode ? "Deactivate Mode" : "Activate Mode"}
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={handleToggleDeveloperMode} className={cn("w-full h-12 text-lg font-bold rounded-2xl", isDevMode ? "bg-slate-900" : "bg-destructive")}>{isDevMode ? "Deactivate Mode" : "Activate Mode"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Security Toggle Dialog */}
       <Dialog open={isSecurityDialogOpen} onOpenChange={setIsSecurityDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Lock className="text-orange-500"/> Session Security</DialogTitle>
-            <DialogDescription>Control how users stay logged into the system.</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Lock className="text-orange-500"/> Session Security</DialogTitle><DialogDescription>Control how users stay logged into the system.</DialogDescription></DialogHeader>
           <div className="py-6 flex items-center justify-between p-6 bg-slate-50 rounded-3xl border border-slate-100">
-            <div className="space-y-1">
-              <Label className="text-sm font-bold">Enhanced Login Security</Label>
-              <p className="text-[10px] text-muted-foreground leading-tight">If ON, users must login every time they open the app.</p>
-            </div>
+            <div className="space-y-1"><Label className="text-sm font-bold">Enhanced Login Security</Label><p className="text-[10px] text-muted-foreground leading-tight">If ON, users must login every time they open the app.</p></div>
             <Switch checked={enhancedSecurity} onCheckedChange={handleSaveSecurity} />
           </div>
-          <DialogFooter>
-            <Button onClick={() => setIsSecurityDialogOpen(false)} className="w-full h-12 rounded-2xl">Close Settings</Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={() => setIsSecurityDialogOpen(false)} className="w-full h-12 rounded-2xl">Close Settings</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* NEW: Financial Estimation Constants Section */}
+      <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-indigo-600 print:hidden">
+        <CardHeader>
+          <div className="flex items-center gap-2 text-indigo-600">
+            <Calculator size={20} />
+            <CardTitle>Financial Estimation Constants</CardTitle>
+          </div>
+          <CardDescription>Configure global food and utility costs for profit calculations.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="foodCost">Package Food Cost (৳)</Label>
+              <div className="relative">
+                <Utensils className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="foodCost" 
+                  type="number" 
+                  className="pl-9" 
+                  placeholder="e.g. 4500" 
+                  value={financialEstimates.packageFoodCost} 
+                  onChange={e => setFinancialEstimates({...financialEstimates, packageFoodCost: e.target.value})} 
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground italic">Estimated monthly food expense per package student.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="utilCost">Estimated Utility Cost (৳)</Label>
+              <div className="relative">
+                <Zap className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="utilCost" 
+                  type="number" 
+                  className="pl-9" 
+                  placeholder="e.g. 500" 
+                  value={financialEstimates.utilityEstimateCost} 
+                  onChange={e => setFinancialEstimates({...financialEstimates, utilityEstimateCost: e.target.value})} 
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground italic">Estimated monthly utility expense (electricity/water) per active student.</p>
+            </div>
+          </div>
+          <Button onClick={handleSaveEstimates} disabled={isUpdating} className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700">
+            {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Update Estimation Rules
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Meal Configuration Section */}
       <Card className="border-none shadow-sm overflow-hidden print:hidden">
         <CardHeader className="flex flex-row items-center justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-primary">
-              <Utensils size={20} />
-              <CardTitle>Meal Configuration</CardTitle>
-            </div>
-            <CardDescription>Set the monthly standard meal rate.</CardDescription>
-          </div>
-          <Link href="/food-history">
-            <Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg border-primary/20 text-primary font-bold">
-              <History size={14} /> meals ret
-            </Button>
-          </Link>
+          <div className="space-y-1"><div className="flex items-center gap-2 text-primary"><Utensils size={20} /><CardTitle>Meal Configuration</CardTitle></div><CardDescription>Set the monthly standard meal rate.</CardDescription></div>
+          <Link href="/food-history"><Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg border-primary/20 text-primary font-bold"><History size={14} /> meals ret</Button></Link>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="mealRate">Standard Meal Rate (৳)</Label>
-            <div className="flex gap-4">
-              <Input id="mealRate" type="number" placeholder="e.g. 40" value={rate} onChange={e => setRate(e.target.value)} className="max-w-[200px]" />
-              <Button onClick={handleSaveRate} disabled={isUpdating} className="gap-2">
-                {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Rate
-              </Button>
-            </div>
-          </div>
+          <div className="space-y-2"><Label htmlFor="mealRate">Standard Meal Rate (৳)</Label><div className="flex gap-4"><Input id="mealRate" type="number" placeholder="e.g. 40" value={rate} onChange={e => setRate(e.target.value)} className="max-w-[200px]" /><Button onClick={handleSaveRate} disabled={isUpdating} className="gap-2">{isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Rate</Button></div></div>
         </CardContent>
       </Card>
 
       {/* Registration Links Section */}
       <Card className="border-none shadow-sm border-l-4 border-l-primary bg-primary/5 print:hidden">
-        <CardHeader>
-          <div className="flex items-center gap-2 text-primary">
-            <LinkIcon size={20} />
-            <CardTitle>Public Registration Links</CardTitle>
-          </div>
-          <CardDescription>Share these secure links with students.</CardDescription>
-        </CardHeader>
+        <CardHeader><div className="flex items-center gap-2 text-primary"><LinkIcon size={20} /><CardTitle>Public Registration Links</CardTitle></div><CardDescription>Share these secure links with students.</CardDescription></CardHeader>
         <CardContent className="space-y-4">
           {[
             { label: "New Student Registration", bengaliLabel: "নতুন স্টুডেন্ট এডমিশন ফর্ম", type: "new" },
@@ -410,38 +431,15 @@ export default function SettingsPage() {
             const path = `/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`;
             const fullUrl = `${PRODUCTION_DOMAIN}${path}`;
             const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(fullUrl)}`;
-            
             return (
               <div key={link.type} className="flex flex-col gap-4 p-4 bg-background rounded-3xl border shadow-sm">
                 <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
-                  <div className="flex-1 overflow-hidden">
-                    <p className="text-sm font-bold">{link.label}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{fullUrl}</p>
-                  </div>
+                  <div className="flex-1 overflow-hidden"><p className="text-sm font-bold">{link.label}</p><p className="text-[10px] text-muted-foreground truncate">{fullUrl}</p></div>
                   <div className="flex flex-wrap gap-2 shrink-0">
-                    <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[10px] font-bold uppercase" onClick={() => window.open(fullUrl, '_blank')}>
-                      <ExternalLink size={14} /> Open
-                    </Button>
-                    <Button size="sm" variant="secondary" className="h-8 gap-1.5 text-[10px] font-bold uppercase" onClick={() => copyToClipboard(path)}>
-                      <Copy size={14} /> Copy
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      className="h-8 gap-1.5 text-[10px] font-bold uppercase text-primary border-primary/20"
-                      asChild
-                    >
-                      <a href={qrUrl} download={`qr_${link.type}.png`}>
-                        <Download size={14} /> QR Image
-                      </a>
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      className="h-8 gap-1.5 text-[10px] font-bold uppercase"
-                      onClick={() => handlePrintFlyer(link.label, fullUrl, link.bengaliLabel)}
-                    >
-                      <Printer size={14} /> Print Flyer
-                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[10px] font-bold uppercase" onClick={() => window.open(fullUrl, '_blank')}><ExternalLink size={14} /> Open</Button>
+                    <Button size="sm" variant="secondary" className="h-8 gap-1.5 text-[10px] font-bold uppercase" onClick={() => copyToClipboard(path)}><Copy size={14} /> Copy</Button>
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[10px] font-bold uppercase text-primary border-primary/20" asChild><a href={qrUrl} download={`qr_${link.type}.png`}><Download size={14} /> QR Image</a></Button>
+                    <Button size="sm" className="h-8 gap-1.5 text-[10px] font-bold uppercase" onClick={() => handlePrintFlyer(link.label, fullUrl, link.bengaliLabel)}><Printer size={14} /> Print Flyer</Button>
                   </div>
                 </div>
               </div>
@@ -452,20 +450,10 @@ export default function SettingsPage() {
 
       {/* Rules & Regulations Editor Section */}
       <Card className="border-none shadow-sm overflow-hidden print:hidden">
-        <CardHeader>
-          <div className="flex items-center gap-2 text-primary">
-            <ScrollText size={20} />
-            <CardTitle>Rules & Regulations Setup</CardTitle>
-          </div>
-          <CardDescription>Edit hostel rules like a document.</CardDescription>
-        </CardHeader>
+        <CardHeader><div className="flex items-center gap-2 text-primary"><ScrollText size={20} /><CardTitle>Rules & Regulations Setup</CardTitle></div><CardDescription>Edit hostel rules like a document.</CardDescription></CardHeader>
         <CardContent className="space-y-4">
           <Tabs defaultValue="edit" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="edit" className="gap-2"><Edit3 size={14} /> Document Editor</TabsTrigger>
-              <TabsTrigger value="preview" className="gap-2"><Eye size={14} /> Preview</TabsTrigger>
-            </TabsList>
-            
+            <TabsList className="grid w-full grid-cols-2 mb-4"><TabsTrigger value="edit" className="gap-2"><Edit3 size={14} /> Document Editor</TabsTrigger><TabsTrigger value="preview" className="gap-2"><Eye size={14} /> Preview</TabsTrigger></TabsList>
             <TabsContent value="edit" className="space-y-0">
               <div className="flex flex-wrap gap-1 p-2 bg-secondary/30 rounded-t-lg border-x border-t sticky top-0 z-10 backdrop-blur-sm">
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Bold" onClick={() => execCommand('bold')}><Bold size={14} /></Button>
@@ -473,40 +461,20 @@ export default function SettingsPage() {
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Heading 2" onClick={() => execCommand('formatBlock', 'H2')}><Heading2 size={14} /></Button>
                 <Separator orientation="vertical" className="h-6 mx-1" />
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="List" onClick={() => execCommand('insertUnorderedList')}><List size={14} /></Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Palette size={14} /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={() => execCommand('foreColor', '#000000')}>Black</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => execCommand('foreColor', '#296EB3')}>Blue</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => execCommand('foreColor', '#F06A6A')}>Red</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Palette size={14} /></Button></DropdownMenuTrigger><DropdownMenuContent align="start"><DropdownMenuItem onClick={() => execCommand('foreColor', '#000000')}>Black</DropdownMenuItem><DropdownMenuItem onClick={() => execCommand('foreColor', '#296EB3')}>Blue</DropdownMenuItem><DropdownMenuItem onClick={() => execCommand('foreColor', '#F06A6A')}>Red</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => execCommand('removeFormat')}><Eraser size={14} /></Button>
               </div>
               <div ref={editorRef} contentEditable onInput={(e) => setRules(e.currentTarget.innerHTML)} className="rich-text min-h-[400px] p-6 border rounded-b-lg focus:outline-none bg-white shadow-inner overflow-y-auto" dangerouslySetInnerHTML={{ __html: rules }} />
             </TabsContent>
-
-            <TabsContent value="preview" className="border rounded-lg p-8 bg-slate-50 min-h-[400px]">
-              <div className="bg-white p-8 rounded-2xl shadow-sm border max-w-2xl mx-auto">
-                <div className="rich-text text-sm max-w-none text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: rules || "<i>No rules written yet.</i>" }} />
-              </div>
-            </TabsContent>
+            <TabsContent value="preview" className="border rounded-lg p-8 bg-slate-50 min-h-[400px]"><div className="bg-white p-8 rounded-2xl shadow-sm border max-w-2xl mx-auto"><div className="rich-text text-sm max-w-none text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: rules || "<i>No rules written yet.</i>" }} /></div></TabsContent>
           </Tabs>
-          <Button onClick={handleSaveRules} disabled={isUpdating} className="w-full gap-2 h-14 text-lg font-bold shadow-lg mt-4">
-            {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={20} />} Save & Publish Rules
-          </Button>
+          <Button onClick={handleSaveRules} disabled={isUpdating} className="w-full gap-2 h-14 text-lg font-bold shadow-lg mt-4">{isUpdating ? <Loader2 className="animate-spin" /> : <Save size={20} />} Save & Publish Rules</Button>
         </CardContent>
       </Card>
 
       {/* Opening Balances Section */}
       <Card className="border-none shadow-sm print:hidden">
-        <CardHeader>
-          <div className="flex items-center gap-2 text-primary">
-            <Wallet size={20} />
-            <CardTitle>Opening Balances</CardTitle>
-          </div>
-          <CardDescription>Set your initial funds.</CardDescription>
-        </CardHeader>
+        <CardHeader><div className="flex items-center gap-2 text-primary"><Wallet size={20} /><CardTitle>Opening Balances</CardTitle></div><CardDescription>Set your initial funds.</CardDescription></CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2"><Label><Banknote size={14} /> Cash</Label><Input type="number" value={balances.cash} onChange={e => setBalances({...balances, cash: e.target.value})} /></div>
@@ -514,9 +482,7 @@ export default function SettingsPage() {
             <div className="space-y-2"><Label><Smartphone size={14} className="text-primary" /> Bkash</Label><Input type="number" value={balances.bkash} onChange={e => setBalances({...balances, bkash: e.target.value})} /></div>
             <div className="space-y-2"><Label><Smartphone size={14} className="text-orange-500" /> Nagad</Label><Input type="number" value={balances.nagad} onChange={e => setBalances({...balances, nagad: e.target.value})} /></div>
           </div>
-          <Button onClick={handleSaveBalances} disabled={isUpdating} className="w-full gap-2 mt-4">
-            {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Initial Balances
-          </Button>
+          <Button onClick={handleSaveBalances} disabled={isUpdating} className="w-full gap-2 mt-4">{isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Initial Balances</Button>
         </CardContent>
       </Card>
 
@@ -525,35 +491,14 @@ export default function SettingsPage() {
         <div className="print-only print-report-container flex flex-col items-center justify-center h-[297mm] w-[210mm] border-[10mm] border-primary bg-white">
           <div className="text-center space-y-6 p-12 flex flex-col items-center">
             <h1 className="text-6xl font-black text-primary uppercase tracking-tighter mb-4" style={{ color: 'hsl(var(--primary)) !important' }}>সমীকরণ ছাত্রাবাস</h1>
-            <div className="bg-primary text-white px-12 py-4 rounded-full text-3xl font-black uppercase tracking-widest shadow-xl" style={{ backgroundColor: 'hsl(var(--primary)) !important', color: 'white !important' }}>
-              অনলাইন ভর্তি ফর্ম
-            </div>
-            
+            <div className="bg-primary text-white px-12 py-4 rounded-full text-3xl font-black uppercase tracking-widest shadow-xl" style={{ backgroundColor: 'hsl(var(--primary)) !important', color: 'white !important' }}>অনলাইন ভর্তি ফর্ম</div>
             <div className="pt-12 flex flex-col items-center space-y-8">
-              <div className="p-8 border-[3px] border-dashed border-primary rounded-[3rem] bg-white shadow-inner" style={{ borderColor: 'hsl(var(--primary)) !important' }}>
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=450x450&data=${encodeURIComponent(activeFlyer.url)}`}
-                  alt="Registration QR Code"
-                  className="w-[120mm] h-[120mm] block"
-                />
-              </div>
-              
-              <div className="space-y-4">
-                <h2 className="text-4xl font-black text-slate-800">{activeFlyer.bengaliLabel}</h2>
-                <p className="text-2xl font-bold text-slate-500 uppercase tracking-widest">
-                  Scan to enroll now
-                </p>
-              </div>
+              <div className="p-8 border-[3px] border-dashed border-primary rounded-[3rem] bg-white shadow-inner" style={{ borderColor: 'hsl(var(--primary)) !important' }}><img src={`https://api.qrserver.com/v1/create-qr-code/?size=450x450&data=${encodeURIComponent(activeFlyer.url)}`} alt="Registration QR Code" className="w-[120mm] h-[120mm] block" /></div>
+              <div className="space-y-4"><h2 className="text-4xl font-black text-slate-800">{activeFlyer.bengaliLabel}</h2><p className="text-2xl font-bold text-slate-500 uppercase tracking-widest">Scan to enroll now</p></div>
             </div>
-
             <div className="pt-20 text-center space-y-4">
-              <p className="text-xl font-bold text-primary flex items-center justify-center gap-3" style={{ color: 'hsl(var(--primary)) !important' }}>
-                <MapPin size={24} /> {userBranch} Branch
-              </p>
-              <div className="h-1 w-48 bg-primary/20 mx-auto rounded-full" style={{ backgroundColor: 'rgba(41, 110, 179, 0.2) !important' }} />
-              <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">
-                Powered by Somikoron Digital System
-              </p>
+              <p className="text-xl font-bold text-primary flex items-center justify-center gap-3" style={{ color: 'hsl(var(--primary)) !important' }}><MapPin size={24} /> {userBranch} Branch</p>
+              <div className="h-1 w-48 bg-primary/20 mx-auto rounded-full" style={{ backgroundColor: 'rgba(41, 110, 179, 0.2) !important' }} /><p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Powered by Somikoron Digital System</p>
             </div>
           </div>
         </div>

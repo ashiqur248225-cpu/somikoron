@@ -102,6 +102,17 @@ export default function BuildingDetailsPage({
   const buildingRef = useMemoFirebase(() => id ? doc(db, "buildings", id) : null, [db, id])
   const { data: building, isLoading } = useDoc(buildingRef)
 
+  // Fetch Estimations Config
+  const estimatesRef = useMemoFirebase(() => doc(db, "configs", "financialEstimates"), [db])
+  const { data: estimates } = useDoc(estimatesRef)
+
+  // Fetch Students for this building (to calculate real revenue/deductions)
+  const studentsQuery = useMemoFirebase(() => {
+    if (!id) return null
+    return query(collection(db, "students"), where("buildingId", "==", id), where("isActive", "==", true))
+  }, [db, id])
+  const { data: activeStudents } = useCollection(studentsQuery)
+
   // Fetch Payments for recent collection analytics
   const paymentsQuery = useMemoFirebase(() => {
     if (!id) return null
@@ -125,7 +136,7 @@ export default function BuildingDetailsPage({
 
   // Advanced Financial Analytics Memo
   const revenueStats = useMemo(() => {
-    if (!building) return { 
+    if (!building || !activeStudents) return { 
       expectedIncome: 0, 
       occupiedRevenue: 0, 
       efficiency: 0,
@@ -137,19 +148,33 @@ export default function BuildingDetailsPage({
       roomRevenueList: []
     }
 
-    let expectedIncome = 0
-    let occupiedRevenue = 0
-    const roomRevenueList: any[] = []
+    const foodCostPerPackage = estimates?.packageFoodCost || 4500;
+    const utilCostPerStudent = estimates?.utilityEstimateCost || 500;
 
+    // GROSS INCOME: SUM OF RENT FOR ALL ACTIVE STUDENTS
+    const realizedGrossIncome = activeStudents.reduce((acc, s) => acc + (Number(s.monthlyRent) || 0), 0)
+    
+    // DEDUCTIONS
+    const packageStudentCount = activeStudents.filter(s => s.paymentSystem === 'package').length;
+    const foodDeduction = packageStudentCount * foodCostPerPackage;
+    const utilityDeduction = activeStudents.length * utilCostPerStudent;
+    const buildingRentDeduction = Number(building.buildingRentCost || 0);
+
+    const netProfit = realizedGrossIncome - foodDeduction - utilityDeduction - buildingRentDeduction;
+
+    // POTENTIAL REVENUE CALCULATION (Keep for room list metrics)
+    let potentialIncome = 0;
+    const roomRevenueList: any[] = [];
     building.apartmentsDetail?.forEach((apt: any) => {
       apt.rooms?.forEach((room: any) => {
         const rentPerSeat = Number(room.rentPerSeat || 0)
         const roomExpected = (room.totalSeats || 0) * rentPerSeat
         const occCount = (room.seats || []).filter((s: any) => s.status === 'occupied').length
-        const roomCurrent = occCount * rentPerSeat
+        const roomCurrent = activeStudents
+          .filter(s => s.roomNumber === room.roomNo && s.buildingId === id)
+          .reduce((sum, s) => sum + (Number(s.monthlyRent) || 0), 0);
         
-        expectedIncome += roomExpected
-        occupiedRevenue += roomCurrent
+        potentialIncome += roomExpected;
 
         roomRevenueList.push({
           roomNo: room.roomNo,
@@ -176,15 +201,9 @@ export default function BuildingDetailsPage({
 
     payments?.forEach(p => {
       let pDate: Date | null = null
-      if (p.date?.toDate) {
-        pDate = p.date.toDate()
-      } else if (p.date) {
-        pDate = new Date(p.date)
-      }
-      
+      if (p.date?.toDate) { pDate = p.date.toDate() } else if (p.date) { pDate = new Date(p.date) }
       const amount = Number(p.amount || 0)
       totalLifetimeCollected += amount
-
       if (pDate) {
         if (pDate >= startOfMonth) thisMonthCollected += amount
         if (pDate >= thirtyDaysAgo) last30DaysCollected += amount
@@ -192,12 +211,11 @@ export default function BuildingDetailsPage({
       }
     })
 
-    const efficiency = expectedIncome > 0 ? (occupiedRevenue / expectedIncome) * 100 : 0
-    const netProfit = last30DaysCollected - (building.buildingRentCost || 0)
+    const efficiency = realizedGrossIncome > 0 ? (realizedGrossIncome / potentialIncome) * 100 : 0
 
     return { 
-      expectedIncome, 
-      occupiedRevenue, 
+      expectedIncome: realizedGrossIncome, // This is REAL realized income from students
+      occupiedRevenue: realizedGrossIncome, 
       efficiency, 
       thisMonthCollected, 
       last30DaysCollected, 
@@ -206,7 +224,7 @@ export default function BuildingDetailsPage({
       netProfit,
       roomRevenueList
     }
-  }, [building, payments])
+  }, [building, payments, activeStudents, estimates, id])
 
   const addApartment = () => {
     setEditApts([...editApts, {
@@ -225,13 +243,7 @@ export default function BuildingDetailsPage({
 
   const addRoomToApartment = (aptIdx: number) => {
     const updated = [...editApts]
-    updated[aptIdx].rooms.push({
-      roomNo: "",
-      totalSeats: 0,
-      seats: [],
-      rentPerSeat: 0,
-      facilities: []
-    })
+    updated[aptIdx].rooms.push({ roomNo: "", totalSeats: 0, seats: [], rentPerSeat: 0, facilities: [] })
     setEditApts(updated)
   }
 
@@ -248,21 +260,17 @@ export default function BuildingDetailsPage({
     const room = updated[aptIdx].rooms[roomIdx]
     const prevCount = room.totalSeats || 0
     const prevSeats = room.seats || []
-    
     room.totalSeats = count
-    
     if (count > prevCount) {
       const newSeats = Array.from({ length: count - prevCount }, (_, i) => ({
-        seatNo: (prevCount + i + 1).toString(),
-        status: 'empty' as const
+        seatNo: (prevCount + i + 1).toString(), status: 'empty' as const
       }))
       room.seats = [...prevSeats, ...newSeats]
     } else if (count < prevCount) {
       room.seats = prevSeats.slice(0, count)
     } else if (count > 0 && prevSeats.length === 0) {
        room.seats = Array.from({ length: count }, (_, i) => ({
-        seatNo: (i + 1).toString(),
-        status: 'empty' as const
+        seatNo: (i + 1).toString(), status: 'empty' as const
       }))
     }
     setEditApts(updated)
@@ -271,18 +279,14 @@ export default function BuildingDetailsPage({
   const handleUpdate = async () => {
     if (!buildingRef) return
     setIsUpdating(true)
-    
-    let total = 0
-    let occupied = 0
+    let total = 0; let occupied = 0
     editApts.forEach(apt => {
       apt.rooms.forEach(room => {
         room.seats.forEach(seat => {
-          total++
-          if (seat.status === 'occupied') occupied++
+          total++; if (seat.status === 'occupied') occupied++
         })
       })
     })
-
     try {
       await updateDoc(buildingRef, {
         ...editForm,
@@ -294,27 +298,18 @@ export default function BuildingDetailsPage({
         emptySeats: total - occupied,
         updatedAt: serverTimestamp()
       })
-      setIsEditDialogOpen(false)
-      toast({ title: "Updated", description: "Hierarchy and financials saved." })
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsUpdating(false)
-    }
+      setIsEditDialogOpen(false); toast({ title: "Updated" })
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } 
+    finally { setIsUpdating(false) }
   }
 
   const handleDelete = async () => {
     if (!buildingRef) return
     setIsUpdating(true)
     try {
-      await deleteDoc(buildingRef)
-      toast({ title: "Deleted", description: "Building removed." })
-      router.push("/buildings")
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsUpdating(false)
-    }
+      await deleteDoc(buildingRef); toast({ title: "Deleted" }); router.push("/buildings")
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } 
+    finally { setIsUpdating(false) }
   }
 
   if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
@@ -324,530 +319,132 @@ export default function BuildingDetailsPage({
     const updated = [...editApts]
     const currentRoom = updated[aptIdx].rooms[roomIdx]
     if (!currentRoom.facilities) currentRoom.facilities = []
-    
     if (currentRoom.facilities.includes(facility)) {
       currentRoom.facilities = currentRoom.facilities.filter(f => f !== facility)
-    } else {
-      currentRoom.facilities.push(facility)
-    }
+    } else { currentRoom.facilities.push(facility) }
     setEditApts(updated)
   }
 
   return (
     <div className="space-y-8 pb-20 relative">
-      {/* Mobile App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
-        {userRole === 'Building Manager' ? (
-          <SidebarTrigger className="-ml-2" />
-        ) : (
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
-            <ChevronLeft size={24} />
-          </Button>
-        )}
-        <div className="flex-1 overflow-hidden">
-          <h1 className="text-lg font-bold truncate">{building.name}</h1>
-        </div>
+        {userRole === 'Building Manager' ? <SidebarTrigger className="-ml-2" /> : <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2"><ChevronLeft size={24} /></Button>}
+        <div className="flex-1 overflow-hidden"><h1 className="text-lg font-bold truncate">{building.name}</h1></div>
         <div className="flex items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <MoreVertical size={20} />
-              </Button>
-            </DropdownMenuTrigger>
+          <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical size={20} /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
-              <DropdownMenuItem onSelect={() => setIsMatrixOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
-                <BarChart3 size={16} className="text-primary" /> Revenue Matrix
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
-                <Edit size={16} className="text-primary" /> Edit Building
-              </DropdownMenuItem>
-              {userRole !== 'Admin' && userRole !== 'Branch Manager' && userRole !== 'Building Manager' && (
-                <DropdownMenuItem onSelect={() => setIsDeleteDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
-                  <Trash2 size={16} /> Delete Building
-                </DropdownMenuItem>
-              )}
+              <DropdownMenuItem onSelect={() => setIsMatrixOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer"><BarChart3 size={16} className="text-primary" /> Revenue Matrix</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer"><Edit size={16} className="text-primary" /> Edit Building</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
 
-      {/* Desktop Header */}
       <div className="hidden md:flex justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div className="bg-primary/10 p-3 rounded-xl text-primary"><Building2 size={32} /></div>
-          <div>
-            <h1 className="text-3xl font-bold">{building.name}</h1>
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1">
-              <MapPin size={14} /> <span>{building.address}</span>
-            </div>
-          </div>
-        </div>
+        <div className="flex items-center gap-4"><div className="bg-primary/10 p-3 rounded-xl text-primary"><Building2 size={32} /></div><div><h1 className="text-3xl font-bold">{building.name}</h1><div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1"><MapPin size={14} /> <span>{building.address}</span></div></div></div>
         <div className="flex gap-2">
-           <Button variant="outline" className="gap-2 h-11 px-6 rounded-xl font-bold text-primary" onClick={() => setIsMatrixOpen(true)}>
-             <BarChart3 size={18} /> Revenue Matrix
-           </Button>
-
+           <Button variant="outline" className="gap-2 h-11 px-6 rounded-xl font-bold text-primary" onClick={() => setIsMatrixOpen(true)}><BarChart3 size={18} /> Revenue Matrix</Button>
            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-             <DialogTrigger asChild>
-               <Button variant="outline" className="gap-2 h-11 px-6 rounded-xl font-bold text-slate-700">
-                 <Edit size={18} /> Edit Building
-               </Button>
-             </DialogTrigger>
+             <DialogTrigger asChild><Button variant="outline" className="gap-2 h-11 px-6 rounded-xl font-bold text-slate-700"><Edit size={18} /> Edit Building</Button></DialogTrigger>
              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Edit Building & Financials</DialogTitle>
-                  <DialogDescription>Manage Apartments, Meters, Rooms and Rent rates.</DialogDescription>
-                </DialogHeader>
+                <DialogHeader><DialogTitle>Edit Building & Financials</DialogTitle><DialogDescription>Manage Apartments, Meters, Rooms and Rent rates.</DialogDescription></DialogHeader>
                 <div className="space-y-6 py-4">
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label>Building Name</Label>
-                        <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Address</Label>
-                        <Input value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-primary font-bold">Building Monthly Rent (৳)</Label>
-                        <Input type="number" value={editForm.buildingRentCost} onChange={e => setEditForm({...editForm, buildingRentCost: e.target.value})} />
-                      </div>
+                      <div className="space-y-2"><Label>Building Name</Label><Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
+                      <div className="space-y-2"><Label>Address</Label><Input value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} /></div>
+                      <div className="space-y-2"><Label className="text-primary font-bold">Building Monthly Rent (৳)</Label><Input type="number" value={editForm.buildingRentCost} onChange={e => setEditForm({...editForm, buildingRentCost: e.target.value})} /></div>
                    </div>
-                   
-                   <div className="flex justify-between items-center border-b pb-2">
-                      <p className="text-sm font-bold text-muted-foreground uppercase">Apartments & Revenue Setup</p>
-                      <Button variant="outline" size="sm" onClick={addApartment} className="h-8">
-                        <Plus size={14} className="mr-1" /> Add Apartment
-                      </Button>
-                   </div>
-
+                   <div className="flex justify-between items-center border-b pb-2"><p className="text-sm font-bold text-muted-foreground uppercase">Apartments & Revenue Setup</p><Button variant="outline" size="sm" onClick={addApartment} className="h-8"><Plus size={14} className="mr-1" /> Add Apartment</Button></div>
                    <div className="space-y-6">
                       {editApts.map((apt, aIdx) => (
                         <div key={apt.id || aIdx} className="p-4 border-2 rounded-xl bg-secondary/5 space-y-4">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                            <div className="space-y-1">
-                              <Label className="text-[10px] uppercase font-bold">Apt Name</Label>
-                              <Input value={apt.name} onChange={e => {
-                                const updated = [...editApts]
-                                updated[aIdx].name = e.target.value
-                                setEditApts(updated)
-                              }} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] uppercase font-bold">Meter No</Label>
-                              <Input value={apt.meterNo} onChange={e => {
-                                const updated = [...editApts]
-                                updated[aIdx].meterNo = e.target.value
-                                setEditApts(updated)
-                              }} />
-                            </div>
-                            <Button variant="ghost" size="sm" onClick={() => removeApartment(aIdx)} className="text-destructive h-10">
-                              <Trash2 size={16} />
-                            </Button>
+                            <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Apt Name</Label><Input value={apt.name} onChange={e => { const updated = [...editApts]; updated[aIdx].name = e.target.value; setEditApts(updated) }} /></div>
+                            <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Meter No</Label><Input value={apt.meterNo} onChange={e => { const updated = [...editApts]; updated[aIdx].meterNo = e.target.value; setEditApts(updated) }} /></div>
+                            <Button variant="ghost" size="sm" onClick={() => removeApartment(aIdx)} className="text-destructive h-10"><Trash2 size={16} /></Button>
                           </div>
                           <div className="ml-4 pl-4 border-l-2 border-primary/20 space-y-4">
                              {apt.rooms.map((room, roomIdx) => (
                                <div key={`${room.roomNo}-${roomIdx}`} className="p-3 bg-background border rounded-lg space-y-3">
                                   <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-                                     <div className="space-y-1">
-                                        <Label className="text-[9px] uppercase font-bold">Room No.</Label>
-                                        <Input value={room.roomNo} onChange={e => {
-                                          const updated = [...editApts]
-                                          updated[aIdx].rooms[roomIdx].roomNo = e.target.value
-                                          setEditApts(updated)
-                                        }} />
-                                     </div>
-                                     <div className="space-y-1">
-                                        <Label className="text-[9px] uppercase font-bold">Seats</Label>
-                                        <Input type="number" value={room.totalSeats} onChange={e => updateRoomSeatCount(aIdx, roomIdx, Number(e.target.value))} />
-                                     </div>
-                                     <div className="space-y-1">
-                                        <Label className="text-[9px] uppercase font-bold text-primary">Rent/Seat (৳)</Label>
-                                        <Input type="number" value={room.rentPerSeat || ""} onChange={e => {
-                                          const updated = [...editApts]
-                                          updated[aIdx].rooms[roomIdx].rentPerSeat = Number(e.target.value)
-                                          setEditApts(updated)
-                                        }} />
-                                     </div>
-                                     <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(aIdx, roomIdx)} className="text-destructive h-10 w-10">
-                                        <XCircle size={16} />
-                                     </Button>
+                                     <div className="space-y-1"><Label className="text-[9px] uppercase font-bold">Room No.</Label><Input value={room.roomNo} onChange={e => { const updated = [...editApts]; updated[aIdx].rooms[roomIdx].roomNo = e.target.value; setEditApts(updated) }} /></div>
+                                     <div className="space-y-1"><Label className="text-[9px] uppercase font-bold">Seats</Label><Input type="number" value={room.totalSeats} onChange={e => updateRoomSeatCount(aIdx, roomIdx, Number(e.target.value))} /></div>
+                                     <div className="space-y-1"><Label className="text-[9px] uppercase font-bold text-primary">Rent/Seat (৳)</Label><Input type="number" value={room.rentPerSeat || ""} onChange={e => { const updated = [...editApts]; updated[aIdx].rooms[roomIdx].rentPerSeat = Number(e.target.value); setEditApts(updated) }} /></div>
+                                     <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(aIdx, roomIdx)} className="text-destructive h-10 w-10"><XCircle size={16} /></Button>
                                   </div>
-
-                                  <div className="space-y-2">
-                                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Room Facilities</Label>
-                                    <div className="flex flex-wrap gap-4">
-                                      {['AC', 'Balcony', 'Attached Washroom'].map((fac) => (
-                                        <div key={fac} className="flex items-center gap-1.5">
-                                          <Checkbox 
-                                            id={`edit-fac-${aIdx}-${roomIdx}-${fac}`}
-                                            checked={room.facilities?.includes(fac)}
-                                            onCheckedChange={() => toggleFacility(aIdx, roomIdx, fac)}
-                                          />
-                                          <Label htmlFor={`edit-fac-${aIdx}-${roomIdx}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-
+                                  <div className="space-y-2"><Label className="text-[9px] uppercase font-bold text-muted-foreground">Room Facilities</Label><div className="flex flex-wrap gap-4">{['AC', 'Balcony', 'Attached Washroom'].map((fac) => (<div key={fac} className="flex items-center gap-1.5"><Checkbox id={`edit-fac-${aIdx}-${roomIdx}-${fac}`} checked={room.facilities?.includes(fac)} onCheckedChange={() => toggleFacility(aIdx, roomIdx, fac)}/><Label htmlFor={`edit-fac-${aIdx}-${roomIdx}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label></div>))}</div></div>
                                   <div className="flex flex-wrap gap-1.5 pt-2 border-t mt-2">
-                                    {room.seats?.map((seat, sIdx) => (
-                                      <button
-                                        key={sIdx}
-                                        onClick={() => {
-                                          const updated = [...editApts]
-                                          const current = updated[aIdx].rooms[roomIdx].seats[sIdx].status
-                                          updated[aIdx].rooms[roomIdx].seats[sIdx].status = current === 'empty' ? 'occupied' : 'empty'
-                                          setEditApts(updated)
-                                        }}
-                                        className={cn(
-                                          "px-2 py-1 rounded text-[10px] font-bold border",
-                                          seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive"
-                                        )}
-                                      >
-                                        S-{seat.seatNo}
-                                      </button>
-                                    ))}
+                                    {room.seats?.map((seat, sIdx) => (<button key={sIdx} onClick={() => { const updated = [...editApts]; const current = updated[aIdx].rooms[roomIdx].seats[sIdx].status; updated[aIdx].rooms[roomIdx].seats[sIdx].status = current === 'empty' ? 'occupied' : 'empty'; setEditApts(updated) }} className={cn("px-2 py-1 rounded text-[10px] font-bold border", seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive")}>S-{seat.seatNo}</button>))}
                                   </div>
                                </div>
                              ))}
-                             <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(aIdx)} className="text-primary h-8">
-                                <Plus size={14} className="mr-1"/> Add Room to {apt.name || 'Apt'}
-                             </Button>
+                             <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(aIdx)} className="text-primary h-8"><Plus size={14} className="mr-1"/> Add Room to {apt.name || 'Apt'}</Button>
                           </div>
                         </div>
                       ))}
                    </div>
                 </div>
-                <DialogFooter>
-                  <Button onClick={handleUpdate} disabled={isUpdating} className="w-full h-12 text-lg font-bold">
-                    {isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}
-                  </Button>
-                </DialogFooter>
+                <DialogFooter><Button onClick={handleUpdate} disabled={isUpdating} className="w-full h-12 text-lg font-bold">{isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}</Button></DialogFooter>
              </DialogContent>
            </Dialog>
-
-           {userRole !== 'Admin' && userRole !== 'Branch Manager' && userRole !== 'Building Manager' && (
+           {userRole === 'Admin' && (
              <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-               <AlertDialogTrigger asChild>
-                 <Button variant="destructive" size="icon" className="h-11 w-11 rounded-xl shadow-lg shadow-destructive/20">
-                   <Trash2 size={18}/>
-                 </Button>
-               </AlertDialogTrigger>
-               <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Building?</AlertDialogTitle>
-                    <AlertDialogDescription>Hierarchy Apartment &rarr; Room &rarr; Seat will be lost. This action is permanent.</AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 font-bold">
-                      {isUpdating ? <Loader2 className="animate-spin" /> : "Delete Permanently"}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-               </AlertDialogContent>
+               <AlertDialogTrigger asChild><Button variant="destructive" size="icon" className="h-11 w-11 rounded-xl shadow-lg shadow-destructive/20"><Trash2 size={18}/></Button></AlertDialogTrigger>
+               <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Building?</AlertDialogTitle><AlertDialogDescription>Hierarchy Apartment &rarr; Room &rarr; Seat will be lost. This action is permanent.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 font-bold">{isUpdating ? <Loader2 className="animate-spin" /> : "Delete Permanently"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
              </AlertDialog>
            )}
-           {userRole !== 'Building Manager' && (
-             <Button variant="ghost" onClick={() => router.push("/buildings")} className="h-11 rounded-xl px-6">Back</Button>
-           )}
+           {userRole !== 'Building Manager' && <Button variant="ghost" onClick={() => router.push("/buildings")} className="h-11 rounded-xl px-6">Back</Button>}
         </div>
       </div>
 
-      {/* Revenue Matrix Dialog */}
       <Dialog open={isMatrixOpen} onOpenChange={setIsMatrixOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><BarChart3 className="text-primary" /> Room Wise Revenue Matrix</DialogTitle>
-            <DialogDescription>A complete breakdown of income potential vs current occupancy for each room.</DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Card className="border-none shadow-none bg-white rounded-2xl overflow-hidden">
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/50">
-                      <TableHead className="font-bold">Room</TableHead>
-                      <TableHead className="text-center font-bold">Seats</TableHead>
-                      <TableHead className="text-center font-bold">Occ.</TableHead>
-                      <TableHead className="text-right font-bold">Rent</TableHead>
-                      <TableHead className="text-right font-bold">Expected</TableHead>
-                      <TableHead className="text-right font-bold">Current</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {revenueStats.roomRevenueList.map((room: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-bold">R-{room.roomNo}<br/><span className="text-[10px] text-muted-foreground font-normal">{room.aptName}</span></TableCell>
-                        <TableCell className="text-center font-medium">{room.totalSeats}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={cn(
-                            "text-[10px] font-black",
-                            room.occupiedSeats === room.totalSeats ? "border-success text-success" : "border-orange-400 text-orange-600"
-                          )}>
-                            {room.occupiedSeats}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-slate-600">৳{room.rentPerSeat}</TableCell>
-                        <TableCell className="text-right font-bold">৳{room.expected.toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-black text-primary">৳{room.current.toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setIsMatrixOpen(false)} variant="secondary" className="w-full">Close Matrix</Button>
-          </DialogFooter>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><BarChart3 className="text-primary" /> Room Wise Revenue Matrix</DialogTitle><DialogDescription>Realized income potential vs current occupancy for each room.</DialogDescription></DialogHeader>
+          <div className="py-4"><Card className="border-none shadow-none bg-white rounded-2xl overflow-hidden"><CardContent className="p-0"><Table><TableHeader><TableRow className="bg-slate-50/50"><TableHead className="font-bold">Room</TableHead><TableHead className="text-center font-bold">Seats</TableHead><TableHead className="text-center font-bold">Occ.</TableHead><TableHead className="text-right font-bold">Potential</TableHead><TableHead className="text-right font-bold">Realized</TableHead></TableRow></TableHeader><TableBody>{revenueStats.roomRevenueList.map((room: any, idx: number) => (<TableRow key={idx}><TableCell className="font-bold">R-{room.roomNo}<br/><span className="text-[10px] text-muted-foreground font-normal">{room.aptName}</span></TableCell><TableCell className="text-center font-medium">{room.totalSeats}</TableCell><TableCell className="text-center"><Badge variant="outline" className={cn("text-[10px] font-black", room.occupiedSeats === room.totalSeats ? "border-success text-success" : "border-orange-400 text-orange-600")}>{room.occupiedSeats}</Badge></TableCell><TableCell className="text-right font-bold text-slate-600">৳{room.expected.toLocaleString()}</TableCell><TableCell className="text-right font-black text-primary">৳{room.current.toLocaleString()}</TableCell></TableRow>))}</TableBody></Table></CardContent></Card></div>
+          <DialogFooter><Button onClick={() => setIsMatrixOpen(false)} variant="secondary" className="w-full">Close Matrix</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Summary Analytics Cards - Arranged 3 then 3 */}
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl">
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Building Rent</p>
-                  <p className="text-xl font-bold mt-1">৳{(building.buildingRentCost || 0).toLocaleString()}</p>
-                </div>
-                <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Banknote size={20} /></div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-primary rounded-2xl">
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Expected Rev.</p>
-                  <p className="text-xl font-bold mt-1">৳{revenueStats.expectedIncome.toLocaleString()}</p>
-                </div>
-                <div className="bg-primary/5 p-2 rounded-lg text-primary"><TrendingUp size={20} /></div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl">
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Occupied Rev.</p>
-                  <p className="text-xl font-bold mt-1">৳{revenueStats.occupiedRevenue.toLocaleString()}</p>
-                </div>
-                <div className="bg-orange-50 p-2 rounded-lg text-orange-600"><Users size={20} /></div>
-              </div>
-            </CardContent>
-          </Card>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Building Rent</p><p className="text-xl font-bold mt-1">৳{(building.buildingRentCost || 0).toLocaleString()}</p></div><div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Banknote size={20} /></div></div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-primary rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Gross Income (Real)</p><p className="text-xl font-bold mt-1">৳{revenueStats.expectedIncome.toLocaleString()}</p></div><div className="bg-primary/5 p-2 rounded-lg text-primary"><TrendingUp size={20} /></div></div></CardContent></Card>
+          <Card className={cn("border-none shadow-sm bg-white border-l-4 rounded-2xl", revenueStats.netProfit >= 0 ? "border-l-success" : "border-l-destructive")}><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Estimated Net Profit</p><p className={cn("text-xl font-bold mt-1", revenueStats.netProfit >= 0 ? "text-success" : "text-destructive")}>৳{revenueStats.netProfit.toLocaleString()}</p></div><div className={cn("p-2 rounded-lg", revenueStats.netProfit >= 0 ? "bg-success/5 text-success" : "bg-destructive/5 text-destructive")}>{revenueStats.netProfit >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div></div></CardContent></Card>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-indigo-500 rounded-2xl">
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1"><HandCoins size={10}/> Total Building Collection</p>
-                  <p className="text-xl font-black mt-1 text-indigo-700">৳{revenueStats.totalLifetimeCollected.toLocaleString()}</p>
-                </div>
-                <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><HandCoins size={20} /></div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl">
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Recent Collect (30d)</p>
-                  <p className="text-xl font-bold mt-1 text-success">৳{revenueStats.last30DaysCollected.toLocaleString()}</p>
-                </div>
-                <div className="bg-success/5 p-2 rounded-lg text-success"><CircleDollarSign size={20} /></div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className={cn(
-            "border-none shadow-sm bg-white border-l-4 rounded-2xl",
-            revenueStats.netProfit >= 0 ? "border-l-success" : "border-l-destructive"
-          )}>
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Net Profit/Loss (30d)</p>
-                  <p className={cn(
-                    "text-xl font-bold mt-1",
-                    revenueStats.netProfit >= 0 ? "text-success" : "text-destructive"
-                  )}>৳{revenueStats.netProfit.toLocaleString()}</p>
-                </div>
-                <div className={cn(
-                  "p-2 rounded-lg",
-                  revenueStats.netProfit >= 0 ? "bg-success/5 text-success" : "bg-destructive/5 text-destructive"
-                )}>{revenueStats.netProfit >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div>
-              </div>
-            </CardContent>
-          </Card>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-indigo-500 rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1"><HandCoins size={10}/> Total Collections</p><p className="text-xl font-black mt-1 text-indigo-700">৳{revenueStats.totalLifetimeCollected.toLocaleString()}</p></div><div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><HandCoins size={20} /></div></div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">30 Day Collection</p><p className="text-xl font-bold mt-1 text-success">৳{revenueStats.last30DaysCollected.toLocaleString()}</p></div><div className="bg-success/5 p-2 rounded-lg text-success"><CircleDollarSign size={20} /></div></div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Current Active Residents</p><p className="text-xl font-bold mt-1">{(activeStudents || []).length}</p></div><div className="bg-orange-50 p-2 rounded-lg text-orange-600"><Users size={20} /></div></div></CardContent></Card>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          {/* Revenue Efficiency Card */}
           <Card className="border-none shadow-sm bg-white rounded-2xl overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b pb-4">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <Percent className="text-primary" size={18} />
-                  <CardTitle className="text-sm font-bold uppercase tracking-tight">Revenue Efficiency Insight</CardTitle>
-                </div>
-                <Badge variant="outline" className="font-black text-primary bg-white">{revenueStats.efficiency.toFixed(1)}%</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="space-y-4">
-                <div className="flex justify-between text-[10px] font-bold uppercase text-muted-foreground">
-                  <span>Current Occupied Earnings</span>
-                  <span>Full Potential</span>
-                </div>
-                <Progress value={revenueStats.efficiency} className="h-3 bg-secondary" />
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Building is currently operating at <span className="font-bold text-primary">{revenueStats.efficiency.toFixed(1)}%</span> of its total earning capacity. 
-                  Vacant seats are causing a monthly loss of <span className="font-bold text-destructive">৳{(revenueStats.expectedIncome - revenueStats.occupiedRevenue).toLocaleString()}</span>.
-                </p>
-              </div>
-            </CardContent>
+            <CardHeader className="bg-slate-50/50 border-b pb-4"><div className="flex justify-between items-center"><div className="flex items-center gap-2"><Percent className="text-primary" size={18} /><CardTitle className="text-sm font-bold uppercase tracking-tight">Revenue Potential Insight</CardTitle></div><Badge variant="outline" className="font-black text-primary bg-white">{revenueStats.efficiency.toFixed(1)}%</Badge></div></CardHeader>
+            <CardContent className="p-6"><div className="space-y-4"><div className="flex justify-between text-[10px] font-bold uppercase text-muted-foreground"><span>Current Realized Revenue</span><span>Full Potential</span></div><Progress value={revenueStats.efficiency} className="h-3 bg-secondary" /><p className="text-xs text-muted-foreground leading-relaxed">Building is currently operating at <span className="font-bold text-primary">{revenueStats.efficiency.toFixed(1)}%</span> of its total earning capacity based on student rents.</p></div></CardContent>
           </Card>
         </div>
-
         <div className="space-y-8">
-          {/* Collection Logs Summary */}
           <Card className="border-none shadow-sm bg-white rounded-2xl overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b pb-4 cursor-pointer" onClick={() => setShowRecentCollections(!showRecentCollections)}>
-              <div className="flex justify-between items-center w-full">
-                <div className="flex items-center gap-2">
-                  <Calculator className="text-primary" size={18} />
-                  <CardTitle className="text-sm font-bold uppercase tracking-tight">Recent Collections</CardTitle>
-                </div>
-                {showRecentCollections ? <ChevronUp size={18} className="text-muted-foreground" /> : <ChevronDown size={18} className="text-muted-foreground" />}
-              </div>
-            </CardHeader>
-            {showRecentCollections && (
-              <CardContent className="p-6 space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="flex justify-between items-center pb-4 border-b border-dashed">
-                  <div className="space-y-0.5">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Last 7 Days</p>
-                    <p className="text-lg font-bold">৳{revenueStats.last7DaysCollected.toLocaleString()}</p>
-                  </div>
-                  <ArrowUpRight className="text-success" />
-                </div>
-                <div className="flex justify-between items-center pb-4 border-b border-dashed">
-                  <div className="space-y-0.5">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Last 30 Days</p>
-                    <p className="text-lg font-bold">৳{revenueStats.last30DaysCollected.toLocaleString()}</p>
-                  </div>
-                  <ArrowUpRight className="text-success" />
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="space-y-0.5">
-                    <p className="text-[10px] font-black uppercase text-primary tracking-widest">This Calendar Month</p>
-                    <p className="text-xl font-black text-primary">৳{revenueStats.thisMonthCollected.toLocaleString()}</p>
-                  </div>
-                  <div className="bg-primary/10 p-2 rounded-full text-primary"><Calendar size={18}/></div>
-                </div>
-              </CardContent>
-            )}
+            <CardHeader className="bg-slate-50/50 border-b pb-4 cursor-pointer" onClick={() => setShowRecentCollections(!showRecentCollections)}><div className="flex justify-between items-center w-full"><div className="flex items-center gap-2"><Calculator className="text-primary" size={18} /><CardTitle className="text-sm font-bold uppercase tracking-tight">Recent Collections</CardTitle></div>{showRecentCollections ? <ChevronUp size={18} className="text-muted-foreground" /> : <ChevronDown size={18} className="text-muted-foreground" />}</div></CardHeader>
+            {showRecentCollections && (<CardContent className="p-6 space-y-6 animate-in fade-in slide-in-from-top-2 duration-200"><div className="flex justify-between items-center pb-4 border-b border-dashed"><div className="space-y-0.5"><p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Last 7 Days</p><p className="text-lg font-bold">৳{revenueStats.last7DaysCollected.toLocaleString()}</p></div><ArrowUpRight className="text-success" /></div><div className="flex justify-between items-center pb-4 border-b border-dashed"><div className="space-y-0.5"><p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Last 30 Days</p><p className="text-lg font-bold">৳{revenueStats.last30DaysCollected.toLocaleString()}</p></div><ArrowUpRight className="text-success" /></div><div className="flex justify-between items-center"><div className="space-y-0.5"><p className="text-[10px] font-black uppercase text-primary tracking-widest">This Month</p><p className="text-xl font-black text-primary">৳{revenueStats.thisMonthCollected.toLocaleString()}</p></div><div className="bg-primary/10 p-2 rounded-full text-primary"><Calendar size={18}/></div></div></CardContent>)}
           </Card>
-
-          {/* Occupancy Summary Stats */}
           <div className="grid grid-cols-1 gap-4">
-            <Card className="bg-primary/5 border-none shadow-none rounded-2xl">
-              <CardContent className="pt-6">
-                <div className="flex justify-between items-center">
-                  <div><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Total Seats</p><p className="text-2xl font-black text-slate-800">{building.totalSeats}</p></div>
-                  <Users className="text-primary/40" size={32} />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-success/5 border-none shadow-none rounded-2xl">
-              <CardContent className="pt-6">
-                <div className="flex justify-between items-center">
-                  <div><p className="text-[10px] text-success uppercase font-bold tracking-widest">Occupied</p><p className="text-2xl font-black text-success">{building.occupiedSeats}</p></div>
-                  <UserCheck className="text-success/40" size={32} />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-destructive/5 border-none shadow-none rounded-2xl">
-              <CardContent className="pt-6">
-                <div className="flex justify-between items-center">
-                  <div><p className="text-[10px] text-destructive uppercase font-bold tracking-widest">Empty/Lost</p><p className="text-2xl font-black text-destructive">{building.emptySeats}</p></div>
-                  <UserMinus className="text-destructive/40" size={32} />
-                </div>
-              </CardContent>
-            </Card>
+            <Card className="bg-primary/5 border-none shadow-none rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-center"><div><p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Total Capacity</p><p className="text-2xl font-black text-slate-800">{building.totalSeats}</p></div><Users className="text-primary/40" size={32} /></div></CardContent></Card>
+            <Card className="bg-success/5 border-none shadow-none rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-center"><div><p className="text-[10px] text-success uppercase font-bold tracking-widest">Occupied</p><p className="text-2xl font-black text-success">{building.occupiedSeats}</p></div><UserCheck className="text-success/40" size={32} /></div></CardContent></Card>
+            <Card className="bg-destructive/5 border-none shadow-none rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-center"><div><p className="text-[10px] text-destructive uppercase font-bold tracking-widest">Lost Seats</p><p className="text-2xl font-black text-destructive">{building.emptySeats}</p></div><UserMinus className="text-destructive/40" size={32} /></div></CardContent></Card>
           </div>
         </div>
       </div>
 
       <Separator className="opacity-50" />
 
-      {/* Existing Physical Hierarchy View */}
-      <div className="space-y-8">
-        <h2 className="text-lg font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-          <LayoutGrid size={20} /> Physical Structure & Allocation
-        </h2>
+      <div className="space-y-8"><h2 className="text-lg font-black uppercase tracking-widest text-slate-400 flex items-center gap-2"><LayoutGrid size={20} /> Physical Structure & Allocation</h2>
         {building.apartmentsDetail?.map((apt: any, aIdx: number) => (
-          <div key={apt.id || aIdx} className="space-y-4">
-             <div className="flex items-center gap-4 bg-secondary/30 p-4 rounded-xl border">
-                <div className="bg-primary/10 p-2 rounded-lg text-primary"><LayoutGrid size={24} /></div>
-                <div className="flex-1">
-                   <h2 className="text-xl font-bold">{apt.name}</h2>
-                   <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-                      <span className="flex items-center gap-1"><Zap size={12} className="text-primary" /> Meter: {apt.meterNo}</span>
-                      <span className="flex items-center gap-1"><DoorOpen size={12} /> {apt.rooms?.length} Rooms</span>
-                   </div>
-                </div>
-             </div>
-             
+          <div key={apt.id || aIdx} className="space-y-4"><div className="flex items-center gap-4 bg-secondary/30 p-4 rounded-xl border"><div className="bg-primary/10 p-2 rounded-lg text-primary"><LayoutGrid size={24} /></div><div className="flex-1"><h2 className="text-xl font-bold">{apt.name}</h2><div className="flex items-center gap-4 text-xs text-muted-foreground mt-1"><span className="flex items-center gap-1"><Zap size={12} className="text-primary" /> Meter: {apt.meterNo}</span><span className="flex items-center gap-1"><DoorOpen size={12} /> {apt.rooms?.length} Rooms</span></div></div></div>
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ml-4">
-                {apt.rooms?.map((room: any, rIdx: number) => (
-                  <Card key={`${room.roomNo}-${rIdx}`} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all rounded-2xl">
-                    <div className="h-1.5 bg-primary/20 w-full" />
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <CardTitle className="text-lg">Room {room.roomNo}</CardTitle>
-                          <Badge variant="secondary" className="w-fit text-[9px] uppercase mt-1">৳{room.rentPerSeat}/seat</Badge>
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {room.facilities?.map((f: string) => (
-                              <Badge key={f} variant="outline" className="text-[7px] py-0 px-1 border-primary/30 text-primary uppercase font-bold">
-                                {f}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="font-bold text-muted-foreground">{room.totalSeats} Seats</Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {room.seats?.map((seat: any, sIdx: number) => (
-                          <div 
-                            key={sIdx}
-                            className={cn(
-                              "flex flex-col items-center justify-center p-2 rounded-md border w-14",
-                              seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive"
-                            )}
-                          >
-                            <span className="text-[10px] font-bold">S-{seat.seatNo}</span>
-                            {seat.status === 'occupied' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                {apt.rooms?.map((room: any, rIdx: number) => (<Card key={`${room.roomNo}-${rIdx}`} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all rounded-2xl"><div className="h-1.5 bg-primary/20 w-full" /><CardHeader className="pb-2"><div className="flex justify-between items-start"><div><CardTitle className="text-lg">Room {room.roomNo}</CardTitle><Badge variant="secondary" className="w-fit text-[9px] uppercase mt-1">৳{room.rentPerSeat}/seat</Badge><div className="flex flex-wrap gap-1 mt-1.5">{room.facilities?.map((f: string) => (<Badge key={f} variant="outline" className="text-[7px] py-0 px-1 border-primary/30 text-primary uppercase font-bold">{f}</Badge>))}</div></div><Badge variant="outline" className="font-bold text-muted-foreground">{room.totalSeats} Seats</Badge></div></CardHeader><CardContent><div className="flex flex-wrap gap-2 mt-2">{room.seats?.map((seat: any, sIdx: number) => (<div key={sIdx} className={cn("flex flex-col items-center justify-center p-2 rounded-md border w-14", seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive")}><span className="text-[10px] font-bold">S-{seat.seatNo}</span>{seat.status === 'occupied' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}</div>))}</div></CardContent></Card>))}
              </div>
           </div>
         ))}
