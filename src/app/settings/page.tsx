@@ -84,6 +84,7 @@ export default function SettingsPage() {
   const [selectedLinkBranch, setSelectedLinkBranch] = useState("")
   const [selectedMealBranch, setSelectedMealBranch] = useState("")
   const [selectedBalanceBranch, setSelectedBalanceBranch] = useState("")
+  const [selectedEstimatesBranch, setSelectedEstimatesBranch] = useState("")
   
   // Admin/Dev States
   const [isDevDialogOpen, setIsDevDialogOpen] = useState(false)
@@ -124,6 +125,7 @@ export default function SettingsPage() {
     setSelectedLinkBranch(branch)
     setSelectedMealBranch(branch)
     setSelectedBalanceBranch(branch)
+    setSelectedEstimatesBranch(branch)
     setUserRole(role)
     setUserName(name)
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
@@ -251,7 +253,11 @@ export default function SettingsPage() {
   const securityRef = useMemoFirebase(() => doc(db, "configs", "securityConfig"), [db])
   const { data: securityData } = useDoc(securityRef)
 
-  const estimatesRef = useMemoFirebase(() => doc(db, "configs", "financialEstimates"), [db])
+  // BRANCH AWARE ESTIMATES
+  const estimatesRef = useMemoFirebase(() => 
+    selectedEstimatesBranch ? doc(db, "configs", `financialEstimates_${selectedEstimatesBranch}`) : null, 
+    [db, selectedEstimatesBranch]
+  )
   const { data: estimatesData } = useDoc(estimatesRef)
 
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
@@ -279,6 +285,11 @@ export default function SettingsPage() {
         packageFoodCost: (estimatesData.packageFoodCost || 4500).toString(),
         utilityEstimateCost: (estimatesData.utilityEstimateCost || 500).toString()
       })
+    } else {
+      setFinancialEstimates({
+        packageFoodCost: "4500",
+        utilityEstimateCost: "500"
+      })
     }
   }, [estimatesData])
 
@@ -304,14 +315,19 @@ export default function SettingsPage() {
   }
 
   const handleSaveEstimates = async () => {
+    if (!selectedEstimatesBranch) {
+      toast({ variant: "destructive", title: "Error", description: "Please select a branch first." })
+      return
+    }
     setIsUpdating(true)
     try {
+      if (!estimatesRef) throw new Error("Document reference not ready");
       await setDoc(estimatesRef, {
         packageFoodCost: Number(financialEstimates.packageFoodCost),
         utilityEstimateCost: Number(financialEstimates.utilityEstimateCost),
         updatedAt: serverTimestamp()
       })
-      toast({ title: "Estimation Constants Saved", description: "Profit calculations will now reflect these values." })
+      toast({ title: "Estimation Constants Saved", description: `Profit calculations will now reflect these values for ${selectedEstimatesBranch}.` })
     } catch (e: any) {
       toast({ variant: "destructive", description: e.message })
     } finally {
@@ -695,9 +711,27 @@ export default function SettingsPage() {
             <Calculator size={20} />
             <CardTitle>Financial Estimation Constants</CardTitle>
           </div>
-          <CardDescription>Configure global food and utility costs for profit calculations.</CardDescription>
+          <CardDescription>Configure branch-specific food and utility costs for profit calculations.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {userRole === 'Admin' && (
+            <div className="space-y-2 mb-4">
+              <Label className="text-[10px] font-black uppercase text-indigo-600 tracking-widest flex items-center gap-2">
+                <MapPin size={12}/> Select Branch for Constants
+              </Label>
+              <Select value={selectedEstimatesBranch} onValueChange={setSelectedEstimatesBranch}>
+                <SelectTrigger className="h-10 bg-slate-50 border-none shadow-inner font-bold">
+                  <SelectValue placeholder="Select Branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches?.map(b => (
+                    <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label htmlFor="foodCost">Package Food Cost (৳)</Label>
@@ -733,6 +767,7 @@ export default function SettingsPage() {
           <Button onClick={handleSaveEstimates} disabled={isUpdating} className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700">
             {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Update Estimation Rules
           </Button>
+          <p className="text-[10px] text-muted-foreground italic text-center">Configuring for Branch: <b>{selectedEstimatesBranch || 'None'}</b></p>
         </CardContent>
       </Card>
 

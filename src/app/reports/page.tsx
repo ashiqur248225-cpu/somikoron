@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -90,7 +91,11 @@ export default function ReportsPage() {
   }, [db, branchFilter])
   const { data: expenses, isLoading: eLoading } = useCollection(expensesQuery)
 
-  const estimatesRef = useMemoFirebase(() => doc(db, "configs", "financialEstimates"), [db])
+  // BRANCH AWARE ESTIMATES
+  const estimatesRef = useMemoFirebase(() => {
+    if (!branchFilter || branchFilter === 'all') return doc(db, "configs", "financialEstimates");
+    return doc(db, "configs", `financialEstimates_${branchFilter}`);
+  }, [db, branchFilter])
   const { data: estimates } = useDoc(estimatesRef)
 
   const studentsQuery = useMemoFirebase(() => {

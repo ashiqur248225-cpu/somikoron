@@ -102,8 +102,11 @@ export default function BuildingDetailsPage({
   const buildingRef = useMemoFirebase(() => id ? doc(db, "buildings", id) : null, [db, id])
   const { data: building, isLoading } = useDoc(buildingRef)
 
-  // Fetch Estimations Config
-  const estimatesRef = useMemoFirebase(() => doc(db, "configs", "financialEstimates"), [db])
+  // BRANCH AWARE ESTIMATIONS
+  const estimatesRef = useMemoFirebase(() => {
+    if (!building?.branch) return doc(db, "configs", "financialEstimates");
+    return doc(db, "configs", `financialEstimates_${building.branch}`);
+  }, [db, building?.branch])
   const { data: estimates } = useDoc(estimatesRef)
 
   // Fetch Students for this building (to calculate real revenue/deductions)
@@ -383,7 +386,7 @@ export default function BuildingDetailsPage({
                                   </div>
                                </div>
                              ))}
-                             <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(aIdx)} className="text-primary h-8"><Plus size={14} className="mr-1"/> Add Room to {apt.name || 'Apt'}</Button>
+                             <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(aIdx)} className="text-primary h-8"><Plus size={14} className="mr-1" /> Add Room to {apt.name || 'Apt'}</Button>
                           </div>
                         </div>
                       ))}
@@ -449,7 +452,9 @@ export default function BuildingDetailsPage({
         {building.apartmentsDetail?.map((apt: any, aIdx: number) => (
           <div key={apt.id || aIdx} className="space-y-4"><div className="flex items-center gap-4 bg-secondary/30 p-4 rounded-xl border"><div className="bg-primary/10 p-2 rounded-lg text-primary"><LayoutGrid size={24} /></div><div className="flex-1"><h2 className="text-xl font-bold">{apt.name}</h2><div className="flex items-center gap-4 text-xs text-muted-foreground mt-1"><span className="flex items-center gap-1"><Zap size={12} className="text-primary" /> Meter: {apt.meterNo}</span><span className="flex items-center gap-1"><DoorOpen size={12} /> {apt.rooms?.length} Rooms</span></div></div></div>
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ml-4">
-                {apt.rooms?.map((room: any, rIdx: number) => (<Card key={`${room.roomNo}-${rIdx}`} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all rounded-2xl"><div className="h-1.5 bg-primary/20 w-full" /><CardHeader className="pb-2"><div className="flex justify-between items-start"><div><CardTitle className="text-lg">Room {room.roomNo}</CardTitle><Badge variant="secondary" className="w-fit text-[9px] uppercase mt-1">৳{room.rentPerSeat}/seat</Badge><div className="flex flex-wrap gap-1 mt-1.5">{room.facilities?.map((f: string) => (<Badge key={f} variant="outline" className="text-[7px] py-0 px-1 border-primary/30 text-primary uppercase font-bold">{f}</Badge>))}</div></div><Badge variant="outline" className="font-bold text-muted-foreground">{room.totalSeats} Seats</Badge></div></CardHeader><CardContent><div className="flex flex-wrap gap-2 mt-2">{room.seats?.map((seat: any, sIdx: number) => (<div key={sIdx} className={cn("flex flex-col items-center justify-center p-2 rounded-md border w-14", seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive")}><span className="text-[10px] font-bold">S-{seat.seatNo}</span>{seat.status === 'occupied' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}</div>))}</div></CardContent></Card>))}
+                {apt.rooms?.map((room: any, rIdx: number) => (<Card key={`${room.roomNo}-${rIdx}`} className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all rounded-2xl"><div className="h-1.5 bg-primary/20 w-full" /><CardHeader className="pb-2"><div className="flex justify-between items-start"><div><CardTitle className="text-lg">Room {room.roomNo}</CardTitle><Badge variant="secondary" className="w-fit text-[9px] uppercase mt-1">৳{room.rentPerSeat}/seat</Badge><div className="flex flex-wrap gap-1 mt-1.5">{room.facilities?.map((f: string) => (<Badge key={f} variant="outline" className="text-[7px] py-0 px-1 border-primary/30 text-primary uppercase font-bold">{f}</Badge>))}</div></div><Badge variant="outline" className="font-bold text-muted-foreground">{room.totalSeats} Seats</Badge></div></CardHeader><CardContent><div className="flex flex-wrap gap-2 mt-2">{room.seats?.map((seat: any, sIdx: number) => (
+                  <div key={sIdx} className={cn("flex flex-col items-center justify-center p-2 rounded-md border w-14", seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive")}><span className="text-[10px] font-bold">S-{seat.seatNo}</span>{seat.status === 'occupied' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}</div>
+                ))}</div></CardContent></Card>))}
              </div>
           </div>
         ))}
