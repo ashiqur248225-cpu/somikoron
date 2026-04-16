@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,7 +13,14 @@ import {
   MoreVertical, ShieldCheck, Lock, ShieldAlert, RefreshCw, Download, Printer, MapPin,
   History,
   Calculator,
-  Zap
+  Zap,
+  LayoutGrid,
+  Target,
+  TrendingUp,
+  TrendingDown,
+  CircleDollarSign,
+  Users,
+  Home
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
@@ -21,6 +28,7 @@ import { doc, setDoc, serverTimestamp, getDoc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Slider } from "@/components/ui/slider"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -55,10 +63,23 @@ export default function SettingsPage() {
   // Admin/Dev States
   const [isDevDialogOpen, setIsDevDialogOpen] = useState(false)
   const [isSecurityDialogOpen, setIsSecurityDialogOpen] = useState(false)
+  const [isPlannerOpen, setIsPlannerOpen] = useState(false)
   const [devPassword, setDevPassword] = useState("")
   const [isDevMode, setIsDevMode] = useState(false)
   const [enhancedSecurity, setEnhancedSecurity] = useState(false)
   
+  // Project Planner State
+  const [plannerForm, setPlannerForm] = useState({
+    rooms: "12",
+    seatsPerRoom: "4",
+    buildingRent: "45000",
+    packageRate: "12500",
+    nonPackageRate: "7000",
+    packageDist: 60,
+    utilityCost: "600",
+    foodCost: "4500"
+  })
+
   // Financial Estimates State
   const [financialEstimates, setFinancialEstimates] = useState({
     packageFoodCost: "4500",
@@ -75,6 +96,31 @@ export default function SettingsPage() {
     setUserName(localStorage.getItem("user_name") || "User")
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
   }, [])
+
+  // Project Planner Logic
+  const plannerResults = useMemo(() => {
+    const rooms = Number(plannerForm.rooms) || 0
+    const spr = Number(plannerForm.seatsPerRoom) || 0
+    const rent = Number(plannerForm.buildingRent) || 0
+    const pRate = Number(plannerForm.packageRate) || 0
+    const npRate = Number(plannerForm.nonPackageRate) || 0
+    const pDist = plannerForm.packageDist
+    const uCost = Number(plannerForm.utilityCost) || 0
+    const fCost = Number(plannerForm.foodCost) || 0
+
+    const totalSeats = rooms * spr
+    const pSeats = Math.round(totalSeats * (pDist / 100))
+    const npSeats = totalSeats - pSeats
+
+    const revenue = (pSeats * pRate) + (npSeats * npRate)
+    const foodTotal = pSeats * fCost
+    const utilityTotal = totalSeats * uCost
+    const totalCosts = rent + foodTotal + utilityTotal
+    const profit = revenue - totalCosts
+    const efficiency = revenue > 0 ? (profit / revenue) * 100 : 0
+
+    return { totalSeats, pSeats, npSeats, revenue, costs: totalCosts, profit, efficiency }
+  }, [plannerForm])
 
   // Print synchronization effect
   useEffect(() => {
@@ -313,6 +359,11 @@ export default function SettingsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-xl p-2 border-slate-100">
+              <DropdownMenuItem onClick={() => setIsPlannerOpen(true)} className="gap-3 p-3 rounded-lg cursor-pointer">
+                <Calculator size={18} className="text-indigo-600" />
+                <span className="font-bold text-indigo-600">Project Planner</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setIsDevDialogOpen(true)} className="gap-3 p-3 rounded-lg cursor-pointer">
                 <ShieldAlert size={18} className={isDevMode ? "text-destructive" : "text-primary"} />
                 <span className="font-bold">{isDevMode ? "Disable Dev Mode" : "Developer Mode"}</span>
@@ -331,6 +382,150 @@ export default function SettingsPage() {
           </Link>
         </div>
       </div>
+
+      {/* PROJECT PLANNER DIALOG */}
+      <Dialog open={isPlannerOpen} onOpenChange={setIsPlannerOpen}>
+        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto rounded-3xl p-0">
+          <div className="h-2 bg-indigo-600 w-full" />
+          <DialogHeader className="px-8 pt-6">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600"><Calculator size={24}/></div>
+              <div>
+                <DialogTitle className="text-2xl font-black">Investment & Profit Planner</DialogTitle>
+                <DialogDescription>Estimate ROI and potential profit for a new hostel project.</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="p-8 grid grid-cols-1 lg:grid-cols-5 gap-8">
+            {/* Input Section */}
+            <div className="lg:col-span-3 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Total Rooms</Label>
+                  <div className="relative">
+                    <LayoutGrid className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input type="number" className="pl-9 h-11" value={plannerForm.rooms} onChange={e => setPlannerForm({...plannerForm, rooms: e.target.value})} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Seats Per Room</Label>
+                  <div className="relative">
+                    <Users className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input type="number" className="pl-9 h-11" value={plannerForm.seatsPerRoom} onChange={e => setPlannerForm({...plannerForm, seatsPerRoom: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-indigo-600 ml-1">Monthly Owner Rent (৳)</Label>
+                <div className="relative">
+                  <Home className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+                  <Input type="number" className="pl-9 h-12 text-lg font-bold" value={plannerForm.buildingRent} onChange={e => setPlannerForm({...plannerForm, buildingRent: e.target.value})} />
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Package Rate (৳)</Label>
+                  <Input type="number" className="h-11 font-bold" value={plannerForm.packageRate} onChange={e => setPlannerForm({...plannerForm, packageRate: e.target.value})} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Non-Package Rate (৳)</Label>
+                  <Input type="number" className="h-11 font-bold" value={plannerForm.nonPackageRate} onChange={e => setPlannerForm({...plannerForm, nonPackageRate: e.target.value})} />
+                </div>
+              </div>
+
+              <div className="space-y-6 pt-2">
+                <div className="flex justify-between items-end px-1">
+                  <Label className="text-[10px] font-black uppercase text-primary">Student Distribution</Label>
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-indigo-600">{plannerForm.packageDist}% Package</span>
+                    <span className="text-xs text-muted-foreground mx-2">/</span>
+                    <span className="text-xs font-bold text-slate-500">{100 - plannerForm.packageDist}% Non-Package</span>
+                  </div>
+                </div>
+                <Slider 
+                  value={[plannerForm.packageDist]} 
+                  max={100} 
+                  step={5} 
+                  onValueChange={(val) => setPlannerForm({...plannerForm, packageDist: val[0]})}
+                  className="py-4"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Est. Utility/Seat</Label>
+                  <Input type="number" className="h-11" value={plannerForm.utilityCost} onChange={e => setPlannerForm({...plannerForm, utilityCost: e.target.value})} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Fixed Food Cost</Label>
+                  <Input type="number" className="h-11" value={plannerForm.foodCost} onChange={e => setPlannerForm({...plannerForm, foodCost: e.target.value})} />
+                </div>
+              </div>
+            </div>
+
+            {/* Results Section */}
+            <div className="lg:col-span-2 space-y-6">
+              <Card className="border-none shadow-inner bg-slate-50 rounded-3xl p-6 h-full flex flex-col">
+                <div className="flex-1 space-y-6">
+                  <div className="text-center space-y-1">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Capacity</p>
+                    <p className="text-4xl font-black text-slate-800">{plannerResults.totalSeats} <span className="text-lg text-slate-400">Seats</span></p>
+                    <div className="flex justify-center gap-4 text-[9px] font-bold uppercase mt-2">
+                      <span className="text-indigo-600">{plannerResults.pSeats} Package</span>
+                      <span className="text-slate-400">{plannerResults.npSeats} Non-P</span>
+                    </div>
+                  </div>
+
+                  <Separator className="bg-slate-200" />
+
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-success" /> <span className="text-xs font-medium text-slate-600">Expected Revenue</span></div>
+                      <span className="font-black text-slate-800">৳{plannerResults.revenue.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-destructive" /> <span className="text-xs font-medium text-slate-600">Est. Operating Expense</span></div>
+                      <span className="font-black text-slate-800">৳{plannerResults.costs.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 p-6 bg-white rounded-3xl border-2 border-indigo-100 shadow-xl space-y-2 text-center animate-in zoom-in-95 duration-500">
+                    <p className="text-[10px] font-black uppercase text-indigo-600 tracking-[0.2em]">Projected Monthly Profit</p>
+                    <p className={cn("text-4xl font-black tracking-tighter", plannerResults.profit >= 0 ? "text-success" : "text-destructive")}>
+                      ৳{plannerResults.profit.toLocaleString()}
+                    </p>
+                    <div className="pt-2">
+                      <Badge className={cn("rounded-full font-bold", plannerResults.efficiency > 20 ? "bg-success" : (plannerResults.efficiency > 0 ? "bg-orange-500" : "bg-destructive"))}>
+                        Efficiency: {plannerResults.efficiency.toFixed(1)}%
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-6 space-y-2">
+                  <div className="flex items-center gap-2 text-primary font-bold text-[10px] uppercase">
+                    <Target size={12}/> Planner Insight
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-muted-foreground italic">
+                    {plannerResults.profit > 15000 
+                      ? "This looks like a high-yield project. Consider the current distribution for maximum ROI."
+                      : "Profit margins are tight. Try increasing seats per room or reducing building rent."}
+                  </p>
+                </div>
+              </Card>
+            </div>
+          </div>
+
+          <DialogFooter className="p-6 bg-slate-50 border-t">
+            <Button variant="outline" onClick={() => setIsPlannerOpen(false)} className="rounded-xl px-8 h-12 font-bold">Close Planner</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Developer Mode Password Dialog */}
       <Dialog open={isDevDialogOpen} onOpenChange={setIsDevDialogOpen}>
