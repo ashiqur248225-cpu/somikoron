@@ -106,7 +106,6 @@ export function AppSidebar() {
     { title: "Payment Entry", url: "/payment-entry", icon: PlusCircle, roles: ["Building Manager"] },
     { title: "Expense Entry", url: "/expense-entry", icon: Receipt, roles: ["Building Manager"] },
     { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
-    { title: "Manager Requests", url: "/manager-requests", icon: BellRing, roles: ["Admin", "Branch Manager"] },
     { title: "Income", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager"] },
     { title: "Receipts", url: "/receipts", icon: ScrollText, roles: ["Admin", "Branch Manager"] },
     { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager"] },
@@ -210,3 +209,4 @@ export function AppSidebar() {
     </Sidebar>
   )
 }
+
