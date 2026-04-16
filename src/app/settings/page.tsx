@@ -511,7 +511,7 @@ export default function SettingsPage() {
               </div>
 
               <ScrollArea className="flex-1 pr-4">
-                <div className="space-y-4">
+                <div className="space-y-4 pb-24">
                   {plannerGroups.map((group, idx) => (
                     <Card key={group.id} className="border-2 shadow-none rounded-2xl overflow-hidden relative group animate-in slide-in-from-right-2 duration-300">
                       <div className="h-1 w-full bg-indigo-200" />
