@@ -315,12 +315,16 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">System Password <Lock size={10}/></Label>
                   <div className="flex gap-2">
-                    <Input readOnly value={formData.password} className="bg-secondary/30 font-mono" />
+                    <Input 
+                      value={formData.password} 
+                      onChange={e => setFormData({...formData, password: e.target.value})}
+                      className="bg-secondary/30 font-mono" 
+                    />
                     <Button type="button" variant="outline" size="icon" onClick={() => setFormData({...formData, password: generateRandomPassword()})}>
                       <RefreshCw size={14} />
                     </Button>
                   </div>
-                  <p className="text-[10px] text-muted-foreground italic">Auto-generated for security.</p>
+                  <p className="text-[10px] text-muted-foreground italic">Auto-generated or custom password.</p>
                 </div>
               </div>
               <div className="space-y-2">
