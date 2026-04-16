@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
@@ -20,7 +21,10 @@ import {
   TrendingDown,
   CircleDollarSign,
   Users,
-  Home
+  Home,
+  Plus,
+  Trash2,
+  X
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
@@ -48,8 +52,18 @@ import {
 } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const PRODUCTION_DOMAIN = "https://somikoron-one.vercel.app";
+
+interface RoomGroup {
+  id: string;
+  rooms: string;
+  spr: string;
+  pRent: string;
+  npRent: string;
+  mode: 'package' | 'non-package';
+}
 
 export default function SettingsPage() {
   const { toast } = useToast()
@@ -69,13 +83,11 @@ export default function SettingsPage() {
   const [enhancedSecurity, setEnhancedSecurity] = useState(false)
   
   // Project Planner State
-  const [plannerForm, setPlannerForm] = useState({
-    rooms: "12",
-    seatsPerRoom: "4",
+  const [plannerGroups, setPlannerGroups] = useState<RoomGroup[]>([
+    { id: "1", rooms: "5", spr: "4", pRent: "9500", npRent: "5000", mode: "package" }
+  ])
+  const [plannerSettings, setPlannerSettings] = useState({
     buildingRent: "45000",
-    packageRate: "12500",
-    nonPackageRate: "7000",
-    packageDist: 60,
     utilityCost: "600",
     foodCost: "4500"
   })
@@ -99,28 +111,73 @@ export default function SettingsPage() {
 
   // Project Planner Logic
   const plannerResults = useMemo(() => {
-    const rooms = Number(plannerForm.rooms) || 0
-    const spr = Number(plannerForm.seatsPerRoom) || 0
-    const rent = Number(plannerForm.buildingRent) || 0
-    const pRate = Number(plannerForm.packageRate) || 0
-    const npRate = Number(plannerForm.nonPackageRate) || 0
-    const pDist = plannerForm.packageDist
-    const uCost = Number(plannerForm.utilityCost) || 0
-    const fCost = Number(plannerForm.foodCost) || 0
+    const rent = Number(plannerSettings.buildingRent) || 0
+    const uCost = Number(plannerSettings.utilityCost) || 0
+    const fCost = Number(plannerSettings.foodCost) || 4500
 
-    const totalSeats = rooms * spr
-    const pSeats = Math.round(totalSeats * (pDist / 100))
-    const npSeats = totalSeats - pSeats
+    let totalRevenue = 0
+    let totalFoodExpense = 0
+    let totalSeats = 0
+    let packageSeatsCount = 0
+    let nonPackageSeatsCount = 0
 
-    const revenue = (pSeats * pRate) + (npSeats * npRate)
-    const foodTotal = pSeats * fCost
-    const utilityTotal = totalSeats * uCost
-    const totalCosts = rent + foodTotal + utilityTotal
-    const profit = revenue - totalCosts
-    const efficiency = revenue > 0 ? (profit / revenue) * 100 : 0
+    plannerGroups.forEach(g => {
+      const rooms = Number(g.rooms) || 0
+      const spr = Number(g.spr) || 0
+      const seats = rooms * spr
+      const pRent = Number(g.pRent) || 0
+      const npRent = Number(g.npRent) || 0
 
-    return { totalSeats, pSeats, npSeats, revenue, costs: totalCosts, profit, efficiency }
-  }, [plannerForm])
+      totalSeats += seats
+
+      if (g.mode === 'package') {
+        totalRevenue += seats * pRent
+        totalFoodExpense += seats * fCost
+        packageSeatsCount += seats
+      } else {
+        totalRevenue += seats * npRent
+        nonPackageSeatsCount += seats
+      }
+    })
+
+    const totalUtilityExpense = totalSeats * uCost
+    const totalCosts = rent + totalFoodExpense + totalUtilityExpense
+    const profit = totalRevenue - totalCosts
+    const efficiency = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0
+
+    return { 
+      totalSeats, 
+      packageSeatsCount, 
+      nonPackageSeatsCount, 
+      revenue: totalRevenue, 
+      costs: totalCosts, 
+      profit, 
+      efficiency 
+    }
+  }, [plannerGroups, plannerSettings])
+
+  // Planner Group Actions
+  const addRoomGroup = () => {
+    const newGroup: RoomGroup = {
+      id: Math.random().toString(36).substr(2, 9),
+      rooms: "1",
+      spr: "4",
+      pRent: "9500",
+      npRent: "5000",
+      mode: "package"
+    }
+    setPlannerGroups([...plannerGroups, newGroup])
+  }
+
+  const removeRoomGroup = (id: string) => {
+    if (plannerGroups.length > 1) {
+      setPlannerGroups(plannerGroups.filter(g => g.id !== id))
+    }
+  }
+
+  const updateGroup = (id: string, field: keyof RoomGroup, value: any) => {
+    setPlannerGroups(plannerGroups.map(g => g.id === id ? { ...g, [field]: value } : g))
+  }
 
   // Print synchronization effect
   useEffect(() => {
@@ -385,99 +442,111 @@ export default function SettingsPage() {
 
       {/* PROJECT PLANNER DIALOG */}
       <Dialog open={isPlannerOpen} onOpenChange={setIsPlannerOpen}>
-        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto rounded-3xl p-0">
-          <div className="h-2 bg-indigo-600 w-full" />
-          <DialogHeader className="px-8 pt-6">
+        <DialogContent className="max-w-5xl max-h-[95vh] overflow-hidden rounded-3xl p-0 flex flex-col">
+          <div className="h-2 bg-indigo-600 w-full shrink-0" />
+          <DialogHeader className="px-8 pt-6 shrink-0">
             <div className="flex items-center gap-3 mb-1">
               <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600"><Calculator size={24}/></div>
               <div>
                 <DialogTitle className="text-2xl font-black">Investment & Profit Planner</DialogTitle>
-                <DialogDescription>Estimate ROI and potential profit for a new hostel project.</DialogDescription>
+                <DialogDescription>Compare Package vs Non-Package ROI with dynamic room groups.</DialogDescription>
               </div>
             </div>
           </DialogHeader>
 
-          <div className="p-8 grid grid-cols-1 lg:grid-cols-5 gap-8">
+          <div className="flex-1 overflow-hidden p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Input Section */}
-            <div className="lg:col-span-3 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="lg:col-span-8 flex flex-col gap-6 overflow-hidden">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Total Rooms</Label>
+                  <Label className="text-[10px] font-black uppercase text-indigo-600 ml-1">Building Rent (৳)</Label>
                   <div className="relative">
-                    <LayoutGrid className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input type="number" className="pl-9 h-11" value={plannerForm.rooms} onChange={e => setPlannerForm({...plannerForm, rooms: e.target.value})} />
+                    <Home className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input type="number" className="pl-9 h-10 font-bold" value={plannerSettings.buildingRent} onChange={e => setPlannerSettings({...plannerSettings, buildingRent: e.target.value})} />
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Seats Per Room</Label>
-                  <div className="relative">
-                    <Users className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input type="number" className="pl-9 h-11" value={plannerForm.seatsPerRoom} onChange={e => setPlannerForm({...plannerForm, seatsPerRoom: e.target.value})} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black uppercase text-indigo-600 ml-1">Monthly Owner Rent (৳)</Label>
-                <div className="relative">
-                  <Home className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                  <Input type="number" className="pl-9 h-12 text-lg font-bold" value={plannerForm.buildingRent} onChange={e => setPlannerForm({...plannerForm, buildingRent: e.target.value})} />
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Package Rate (৳)</Label>
-                  <Input type="number" className="h-11 font-bold" value={plannerForm.packageRate} onChange={e => setPlannerForm({...plannerForm, packageRate: e.target.value})} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Non-Package Rate (৳)</Label>
-                  <Input type="number" className="h-11 font-bold" value={plannerForm.nonPackageRate} onChange={e => setPlannerForm({...plannerForm, nonPackageRate: e.target.value})} />
-                </div>
-              </div>
-
-              <div className="space-y-6 pt-2">
-                <div className="flex justify-between items-end px-1">
-                  <Label className="text-[10px] font-black uppercase text-primary">Student Distribution</Label>
-                  <div className="text-right">
-                    <span className="text-xs font-bold text-indigo-600">{plannerForm.packageDist}% Package</span>
-                    <span className="text-xs text-muted-foreground mx-2">/</span>
-                    <span className="text-xs font-bold text-slate-500">{100 - plannerForm.packageDist}% Non-Package</span>
-                  </div>
-                </div>
-                <Slider 
-                  value={[plannerForm.packageDist]} 
-                  max={100} 
-                  step={5} 
-                  onValueChange={(val) => setPlannerForm({...plannerForm, packageDist: val[0]})}
-                  className="py-4"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Est. Utility/Seat</Label>
-                  <Input type="number" className="h-11" value={plannerForm.utilityCost} onChange={e => setPlannerForm({...plannerForm, utilityCost: e.target.value})} />
+                  <Input type="number" className="h-10" value={plannerSettings.utilityCost} onChange={e => setPlannerSettings({...plannerSettings, utilityCost: e.target.value})} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Fixed Food Cost</Label>
-                  <Input type="number" className="h-11" value={plannerForm.foodCost} onChange={e => setPlannerForm({...plannerForm, foodCost: e.target.value})} />
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Food Cost (Fixed)</Label>
+                  <Input type="number" className="h-10" value={plannerSettings.foodCost} onChange={e => setPlannerSettings({...plannerSettings, foodCost: e.target.value})} />
                 </div>
               </div>
+
+              <div className="flex justify-between items-center shrink-0 border-b pb-2">
+                <h4 className="text-xs font-black uppercase text-slate-500 flex items-center gap-2">
+                  <LayoutGrid size={14}/> Room Categories
+                </h4>
+                <Button variant="outline" size="sm" onClick={addRoomGroup} className="h-8 gap-1.5 text-[10px] font-bold uppercase text-indigo-600 border-indigo-200 hover:bg-indigo-50">
+                  <Plus size={14}/> Add Room Group
+                </Button>
+              </div>
+
+              <ScrollArea className="flex-1 pr-4">
+                <div className="space-y-4">
+                  {plannerGroups.map((group, idx) => (
+                    <Card key={group.id} className="border-2 shadow-none rounded-2xl overflow-hidden relative group animate-in slide-in-from-right-2 duration-300">
+                      <div className={cn("h-1 w-full", group.mode === 'package' ? "bg-primary" : "bg-orange-500")} />
+                      <CardContent className="p-4 space-y-4">
+                        <div className="grid grid-cols-2 md:grid-cols-12 gap-4 items-end">
+                          <div className="md:col-span-2 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Rooms</Label>
+                            <Input type="number" value={group.rooms} onChange={e => updateGroup(group.id, 'rooms', e.target.value)} className="h-9 text-xs" />
+                          </div>
+                          <div className="md:col-span-2 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Seats/R</Label>
+                            <Input type="number" value={group.spr} onChange={updateGroup.bind(null, group.id, 'spr')} className="h-9 text-xs" />
+                          </div>
+                          <div className="md:col-span-3 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-primary">Package (৳)</Label>
+                            <Input type="number" value={group.pRent} onChange={e => updateGroup(group.id, 'pRent', e.target.value)} className="h-9 text-xs font-bold" />
+                          </div>
+                          <div className="md:col-span-3 space-y-1">
+                            <Label className="text-[9px] font-black uppercase text-orange-600">Non-Pack (৳)</Label>
+                            <Input type="number" value={group.npRent} onChange={e => updateGroup(group.id, 'npRent', e.target.value)} className="h-9 text-xs font-bold" />
+                          </div>
+                          <div className="md:col-span-2 flex flex-col items-center gap-1.5 pb-0.5">
+                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Mode</Label>
+                            <div className="flex items-center gap-2">
+                              <span className={cn("text-[8px] font-black uppercase", group.mode === 'non-package' ? "text-orange-600" : "text-slate-400")}>NP</span>
+                              <Switch 
+                                checked={group.mode === 'package'} 
+                                onCheckedChange={(val) => updateGroup(group.id, 'mode', val ? 'package' : 'non-package')}
+                                className="data-[state=checked]:bg-primary"
+                              />
+                              <span className={cn("text-[8px] font-black uppercase", group.mode === 'package' ? "text-primary" : "text-slate-400")}>PKG</span>
+                            </div>
+                          </div>
+                        </div>
+                        {plannerGroups.length > 1 && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="absolute -top-1 -right-1 h-7 w-7 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" 
+                            onClick={() => removeRoomGroup(group.id)}
+                          >
+                            <X size={14}/>
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
 
             {/* Results Section */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-4 space-y-6 shrink-0">
               <Card className="border-none shadow-inner bg-slate-50 rounded-3xl p-6 h-full flex flex-col">
                 <div className="flex-1 space-y-6">
                   <div className="text-center space-y-1">
                     <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Capacity</p>
                     <p className="text-4xl font-black text-slate-800">{plannerResults.totalSeats} <span className="text-lg text-slate-400">Seats</span></p>
                     <div className="flex justify-center gap-4 text-[9px] font-bold uppercase mt-2">
-                      <span className="text-indigo-600">{plannerResults.pSeats} Package</span>
-                      <span className="text-slate-400">{plannerResults.npSeats} Non-P</span>
+                      <span className="text-primary">{plannerResults.packageSeatsCount} PKG</span>
+                      <span className="text-orange-600">{plannerResults.nonPackageSeatsCount} Non-P</span>
                     </div>
                   </div>
 
@@ -513,15 +582,15 @@ export default function SettingsPage() {
                   </div>
                   <p className="text-[10px] leading-relaxed text-muted-foreground italic">
                     {plannerResults.profit > 15000 
-                      ? "This looks like a high-yield project. Consider the current distribution for maximum ROI."
-                      : "Profit margins are tight. Try increasing seats per room or reducing building rent."}
+                      ? "This looks like a high-yield project. Monitor the distribution for maximum ROI."
+                      : "Profit margins are tight. Try increasing seats per room or switching more rooms to Package Mode if possible."}
                   </p>
                 </div>
               </Card>
             </div>
           </div>
 
-          <DialogFooter className="p-6 bg-slate-50 border-t">
+          <DialogFooter className="p-6 bg-slate-50 border-t shrink-0">
             <Button variant="outline" onClick={() => setIsPlannerOpen(false)} className="rounded-xl px-8 h-12 font-bold">Close Planner</Button>
           </DialogFooter>
         </DialogContent>
