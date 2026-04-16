@@ -39,7 +39,8 @@ import {
   ChevronDown,
   Clock,
   ListFilter,
-  UserCheck
+  UserCheck,
+  MapPin
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -113,9 +114,10 @@ export default function SMSPanelPage() {
 
   // Broadcast States
   const [searchTerm, setSearchTerm] = useState("")
+  const [branchFilter, setBranchFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all") 
-  const [residentActiveFilter, setResidentStatusFilter] = useState("active") // New status filter
+  const [residentActiveFilter, setResidentStatusFilter] = useState("active") 
   const [selectedStudents, setSelectedStudents] = useState<string[]>([])
   const [customMessage, setCustomMessage] = useState("")
   const [selectedTemplateId, setSelectedTemplateId] = useState("manual")
@@ -125,9 +127,15 @@ export default function SMSPanelPage() {
   const [isScanning, setIsScanning] = useState(false)
 
   useEffect(() => {
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    const storedBranch = localStorage.getItem("user_branch") || "Main Branch"
+    setUserBranch(storedBranch)
     setUserName(localStorage.getItem("user_name") || "User")
-    setUserRole(localStorage.getItem("user_role") || "Manager")
+    const role = localStorage.getItem("user_role") || "Manager"
+    setUserRole(role)
+    
+    if (role !== 'Admin') {
+      setBranchFilter(storedBranch)
+    }
   }, [])
 
   // Templates Logic
@@ -182,14 +190,19 @@ export default function SMSPanelPage() {
   const mealConfigRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
   const { data: mealConfig } = useDoc(mealConfigRef)
 
-  // Student Query - Allow fetching all to filter by active/inactive
+  // Branches Query
+  const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
+  const { data: branches } = useCollection(branchesQuery)
+
+  // Student Query
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    if (userRole === 'Admin' && buildingFilter === 'global_all') {
-      return query(collection(db, "students"))
+    if (userRole === 'Admin') {
+      if (branchFilter === 'all') return query(collection(db, "students"))
+      return query(collection(db, "students"), where("branch", "==", branchFilter))
     }
     return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, buildingFilter])
+  }, [db, userBranch, userRole, branchFilter])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
   // Logs Query
@@ -210,8 +223,12 @@ export default function SMSPanelPage() {
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Admin') {
+      if (branchFilter === 'all') return query(collection(db, "buildings"))
+      return query(collection(db, "buildings"), where("branch", "==", branchFilter))
+    }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, branchFilter])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const filteredStudents = useMemo(() => {
@@ -224,7 +241,7 @@ export default function SMSPanelPage() {
       const matchesSearch = s.name.toLowerCase().includes(search) || (s.phone || "").includes(search)
       
       let matchesBuilding = true
-      if (buildingFilter !== "all" && buildingFilter !== 'global_all') {
+      if (buildingFilter !== "all") {
         matchesBuilding = s.buildingId === buildingFilter
       }
       
@@ -426,7 +443,7 @@ export default function SMSPanelPage() {
         toast({ 
           variant: "destructive", 
           title: "Broadcast Failed", 
-          description: `Gateway Error: ${lastError}. (Tip: Balance ৳0.50 is usually insufficient for broadcast).` 
+          description: `Gateway Error: ${lastError}.` 
         })
       }
     } catch (e: any) {
@@ -643,15 +660,27 @@ export default function SMSPanelPage() {
                     </Button>
                   </div>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {userRole === 'Admin' && (
+                      <Select value={branchFilter} onValueChange={setBranchFilter}>
+                        <SelectTrigger className="bg-white h-9 text-xs">
+                          <MapPin size={12} className="mr-2 text-primary" />
+                          <SelectValue placeholder="All Branches" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Branches</SelectItem>
+                          {branches?.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+
                     <Select value={buildingFilter} onValueChange={setBuildingFilter}>
                       <SelectTrigger className="bg-white h-9 text-xs">
                         <Building2 size={12} className="mr-2" />
                         <SelectValue placeholder="All Buildings" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Current Branch Buildings</SelectItem>
-                        {userRole === 'Admin' && <SelectItem value="global_all" className="font-bold text-primary">Global (All Hostels)</SelectItem>}
+                        <SelectItem value="all">All Buildings</SelectItem>
                         {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
