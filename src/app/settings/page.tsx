@@ -82,6 +82,7 @@ export default function SettingsPage() {
   const [userRole, setUserRole] = useState("")
   const [selectedLinkBranch, setSelectedLinkBranch] = useState("")
   const [selectedMealBranch, setSelectedMealBranch] = useState("")
+  const [selectedBalanceBranch, setSelectedBalanceBranch] = useState("")
   
   // Admin/Dev States
   const [isDevDialogOpen, setIsDevDialogOpen] = useState(false)
@@ -121,6 +122,7 @@ export default function SettingsPage() {
     setUserBranch(branch)
     setSelectedLinkBranch(branch)
     setSelectedMealBranch(branch)
+    setSelectedBalanceBranch(branch)
     setUserRole(role)
     setUserName(name)
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
@@ -230,7 +232,11 @@ export default function SettingsPage() {
   )
   const { data: config, isLoading: isConfigLoading } = useDoc(configRef)
 
-  const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
+  // BRANCH AWARE OPENING BALANCES
+  const balancesRef = useMemoFirebase(() => 
+    selectedBalanceBranch ? doc(db, "configs", `openingBalances_${selectedBalanceBranch}`) : null, 
+    [db, selectedBalanceBranch]
+  )
   const { data: openingBalances, isLoading: isBalancesLoading } = useDoc(balancesRef)
 
   const rulesRef = useMemoFirebase(() => doc(db, "configs", "hostelRules"), [db])
@@ -261,6 +267,8 @@ export default function SettingsPage() {
         bkash: (openingBalances.bkash || 0).toString(),
         nagad: (openingBalances.nagad || 0).toString(),
       })
+    } else {
+      setBalances({ cash: "0", bank: "0", bkash: "0", nagad: "0" })
     }
   }, [openingBalances])
 
@@ -319,8 +327,8 @@ export default function SettingsPage() {
   }
 
   const handleSaveBalances = async () => {
-    if (!userBranch) {
-      toast({ variant: "destructive", title: "Error", description: "Active branch not identified." })
+    if (!selectedBalanceBranch) {
+      toast({ variant: "destructive", title: "Error", description: "Select a branch first." })
       return;
     }
     setIsUpdating(true)
@@ -331,6 +339,7 @@ export default function SettingsPage() {
       const nagad = Number(balances.nagad || 0)
       const total = cash + bank + bkash + nagad
 
+      if (!balancesRef) throw new Error("Document reference not ready");
       await setDoc(balancesRef, {
         cash,
         bank,
@@ -339,9 +348,9 @@ export default function SettingsPage() {
         updatedAt: serverTimestamp()
       })
 
-      const netBalanceRef = doc(db, "netBalance", userBranch)
+      const netBalanceRef = doc(db, "netBalance", selectedBalanceBranch)
       await setDoc(netBalanceRef, {
-        branchId: userBranch,
+        branchId: selectedBalanceBranch,
         totalCash: cash,
         totalBank: bank,
         totalBkash: bkash,
@@ -350,7 +359,7 @@ export default function SettingsPage() {
         lastUpdated: serverTimestamp()
       }, { merge: true })
 
-      toast({ title: "Balances Saved", description: "Initial funds synchronized with dashboard." })
+      toast({ title: "Balances Saved", description: `Initial funds synchronized for ${selectedBalanceBranch}.` })
     } catch (e: any) {
       toast({ variant: "destructive", description: e.message })
     } finally {
@@ -841,6 +850,24 @@ export default function SettingsPage() {
       <Card className="border-none shadow-sm print:hidden">
         <CardHeader><div className="flex items-center gap-2 text-primary"><Wallet size={20} /><CardTitle>Opening Balances</CardTitle></div><CardDescription>Set your initial funds.</CardDescription></CardHeader>
         <CardContent className="space-y-6">
+          {userRole === 'Admin' && (
+            <div className="space-y-2 mb-4">
+              <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                <MapPin size={12}/> Select Branch for Balances
+              </Label>
+              <Select value={selectedBalanceBranch} onValueChange={setSelectedBalanceBranch}>
+                <SelectTrigger className="h-10 bg-slate-50 border-none shadow-inner font-bold">
+                  <SelectValue placeholder="Select Branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches?.map(b => (
+                    <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2"><Label><Banknote size={14} /> Cash</Label><Input type="number" value={balances.cash} onChange={e => setBalances({...balances, cash: e.target.value})} /></div>
             <div className="space-y-2"><Label><Landmark size={14} /> Bank</Label><Input type="number" value={balances.bank} onChange={e => setBalances({...balances, bank: e.target.value})} /></div>
@@ -848,6 +875,7 @@ export default function SettingsPage() {
             <div className="space-y-2"><Label><Smartphone size={14} className="text-orange-500" /> Nagad</Label><Input type="number" value={balances.nagad} onChange={e => setBalances({...balances, nagad: e.target.value})} /></div>
           </div>
           <Button onClick={handleSaveBalances} disabled={isUpdating} className="w-full gap-2 mt-4">{isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Initial Balances</Button>
+          <p className="text-[10px] text-muted-foreground italic">Configuring Initial Funds for Branch: <b>{selectedBalanceBranch || 'None'}</b></p>
         </CardContent>
       </Card>
 
