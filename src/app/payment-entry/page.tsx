@@ -297,7 +297,6 @@ export default function PaymentEntryPage() {
         )}
         <div>
           <h1 className="text-3xl font-bold text-primary tracking-tight">Payment Entry</h1>
-          <p className="text-muted-foreground text-sm">Record incoming resident payment for {userBranch}.</p>
         </div>
       </div>
 
