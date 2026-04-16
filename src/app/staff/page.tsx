@@ -93,6 +93,14 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
   }, [db, formData.branch])
   const { data: buildings } = useCollection(buildingsQuery)
 
+  // Query to get all buildings for name mapping in the list
+  const allBuildingsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    if (userRole === 'Admin') return query(collection(db, "buildings"))
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userBranch, userRole])
+  const { data: allBuildings } = useCollection(allBuildingsQuery)
+
   const filteredStaff = useMemo(() => {
     if (!staff) return []
     return staff.filter(s => {
@@ -164,6 +172,11 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
     }
   }
 
+  const getBuildingName = (id: string) => {
+    if (!id || id === 'none') return null
+    return allBuildings?.find(b => b.id === id)?.name || id
+  }
+
   return (
     <div className="space-y-8 pb-20">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
@@ -227,7 +240,7 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-slate-600">{s.branch}</span>
-                            {s.assignedBuildingId !== 'none' && <span className="text-[10px] text-muted-foreground">Building ID: {s.assignedBuildingId}</span>}
+                            {s.assignedBuildingId !== 'none' && <span className="text-[10px] text-muted-foreground">Building: {getBuildingName(s.assignedBuildingId)}</span>}
                           </div>
                         </TableCell>
                         <TableCell className="font-black text-slate-700">৳{s.monthlySalary?.toLocaleString()}</TableCell>
@@ -256,8 +269,15 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
                     </div>
                     
                     <div className="flex justify-between items-center pt-1">
-                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-bold uppercase">
-                        <MapPin size={10} /> {s.branch}
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-bold uppercase">
+                          <MapPin size={10} /> {s.branch}
+                        </div>
+                        {s.assignedBuildingId !== 'none' && (
+                          <div className="flex items-center gap-1.5 text-[9px] text-primary font-bold uppercase mt-1">
+                            <Building2 size={9} /> {getBuildingName(s.assignedBuildingId)}
+                          </div>
+                        )}
                       </div>
                       <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold uppercase gap-1">
                         Profile <Eye size={12} />
