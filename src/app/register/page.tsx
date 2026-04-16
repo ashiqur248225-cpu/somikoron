@@ -184,7 +184,7 @@ function RegistrationFormContent() {
     <div className="min-h-screen bg-slate-50 py-12 px-4">
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-black text-primary tracking-tighter uppercase">SOMIKORON HOSTEL</h1>
+          <h1 className="text-4xl font-black text-primary tracking-tighter uppercase">সমীকরণ ছাত্রাবাস</h1>
           <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2">
             <MapPin size={12} className="text-primary" /> {urlBranch} Branch
           </p>
