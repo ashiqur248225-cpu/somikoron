@@ -62,7 +62,10 @@ export default function BulkMealEntryPage() {
   }, [db, userBranch])
   const { data: students } = useCollection(studentsQuery)
 
-  const mealConfigRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
+  const mealConfigRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
+    [db, userBranch]
+  )
   const { data: mealConfig } = useDoc(mealConfigRef)
 
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
@@ -81,7 +84,10 @@ export default function BulkMealEntryPage() {
   }, [students, mealLogFilter.buildingId])
 
   const handleBulkMealSubmit = async () => {
-    if (!students || !mealConfig?.rate) return;
+    if (!students || !mealConfig?.rate) {
+      toast({ variant: "destructive", title: "Error", description: "Meal rate not configured for this branch." });
+      return;
+    }
     setIsSubmitting(true);
     const batch = writeBatch(db);
     const mealRate = Number(mealConfig.rate);

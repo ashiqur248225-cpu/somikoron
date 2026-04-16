@@ -186,8 +186,11 @@ export default function SMSPanelPage() {
     }
   }
 
-  // Meal Rate Config
-  const mealConfigRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
+  // Meal Rate Config - BRANCH AWARE
+  const mealConfigRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
+    [db, userBranch]
+  )
   const { data: mealConfig } = useDoc(mealConfigRef)
 
   // Branches Query

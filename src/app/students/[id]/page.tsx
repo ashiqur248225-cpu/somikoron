@@ -114,6 +114,13 @@ export default function StudentDetailsPage() {
     return staffList.filter(s => s.staffType === 'management' || !s.staffType)
   }, [staffList])
 
+  // BRANCH AWARE MEAL RATE
+  const mealConfigRef = useMemoFirebase(() => 
+    student?.branch ? doc(db, "configs", `mealRate_${student.branch}`) : null, 
+    [db, student?.branch]
+  )
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
   const [paymentData, setPaymentData] = useState({
     month: MONTHS[new Date().getMonth()],
     year: new Date().getFullYear().toString(),
@@ -281,7 +288,8 @@ export default function StudentDetailsPage() {
           const foodBalance = foodVal > 0 ? foodVal : 0;
           const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
           const totalPayable = finalTotalDue + foodDue;
-          const msg = template.replaceAll('[নাম]', student.name).replaceAll('[মাস]', `${paymentData.month} ${paymentData.year}`).replaceAll('[total_payable]', totalPayable.toString()).replaceAll('[paid]', totalAmt.toString()).replaceAll('[food_balance]', foodBalance.toString()).replaceAll('[food_due]', foodDue.toString()).replaceAll('[রুম]', student.roomNumber).replaceAll('[building]', student.buildingName).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
+          const mealRate = Number(mealConfig?.rate || 0);
+          const msg = template.replaceAll('[নাম]', student.name).replaceAll('[মাস]', `${paymentData.month} ${paymentData.year}`).replaceAll('[total_payable]', totalPayable.toString()).replaceAll('[paid]', totalAmt.toString()).replaceAll('[food_balance]', foodBalance.toString()).replaceAll('[food_due]', foodDue.toString()).replaceAll('[রুম]', student.roomNumber).replaceAll('[building]', student.buildingName).replaceAll('[meal_rate]', mealRate.toString()).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
           const res = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
           const logId = doc(collection(db, "smsLogs")).id;
           await setDoc(doc(db, "smsLogs", logId), { id: logId, to: student.phone, message: msg, status: res.error === 0 ? 'Success' : 'Failed', branch: student.branch, sentBy: userName, createdAt: serverTimestamp() });
@@ -380,13 +388,10 @@ export default function StudentDetailsPage() {
       const methodKey = methodKeyMap[exitMethod] || 'totalCash'
 
       // NEW LOGIC: Calculate final remaining due or advance
-      // Theoretical position is settlementCalculation.netResult
-      // positive = hostel owes student, negative = student owes hostel
       let finalTotalDue = 0;
       let finalAdvance = 0;
 
       if (settlementCalculation.isRefund) {
-        // CASE: Hostel refunds student
         if (processedAmt > 0) {
           const expenseId = doc(collection(db, "expenses")).id
           batch.set(doc(db, "expenses", expenseId), {
@@ -399,12 +404,10 @@ export default function StudentDetailsPage() {
           batch.set(balanceRef, { [methodKey]: increment(-processedAmt), totalHandCash: increment(-processedAmt), lastUpdated: serverTimestamp() }, { merge: true })
         }
         
-        // Calculate remaining credit/debt
         const delta = settlementCalculation.netResult - processedAmt;
-        if (delta > 0) finalAdvance = delta; // Hostel still owes student
-        else if (delta < 0) finalTotalDue = Math.abs(delta); // Student now owes hostel
+        if (delta > 0) finalAdvance = delta;
+        else if (delta < 0) finalTotalDue = Math.abs(delta);
       } else {
-        // CASE: Student pays hostel (Income)
         if (processedAmt > 0) {
           const paymentId = doc(collection(db, "payments")).id
           batch.set(doc(db, "payments", paymentId), {
@@ -418,12 +421,9 @@ export default function StudentDetailsPage() {
           batch.set(balanceRef, { [methodKey]: increment(processedAmt), totalHandCash: increment(processedAmt), lastUpdated: serverTimestamp() }, { merge: true })
         }
 
-        // Calculate remaining debt/credit
-        // Theoretical result is negative (e.g., -1000 means student owes 1000)
-        // processedAmt is what student paid (e.g., 400)
         const delta = Math.abs(settlementCalculation.netResult) - processedAmt;
-        if (delta > 0) finalTotalDue = delta; // Student still owes hostel
-        else if (delta < 0) finalAdvance = Math.abs(delta); // Student overpaid, hostel owes them
+        if (delta > 0) finalTotalDue = delta;
+        else if (delta < 0) finalAdvance = Math.abs(delta);
       }
 
       // 3. Mark Student Inactive & PERSIST remaining dues
@@ -432,8 +432,8 @@ export default function StudentDetailsPage() {
         leftAt: serverTimestamp(), 
         totalDue: finalTotalDue,
         advanceAmount: finalAdvance,
-        foodDueAmount: 0, // Cleared as it's merged into totalDue
-        duesBreakdown: {}, // Cleared as it's settled into one "Due" value
+        foodDueAmount: 0,
+        duesBreakdown: {},
         finalSettlementAmount: processedAmt,
         finalSettlementMethod: exitMethod,
         finalSettlementProcessedBy: exitStaff,

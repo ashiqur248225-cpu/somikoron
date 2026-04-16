@@ -81,6 +81,7 @@ export default function SettingsPage() {
   const [userName, setUserName] = useState("")
   const [userRole, setUserRole] = useState("")
   const [selectedLinkBranch, setSelectedLinkBranch] = useState("")
+  const [selectedMealBranch, setSelectedMealBranch] = useState("")
   
   // Admin/Dev States
   const [isDevDialogOpen, setIsDevDialogOpen] = useState(false)
@@ -119,6 +120,7 @@ export default function SettingsPage() {
     
     setUserBranch(branch)
     setSelectedLinkBranch(branch)
+    setSelectedMealBranch(branch)
     setUserRole(role)
     setUserName(name)
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
@@ -221,7 +223,11 @@ export default function SettingsPage() {
     nagad: "0"
   })
 
-  const configRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
+  // BRANCH AWARE MEAL RATE
+  const configRef = useMemoFirebase(() => 
+    selectedMealBranch ? doc(db, "configs", `mealRate_${selectedMealBranch}`) : null, 
+    [db, selectedMealBranch]
+  )
   const { data: config, isLoading: isConfigLoading } = useDoc(configRef)
 
   const balancesRef = useMemoFirebase(() => doc(db, "configs", "openingBalances"), [db])
@@ -240,7 +246,11 @@ export default function SettingsPage() {
   const { data: branches } = useCollection(branchesQuery)
 
   useEffect(() => {
-    if (config) setRate(config.rate?.toString() || "")
+    if (config) {
+      setRate(config.rate?.toString() || "")
+    } else {
+      setRate("")
+    }
   }, [config])
 
   useEffect(() => {
@@ -276,10 +286,15 @@ export default function SettingsPage() {
       toast({ variant: "destructive", title: "Error", description: "Please enter a valid meal rate." })
       return
     }
+    if (!selectedMealBranch) {
+      toast({ variant: "destructive", title: "Error", description: "Please select a branch first." })
+      return
+    }
     setIsUpdating(true)
     try {
+      if (!configRef) throw new Error("Document reference not ready");
       await setDoc(configRef, { rate: Number(rate), updatedAt: serverTimestamp() })
-      toast({ title: "Settings Saved" })
+      toast({ title: "Settings Saved", description: `Meal rate updated for ${selectedMealBranch}.` })
     } catch (e: any) {
       toast({ variant: "destructive", description: e.message })
     } finally {
@@ -712,7 +727,41 @@ export default function SettingsPage() {
           <Link href="/food-history"><Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg border-primary/20 text-primary font-bold"><History size={14} /> meals ret</Button></Link>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2"><Label htmlFor="mealRate">Standard Meal Rate (৳)</Label><div className="flex gap-4"><Input id="mealRate" type="number" placeholder="e.g. 40" value={rate} onChange={e => setRate(e.target.value)} className="max-w-[200px]" /><Button onClick={handleSaveRate} disabled={isUpdating} className="gap-2">{isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Rate</Button></div></div>
+          {userRole === 'Admin' && (
+            <div className="space-y-2 mb-4">
+              <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                <MapPin size={12}/> Select Branch for Rate
+              </Label>
+              <Select value={selectedMealBranch} onValueChange={setSelectedMealBranch}>
+                <SelectTrigger className="h-10 bg-slate-50 border-none shadow-inner font-bold">
+                  <SelectValue placeholder="Select Branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches?.map(b => (
+                    <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="mealRate">Standard Meal Rate (৳)</Label>
+            <div className="flex gap-4">
+              <Input 
+                id="mealRate" 
+                type="number" 
+                placeholder="e.g. 40" 
+                value={rate} 
+                onChange={e => setRate(e.target.value)} 
+                className="max-w-[200px]" 
+              />
+              <Button onClick={handleSaveRate} disabled={isUpdating} className="gap-2">
+                {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Rate
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground italic">Configuring for Branch: <b>{selectedMealBranch || 'None'}</b></p>
+          </div>
         </CardContent>
       </Card>
 
