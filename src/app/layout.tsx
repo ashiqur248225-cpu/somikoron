@@ -6,7 +6,7 @@ import { AuthGuard } from '@/components/auth-guard';
 import { LayoutWrapper } from '@/components/layout-wrapper';
 
 export const metadata: Metadata = {
-  title: 'Somikoron - Building & Student Management',
+  title: 'Somikoron',
   description: 'A comprehensive hostel accounting and management platform',
   generator: 'Next.js',
   manifest: '/manifest.json',

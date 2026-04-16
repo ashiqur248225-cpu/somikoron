@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Loader2, Lock, Smartphone, ShieldCheck } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import Image from 'next/image';
+import logoIcon from '../../public/icon.png'; // পাথটি আপনার ফাইল অনুযায়ী চেক করুন (AuthGuard থেকে public ফোল্ডার)
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -121,13 +123,23 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       <div className="fixed inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 z-[9999]">
         <div className="w-full max-w-[400px] space-y-8 animate-in fade-in zoom-in duration-300">
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-primary/10 text-primary mb-2 shadow-inner">
-              <ShieldCheck size={48} strokeWidth={1.5} />
+            
+            {/* লোগো কন্টেইনার */}
+            <div className="inline-flex items-center justify-center">
+              <Image 
+                src={logoIcon}  // ফাইলটি public ফোল্ডারে থাকলে এটিই সঠিক পাথ
+                width={100} 
+                height={100} 
+                alt="Somikoron Logo" 
+                className="object-contain"
+                priority
+              />
             </div>
-            <h1 className="text-4xl font-black tracking-tighter text-primary">SOMIKORON</h1>
+  
+            <h2 className="text-4xl font-black tracking-tighter text-primary">SOMIKORON</h2>
             <p className="text-muted-foreground text-sm font-medium tracking-wide">HOSTEL ERP & ACCOUNTING SYSTEM</p>
           </div>
-
+  
           <Card className="border-none shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden rounded-2xl">
             <div className="h-2 bg-gradient-to-r from-primary/50 via-primary to-primary/50 w-full" />
             <CardHeader className="pb-2">
@@ -150,7 +162,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
                     <Input id="password" type="password" placeholder="••••••••" className="pl-10 h-11 bg-secondary/20 border-none" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
                   </div>
                 </div>
-                <Button type="submit" className="w-full h-12 text-lg font-bold shadow-lg" disabled={isLoading}>{isLoading ? <Loader2 className="animate-spin mr-2" /> : "Verify & Access"}</Button>
+                <Button type="submit" className="w-full h-12 text-lg font-bold shadow-lg" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="animate-spin mr-2" /> : "Verify & Access"}
+                </Button>
               </form>
             </CardContent>
           </Card>
