@@ -1,8 +1,6 @@
 
-import type {Metadata} from 'next';
+import type {Metadata, Viewport} from 'next';
 import './globals.css';
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/layout/app-sidebar"
 import { Toaster } from "@/components/ui/toaster"
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { AuthGuard } from '@/components/auth-guard';
@@ -11,6 +9,28 @@ import { LayoutWrapper } from '@/components/layout-wrapper';
 export const metadata: Metadata = {
   title: 'Somikoron - Building & Student Management',
   description: 'A comprehensive hostel accounting and management platform',
+  generator: 'Next.js',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Somikoron',
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/icon.png',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#296EB3',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

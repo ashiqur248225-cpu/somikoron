@@ -1,0 +1,33 @@
+
+import { MetadataRoute } from 'next'
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: 'Somikoron Hostel Management',
+    short_name: 'Somikoron',
+    description: 'A comprehensive hostel accounting and management platform',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#ffffff',
+    theme_color: '#296EB3',
+    icons: [
+      {
+        src: '/favicon.ico',
+        sizes: 'any',
+        type: 'image/x-icon',
+      },
+      {
+        src: '/icon.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+      {
+        src: '/icon.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+    ],
+  }
+}
