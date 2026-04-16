@@ -50,40 +50,63 @@ export default function ReportsPage() {
     return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-01`;
   }
 
-  // Default to current month range (Local Time)
-  const [startDate, setStartDate] = useState(getFirstDayOfMonthYMD())
-  const [endDate, setEndDate] = useState(getLocalYMD())
-  const [buildingFilter, setBuildingFilter] = useState("all")
-  const [selectedTrackerBuilding, setSelectedTrackerBuilding] = useState("all")
-  
+  // User context
+  const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
 
+  // Default to current month range (Local Time)
+  const [startDate, setStartDate] = useState(getFirstDayOfMonthYMD())
+  const [endDate, setEndDate] = useState(getLocalYMD())
+  const [branchFilter, setBranchFilter] = useState("all")
+  const [buildingFilter, setBuildingFilter] = useState("all")
+  const [selectedTrackerBuilding, setSelectedTrackerBuilding] = useState("all")
+  
   useEffect(() => {
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
-    setUserName(localStorage.getItem("user_name") || "User")
+    const storedRole = localStorage.getItem("user_role") || "Manager"
+    const storedBranch = localStorage.getItem("user_branch") || "Main Branch"
+    const storedName = localStorage.getItem("user_name") || "User"
+    
+    setUserRole(storedRole)
+    setUserBranch(storedBranch)
+    setUserName(storedName)
+    
+    // Set initial branch filter
+    if (storedRole !== 'Admin') {
+      setBranchFilter(storedBranch)
+    } else {
+      setBranchFilter("all")
+    }
   }, [])
 
+  const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
+  const { data: branches } = useCollection(branchesQuery)
+
   const buildingsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    if (!branchFilter) return null
+    if (branchFilter === 'all') return collection(db, "buildings")
+    return query(collection(db, "buildings"), where("branch", "==", branchFilter))
+  }, [db, branchFilter])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const paymentsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "payments"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    if (!branchFilter) return null
+    if (branchFilter === 'all') return collection(db, "payments")
+    return query(collection(db, "payments"), where("branch", "==", branchFilter))
+  }, [db, branchFilter])
   const { data: payments, isLoading: pLoading } = useCollection(paymentsQuery)
 
   const expensesQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "expenses"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    if (!branchFilter) return null
+    if (branchFilter === 'all') return collection(db, "expenses")
+    return query(collection(db, "expenses"), where("branch", "==", branchFilter))
+  }, [db, branchFilter])
   const { data: expenses, isLoading: eLoading } = useCollection(expensesQuery)
 
   // Fetch Actual Branch Balance from netBalance collection
-  const balanceRef = useMemoFirebase(() => userBranch ? doc(db, "netBalance", userBranch) : null, [db, userBranch])
+  // Note: For 'all' branches, we'd need to aggregate, but for now we look at current user branch or first selected
+  const targetBalanceId = branchFilter === 'all' ? userBranch : branchFilter
+  const balanceRef = useMemoFirebase(() => targetBalanceId ? doc(db, "netBalance", targetBalanceId) : null, [db, targetBalanceId])
   const { data: branchBalance } = useDoc(balanceRef)
 
   const stats = useMemo(() => {
@@ -189,7 +212,6 @@ export default function ReportsPage() {
     }
 
     // Transaction calculated balance (Sum of all time for this branch)
-    // CRITICAL FIX: Accumulator calculation method correctly sums amount values
     const allTimeIncome = payments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
     const allTimeExpense = expenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
     
@@ -216,6 +238,11 @@ export default function ReportsPage() {
   }
 
   const handleReset = () => {
+    if (userRole === 'Admin') {
+      setBranchFilter("all")
+    } else {
+      setBranchFilter(userBranch)
+    }
     setBuildingFilter("all")
     setStartDate(getFirstDayOfMonthYMD())
     setEndDate(getLocalYMD())
@@ -259,7 +286,7 @@ export default function ReportsPage() {
       <div className="print-only print-report-container">
         <div className="report-header">
           <h1>সমীকরণ ছাত্রাবাস</h1>
-          <p className="branch-title">{userBranch} Branch • Performance Analytics</p>
+          <p className="branch-title">{branchFilter === 'all' ? 'All Branches' : branchFilter} • Performance Analytics</p>
           <div className="flex justify-between items-end mt-4 px-2 text-[8pt] font-bold text-slate-500 uppercase">
             <div>
               <p>Period: {startDate} to {endDate}</p>
@@ -579,6 +606,22 @@ export default function ReportsPage() {
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Report Parameters</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
+            {userRole === 'Admin' && (
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold">Branch</Label>
+                <Select value={branchFilter} onValueChange={setBranchFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Branches" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Branches</SelectItem>
+                    {branches?.map(b => (
+                      <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div>
           </div>
