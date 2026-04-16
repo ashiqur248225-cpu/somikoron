@@ -27,8 +27,8 @@ import {
   X
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
-import { doc, setDoc, serverTimestamp, getDoc } from "firebase/firestore"
+import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
+import { doc, setDoc, serverTimestamp, getDoc, collection } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -53,6 +53,13 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 const PRODUCTION_DOMAIN = "https://somikoron-one.vercel.app";
 
@@ -72,6 +79,8 @@ export default function SettingsPage() {
   const [rules, setRules] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
+  const [userRole, setUserRole] = useState("")
+  const [selectedLinkBranch, setSelectedLinkBranch] = useState("")
   
   // Admin/Dev States
   const [isDevDialogOpen, setIsDevDialogOpen] = useState(false)
@@ -104,8 +113,14 @@ export default function SettingsPage() {
   const editorRef = useRef<HTMLDivElement>(null)
   
   useEffect(() => {
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
-    setUserName(localStorage.getItem("user_name") || "User")
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const role = localStorage.getItem("user_role") || "Manager"
+    const name = localStorage.getItem("user_name") || "User"
+    
+    setUserBranch(branch)
+    setSelectedLinkBranch(branch)
+    setUserRole(role)
+    setUserName(name)
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
   }, [])
 
@@ -220,6 +235,9 @@ export default function SettingsPage() {
 
   const estimatesRef = useMemoFirebase(() => doc(db, "configs", "financialEstimates"), [db])
   const { data: estimatesData } = useDoc(estimatesRef)
+
+  const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
+  const { data: branches } = useCollection(branchesQuery)
 
   useEffect(() => {
     if (config) setRate(config.rate?.toString() || "")
@@ -639,7 +657,7 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* NEW: Financial Estimation Constants Section */}
+      {/* Financial Estimation Constants Section */}
       <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-indigo-600 print:hidden">
         <CardHeader>
           <div className="flex items-center gap-2 text-indigo-600">
@@ -702,11 +720,31 @@ export default function SettingsPage() {
       <Card className="border-none shadow-sm border-l-4 border-l-primary bg-primary/5 print:hidden">
         <CardHeader><div className="flex items-center gap-2 text-primary"><LinkIcon size={20} /><CardTitle>Public Registration Links</CardTitle></div><CardDescription>Share these secure links with students.</CardDescription></CardHeader>
         <CardContent className="space-y-4">
+          {/* Branch Selection for Admin */}
+          {userRole === 'Admin' && (
+             <div className="p-4 bg-white rounded-2xl border border-primary/10 space-y-2 mb-2 shadow-sm">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                  <MapPin size={12}/> Target Branch for Links
+                </Label>
+                <Select value={selectedLinkBranch} onValueChange={setSelectedLinkBranch}>
+                   <SelectTrigger className="h-10 bg-slate-50 border-none shadow-inner font-bold">
+                      <SelectValue placeholder="Select Branch" />
+                   </SelectTrigger>
+                   <SelectContent>
+                      {branches?.map(b => (
+                         <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                      ))}
+                   </SelectContent>
+                </Select>
+                <p className="text-[9px] text-muted-foreground italic">Generate links and QR codes for different hostel locations.</p>
+             </div>
+          )}
+
           {[
             { label: "New Student Registration", bengaliLabel: "নতুন স্টুডেন্ট এডমিশন ফর্ম", type: "new" },
             { label: "Existing Resident (Data Import)", bengaliLabel: "পুরাতন স্টুডেন্ট এডমিশন ফর্ম", type: "old" }
           ].map((link) => {
-            const path = `/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`;
+            const path = `/register?branch=${encodeURIComponent(selectedLinkBranch || userBranch)}&type=${link.type}`;
             const fullUrl = `${PRODUCTION_DOMAIN}${path}`;
             const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(fullUrl)}`;
             return (
@@ -775,7 +813,7 @@ export default function SettingsPage() {
               <div className="space-y-4"><h2 className="text-4xl font-black text-slate-800">{activeFlyer.bengaliLabel}</h2><p className="text-2xl font-bold text-slate-500 uppercase tracking-widest">Scan to enroll now</p></div>
             </div>
             <div className="pt-20 text-center space-y-4">
-              <p className="text-xl font-bold text-primary flex items-center justify-center gap-3" style={{ color: 'hsl(var(--primary)) !important' }}><MapPin size={24} /> {userBranch} Branch</p>
+              <p className="text-xl font-bold text-primary flex items-center justify-center gap-3" style={{ color: 'hsl(var(--primary)) !important' }}><MapPin size={24} /> {selectedLinkBranch || userBranch} Branch</p>
               <div className="h-1 w-48 bg-primary/20 mx-auto rounded-full" style={{ backgroundColor: 'rgba(41, 110, 179, 0.2) !important' }} /><p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Powered by Somikoron Digital System</p>
             </div>
           </div>
