@@ -12,7 +12,7 @@ import {
   Printer, Loader2, Building2, Filter, Calculator, 
   ArrowUpRight, ArrowDownRight, ArrowDownCircle, TrendingUp, PieChart as PieChartIcon, BarChart3,
   Lightbulb, AlertTriangle, CheckCircle2, Target, Zap, ShieldCheck, RotateCcw, MoreVertical,
-  Activity, Search, Database, LayoutGrid
+  Activity, Search, Database, LayoutGrid, AlertCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -187,17 +187,13 @@ export default function ReportsPage() {
     if (!branchBalance || !stats) return { diff: 0, score: 0, status: "Unknown" };
 
     // Transaction calculated balance (Sum of all time)
-    // For proper check, we need all-time income and expense
     const allTimeIncome = payments?.reduce((a, b) => a + (b.amount || 0), 0) || 0;
     const allTimeExpense = expenses?.reduce((a, b) => a + (a.amount || 0), 0) || 0;
-    // Note: Net balance in system starts from 0 or opening balance. 
-    // Opening balance logic from settings is persisted in netBalance.
     
     const calculatedBalance = allTimeIncome - allTimeExpense;
     const actualBalance = branchBalance.totalHandCash || 0;
     
     const diff = Math.abs(calculatedBalance - actualBalance);
-    // Score based on relative error. If 0 diff, 100%.
     const score = diff === 0 ? 100 : Math.max(0, 100 - (diff / (allTimeIncome || 1)) * 100);
 
     return { 
@@ -307,7 +303,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* SCREEN VIEW (Preserved UI) */}
+      {/* SCREEN VIEW */}
       <div className="print:hidden space-y-8">
         <div className="grid gap-6 grid-cols-1 sm:grid-cols-3">
           <Card className="border-none shadow-sm bg-white border-l-[6px] border-l-success rounded-2xl"><CardHeader className="pb-2 flex justify-between"><CardTitle className="text-[10px] font-bold uppercase text-success">Total Income</CardTitle><ArrowUpRight className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-xl font-black">৳{stats?.totalIncome.toLocaleString()}</div></CardContent></Card>
