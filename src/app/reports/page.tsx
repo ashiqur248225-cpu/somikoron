@@ -184,21 +184,27 @@ export default function ReportsPage() {
   }, [expenses, selectedTrackerBuilding, startDate, endDate]);
 
   const integrityStats = useMemo(() => {
-    if (!branchBalance || !stats) return { diff: 0, score: 0, status: "Unknown" };
+    if (!branchBalance || !stats || !payments || !expenses) {
+      return { diff: 0, score: 0, calculatedBalance: 0, actualBalance: 0, status: "Unknown" };
+    }
 
-    // Transaction calculated balance (Sum of all time)
-    const allTimeIncome = payments?.reduce((a, b) => a + (b.amount || 0), 0) || 0;
-    const allTimeExpense = expenses?.reduce((a, b) => a + (a.amount || 0), 0) || 0;
+    // Transaction calculated balance (Sum of all time for this branch)
+    // CRITICAL FIX: Accumulator calculation method correctly sums amount values
+    const allTimeIncome = payments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+    const allTimeExpense = expenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
     
     const calculatedBalance = allTimeIncome - allTimeExpense;
-    const actualBalance = branchBalance.totalHandCash || 0;
+    const actualBalance = Number(branchBalance.totalHandCash || 0);
     
     const diff = Math.abs(calculatedBalance - actualBalance);
+    // Score based on accuracy relative to total throughput
     const score = diff === 0 ? 100 : Math.max(0, 100 - (diff / (allTimeIncome || 1)) * 100);
 
     return { 
       diff, 
       score, 
+      calculatedBalance,
+      actualBalance,
       status: diff === 0 ? "Correct" : "Discrepancy" 
     };
   }, [branchBalance, payments, expenses, stats]);
@@ -477,25 +483,25 @@ export default function ReportsPage() {
                             ) : (
                                <div className="space-y-2">
                                   <div className="flex items-center gap-2 text-destructive font-black text-lg">
-                                     <AlertCircle size={24}/> Warning: Data Mismatch Detected.
+                                     <AlertCircle size={24}/> Warning: Proper data entry is missing.
                                   </div>
                                   <p className="text-sm font-bold text-slate-600">
-                                     Your actual branch balance differs by <span className="text-destructive font-black text-xl">৳{integrityStats.diff.toLocaleString()}</span> from the transaction history.
+                                     Your balance differs by <span className="text-destructive font-black text-xl">৳{integrityStats.diff.toLocaleString()}</span> from the transaction history.
                                   </p>
                                   <p className="text-[10px] text-muted-foreground italic font-medium">
-                                     Check if all payments or expenses are recorded correctly.
+                                     Calculation: Income - Expenses = Net Balance.
                                   </p>
                                </div>
                             )}
                          </div>
                          <div className="grid grid-cols-2 gap-4 pt-4">
                             <div className="p-3 rounded-2xl bg-slate-50 border">
-                               <p className="text-[8px] font-black text-muted-foreground uppercase">Expected (TXs)</p>
-                               <p className="text-sm font-black text-slate-800">৳{(stats?.totalIncome - stats?.totalExpense).toLocaleString()}</p>
+                               <p className="text-[8px] font-black text-muted-foreground uppercase">Expected (Ledger)</p>
+                               <p className="text-sm font-black text-slate-800">৳{integrityStats.calculatedBalance.toLocaleString()}</p>
                             </div>
                             <div className="p-3 rounded-2xl bg-slate-50 border">
-                               <p className="text-[8px] font-black text-muted-foreground uppercase">Actual (Cash)</p>
-                               <p className="text-sm font-black text-primary">৳{(branchBalance?.totalHandCash || 0).toLocaleString()}</p>
+                               <p className="text-[8px] font-black text-muted-foreground uppercase">Actual (Cash Hand)</p>
+                               <p className="text-sm font-black text-primary">৳{integrityStats.actualBalance.toLocaleString()}</p>
                             </div>
                          </div>
                       </div>
