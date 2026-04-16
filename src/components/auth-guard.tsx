@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { usePathname } from "next/navigation"
 import { useFirestore } from "@/firebase"
 import { collection, query, where, getDocs, limit, doc, getDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -12,6 +13,9 @@ import { Loader2, Lock, Smartphone, ShieldCheck } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const isPublicPage = pathname?.startsWith('/register') || pathname?.startsWith('/hostel-registration')
+  
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({ number: "", password: "" })
@@ -19,6 +23,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { toast } = useToast()
 
   useEffect(() => {
+    // Speed optimization: Skip session checks for public pages
+    if (isPublicPage) {
+      setIsAuthenticated(true)
+      return
+    }
+
     const checkSecuritySession = async () => {
       // 1. Check if enhanced security is enabled in cloud
       try {
@@ -45,7 +55,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     checkSecuritySession()
-  }, [db])
+  }, [db, isPublicPage])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -90,6 +100,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Immediately render public pages to avoid flash of loading
+  if (isPublicPage) {
+    return <>{children}</>
+  }
+
   if (isAuthenticated === null) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-background">
@@ -102,11 +117,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    const publicPaths = ['/register', '/hostel-registration']
-    if (typeof window !== 'undefined' && publicPaths.some(path => window.location.pathname.startsWith(path))) {
-      return <>{children}</>
-    }
-
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 z-[9999]">
         <div className="w-full max-w-[400px] space-y-8 animate-in fade-in zoom-in duration-300">
