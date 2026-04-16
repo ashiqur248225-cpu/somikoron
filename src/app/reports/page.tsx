@@ -61,8 +61,9 @@ export default function ReportsPage() {
     const storedBranch = localStorage.getItem("user_branch") || "Main Branch"
     const storedName = localStorage.getItem("user_name") || "User"
     setUserRole(storedRole); setUserBranch(storedBranch); setUserName(storedName)
-    if (storedRole !== 'Admin') setBranchFilter(storedBranch)
-    else setBranchFilter("all")
+    
+    // Admin or not, automatically set the branch filter to the user's current branch
+    setBranchFilter(storedBranch)
   }, [])
 
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
@@ -89,7 +90,6 @@ export default function ReportsPage() {
   }, [db, branchFilter])
   const { data: expenses, isLoading: eLoading } = useCollection(expensesQuery)
 
-  // NEW: Fetch Financial Estimates and Students for Realistic Calculations
   const estimatesRef = useMemoFirebase(() => doc(db, "configs", "financialEstimates"), [db])
   const { data: estimates } = useDoc(estimatesRef)
 
@@ -121,7 +121,6 @@ export default function ReportsPage() {
     const totalIncome = income.reduce((a, b) => a + (b.amount || 0), 0)
     const totalExpense = expense.reduce((a, b) => a + (b.amount || 0), 0)
     
-    // REALISTIC BUILDING PERFORMANCE MAP
     const buildingMap: Record<string, any> = {}
     buildings.forEach(b => {
       if (buildingFilter !== 'all' && b.id !== buildingFilter) return;
@@ -190,7 +189,14 @@ export default function ReportsPage() {
   }, [expenses, selectedTrackerBuilding, startDate, endDate]);
 
   const handlePrint = () => { if (typeof window !== "undefined") setTimeout(() => { window.print(); }, 500); }
-  const handleReset = () => { if (userRole === 'Admin') setBranchFilter("all"); else setBranchFilter(userBranch); setBuildingFilter("all"); setStartDate(getFirstDayOfMonthYMD()); setEndDate(getLocalYMD()); }
+  
+  const handleReset = () => { 
+    // Reset to user's currently active branch
+    setBranchFilter(userBranch); 
+    setBuildingFilter("all"); 
+    setStartDate(getFirstDayOfMonthYMD()); 
+    setEndDate(getLocalYMD()); 
+  }
 
   if (pLoading || eLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
 
@@ -236,7 +242,7 @@ export default function ReportsPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-4">
              <Card className="border-none shadow-xl bg-white rounded-3xl overflow-hidden border-t-4 border-t-primary">
-                <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between"><div className="space-y-1"><CardTitle className="text-lg flex items-center gap-2 text-primary"><Activity size={20}/> Smart Expense Tracker</CardTitle><CardDescription>Building-specific spending insights.</CardDescription></div><Select value={selectedTrackerBuilding} onValueChange={setSelectedTrackerBuilding}><SelectTrigger className="w-[180px] h-9 bg-white font-bold text-xs"><LayoutGrid size={14} className="mr-2 text-primary" /><SelectValue placeholder="All Buildings" /></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></Select></CardHeader>
+                <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between"><div className="space-y-1"><CardTitle className="text-lg flex items-center gap-2 text-primary"><Activity size={20}/> Smart Expense Tracker</CardTitle><CardDescription>Building-specific spending insights.</CardDescription></div><Select value={selectedTrackerBuilding} onValueChange={setSelectedTrackerBuilding}><SelectTrigger className="w-[180px] h-9 bg-white font-bold text-xs"><LayoutGrid size={14} className="mr-2 text-primary" /><SelectValue placeholder="All Buildings" /></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></CardHeader>
                 <CardContent className="p-6 space-y-6"><div className="h-[220px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={trackerData.categoryStats} layout="vertical" margin={{ left: 0, right: 30 }}><CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" /><XAxis type="number" hide /><YAxis dataKey="name" type="category" fontSize={10} width={80} axisLine={false} tickLine={false} fontFamily="Inter" fontWeight={700}/><Tooltip formatter={(v: number) => `৳${v.toLocaleString()}`} cursor={{ fill: 'transparent' }} /><Bar dataKey="value" fill="#296EB3" radius={[0, 4, 4, 0]} barSize={20} /></BarChart></ResponsiveContainer></div><div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex items-center justify-between group hover:bg-primary/10 transition-colors"><div className="flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-primary"><TrendingUp size={20}/></div><div><p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">High-Cost Alert</p><h4 className="text-sm font-black text-slate-800">Highest expense: <span className="text-primary capitalize">{trackerData.highestCategory}</span></h4></div></div><Badge className="bg-primary group-hover:scale-110 transition-transform">৳{(trackerData.categoryStats[0]?.value || 0).toLocaleString()}</Badge></div></CardContent>
              </Card>
           </div>
