@@ -62,7 +62,6 @@ interface RoomGroup {
   spr: string;
   pRent: string;
   npRent: string;
-  mode: 'package' | 'non-package';
 }
 
 export default function SettingsPage() {
@@ -84,12 +83,13 @@ export default function SettingsPage() {
   
   // Project Planner State
   const [plannerGroups, setPlannerGroups] = useState<RoomGroup[]>([
-    { id: "1", rooms: "5", spr: "4", pRent: "9500", npRent: "5000", mode: "package" }
+    { id: "1", rooms: "5", spr: "4", pRent: "9500", npRent: "5000" }
   ])
   const [plannerSettings, setPlannerSettings] = useState({
     buildingRent: "45000",
     utilityCost: "600",
-    foodCost: "4500"
+    foodCost: "4500",
+    distribution: "50"
   })
 
   // Financial Estimates State
@@ -114,6 +114,7 @@ export default function SettingsPage() {
     const rent = Number(plannerSettings.buildingRent) || 0
     const uCost = Number(plannerSettings.utilityCost) || 0
     const fCost = Number(plannerSettings.foodCost) || 4500
+    const dist = Number(plannerSettings.distribution) / 100
 
     let totalRevenue = 0
     let totalFoodExpense = 0
@@ -129,15 +130,15 @@ export default function SettingsPage() {
       const npRent = Number(g.npRent) || 0
 
       totalSeats += seats
-
-      if (g.mode === 'package') {
-        totalRevenue += seats * pRent
-        totalFoodExpense += seats * fCost
-        packageSeatsCount += seats
-      } else {
-        totalRevenue += seats * npRent
-        nonPackageSeatsCount += seats
-      }
+      
+      const gPackageSeats = seats * dist
+      const gNonPackageSeats = seats * (1 - dist)
+      
+      totalRevenue += (gPackageSeats * pRent) + (gNonPackageSeats * npRent)
+      totalFoodExpense += gPackageSeats * fCost
+      
+      packageSeatsCount += gPackageSeats
+      nonPackageSeatsCount += gNonPackageSeats
     })
 
     const totalUtilityExpense = totalSeats * uCost
@@ -147,8 +148,8 @@ export default function SettingsPage() {
 
     return { 
       totalSeats, 
-      packageSeatsCount, 
-      nonPackageSeatsCount, 
+      packageSeatsCount: Math.round(packageSeatsCount), 
+      nonPackageSeatsCount: Math.round(nonPackageSeatsCount), 
       revenue: totalRevenue, 
       costs: totalCosts, 
       profit, 
@@ -163,8 +164,7 @@ export default function SettingsPage() {
       rooms: "1",
       spr: "4",
       pRent: "9500",
-      npRent: "5000",
-      mode: "package"
+      npRent: "5000"
     }
     setPlannerGroups([...plannerGroups, newGroup])
   }
@@ -457,7 +457,7 @@ export default function SettingsPage() {
           <div className="flex-1 overflow-hidden p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Input Section */}
             <div className="lg:col-span-8 flex flex-col gap-6 overflow-hidden">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-black uppercase text-indigo-600 ml-1">Building Rent (৳)</Label>
                   <div className="relative">
@@ -465,13 +465,39 @@ export default function SettingsPage() {
                     <Input type="number" className="pl-9 h-10 font-bold" value={plannerSettings.buildingRent} onChange={e => setPlannerSettings({...plannerSettings, buildingRent: e.target.value})} />
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Est. Utility/Seat</Label>
-                  <Input type="number" className="h-10" value={plannerSettings.utilityCost} onChange={e => setPlannerSettings({...plannerSettings, utilityCost: e.target.value})} />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Est. Utility/Seat</Label>
+                    <Input type="number" className="h-10" value={plannerSettings.utilityCost} onChange={e => setPlannerSettings({...plannerSettings, utilityCost: e.target.value})} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Fixed Food Cost</Label>
+                    <Input type="number" className="h-10" value={plannerSettings.foodCost} onChange={e => setPlannerSettings({...plannerSettings, foodCost: e.target.value})} />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Food Cost (Fixed)</Label>
-                  <Input type="number" className="h-10" value={plannerSettings.foodCost} onChange={e => setPlannerSettings({...plannerSettings, foodCost: e.target.value})} />
+              </div>
+
+              {/* GLOBAL DISTRIBUTION SLIDER */}
+              <div className="p-6 bg-indigo-50/50 border border-indigo-100 rounded-3xl space-y-4 shrink-0 shadow-inner">
+                <div className="flex justify-between items-end mb-2">
+                  <Label className="text-[11px] font-black uppercase text-indigo-700 ml-1">Student Distribution Strategy</Label>
+                  <div className="text-right">
+                    <span className="text-lg font-black text-indigo-600">{plannerSettings.distribution}%</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase ml-1">Package</span>
+                  </div>
+                </div>
+                <div className="px-1">
+                  <Slider 
+                    value={[Number(plannerSettings.distribution)]} 
+                    onValueChange={(val) => setPlannerSettings({...plannerSettings, distribution: val[0].toString()})}
+                    max={100}
+                    step={1}
+                    className="py-4"
+                  />
+                  <div className="flex justify-between text-[8px] font-black uppercase text-muted-foreground tracking-widest px-1">
+                    <span>100% Non-Package</span>
+                    <span>100% Package</span>
+                  </div>
                 </div>
               </div>
 
@@ -488,9 +514,9 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   {plannerGroups.map((group, idx) => (
                     <Card key={group.id} className="border-2 shadow-none rounded-2xl overflow-hidden relative group animate-in slide-in-from-right-2 duration-300">
-                      <div className={cn("h-1 w-full", group.mode === 'package' ? "bg-primary" : "bg-orange-500")} />
+                      <div className="h-1 w-full bg-indigo-200" />
                       <CardContent className="p-4 space-y-4">
-                        <div className="grid grid-cols-2 md:grid-cols-12 gap-4 items-end">
+                        <div className="grid grid-cols-2 md:grid-cols-10 gap-4 items-end">
                           <div className="md:col-span-2 space-y-1">
                             <Label className="text-[9px] font-black uppercase text-muted-foreground">Rooms</Label>
                             <Input type="number" value={group.rooms} onChange={e => updateGroup(group.id, 'rooms', e.target.value)} className="h-9 text-xs" />
@@ -506,18 +532,6 @@ export default function SettingsPage() {
                           <div className="md:col-span-3 space-y-1">
                             <Label className="text-[9px] font-black uppercase text-orange-600">Non-Pack (৳)</Label>
                             <Input type="number" value={group.npRent} onChange={e => updateGroup(group.id, 'npRent', e.target.value)} className="h-9 text-xs font-bold" />
-                          </div>
-                          <div className="md:col-span-2 flex flex-col items-center gap-1.5 pb-0.5">
-                            <Label className="text-[9px] font-black uppercase text-muted-foreground">Mode</Label>
-                            <div className="flex items-center gap-2">
-                              <span className={cn("text-[8px] font-black uppercase", group.mode === 'non-package' ? "text-orange-600" : "text-slate-400")}>NP</span>
-                              <Switch 
-                                checked={group.mode === 'package'} 
-                                onCheckedChange={(val) => updateGroup(group.id, 'mode', val ? 'package' : 'non-package')}
-                                className="data-[state=checked]:bg-primary"
-                              />
-                              <span className={cn("text-[8px] font-black uppercase", group.mode === 'package' ? "text-primary" : "text-slate-400")}>PKG</span>
-                            </div>
                           </div>
                         </div>
                         {plannerGroups.length > 1 && (
@@ -583,7 +597,7 @@ export default function SettingsPage() {
                   <p className="text-[10px] leading-relaxed text-muted-foreground italic">
                     {plannerResults.profit > 15000 
                       ? "This looks like a high-yield project. Monitor the distribution for maximum ROI."
-                      : "Profit margins are tight. Try increasing seats per room or switching more rooms to Package Mode if possible."}
+                      : "Profit margins are tight. Try increasing seats per room or adjusting distribution."}
                   </p>
                 </div>
               </Card>
