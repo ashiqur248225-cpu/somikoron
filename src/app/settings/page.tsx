@@ -497,7 +497,7 @@ export default function SettingsPage() {
                           </div>
                           <div className="md:col-span-2 space-y-1">
                             <Label className="text-[9px] font-black uppercase text-muted-foreground">Seats/R</Label>
-                            <Input type="number" value={group.spr} onChange={updateGroup.bind(null, group.id, 'spr')} className="h-9 text-xs" />
+                            <Input type="number" value={group.spr} onChange={e => updateGroup(group.id, 'spr', e.target.value)} className="h-9 text-xs" />
                           </div>
                           <div className="md:col-span-3 space-y-1">
                             <Label className="text-[9px] font-black uppercase text-primary">Package (৳)</Label>
