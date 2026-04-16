@@ -13,7 +13,7 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Wallet, Loader2, Search, Filter, Printer, ArrowUpCircle, RotateCcw, Trash2, Calendar, Smartphone, MapPin, UserCircle } from "lucide-react"
+import { Wallet, Loader2, Search, Filter, Printer, ArrowUpCircle, RotateCcw, Trash2, Calendar, Smartphone, MapPin, UserCircle, MoreVertical } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, limit, where, getDocs, writeBatch, Timestamp } from "firebase/firestore"
@@ -22,6 +22,12 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useRouter } from "next/navigation"
@@ -160,8 +166,31 @@ export default function IncomeHistoryPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsFilterDialogOpen(true)}><Filter size={16} /> Filter</Button>
-          <Button size="sm" variant="outline" className="gap-2" onClick={handlePrint}><Printer size={16} /> Print Report</Button>
+          {/* Desktop Actions */}
+          <div className="hidden md:flex items-center gap-3">
+            <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={() => setIsFilterDialogOpen(true)}><Filter size={16} /> Filter</Button>
+            <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={handlePrint}><Printer size={16} /> Print Report</Button>
+          </div>
+
+          {/* Mobile Actions (3-dot menu) */}
+          <div className="md:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10 text-primary">
+                  <MoreVertical size={24}/>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 rounded-xl p-2 shadow-xl border-slate-100">
+                <DropdownMenuItem onClick={() => setIsFilterDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                  <Filter size={16} className="text-primary" /> Filter
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handlePrint} className="gap-2 font-medium p-3 rounded-lg cursor-pointer">
+                  <Printer size={16} className="text-primary" /> Print Report
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
