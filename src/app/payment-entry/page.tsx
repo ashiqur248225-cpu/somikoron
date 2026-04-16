@@ -287,10 +287,23 @@ export default function PaymentEntryPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 pb-20">
-      <div className="flex items-center gap-4">
+      {/* Sticky App Bar for Mobile */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
         {userRole === 'Building Manager' ? (
           <SidebarTrigger className="-ml-2" />
         ) : (
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
+            <ChevronLeft size={24} />
+          </Button>
+        )}
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-bold truncate">Payment Entry</h1>
+        </div>
+      </div>
+
+      {/* Desktop Header */}
+      <div className="hidden md:flex items-center gap-4">
+        {userRole !== 'Building Manager' && (
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ChevronLeft />
           </Button>
