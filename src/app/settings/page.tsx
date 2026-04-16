@@ -24,11 +24,12 @@ import {
   Home,
   Plus,
   Trash2,
-  X
+  X,
+  Info
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, setDoc, serverTimestamp, getDoc, collection } from "firebase/firestore"
+import { doc, setDoc, serverTimestamp, getDoc, collection, increment } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -217,13 +218,18 @@ export default function SettingsPage() {
     }
   }, [activeFlyer]);
 
-  // Opening Balances State
+  // Opening Balances State - Represents Amount to Add
   const [balances, setBalances] = useState({
     cash: "0",
     bank: "0",
     bkash: "0",
     nagad: "0"
   })
+
+  // Reset inputs when branch changes
+  useEffect(() => {
+    setBalances({ cash: "0", bank: "0", bkash: "0", nagad: "0" })
+  }, [selectedBalanceBranch])
 
   // BRANCH AWARE MEAL RATE
   const configRef = useMemoFirebase(() => 
@@ -232,12 +238,12 @@ export default function SettingsPage() {
   )
   const { data: config, isLoading: isConfigLoading } = useDoc(configRef)
 
-  // BRANCH AWARE OPENING BALANCES
+  // BRANCH AWARE OPENING BALANCES (Total Sum recorded so far)
   const balancesRef = useMemoFirebase(() => 
     selectedBalanceBranch ? doc(db, "configs", `openingBalances_${selectedBalanceBranch}`) : null, 
     [db, selectedBalanceBranch]
   )
-  const { data: openingBalances, isLoading: isBalancesLoading } = useDoc(balancesRef)
+  const { data: totalOpeningBalances, isLoading: isBalancesLoading } = useDoc(balancesRef)
 
   const rulesRef = useMemoFirebase(() => doc(db, "configs", "hostelRules"), [db])
   const { data: rulesData, isLoading: isRulesLoading } = useDoc(rulesRef)
@@ -258,19 +264,6 @@ export default function SettingsPage() {
       setRate("")
     }
   }, [config])
-
-  useEffect(() => {
-    if (openingBalances) {
-      setBalances({
-        cash: (openingBalances.cash || 0).toString(),
-        bank: (openingBalances.bank || 0).toString(),
-        bkash: (openingBalances.bkash || 0).toString(),
-        nagad: (openingBalances.nagad || 0).toString(),
-      })
-    } else {
-      setBalances({ cash: "0", bank: "0", bkash: "0", nagad: "0" })
-    }
-  }, [openingBalances])
 
   useEffect(() => {
     if (rulesData?.rulesText) setRules(rulesData.rulesText)
@@ -331,35 +324,49 @@ export default function SettingsPage() {
       toast({ variant: "destructive", title: "Error", description: "Select a branch first." })
       return;
     }
+    
+    const cash = Number(balances.cash || 0)
+    const bank = Number(balances.bank || 0)
+    const bkash = Number(balances.bkash || 0)
+    const nagad = Number(balances.nagad || 0)
+    const totalToAdd = cash + bank + bkash + nagad
+
+    if (totalToAdd === 0) {
+      toast({ variant: "destructive", title: "Amount Required", description: "Please enter some amounts to add to the balance." })
+      return
+    }
+
     setIsUpdating(true)
     try {
-      const cash = Number(balances.cash || 0)
-      const bank = Number(balances.bank || 0)
-      const bkash = Number(balances.bkash || 0)
-      const nagad = Number(balances.nagad || 0)
-      const total = cash + bank + bkash + nagad
-
+      // 1. Update the Audit/Tracking document for "Total Opening Balance"
       if (!balancesRef) throw new Error("Document reference not ready");
       await setDoc(balancesRef, {
-        cash,
-        bank,
-        bkash,
-        nagad,
+        cash: increment(cash),
+        bank: increment(bank),
+        bkash: increment(bkash),
+        nagad: increment(nagad),
         updatedAt: serverTimestamp()
-      })
+      }, { merge: true })
 
+      // 2. Add to current Net Balance using increment (Persistent Addition)
       const netBalanceRef = doc(db, "netBalance", selectedBalanceBranch)
       await setDoc(netBalanceRef, {
         branchId: selectedBalanceBranch,
-        totalCash: cash,
-        totalBank: bank,
-        totalBkash: bkash,
-        totalNagad: nagad,
-        totalHandCash: total,
+        totalCash: increment(cash),
+        totalBank: increment(bank),
+        totalBkash: increment(bkash),
+        totalNagad: increment(nagad),
+        totalHandCash: increment(totalToAdd),
         lastUpdated: serverTimestamp()
       }, { merge: true })
 
-      toast({ title: "Balances Saved", description: `Initial funds synchronized for ${selectedBalanceBranch}.` })
+      // 3. Reset inputs to 0 to prevent double-adding
+      setBalances({ cash: "0", bank: "0", bkash: "0", nagad: "0" })
+
+      toast({ 
+        title: "Funds Added Successfully", 
+        description: `৳${totalToAdd.toLocaleString()} has been summed into ${selectedBalanceBranch} net balance.` 
+      })
     } catch (e: any) {
       toast({ variant: "destructive", description: e.message })
     } finally {
@@ -846,14 +853,20 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Opening Balances Section */}
+      {/* Opening Balances Section (Add to Balance Mode) */}
       <Card className="border-none shadow-sm print:hidden">
-        <CardHeader><div className="flex items-center gap-2 text-primary"><Wallet size={20} /><CardTitle>Opening Balances</CardTitle></div><CardDescription>Set your initial funds.</CardDescription></CardHeader>
+        <CardHeader>
+          <div className="flex items-center gap-2 text-primary">
+            <Wallet size={20} />
+            <CardTitle>Initial Fund Addition</CardTitle>
+          </div>
+          <CardDescription>Amounts entered here will be <b>summed</b> to your current branch balances.</CardDescription>
+        </CardHeader>
         <CardContent className="space-y-6">
           {userRole === 'Admin' && (
             <div className="space-y-2 mb-4">
               <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
-                <MapPin size={12}/> Select Branch for Balances
+                <MapPin size={12}/> Select Branch to Add Funds
               </Label>
               <Select value={selectedBalanceBranch} onValueChange={setSelectedBalanceBranch}>
                 <SelectTrigger className="h-10 bg-slate-50 border-none shadow-inner font-bold">
@@ -868,14 +881,33 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2"><Label><Banknote size={14} /> Cash</Label><Input type="number" value={balances.cash} onChange={e => setBalances({...balances, cash: e.target.value})} /></div>
-            <div className="space-y-2"><Label><Landmark size={14} /> Bank</Label><Input type="number" value={balances.bank} onChange={e => setBalances({...balances, bank: e.target.value})} /></div>
-            <div className="space-y-2"><Label><Smartphone size={14} className="text-primary" /> Bkash</Label><Input type="number" value={balances.bkash} onChange={e => setBalances({...balances, bkash: e.target.value})} /></div>
-            <div className="space-y-2"><Label><Smartphone size={14} className="text-orange-500" /> Nagad</Label><Input type="number" value={balances.nagad} onChange={e => setBalances({...balances, nagad: e.target.value})} /></div>
+          {totalOpeningBalances && (
+            <div className="p-4 bg-primary/5 rounded-2xl border border-dashed border-primary/20 space-y-2 mb-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase text-primary tracking-widest">
+                <Info size={12}/> Lifetime Added Opening Funds
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
+                <div className="text-[10px] font-bold text-slate-500">Cash: <span className="text-slate-800">৳{totalOpeningBalances.cash?.toLocaleString() || 0}</span></div>
+                <div className="text-[10px] font-bold text-slate-500">Bank: <span className="text-slate-800">৳{totalOpeningBalances.bank?.toLocaleString() || 0}</span></div>
+                <div className="text-[10px] font-bold text-slate-500">Bkash: <span className="text-slate-800">৳{totalOpeningBalances.bkash?.toLocaleString() || 0}</span></div>
+                <div className="text-[10px] font-bold text-slate-500">Nagad: <span className="text-slate-800">৳{totalOpeningBalances.nagad?.toLocaleString() || 0}</span></div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-3xl border border-slate-100">
+            <div className="space-y-2"><Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Add to Cash</Label><div className="relative"><Banknote className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input type="number" value={balances.cash} onChange={e => setBalances({...balances, cash: e.target.value})} className="pl-9 h-11 rounded-xl font-bold bg-white" /></div></div>
+            <div className="space-y-2"><Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Add to Bank</Label><div className="relative"><Landmark className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input type="number" value={balances.bank} onChange={e => setBalances({...balances, bank: e.target.value})} className="pl-9 h-11 rounded-xl font-bold bg-white" /></div></div>
+            <div className="space-y-2"><Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Add to Bkash</Label><div className="relative"><Smartphone className="absolute left-3 top-3 h-4 w-4 text-pink-500" /><Input type="number" value={balances.bkash} onChange={e => setBalances({...balances, bkash: e.target.value})} className="pl-9 h-11 rounded-xl font-bold bg-white" /></div></div>
+            <div className="space-y-2"><Label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Add to Nagad</Label><div className="relative"><Smartphone className="absolute left-3 top-3 h-4 w-4 text-orange-500" /><Input type="number" value={balances.nagad} onChange={e => setBalances({...balances, nagad: e.target.value})} className="pl-9 h-11 rounded-xl font-bold bg-white" /></div></div>
           </div>
-          <Button onClick={handleSaveBalances} disabled={isUpdating} className="w-full gap-2 mt-4">{isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Initial Balances</Button>
-          <p className="text-[10px] text-muted-foreground italic">Configuring Initial Funds for Branch: <b>{selectedBalanceBranch || 'None'}</b></p>
+          
+          <Button onClick={handleSaveBalances} disabled={isUpdating} className="w-full gap-2 h-14 text-lg font-black rounded-2xl shadow-xl shadow-primary/10">
+            {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={20} />} Confirm & Sum to Balance
+          </Button>
+          <p className="text-[9px] text-center text-muted-foreground italic uppercase font-bold tracking-widest">
+            Warning: This will increase your current net balance for <b>{selectedBalanceBranch}</b>.
+          </p>
         </CardContent>
       </Card>
 
