@@ -4,15 +4,14 @@
 import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
-  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend, Tooltip, ResponsiveContainer, XAxis, YAxis,
-  RadialBarChart, RadialBar
+  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend, Tooltip, ResponsiveContainer, XAxis, YAxis
 } from 'recharts';
 import { Badge } from "@/components/ui/badge"
 import { 
   Printer, Loader2, Building2, Filter, Calculator, 
   ArrowUpRight, ArrowDownRight, ArrowDownCircle, TrendingUp, PieChart as PieChartIcon, BarChart3,
-  Lightbulb, AlertTriangle, CheckCircle2, Target, Zap, ShieldCheck, RotateCcw, MoreVertical,
-  Activity, Search, Database, LayoutGrid, AlertCircle
+  Lightbulb, Target, Zap, ShieldCheck, RotateCcw, MoreVertical,
+  Activity, LayoutGrid
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,7 +22,6 @@ import { collection, query, where, doc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import { useToast } from "@/hooks/use-toast"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -103,12 +101,6 @@ export default function ReportsPage() {
   }, [db, branchFilter])
   const { data: expenses, isLoading: eLoading } = useCollection(expensesQuery)
 
-  // Fetch Actual Branch Balance from netBalance collection
-  // Note: For 'all' branches, we'd need to aggregate, but for now we look at current user branch or first selected
-  const targetBalanceId = branchFilter === 'all' ? userBranch : branchFilter
-  const balanceRef = useMemoFirebase(() => targetBalanceId ? doc(db, "netBalance", targetBalanceId) : null, [db, targetBalanceId])
-  const { data: branchBalance } = useDoc(balanceRef)
-
   const stats = useMemo(() => {
     if (!payments || !expenses) return null
     const sDate = startDate ? new Date(startDate.replace(/-/g, '/')) : new Date(0)
@@ -177,7 +169,6 @@ export default function ReportsPage() {
     }
   }, [payments, expenses, startDate, endDate, buildingFilter])
 
-  // NEW: Integrity & Tracker Data
   const trackerData = useMemo(() => {
     if (!expenses) return { categoryStats: [], highestCategory: "None" };
     
@@ -205,31 +196,6 @@ export default function ReportsPage() {
       highestCategory: categoryStats[0]?.name || "None"
     };
   }, [expenses, selectedTrackerBuilding, startDate, endDate]);
-
-  const integrityStats = useMemo(() => {
-    if (!branchBalance || !stats || !payments || !expenses) {
-      return { diff: 0, score: 0, calculatedBalance: 0, actualBalance: 0, status: "Unknown" };
-    }
-
-    // Transaction calculated balance (Sum of all time for this branch)
-    const allTimeIncome = payments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-    const allTimeExpense = expenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-    
-    const calculatedBalance = allTimeIncome - allTimeExpense;
-    const actualBalance = Number(branchBalance.totalHandCash || 0);
-    
-    const diff = Math.abs(calculatedBalance - actualBalance);
-    // Score based on accuracy relative to total throughput
-    const score = diff === 0 ? 100 : Math.max(0, 100 - (diff / (allTimeIncome || 1)) * 100);
-
-    return { 
-      diff, 
-      score, 
-      calculatedBalance,
-      actualBalance,
-      status: diff === 0 ? "Correct" : "Discrepancy" 
-    };
-  }, [branchBalance, payments, expenses, stats]);
 
   const handlePrint = () => { 
     if (typeof window !== "undefined") { 
@@ -467,76 +433,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-4">
-             {/* CARD-1: DATA ENTRY INTEGRITY & HEALTH CHECK */}
-             <Card className="border-none shadow-xl bg-white rounded-3xl overflow-hidden border-t-4 border-t-indigo-600">
-                <CardHeader className="bg-indigo-50/30 border-b">
-                   <CardTitle className="text-lg flex items-center gap-2 text-indigo-700">
-                      <Database size={20}/> Data Entry Integrity Check
-                   </CardTitle>
-                   <CardDescription>Cross-verification between transactions and hand cash.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-8">
-                   <div className="flex flex-col md:flex-row items-center gap-8">
-                      <div className="w-40 h-40 shrink-0">
-                         <ResponsiveContainer width="100%" height="100%">
-                            <RadialBarChart 
-                               innerRadius="70%" 
-                               outerRadius="100%" 
-                               barSize={12} 
-                               data={[{ name: 'Accuracy', value: integrityStats.score, fill: integrityStats.score === 100 ? '#10B981' : '#F06A6A' }]} 
-                               startAngle={90} 
-                               endAngle={450}
-                            >
-                               <RadialBar background dataKey="value" cornerRadius={10} />
-                               <text 
-                                  x="50%" 
-                                  y="50%" 
-                                  textAnchor="middle" 
-                                  dominantBaseline="middle" 
-                                  className="text-2xl font-black fill-slate-800"
-                               >
-                                  {integrityStats.score.toFixed(0)}%
-                               </text>
-                            </RadialBarChart>
-                         </ResponsiveContainer>
-                      </div>
-                      <div className="flex-1 space-y-4 text-center md:text-left">
-                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Verification Status</p>
-                            {integrityStats.diff === 0 ? (
-                               <div className="flex items-center gap-2 text-success font-black text-lg">
-                                  <CheckCircle2 size={24}/> Your data entry is 100% accurate.
-                               </div>
-                            ) : (
-                               <div className="space-y-2">
-                                  <div className="flex items-center gap-2 text-destructive font-black text-lg">
-                                     <AlertCircle size={24}/> Warning: Proper data entry is missing.
-                                  </div>
-                                  <p className="text-sm font-bold text-slate-600">
-                                     Your balance differs by <span className="text-destructive font-black text-xl">৳{integrityStats.diff.toLocaleString()}</span> from the transaction history.
-                                  </p>
-                                  <p className="text-[10px] text-muted-foreground italic font-medium">
-                                     Calculation: Income - Expenses = Net Balance.
-                                  </p>
-                               </div>
-                            )}
-                         </div>
-                         <div className="grid grid-cols-2 gap-4 pt-4">
-                            <div className="p-3 rounded-2xl bg-slate-50 border">
-                               <p className="text-[8px] font-black text-muted-foreground uppercase">Expected (Ledger)</p>
-                               <p className="text-sm font-black text-slate-800">৳{integrityStats.calculatedBalance.toLocaleString()}</p>
-                            </div>
-                            <div className="p-3 rounded-2xl bg-slate-50 border">
-                               <p className="text-[8px] font-black text-muted-foreground uppercase">Actual (Cash Hand)</p>
-                               <p className="text-sm font-black text-primary">৳{integrityStats.actualBalance.toLocaleString()}</p>
-                            </div>
-                         </div>
-                      </div>
-                   </div>
-                </CardContent>
-             </Card>
-
-             {/* CARD-2: BUILDING-WISE SMART EXPENSE TRACKER */}
+             {/* BUILDING-WISE SMART EXPENSE TRACKER */}
              <Card className="border-none shadow-xl bg-white rounded-3xl overflow-hidden border-t-4 border-t-primary">
                 <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between">
                    <div className="space-y-1">
