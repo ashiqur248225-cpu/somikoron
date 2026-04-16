@@ -4,20 +4,22 @@
 import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
-  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend, Tooltip, ResponsiveContainer, XAxis, YAxis
+  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend, Tooltip, ResponsiveContainer, XAxis, YAxis,
+  RadialBarChart, RadialBar
 } from 'recharts';
 import { Badge } from "@/components/ui/badge"
 import { 
   Printer, Loader2, Building2, Filter, Calculator, 
   ArrowUpRight, ArrowDownRight, ArrowDownCircle, TrendingUp, PieChart as PieChartIcon, BarChart3,
-  Lightbulb, AlertTriangle, CheckCircle2, Target, Zap, ShieldCheck, RotateCcw, MoreVertical
+  Lightbulb, AlertTriangle, CheckCircle2, Target, Zap, ShieldCheck, RotateCcw, MoreVertical,
+  Activity, Search, Database, LayoutGrid
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, where } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
+import { collection, query, where, doc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
@@ -52,6 +54,7 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState(getFirstDayOfMonthYMD())
   const [endDate, setEndDate] = useState(getLocalYMD())
   const [buildingFilter, setBuildingFilter] = useState("all")
+  const [selectedTrackerBuilding, setSelectedTrackerBuilding] = useState("all")
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
@@ -78,6 +81,10 @@ export default function ReportsPage() {
     return query(collection(db, "expenses"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: expenses, isLoading: eLoading } = useCollection(expensesQuery)
+
+  // Fetch Actual Branch Balance from netBalance collection
+  const balanceRef = useMemoFirebase(() => userBranch ? doc(db, "netBalance", userBranch) : null, [db, userBranch])
+  const { data: branchBalance } = useDoc(balanceRef)
 
   const stats = useMemo(() => {
     if (!payments || !expenses) return null
@@ -147,6 +154,59 @@ export default function ReportsPage() {
     }
   }, [payments, expenses, startDate, endDate, buildingFilter])
 
+  // NEW: Integrity & Tracker Data
+  const trackerData = useMemo(() => {
+    if (!expenses) return { categoryStats: [], highestCategory: "None" };
+    
+    const filtered = expenses.filter(e => {
+      const d = new Date(e.expenseDate.replace(/-/g, '/'));
+      const sDate = startDate ? new Date(startDate.replace(/-/g, '/')) : new Date(0);
+      const eDate = endDate ? new Date(endDate.replace(/-/g, '/')) : new Date();
+      eDate.setHours(23, 59, 59);
+      
+      const matchesDate = d >= sDate && d <= eDate;
+      const matchesBuilding = selectedTrackerBuilding === 'all' || e.buildingId === selectedTrackerBuilding;
+      return matchesDate && matchesBuilding;
+    });
+
+    const map: Record<string, number> = {};
+    filtered.forEach(e => { map[e.category] = (map[e.category] || 0) + e.amount });
+
+    const categoryStats = Object.entries(map).map(([name, value]) => ({ 
+      name: name.charAt(0).toUpperCase() + name.slice(1), 
+      value 
+    })).sort((a, b) => b.value - a.value);
+
+    return {
+      categoryStats,
+      highestCategory: categoryStats[0]?.name || "None"
+    };
+  }, [expenses, selectedTrackerBuilding, startDate, endDate]);
+
+  const integrityStats = useMemo(() => {
+    if (!branchBalance || !stats) return { diff: 0, score: 0, status: "Unknown" };
+
+    // Transaction calculated balance (Sum of all time)
+    // For proper check, we need all-time income and expense
+    const allTimeIncome = payments?.reduce((a, b) => a + (b.amount || 0), 0) || 0;
+    const allTimeExpense = expenses?.reduce((a, b) => a + (a.amount || 0), 0) || 0;
+    // Note: Net balance in system starts from 0 or opening balance. 
+    // Opening balance logic from settings is persisted in netBalance.
+    
+    const calculatedBalance = allTimeIncome - allTimeExpense;
+    const actualBalance = branchBalance.totalHandCash || 0;
+    
+    const diff = Math.abs(calculatedBalance - actualBalance);
+    // Score based on relative error. If 0 diff, 100%.
+    const score = diff === 0 ? 100 : Math.max(0, 100 - (diff / (allTimeIncome || 1)) * 100);
+
+    return { 
+      diff, 
+      score, 
+      status: diff === 0 ? "Correct" : "Discrepancy" 
+    };
+  }, [branchBalance, payments, expenses, stats]);
+
   const handlePrint = () => { 
     if (typeof window !== "undefined") { 
       setTimeout(() => { window.print(); }, 500);
@@ -166,13 +226,11 @@ export default function ReportsPage() {
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2"><SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mr-2 h-4 md:hidden" /><div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Analytics</h1></div></div>
         <div className="ml-auto flex items-center gap-3">
-          {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-3">
             <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={() => setIsFilterDialogOpen(true)}><Filter size={16} /> Filter</Button>
             <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={handlePrint}><Printer size={16} /> Print Report</Button>
           </div>
 
-          {/* Mobile Actions (3-dot menu) */}
           <div className="md:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -377,6 +435,140 @@ export default function ReportsPage() {
                 </div>
               </Card>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-4">
+             {/* CARD-1: DATA ENTRY INTEGRITY & HEALTH CHECK */}
+             <Card className="border-none shadow-xl bg-white rounded-3xl overflow-hidden border-t-4 border-t-indigo-600">
+                <CardHeader className="bg-indigo-50/30 border-b">
+                   <CardTitle className="text-lg flex items-center gap-2 text-indigo-700">
+                      <Database size={20}/> Data Entry Integrity Check
+                   </CardTitle>
+                   <CardDescription>Cross-verification between transactions and hand cash.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-8">
+                   <div className="flex flex-col md:flex-row items-center gap-8">
+                      <div className="w-40 h-40 shrink-0">
+                         <ResponsiveContainer width="100%" height="100%">
+                            <RadialBarChart 
+                               innerRadius="70%" 
+                               outerRadius="100%" 
+                               barSize={12} 
+                               data={[{ name: 'Accuracy', value: integrityStats.score, fill: integrityStats.score === 100 ? '#10B981' : '#F06A6A' }]} 
+                               startAngle={90} 
+                               endAngle={450}
+                            >
+                               <RadialBar background dataKey="value" cornerRadius={10} />
+                               <text 
+                                  x="50%" 
+                                  y="50%" 
+                                  textAnchor="middle" 
+                                  dominantBaseline="middle" 
+                                  className="text-2xl font-black fill-slate-800"
+                               >
+                                  {integrityStats.score.toFixed(0)}%
+                               </text>
+                            </RadialBarChart>
+                         </ResponsiveContainer>
+                      </div>
+                      <div className="flex-1 space-y-4 text-center md:text-left">
+                         <div className="space-y-1">
+                            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Verification Status</p>
+                            {integrityStats.diff === 0 ? (
+                               <div className="flex items-center gap-2 text-success font-black text-lg">
+                                  <CheckCircle2 size={24}/> Your data entry is 100% accurate.
+                               </div>
+                            ) : (
+                               <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-destructive font-black text-lg">
+                                     <AlertCircle size={24}/> Warning: Data Mismatch Detected.
+                                  </div>
+                                  <p className="text-sm font-bold text-slate-600">
+                                     Your actual branch balance differs by <span className="text-destructive font-black text-xl">৳{integrityStats.diff.toLocaleString()}</span> from the transaction history.
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground italic font-medium">
+                                     Check if all payments or expenses are recorded correctly.
+                                  </p>
+                               </div>
+                            )}
+                         </div>
+                         <div className="grid grid-cols-2 gap-4 pt-4">
+                            <div className="p-3 rounded-2xl bg-slate-50 border">
+                               <p className="text-[8px] font-black text-muted-foreground uppercase">Expected (TXs)</p>
+                               <p className="text-sm font-black text-slate-800">৳{(stats?.totalIncome - stats?.totalExpense).toLocaleString()}</p>
+                            </div>
+                            <div className="p-3 rounded-2xl bg-slate-50 border">
+                               <p className="text-[8px] font-black text-muted-foreground uppercase">Actual (Cash)</p>
+                               <p className="text-sm font-black text-primary">৳{(branchBalance?.totalHandCash || 0).toLocaleString()}</p>
+                            </div>
+                         </div>
+                      </div>
+                   </div>
+                </CardContent>
+             </Card>
+
+             {/* CARD-2: BUILDING-WISE SMART EXPENSE TRACKER */}
+             <Card className="border-none shadow-xl bg-white rounded-3xl overflow-hidden border-t-4 border-t-primary">
+                <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between">
+                   <div className="space-y-1">
+                      <CardTitle className="text-lg flex items-center gap-2 text-primary">
+                        <Activity size={20}/> Smart Expense Tracker
+                      </CardTitle>
+                      <CardDescription>Building-specific spending insights.</CardDescription>
+                   </div>
+                   <Select value={selectedTrackerBuilding} onValueChange={setSelectedTrackerBuilding}>
+                      <SelectTrigger className="w-[180px] h-9 bg-white font-bold text-xs">
+                         <LayoutGrid size={14} className="mr-2 text-primary" />
+                         <SelectValue placeholder="All Buildings" />
+                      </SelectTrigger>
+                      <SelectContent>
+                         <SelectItem value="all">Entire Branch</SelectItem>
+                         {buildings?.map(b => (
+                            <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                         ))}
+                      </SelectContent>
+                   </Select>
+                </CardHeader>
+                <CardContent className="p-6 space-y-6">
+                   <div className="h-[220px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={trackerData.categoryStats} layout="vertical" margin={{ left: 0, right: 30 }}>
+                            <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+                            <XAxis type="number" hide />
+                            <YAxis 
+                               dataKey="name" 
+                               type="category" 
+                               fontSize={10} 
+                               width={80} 
+                               axisLine={false} 
+                               tickLine={false} 
+                               fontFamily="Inter"
+                               fontWeight={700}
+                            />
+                            <Tooltip formatter={(v: number) => `৳${v.toLocaleString()}`} cursor={{ fill: 'transparent' }} />
+                            <Bar dataKey="value" fill="#296EB3" radius={[0, 4, 4, 0]} barSize={20} />
+                         </BarChart>
+                      </ResponsiveContainer>
+                   </div>
+
+                   <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex items-center justify-between group hover:bg-primary/10 transition-colors">
+                      <div className="flex items-center gap-3">
+                         <div className="h-10 w-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-primary">
+                            <TrendingUp size={20}/>
+                         </div>
+                         <div>
+                            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">High-Cost Alert</p>
+                            <h4 className="text-sm font-black text-slate-800">
+                               Highest expense: <span className="text-primary capitalize">{trackerData.highestCategory}</span>
+                            </h4>
+                         </div>
+                      </div>
+                      <Badge className="bg-primary group-hover:scale-110 transition-transform">
+                         ৳{(trackerData.categoryStats[0]?.value || 0).toLocaleString()}
+                      </Badge>
+                   </div>
+                </CardContent>
+             </Card>
           </div>
         </div>
       </div>
