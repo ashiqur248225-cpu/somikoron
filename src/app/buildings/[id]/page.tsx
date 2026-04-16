@@ -17,7 +17,7 @@ import {
   XCircle, Zap, LayoutGrid, Calculator, TrendingUp, TrendingDown,
   ArrowUpRight, ArrowDownRight, Banknote, Calendar, BarChart3,
   CircleDollarSign, Percent, ChevronLeft, MoreVertical, ChevronDown, ChevronUp,
-  HandCoins
+  HandCoins, Package, User
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -145,7 +145,9 @@ export default function BuildingDetailsPage({
       last7DaysCollected: 0,
       totalLifetimeCollected: 0,
       netProfit: 0,
-      roomRevenueList: []
+      roomRevenueList: [],
+      packageCount: 0,
+      nonPackageCount: 0
     }
 
     const foodCostPerPackage = estimates?.packageFoodCost || 4500;
@@ -156,6 +158,7 @@ export default function BuildingDetailsPage({
     
     // DEDUCTIONS
     const packageStudentCount = activeStudents.filter(s => s.paymentSystem === 'package').length;
+    const nonPackageCount = activeStudents.length - packageStudentCount;
     const foodDeduction = packageStudentCount * foodCostPerPackage;
     const utilityDeduction = activeStudents.length * utilCostPerStudent;
     const buildingRentDeduction = Number(building.buildingRentCost || 0);
@@ -222,7 +225,9 @@ export default function BuildingDetailsPage({
       last7DaysCollected, 
       totalLifetimeCollected,
       netProfit,
-      roomRevenueList
+      roomRevenueList,
+      packageCount: packageStudentCount,
+      nonPackageCount
     }
   }, [building, payments, activeStudents, estimates, id])
 
@@ -412,8 +417,8 @@ export default function BuildingDetailsPage({
           <Card className={cn("border-none shadow-sm bg-white border-l-4 rounded-2xl", revenueStats.netProfit >= 0 ? "border-l-success" : "border-l-destructive")}><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Estimated Net Profit</p><p className={cn("text-xl font-bold mt-1", revenueStats.netProfit >= 0 ? "text-success" : "text-destructive")}>৳{revenueStats.netProfit.toLocaleString()}</p></div><div className={cn("p-2 rounded-lg", revenueStats.netProfit >= 0 ? "bg-success/5 text-success" : "bg-destructive/5 text-destructive")}>{revenueStats.netProfit >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div></div></CardContent></Card>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-indigo-500 rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1"><HandCoins size={10}/> Total Collections</p><p className="text-xl font-black mt-1 text-indigo-700">৳{revenueStats.totalLifetimeCollected.toLocaleString()}</p></div><div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><HandCoins size={20} /></div></div></CardContent></Card>
-          <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">30 Day Collection</p><p className="text-xl font-bold mt-1 text-success">৳{revenueStats.last30DaysCollected.toLocaleString()}</p></div><div className="bg-success/5 p-2 rounded-lg text-success"><CircleDollarSign size={20} /></div></div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-indigo-500 rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1"><Package size={10}/> Package Students</p><p className="text-xl font-black mt-1 text-indigo-700">{revenueStats.packageCount}</p></div><div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><Package size={20} /></div></div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1"><User size={10}/> Non-Package Students</p><p className="text-xl font-bold mt-1 text-success">{revenueStats.nonPackageCount}</p></div><div className="bg-success/5 p-2 rounded-lg text-success"><User size={20} /></div></div></CardContent></Card>
           <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Current Active Residents</p><p className="text-xl font-bold mt-1">{(activeStudents || []).length}</p></div><div className="bg-orange-50 p-2 rounded-lg text-orange-600"><Users size={20} /></div></div></CardContent></Card>
         </div>
       </div>
