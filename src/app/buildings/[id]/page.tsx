@@ -144,8 +144,8 @@ export default function BuildingDetailsPage({
     building.apartmentsDetail?.forEach((apt: any) => {
       apt.rooms?.forEach((room: any) => {
         const rentPerSeat = Number(room.rentPerSeat || 0)
-        const roomExpected = room.totalSeats * rentPerSeat
-        const occCount = room.seats.filter((s: any) => s.status === 'occupied').length
+        const roomExpected = (room.totalSeats || 0) * rentPerSeat
+        const occCount = (room.seats || []).filter((s: any) => s.status === 'occupied').length
         const roomCurrent = occCount * rentPerSeat
         
         expectedIncome += roomExpected
@@ -207,6 +207,66 @@ export default function BuildingDetailsPage({
       roomRevenueList
     }
   }, [building, payments])
+
+  const addApartment = () => {
+    setEditApts([...editApts, {
+      id: Math.random().toString(36).substr(2, 9),
+      name: "",
+      meterNo: "",
+      rooms: [{ roomNo: "", totalSeats: 0, seats: [], rentPerSeat: 0, facilities: [] }]
+    }])
+  }
+
+  const removeApartment = (idx: number) => {
+    if (editApts.length > 1) {
+      setEditApts(editApts.filter((_, i) => i !== idx))
+    }
+  }
+
+  const addRoomToApartment = (aptIdx: number) => {
+    const updated = [...editApts]
+    updated[aptIdx].rooms.push({
+      roomNo: "",
+      totalSeats: 0,
+      seats: [],
+      rentPerSeat: 0,
+      facilities: []
+    })
+    setEditApts(updated)
+  }
+
+  const removeRoomFromApartment = (aptIdx: number, roomIdx: number) => {
+    const updated = [...editApts]
+    if (updated[aptIdx].rooms.length > 1) {
+      updated[aptIdx].rooms = updated[aptIdx].rooms.filter((_, i) => i !== roomIdx)
+      setEditApts(updated)
+    }
+  }
+
+  const updateRoomSeatCount = (aptIdx: number, roomIdx: number, count: number) => {
+    const updated = [...editApts]
+    const room = updated[aptIdx].rooms[roomIdx]
+    const prevCount = room.totalSeats || 0
+    const prevSeats = room.seats || []
+    
+    room.totalSeats = count
+    
+    if (count > prevCount) {
+      const newSeats = Array.from({ length: count - prevCount }, (_, i) => ({
+        seatNo: (prevCount + i + 1).toString(),
+        status: 'empty' as const
+      }))
+      room.seats = [...prevSeats, ...newSeats]
+    } else if (count < prevCount) {
+      room.seats = prevSeats.slice(0, count)
+    } else if (count > 0 && prevSeats.length === 0) {
+       room.seats = Array.from({ length: count }, (_, i) => ({
+        seatNo: (i + 1).toString(),
+        status: 'empty' as const
+      }))
+    }
+    setEditApts(updated)
+  }
 
   const handleUpdate = async () => {
     if (!buildingRef) return
@@ -353,11 +413,18 @@ export default function BuildingDetailsPage({
                         <Input type="number" value={editForm.buildingRentCost} onChange={e => setEditForm({...editForm, buildingRentCost: e.target.value})} />
                       </div>
                    </div>
-                   <p className="text-sm font-bold text-muted-foreground uppercase border-b pb-2">Apartments & Revenue Setup</p>
+                   
+                   <div className="flex justify-between items-center border-b pb-2">
+                      <p className="text-sm font-bold text-muted-foreground uppercase">Apartments & Revenue Setup</p>
+                      <Button variant="outline" size="sm" onClick={addApartment} className="h-8">
+                        <Plus size={14} className="mr-1" /> Add Apartment
+                      </Button>
+                   </div>
+
                    <div className="space-y-6">
                       {editApts.map((apt, aIdx) => (
                         <div key={apt.id || aIdx} className="p-4 border-2 rounded-xl bg-secondary/5 space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                             <div className="space-y-1">
                               <Label className="text-[10px] uppercase font-bold">Apt Name</Label>
                               <Input value={apt.name} onChange={e => {
@@ -374,23 +441,37 @@ export default function BuildingDetailsPage({
                                 setEditApts(updated)
                               }} />
                             </div>
+                            <Button variant="ghost" size="sm" onClick={() => removeApartment(aIdx)} className="text-destructive h-10">
+                              <Trash2 size={16} />
+                            </Button>
                           </div>
                           <div className="ml-4 pl-4 border-l-2 border-primary/20 space-y-4">
                              {apt.rooms.map((room, roomIdx) => (
                                <div key={`${room.roomNo}-${roomIdx}`} className="p-3 bg-background border rounded-lg space-y-3">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs font-bold uppercase">Room {room.roomNo}</span>
-                                        <Badge variant="secondary">{room.totalSeats} Seats</Badge>
+                                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                                     <div className="space-y-1">
+                                        <Label className="text-[9px] uppercase font-bold">Room No.</Label>
+                                        <Input value={room.roomNo} onChange={e => {
+                                          const updated = [...editApts]
+                                          updated[aIdx].rooms[roomIdx].roomNo = e.target.value
+                                          setEditApts(updated)
+                                        }} />
                                      </div>
-                                     <div className="flex items-center gap-2">
-                                        <Label className="text-[9px] uppercase font-bold text-primary">Rent Per Seat (৳)</Label>
-                                        <Input type="number" className="h-7 text-xs w-24" value={room.rentPerSeat || ""} onChange={e => {
+                                     <div className="space-y-1">
+                                        <Label className="text-[9px] uppercase font-bold">Seats</Label>
+                                        <Input type="number" value={room.totalSeats} onChange={e => updateRoomSeatCount(aIdx, roomIdx, Number(e.target.value))} />
+                                     </div>
+                                     <div className="space-y-1">
+                                        <Label className="text-[9px] uppercase font-bold text-primary">Rent/Seat (৳)</Label>
+                                        <Input type="number" value={room.rentPerSeat || ""} onChange={e => {
                                           const updated = [...editApts]
                                           updated[aIdx].rooms[roomIdx].rentPerSeat = Number(e.target.value)
                                           setEditApts(updated)
                                         }} />
                                      </div>
+                                     <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(aIdx, roomIdx)} className="text-destructive h-10 w-10">
+                                        <XCircle size={16} />
+                                     </Button>
                                   </div>
 
                                   <div className="space-y-2">
@@ -410,7 +491,7 @@ export default function BuildingDetailsPage({
                                   </div>
 
                                   <div className="flex flex-wrap gap-1.5 pt-2 border-t mt-2">
-                                    {room.seats.map((seat, sIdx) => (
+                                    {room.seats?.map((seat, sIdx) => (
                                       <button
                                         key={sIdx}
                                         onClick={() => {
@@ -430,6 +511,9 @@ export default function BuildingDetailsPage({
                                   </div>
                                </div>
                              ))}
+                             <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(aIdx)} className="text-primary h-8">
+                                <Plus size={14} className="mr-1"/> Add Room to {apt.name || 'Apt'}
+                             </Button>
                           </div>
                         </div>
                       ))}
