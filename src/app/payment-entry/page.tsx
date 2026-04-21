@@ -101,15 +101,19 @@ export default function PaymentEntryPage() {
   const { data: students } = useCollection(studentsQuery)
 
   const staffQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "staff"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    return collection(db, "staff")
+  }, [db])
   const { data: staffList } = useCollection(staffQuery)
 
   const managementStaff = useMemo(() => {
     if (!staffList) return []
-    return staffList.filter(s => s.staffType === 'management' || !s.staffType)
-  }, [staffList])
+    return staffList.filter(s => {
+      // Super Admins are visible in all branches
+      if (s.role === 'Admin') return true;
+      // Branch/Building Managers are only visible in their own branch
+      return s.branch === userBranch && (s.staffType === 'management' || !s.staffType);
+    })
+  }, [staffList, userBranch])
 
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
@@ -404,8 +408,8 @@ export default function PaymentEntryPage() {
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1"><Label className="text-xs">Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1"><Label className="text-xs">Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
           </div>
 
           <div className="p-6 border-2 border-success/10 bg-success/5 rounded-3xl space-y-4 shadow-sm">

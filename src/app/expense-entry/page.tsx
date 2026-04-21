@@ -103,21 +103,24 @@ export default function ExpenseEntryPage() {
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    // NO DATA FILTER FOR BUILDING MANAGER: Show all buildings in branch
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
   }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const staffQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "staff"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+    return collection(db, "staff")
+  }, [db])
   const { data: staffList } = useCollection(staffQuery)
 
   const managementStaff = useMemo(() => {
     if (!staffList) return []
-    return staffList.filter(s => s.staffType === 'management' || !s.staffType)
-  }, [staffList])
+    return staffList.filter(s => {
+      // Super Admins are visible in all branches
+      if (s.role === 'Admin') return true;
+      // Management staff from current branch
+      return s.branch === userBranch && (s.staffType === 'management' || !s.staffType);
+    })
+  }, [staffList, userBranch])
 
   const receiverStaffList = useMemo(() => {
     if (!staffList) return []

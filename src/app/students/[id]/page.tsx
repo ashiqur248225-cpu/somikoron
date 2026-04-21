@@ -111,11 +111,17 @@ export default function StudentDetailsPage() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
-  // FILTERED STAFF FOR RECEIVER: Only Management
+  // FILTERED STAFF FOR RECEIVER: Admins + Branch Management
   const managementStaff = useMemo(() => {
     if (!staffList) return []
-    return staffList.filter(s => s.staffType === 'management' || !s.staffType)
-  }, [staffList])
+    const userBranch = student?.branch || localStorage.getItem("user_branch") || "";
+    return staffList.filter(s => {
+      // Super Admins are visible in all branches
+      if (s.role === 'Admin') return true;
+      // Management staff from the student's specific branch
+      return s.branch === userBranch && (s.staffType === 'management' || !s.staffType);
+    })
+  }, [staffList, student?.branch])
 
   // BRANCH AWARE MEAL RATE
   const mealConfigRef = useMemoFirebase(() => 
@@ -216,7 +222,6 @@ export default function StudentDetailsPage() {
     const foodDueAmount = student.paymentSystem === 'non-package' ? Number(student.foodDueAmount || 0) : 0;
     
     // Formula: (Security Advance) + (Food Balance/Debt) - (Unpaid Rent)
-    // Note: Food balance is already signed (+ for balance, - for debt)
     const netResult = securityAdvance + foodDueAmount - unpaidRent;
     
     return { 
@@ -398,7 +403,6 @@ export default function StudentDetailsPage() {
       }
       const methodKey = methodKeyMap[exitMethod] || 'totalCash'
 
-      // NEW LOGIC: Calculate final remaining due or advance
       let finalTotalDue = 0;
       let finalAdvance = 0;
 
@@ -657,7 +661,7 @@ export default function StudentDetailsPage() {
               <div className="grid grid-cols-2 gap-4"><div className="p-4 bg-red-50 rounded-2xl border border-red-100 space-y-1"><Label className="text-[8px] font-bold text-destructive uppercase">Parent's Mobile</Label><p className="font-black text-slate-800">{student.parentPhone || 'N/A'}</p></div><div className="p-4 bg-red-50 rounded-2xl border border-red-100 space-y-1"><Label className="text-[8px] font-bold text-destructive uppercase">Guardian Mobile</Label><p className="font-black text-slate-800">{student.guardianPhone || 'N/A'}</p></div></div>
             </div>
           </div>
-          <DialogFooter><Button onClick={() => setIsDetailsDialogOpen(true)} className="w-full rounded-2xl h-12 font-bold">Close Details</Button></DialogFooter>
+          <DialogFooter><Button onClick={() => setIsDetailsDialogOpen(false)} className="w-full rounded-2xl h-12 font-bold">Close Details</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
