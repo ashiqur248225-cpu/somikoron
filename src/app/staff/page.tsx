@@ -2,8 +2,8 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useMemo, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Table, 
@@ -39,12 +39,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
-export default function StaffPage({ searchParams }: { searchParams: Promise<{ type?: string }> }) {
+function StaffPageContent() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
-  const resolvedSearchParams = React.use(searchParams)
-  const currentTab = resolvedSearchParams.type || "management"
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get('type') || "management"
   
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddOpen, setIsAddOpen] = useState(false)
@@ -93,7 +93,6 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
   }, [db, formData.branch])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  // Query to get all buildings for name mapping in the list
   const allBuildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Admin') return query(collection(db, "buildings"))
@@ -432,5 +431,13 @@ export default function StaffPage({ searchParams }: { searchParams: Promise<{ ty
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function StaffPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>}>
+      <StaffPageContent />
+    </Suspense>
   )
 }
