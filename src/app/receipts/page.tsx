@@ -22,7 +22,8 @@ import {
   Printer,
   Clock,
   ListFilter,
-  Trash2
+  Trash2,
+  MapPin
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -72,17 +73,27 @@ export default function ReceiptsHistoryPage() {
   const [deleteRange, setDeleteRange] = useState({ start: "", end: "" })
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Filters
+  const [buildingFilter, setBuildingFilter] = useState("all")
+  const [roomFilter, setRoomFilter] = useState("all")
+  const [methodFilter, setMethodFilter] = useState("all")
+  const [timeView, setTimeView] = useState("today")
+
   // Default range: 1st of month to Today
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
-  const [methodFilter, setMethodFilter] = useState("all")
-  const [timeView, setTimeView] = useState("today")
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserName(localStorage.getItem("user_name") || "User")
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
   }, [])
+
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: buildings } = useCollection(buildingsQuery)
 
   const paymentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -95,6 +106,12 @@ export default function ReceiptsHistoryPage() {
   
   const { data: payments, isLoading } = useCollection(paymentsQuery)
 
+  const uniqueRooms = useMemo(() => {
+    if (!payments) return []
+    const rooms = Array.from(new Set(payments.map(p => String(p.roomNumber)).filter(Boolean))).sort()
+    return rooms
+  }, [payments])
+
   const filteredReceipts = useMemo(() => {
     if (!payments) return []
     
@@ -105,29 +122,39 @@ export default function ReceiptsHistoryPage() {
     return payments.filter(p => {
       const search = searchTerm.toLowerCase()
       const receiptNo = `RCPT-${p.id?.substring(0, 8).toUpperCase()}`
-      const matchesSearch = receiptNo.toLowerCase().includes(search) || (p.studentName || "").toLowerCase().includes(search)
+      
+      // Multi-criteria search logic
+      const matchesSearch = 
+        receiptNo.toLowerCase().includes(search) || 
+        (p.studentName || "").toLowerCase().includes(search) ||
+        (p.phone || "").includes(searchTerm) ||
+        (p.buildingName || "").toLowerCase().includes(search) ||
+        (p.roomNumber || "").toString().includes(search)
       
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
       if (isNaN(pDate.getTime())) return false
 
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
+      const matchesBuilding = buildingFilter === "all" || p.buildingId === buildingFilter
+      const matchesRoom = roomFilter === "all" || String(p.roomNumber) === roomFilter
       
+      let matchesTime = true
       if (timeView === 'today') {
-        // Strict same-day comparison (local)
         const pYMD = `${pDate.getFullYear()}-${(pDate.getMonth() + 1).toString().padStart(2, '0')}-${pDate.getDate().toString().padStart(2, '0')}`
-        return matchesSearch && matchesMethod && pYMD === todayYMD
+        matchesTime = pYMD === todayYMD
       } else {
-        // "All Receipts" tab uses the custom date range filters (defaulting to current month)
         const matchesStartDate = !startDate || pDate >= new Date(startDate + "T00:00:00")
         const matchesEndDate = !endDate || pDate <= new Date(endDate + "T23:59:59")
-        return matchesSearch && matchesMethod && matchesStartDate && matchesEndDate
+        matchesTime = matchesStartDate && matchesEndDate
       }
+
+      return matchesSearch && matchesMethod && matchesBuilding && matchesRoom && matchesTime
     }).sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate().getTime() : new Date(a.date).getTime()
       const dateB = b.date?.toDate ? b.date.toDate().getTime() : new Date(b.date).getTime()
       return dateB - dateA
     })
-  }, [payments, searchTerm, startDate, endDate, methodFilter, timeView])
+  }, [payments, searchTerm, startDate, endDate, methodFilter, buildingFilter, roomFilter, timeView])
 
   const handleBulkDelete = async () => {
     if (!deleteRange.start || !deleteRange.end) return;
@@ -156,6 +183,15 @@ export default function ReceiptsHistoryPage() {
     } finally {
       setIsDeleting(false)
     }
+  }
+
+  const handleReset = () => {
+    setSearchTerm("")
+    setBuildingFilter("all")
+    setRoomFilter("all")
+    setMethodFilter("all")
+    setStartDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+    setEndDate(new Date().toISOString().split('T')[0])
   }
 
   return (
@@ -206,7 +242,12 @@ export default function ReceiptsHistoryPage() {
       <div className="flex flex-col gap-6 max-w-4xl mx-auto">
         <div className="relative w-full">
           <Search className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-          <Input placeholder="Find by Receipt No (RCPT-XXXX) or Resident Name..." className="pl-12 h-12 rounded-2xl border-none shadow-md bg-white text-lg" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <Input 
+            placeholder="Search Receipt No, Name, Phone, Building or Room..." 
+            className="pl-12 h-12 rounded-2xl border-none shadow-md bg-white text-lg" 
+            value={searchTerm} 
+            onChange={e => setSearchTerm(e.target.value)} 
+          />
         </div>
         <Tabs value={timeView} onValueChange={setTimeView} className="w-full">
           <TabsList className="bg-secondary/50 p-1 rounded-2xl w-full max-w-[400px] mx-auto grid grid-cols-2">
@@ -256,10 +297,59 @@ export default function ReceiptsHistoryPage() {
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Advanced Filter</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Payment Method</Label><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger className="bg-slate-50 h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
-            <div className="space-y-1.5"><Label className="text-[10px] uppercase font-bold">Date Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50" /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50" /></div></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold">Building</Label>
+                <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                  <SelectTrigger className="bg-slate-50 h-11 rounded-xl">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Entire Branch</SelectItem>
+                    {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold">Room No.</Label>
+                <Select value={roomFilter} onValueChange={setRoomFilter}>
+                  <SelectTrigger className="bg-slate-50 h-11 rounded-xl">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Rooms</SelectItem>
+                    {uniqueRooms.map(r => <SelectItem key={r} value={r}>Room {r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold">Payment Method</Label>
+              <Select value={methodFilter} onValueChange={setMethodFilter}>
+                <SelectTrigger className="bg-slate-50 h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Methods</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bkash">Bkash</SelectItem>
+                  <SelectItem value="nagad">Nagad</SelectItem>
+                  <SelectItem value="bank">Bank</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-bold">Date Range</Label>
+              <div className="flex gap-2">
+                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50" />
+                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50" />
+              </div>
+            </div>
           </div>
-          <DialogFooter><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Search</Button></DialogFooter>
+          <DialogFooter className="flex gap-2">
+            <Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button>
+            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Search</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
