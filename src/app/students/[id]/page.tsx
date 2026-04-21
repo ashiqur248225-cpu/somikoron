@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -89,8 +88,12 @@ export default function StudentDetailsPage() {
   const [exitStaff, setExitStaff] = useState("")
 
   useEffect(() => {
-    setUserRole(localStorage.getItem("user_role") || "Manager")
-    setUserName(localStorage.getItem("user_name") || "User")
+    const role = localStorage.getItem("user_role") || "Manager"
+    const name = localStorage.getItem("user_name") || "User"
+    setUserRole(role)
+    setUserName(name)
+    // AUTO POPULATE PROCESSED BY
+    setExitStaff(name)
   }, [])
 
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
@@ -132,6 +135,13 @@ export default function StudentDetailsPage() {
     receiver: "",
     description: ""
   })
+
+  // AUTO POPULATE RECEIVER IN PAYMENT DIALOG
+  useEffect(() => {
+    if (isPaymentDialogOpen && userName) {
+      setPaymentData(prev => ({ ...prev, receiver: userName }))
+    }
+  }, [isPaymentDialogOpen, userName])
 
   const [editForm, setEditForm] = useState<any>(null)
 
@@ -185,6 +195,7 @@ export default function StudentDetailsPage() {
     const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
     const foodBalance = student.foodDueAmount || 0
     const totalReceived = student.historicalTotalReceived || 0
+    const totalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0);
     const dueBreakdownList = Object.entries(student.duesBreakdown || {}).map(([monthLabel, data]: any) => ({
       month: monthLabel, amount: Number(data.amount), status: 'Unpaid'
     })).sort((a, b) => {
@@ -193,7 +204,7 @@ export default function StudentDetailsPage() {
       if (yA !== yB) return Number(yB) - Number(yA);
       return MONTHS.indexOf(mB) - MONTHS.indexOf(mA);
     });
-    return { rentDue, foodBalance, totalDue: rentDue, totalReceived, advanceRemaining: student.advanceAmount || 0, dueBreakdownList }
+    return { rentDue, foodBalance, totalDue, totalReceived, advanceRemaining: student.advanceAmount || 0, dueBreakdownList }
   }, [student])
 
   // NEW SETTLEMENT CALCULATION LOGIC
@@ -646,7 +657,7 @@ export default function StudentDetailsPage() {
               <div className="grid grid-cols-2 gap-4"><div className="p-4 bg-red-50 rounded-2xl border border-red-100 space-y-1"><Label className="text-[8px] font-bold text-destructive uppercase">Parent's Mobile</Label><p className="font-black text-slate-800">{student.parentPhone || 'N/A'}</p></div><div className="p-4 bg-red-50 rounded-2xl border border-red-100 space-y-1"><Label className="text-[8px] font-bold text-destructive uppercase">Guardian Mobile</Label><p className="font-black text-slate-800">{student.guardianPhone || 'N/A'}</p></div></div>
             </div>
           </div>
-          <DialogFooter><Button onClick={() => setIsDetailsDialogOpen(false)} className="w-full rounded-2xl h-12 font-bold">Close Details</Button></DialogFooter>
+          <DialogFooter><Button onClick={() => setIsDetailsDialogOpen(true)} className="w-full rounded-2xl h-12 font-bold">Close Details</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

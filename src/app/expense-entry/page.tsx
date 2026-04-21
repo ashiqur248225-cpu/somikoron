@@ -88,10 +88,12 @@ export default function ExpenseEntryPage() {
     setUserRole(role)
     setAssignedBuildingId(bId)
 
-    // Auto-select assigned building for Building Manager
-    if (role === 'Building Manager' && bId !== 'none') {
-      setFormData(prev => ({ ...prev, buildingId: bId }))
-    }
+    // AUTO POPULATE SPENT BY AND SELECT BUILDING
+    setFormData(prev => ({ 
+      ...prev, 
+      spentBy: name,
+      buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : prev.buildingId
+    }))
   }, [])
 
   // Check permissions for Building Manager

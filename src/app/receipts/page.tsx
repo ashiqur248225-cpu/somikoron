@@ -243,7 +243,7 @@ export default function ReceiptsHistoryPage() {
         <div className="relative w-full">
           <Search className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
           <Input 
-            placeholder="Search Receipt No, Name, Phone, Building or Room..." 
+            placeholder="Search Receipt No, Name.." 
             className="pl-12 h-12 rounded-2xl border-none shadow-md bg-white text-lg" 
             value={searchTerm} 
             onChange={e => setSearchTerm(e.target.value)} 

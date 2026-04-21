@@ -69,10 +69,12 @@ export default function PaymentEntryPage() {
     setUserRole(role)
     setAssignedBuildingId(bId)
 
-    // AUTO SELECT FOR BUILDING MANAGER
-    if (role === 'Building Manager' && bId !== 'none') {
-      setFormData(prev => ({ ...prev, buildingId: bId }))
-    }
+    // AUTO SELECT FOR BUILDING MANAGER AND AUTO POPULATE RECEIVER
+    setFormData(prev => ({ 
+      ...prev, 
+      receiver: name,
+      buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : prev.buildingId
+    }))
   }, [])
 
   // Check permissions for Building Manager
