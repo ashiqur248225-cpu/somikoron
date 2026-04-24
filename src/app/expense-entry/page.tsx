@@ -141,6 +141,20 @@ export default function ExpenseEntryPage() {
     return rooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
   }, [buildings, formData.buildingId])
 
+  const resetEntryForm = () => {
+    setFormData(prev => ({
+      ...prev,
+      amount: "",
+      description: "",
+      apartmentName: "",
+      roomNumber: "",
+      meterNo: "",
+      receiver: "",
+      totalMeals: "",
+      // Keep category, date, method, spentBy, buildingId for bulk entry efficiency
+    }))
+  }
+
   const handleCreateExpense = async () => {
     if (!formData.amount || !formData.spentBy) {
       toast({ variant: "destructive", title: "Error", description: "Amount and Spent By are required." })
@@ -180,7 +194,7 @@ export default function ExpenseEntryPage() {
           createdAt: serverTimestamp()
         })
         toast({ title: "Request Sent", description: "Your expense entry is pending for Admin approval." })
-        router.push('/students')
+        resetEntryForm()
         return
       }
 
@@ -239,7 +253,7 @@ export default function ExpenseEntryPage() {
       }
 
       toast({ title: "Expense Recorded" })
-      router.push('/expenses')
+      resetEntryForm()
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } 
     finally { setIsSubmitting(false) }
   }
