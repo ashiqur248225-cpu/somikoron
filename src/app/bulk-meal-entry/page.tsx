@@ -67,7 +67,7 @@ export default function BulkMealEntryPage() {
     setMealLogFilter({
       month: currentMonth,
       year: currentYear,
-      buildingId: "all" // USER REQUEST: Not show auto filter building name
+      buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : "all"
     })
   }, [])
 
@@ -219,7 +219,7 @@ export default function BulkMealEntryPage() {
 
       {/* Desktop Header */}
       <div className="hidden md:flex items-center gap-4">
-        {userRole !== 'Building Manager' && (
+        {(userRole === 'Admin' || userRole === 'Branch Manager') && (
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ChevronLeft />
           </Button>
@@ -259,7 +259,7 @@ export default function BulkMealEntryPage() {
             >
               <SelectTrigger className="h-12 rounded-2xl bg-white shadow-sm border-none font-bold"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Buildings</SelectItem>
+                {userRole !== 'Building Manager' && <SelectItem value="all">All Buildings</SelectItem>}
                 {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
