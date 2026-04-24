@@ -55,9 +55,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
+  SelectSeparator,
 } from "@/components/ui/select"
 import {
   DropdownMenu,
@@ -67,6 +70,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function DashboardPage() {
   const db = useFirestore()
@@ -151,11 +156,24 @@ export default function DashboardPage() {
       }
       if (range === 'this_month') return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
       if (range === 'this_year') return date.getFullYear() === now.getFullYear()
-      return true
+      
+      // Handle specific month selection (month_0, month_1, etc.)
+      if (range.startsWith('month_')) {
+        const monthIdx = parseInt(range.split('_')[1])
+        return date.getMonth() === monthIdx && date.getFullYear() === now.getFullYear()
+      }
+
+      return true // all_time
     }
 
-    const filteredPayments = (allPayments || []).filter(p => isWithinRange(p.date?.toDate ? p.date.toDate() : new Date(p.date), timeRange))
-    const filteredExpenses = (allExpenses || []).filter(e => e.expenseDate && isWithinRange(new Date(e.expenseDate), timeRange))
+    const filteredPayments = (allPayments || []).filter(p => {
+      const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
+      return isWithinRange(pDate, timeRange)
+    })
+    const filteredExpenses = (allExpenses || []).filter(e => {
+      const eDate = e.expenseDate ? new Date(e.expenseDate.replace(/-/g, '/')) : null
+      return eDate && isWithinRange(eDate, timeRange)
+    })
 
     const income = filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
     const expense = filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
@@ -205,7 +223,16 @@ export default function DashboardPage() {
               <SelectItem value="yesterday">Yesterday</SelectItem>
               <SelectItem value="this_week">This Week</SelectItem>
               <SelectItem value="this_month">This Month</SelectItem>
-              <SelectItem value="this_year">This Year</SelectItem>
+              
+              <SelectGroup>
+                <SelectLabel className="text-[10px] font-black uppercase text-muted-foreground/50 tracking-tighter px-2 pt-2 border-t mt-1">Specific Month ({new Date().getFullYear()})</SelectLabel>
+                {MONTHS.map((m, idx) => (
+                  <SelectItem key={idx} value={`month_${idx}`}>{m}</SelectItem>
+                ))}
+              </SelectGroup>
+              
+              <SelectSeparator />
+              <SelectItem value="this_year">This Year (All)</SelectItem>
               <SelectItem value="all_time">All Time</SelectItem>
             </SelectContent>
           </Select>
