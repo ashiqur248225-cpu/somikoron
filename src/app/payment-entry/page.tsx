@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -48,8 +49,8 @@ export default function PaymentEntryPage() {
     buildingId: "all",
     roomNumber: "all",
     studentId: "",
-    month: MONTHS[new Date().getMonth()],
-    year: new Date().getFullYear().toString(),
+    month: "",
+    year: "",
     seatAmount: "",
     foodAmount: "",
     addAdvanceAmount: "0",
@@ -69,10 +70,16 @@ export default function PaymentEntryPage() {
     setUserRole(role)
     setAssignedBuildingId(bId)
 
-    // AUTO SELECT FOR BUILDING MANAGER AND AUTO POPULATE RECEIVER
+    // AUTO COLLECT DATE AND POPULATE RECEIVER
+    const now = new Date()
+    const currentMonth = MONTHS[now.getMonth()]
+    const currentYear = now.getFullYear().toString()
+
     setFormData(prev => ({ 
       ...prev, 
       receiver: name,
+      month: currentMonth,
+      year: currentYear,
       buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : prev.buildingId
     }))
   }, [])

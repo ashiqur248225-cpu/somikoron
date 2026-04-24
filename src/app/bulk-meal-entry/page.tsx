@@ -42,8 +42,8 @@ export default function BulkMealEntryPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [mealLogFilter, setMealLogFilter] = useState({
-    month: MONTHS[new Date().getMonth()],
-    year: new Date().getFullYear().toString(),
+    month: "",
+    year: "",
     buildingId: "all"
   })
   const [mealInputs, setMealInputs] = useState<Record<string, string>>({})
@@ -59,9 +59,16 @@ export default function BulkMealEntryPage() {
     setUserRole(role)
     setAssignedBuildingId(bId)
 
-    if (role === 'Building Manager' && bId !== 'none') {
-      setMealLogFilter(prev => ({ ...prev, buildingId: bId }))
-    }
+    // AUTO COLLECT DATE AND BUILDING FOR MANAGER
+    const now = new Date()
+    const currentMonth = MONTHS[now.getMonth()]
+    const currentYear = now.getFullYear().toString()
+
+    setMealLogFilter({
+      month: currentMonth,
+      year: currentYear,
+      buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : "all"
+    })
   }, [])
 
   const buildingsQuery = useMemoFirebase(() => {
