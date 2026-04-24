@@ -25,6 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { sendSMS } from "@/app/actions/sms"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
@@ -201,10 +202,21 @@ export default function BulkMealEntryPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ChevronLeft />
-        </Button>
+      {/* Sticky App Bar for Mobile */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
+        <SidebarTrigger className="-ml-2" />
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-bold truncate">Meal Entry</h1>
+        </div>
+      </div>
+
+      {/* Desktop Header */}
+      <div className="hidden md:flex items-center gap-4">
+        {userRole !== 'Building Manager' && (
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ChevronLeft />
+          </Button>
+        )}
         <div>
           <h1 className="text-3xl font-bold text-primary tracking-tight">Bulk Meal Entry</h1>
           <p className="text-muted-foreground text-sm">Mass update meal counts for non-package residents.</p>
