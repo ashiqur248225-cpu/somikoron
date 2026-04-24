@@ -591,7 +591,7 @@ export default function BuildingsPage() {
                     <div>
                       <CardTitle className="text-lg">Room {room.roomNo}</CardTitle>
                       <p className="text-[10px] font-medium text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <Building2 size={10} /> {room.buildingName} • {room.aptName}
+                        <Building2 size={10} /> {room.buildingName} • {room.aptName} • <span className="font-bold text-primary">৳{room.rentPerSeat}</span>
                       </p>
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {room.facilities?.map((f: string) => (
