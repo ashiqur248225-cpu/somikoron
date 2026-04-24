@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, updateDoc, deleteDoc, serverTimestamp, collection, query, where, increment, getDoc } from "firebase/firestore"
@@ -55,15 +55,17 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
 interface SeatDetail {
+  id: string;
   seatNo: string;
   status: 'empty' | 'occupied';
 }
 
 interface RoomDetail {
+  id: string;
   roomNo: string;
   totalSeats: number;
   seats: SeatDetail[];
-  rentPerSeat?: number;
+  rentPerSeat?: number | string;
   facilities?: string[];
 }
 
@@ -73,6 +75,8 @@ interface ApartmentDetail {
   meterNo: string;
   rooms: RoomDetail[];
 }
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export default function BuildingDetailsPage({ 
   params, 
@@ -123,17 +127,30 @@ export default function BuildingDetailsPage({
   }, [db, id])
   const { data: payments } = useCollection(paymentsQuery)
 
-  const [editForm, setEditForm] = useState({ name: "", address: "", buildingRentCost: "0" })
+  const [editForm, setEditForm] = useState({ name: "", address: "", buildingRentCost: "" })
   const [editApts, setEditApts] = useState<ApartmentDetail[]>([])
+  const [expandedAptId, setExpandedAptId] = useState<string | null>(null)
 
-  useMemo(() => {
+  useEffect(() => {
     if (building) {
       setEditForm({ 
         name: building.name, 
         address: building.address,
-        buildingRentCost: (building.buildingRentCost || 0).toString() 
+        buildingRentCost: (building.buildingRentCost || "").toString() 
       })
-      setEditApts(building.apartmentsDetail || [])
+      // Ensure all objects have IDs for stable focus
+      const normalizedApts = (building.apartmentsDetail || []).map((apt: any) => ({
+        ...apt,
+        id: apt.id || generateId(),
+        rooms: (apt.rooms || []).map((r: any) => ({
+          ...r,
+          id: r.id || generateId(),
+          rentPerSeat: r.rentPerSeat !== undefined ? r.rentPerSeat.toString() : "",
+          seats: (r.seats || []).map((s: any) => ({ ...s, id: s.id || generateId() }))
+        }))
+      }))
+      setEditApts(normalizedApts)
+      if (normalizedApts.length > 0) setExpandedAptId(normalizedApts[0].id)
     }
   }, [building])
 
@@ -234,54 +251,108 @@ export default function BuildingDetailsPage({
     }
   }, [building, payments, activeStudents, estimates, id])
 
+  const cleanNumberValue = (val: string) => {
+    if (val === "") return "";
+    const num = parseInt(val);
+    return isNaN(num) ? "" : num.toString();
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const target = e.target as HTMLElement;
+      const focusableElements = Array.from(document.querySelectorAll('.edit-building-input')) as HTMLElement[];
+      const currentIndex = focusableElements.indexOf(target);
+      
+      if (currentIndex !== -1 && currentIndex < focusableElements.length - 1) {
+        focusableElements[currentIndex + 1].focus();
+      }
+    }
+  }
+
   const addApartment = () => {
+    const newId = generateId();
     setEditApts([...editApts, {
-      id: Math.random().toString(36).substr(2, 9),
+      id: newId,
       name: "",
       meterNo: "",
-      rooms: [{ roomNo: "", totalSeats: 0, seats: [], rentPerSeat: 0, facilities: [] }]
+      rooms: [{ id: generateId(), roomNo: "", totalSeats: 0, seats: [], rentPerSeat: "", facilities: [] }]
     }])
+    setExpandedAptId(newId)
+    
+    setTimeout(() => {
+      const scrollContainer = document.querySelector('.edit-dialog-scroll-area [data-radix-scroll-area-viewport]');
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
+      }
+    }, 100);
   }
 
-  const removeApartment = (idx: number) => {
+  const removeApartment = (aptId: string) => {
     if (editApts.length > 1) {
-      setEditApts(editApts.filter((_, i) => i !== idx))
+      setEditApts(editApts.filter(a => a.id !== aptId))
     }
   }
 
-  const addRoomToApartment = (aptIdx: number) => {
-    const updated = [...editApts]
-    updated[aptIdx].rooms.push({ roomNo: "", totalSeats: 0, seats: [], rentPerSeat: 0, facilities: [] })
-    setEditApts(updated)
+  const addRoomToApartment = (aptId: string) => {
+    const updated = editApts.map(apt => {
+      if (apt.id === aptId) {
+        return {
+          ...apt,
+          rooms: [...apt.rooms, { id: generateId(), roomNo: "", totalSeats: 0, seats: [], rentPerSeat: "", facilities: [] }]
+        }
+      }
+      return apt;
+    });
+    setEditApts(updated);
   }
 
-  const removeRoomFromApartment = (aptIdx: number, roomIdx: number) => {
-    const updated = [...editApts]
-    if (updated[aptIdx].rooms.length > 1) {
-      updated[aptIdx].rooms = updated[aptIdx].rooms.filter((_, i) => i !== roomIdx)
-      setEditApts(updated)
-    }
+  const removeRoomFromApartment = (aptId: string, roomId: string) => {
+    const updated = editApts.map(apt => {
+      if (apt.id === aptId && apt.rooms.length > 1) {
+        return {
+          ...apt,
+          rooms: apt.rooms.filter(r => r.id !== roomId)
+        }
+      }
+      return apt;
+    });
+    setEditApts(updated);
   }
 
-  const updateRoomSeatCount = (aptIdx: number, roomIdx: number, count: number) => {
-    const updated = [...editApts]
-    const room = updated[aptIdx].rooms[roomIdx]
-    const prevCount = room.totalSeats || 0
-    const prevSeats = room.seats || []
-    room.totalSeats = count
-    if (count > prevCount) {
-      const newSeats = Array.from({ length: count - prevCount }, (_, i) => ({
-        seatNo: (prevCount + i + 1).toString(), status: 'empty' as const
-      }))
-      room.seats = [...prevSeats, ...newSeats]
-    } else if (count < prevCount) {
-      room.seats = prevSeats.slice(0, count)
-    } else if (count > 0 && prevSeats.length === 0) {
-       room.seats = Array.from({ length: count }, (_, i) => ({
-        seatNo: (i + 1).toString(), status: 'empty' as const
-      }))
-    }
-    setEditApts(updated)
+  const updateRoomSeatCount = (aptId: string, roomId: string, value: string) => {
+    const cleaned = cleanNumberValue(value);
+    const count = parseInt(cleaned) || 0;
+    
+    const updated = editApts.map(apt => {
+      if (apt.id === aptId) {
+        return {
+          ...apt,
+          rooms: apt.rooms.map(r => {
+            if (r.id === roomId) {
+              const prevCount = r.seats?.length || 0;
+              let newSeats = [...(r.seats || [])];
+              
+              if (count > prevCount) {
+                const added = Array.from({ length: count - prevCount }, (_, i) => ({
+                  id: generateId(),
+                  seatNo: (prevCount + i + 1).toString(),
+                  status: 'empty' as const
+                }));
+                newSeats = [...newSeats, ...added];
+              } else if (count < prevCount) {
+                newSeats = newSeats.slice(0, count);
+              }
+              
+              return { ...r, totalSeats: count, seats: newSeats };
+            }
+            return r;
+          })
+        }
+      }
+      return apt;
+    });
+    setEditApts(updated);
   }
 
   const handleUpdate = async () => {
@@ -299,7 +370,14 @@ export default function BuildingDetailsPage({
       await updateDoc(buildingRef, {
         ...editForm,
         buildingRentCost: Number(editForm.buildingRentCost || 0),
-        apartmentsDetail: editApts,
+        apartmentsDetail: editApts.map(apt => ({
+          ...apt,
+          rooms: apt.rooms.map(r => ({
+            ...r,
+            totalSeats: r.seats.length,
+            rentPerSeat: Number(r.rentPerSeat || 0)
+          }))
+        })),
         apartmentsCount: editApts.length,
         totalSeats: total,
         occupiedSeats: occupied,
@@ -323,14 +401,26 @@ export default function BuildingDetailsPage({
   if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
   if (!building) return <div className="text-center p-20">Building not found.</div>
 
-  const toggleFacility = (aptIdx: number, roomIdx: number, facility: string) => {
-    const updated = [...editApts]
-    const currentRoom = updated[aptIdx].rooms[roomIdx]
-    if (!currentRoom.facilities) currentRoom.facilities = []
-    if (currentRoom.facilities.includes(facility)) {
-      currentRoom.facilities = currentRoom.facilities.filter(f => f !== facility)
-    } else { currentRoom.facilities.push(facility) }
-    setEditApts(updated)
+  const toggleFacility = (aptId: string, roomId: string, facility: string) => {
+    const updated = editApts.map(apt => {
+      if (apt.id === aptId) {
+        return {
+          ...apt,
+          rooms: apt.rooms.map(r => {
+            if (r.id === roomId) {
+              const currentFac = r.facilities || [];
+              const newFac = currentFac.includes(facility) 
+                ? currentFac.filter(f => f !== facility) 
+                : [...currentFac, facility];
+              return { ...r, facilities: newFac }
+            }
+            return r;
+          })
+        }
+      }
+      return apt;
+    });
+    setEditApts(updated);
   }
 
   return (
@@ -363,36 +453,146 @@ export default function BuildingDetailsPage({
                       <div className="space-y-2"><Label className="text-primary font-bold">Building Monthly Rent (৳)</Label><Input type="number" value={editForm.buildingRentCost} onChange={e => setEditForm({...editForm, buildingRentCost: e.target.value})} /></div>
                    </div>
                    <div className="flex justify-between items-center border-b pb-2"><p className="text-sm font-bold text-muted-foreground uppercase">Apartments & Revenue Setup</p><Button variant="outline" size="sm" onClick={addApartment} className="h-8"><Plus size={14} className="mr-1" /> Add Apartment</Button></div>
-                   <div className="space-y-6">
-                      {editApts.map((apt, aIdx) => (
-                        <div key={apt.id || aIdx} className="p-4 border-2 rounded-xl bg-secondary/5 space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                            <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Apt Name</Label><Input value={apt.name} onChange={e => { const updated = [...editApts]; updated[aIdx].name = e.target.value; setEditApts(updated) }} /></div>
-                            <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Meter No</Label><Input value={apt.meterNo} onChange={e => { const updated = [...editApts]; updated[aIdx].meterNo = e.target.value; setEditApts(updated) }} /></div>
-                            <Button variant="ghost" size="sm" onClick={() => removeApartment(aIdx)} className="text-destructive h-10"><Trash2 size={16} /></Button>
-                          </div>
-                          <div className="ml-4 pl-4 border-l-2 border-primary/20 space-y-4">
-                             {apt.rooms.map((room, roomIdx) => (
-                               <div key={`${room.roomNo}-${roomIdx}`} className="p-3 bg-background border rounded-lg space-y-3">
-                                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-                                     <div className="space-y-1"><Label className="text-[9px] uppercase font-bold">Room No.</Label><Input value={room.roomNo} onChange={e => { const updated = [...editApts]; updated[aIdx].rooms[roomIdx].roomNo = e.target.value; setEditApts(updated) }} /></div>
-                                     <div className="space-y-1"><Label className="text-[9px] uppercase font-bold">Seats</Label><Input type="number" value={room.totalSeats} onChange={e => updateRoomSeatCount(aIdx, roomIdx, Number(e.target.value))} /></div>
-                                     <div className="space-y-1"><Label className="text-[9px] uppercase font-bold text-primary">Rent/Seat (৳)</Label><Input type="number" value={room.rentPerSeat || ""} onChange={e => { const updated = [...editApts]; updated[aIdx].rooms[roomIdx].rentPerSeat = Number(e.target.value); setEditApts(updated) }} /></div>
-                                     <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(aIdx, roomIdx)} className="text-destructive h-10 w-10"><XCircle size={16} /></Button>
+                   
+                   <ScrollArea className="h-[500px] border rounded-md p-4 edit-dialog-scroll-area">
+                      <div className="space-y-4">
+                        {editApts.map((apt, aIdx) => (
+                          <div key={apt.id} className="border-2 rounded-xl bg-secondary/5 overflow-hidden">
+                            {/* Collapsible Header */}
+                            <div 
+                              className="p-4 flex items-center justify-between cursor-pointer hover:bg-secondary/10 transition-colors"
+                              onClick={() => setExpandedAptId(expandedAptId === apt.id ? null : apt.id)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="bg-primary/10 p-2 rounded-lg text-primary">
+                                  <LayoutGrid size={18} />
+                                </div>
+                                <div>
+                                  <h3 className="font-bold text-slate-800">{apt.name || `Apartment ${aIdx + 1}`}</h3>
+                                  <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                                    Meter: {apt.meterNo || 'Not set'} • {apt.rooms.length} Rooms
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-destructive" 
+                                  onClick={(e) => { e.stopPropagation(); removeApartment(apt.id); }}
+                                >
+                                  <Trash2 size={16} />
+                                </Button>
+                                {expandedAptId === apt.id ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
+                              </div>
+                            </div>
+
+                            {/* Collapsible Content */}
+                            {expandedAptId === apt.id && (
+                              <div className="p-4 pt-0 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                                <Separator className="mb-4" />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold">Apt Name</Label>
+                                    <Input 
+                                      value={apt.name} 
+                                      onChange={e => { const updated = [...editApts]; updated[aIdx].name = e.target.value; setEditApts(updated) }} 
+                                      className="edit-building-input"
+                                      onKeyDown={handleKeyDown}
+                                    />
                                   </div>
-                                  <div className="space-y-2"><Label className="text-[9px] uppercase font-bold text-muted-foreground">Room Facilities</Label><div className="flex flex-wrap gap-4">{['AC', 'Balcony', 'Attached Washroom'].map((fac) => (<div key={fac} className="flex items-center gap-1.5"><Checkbox id={`edit-fac-${aIdx}-${roomIdx}-${fac}`} checked={room.facilities?.includes(fac)} onCheckedChange={() => toggleFacility(aIdx, roomIdx, fac)}/><Label htmlFor={`edit-fac-${aIdx}-${roomIdx}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label></div>))}</div></div>
-                                  <div className="flex flex-wrap gap-1.5 pt-2 border-t mt-2">
-                                    {room.seats?.map((seat, sIdx) => (<button key={sIdx} onClick={() => { const updated = [...editApts]; const current = updated[aIdx].rooms[roomIdx].seats[sIdx].status; updated[aIdx].rooms[roomIdx].seats[sIdx].status = current === 'empty' ? 'occupied' : 'empty'; setEditApts(updated) }} className={cn("px-2 py-1 rounded text-[10px] font-bold border", seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive")}>S-{seat.seatNo}</button>))}
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold">Meter No</Label>
+                                    <Input 
+                                      value={apt.meterNo} 
+                                      onChange={e => { const updated = [...editApts]; updated[aIdx].meterNo = e.target.value; setEditApts(updated) }} 
+                                      className="edit-building-input"
+                                      onKeyDown={handleKeyDown}
+                                    />
                                   </div>
-                               </div>
-                             ))}
-                             <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(aIdx)} className="text-primary h-8"><Plus size={14} className="mr-1" /> Add Room to {apt.name || 'Apt'}</Button>
+                                </div>
+
+                                <div className="ml-2 pl-2 border-l-2 border-primary/20 space-y-4">
+                                  {apt.rooms.map((room, roomIdx) => (
+                                    <div key={room.id} className="p-3 bg-background border rounded-lg space-y-3 shadow-sm">
+                                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                                        <div className="space-y-1">
+                                          <Label className="text-[9px] font-bold uppercase">Room No.</Label>
+                                          <Input 
+                                            value={room.roomNo} 
+                                            onChange={e => { const updated = [...editApts]; updated[aIdx].rooms[roomIdx].roomNo = e.target.value; setEditApts(updated) }} 
+                                            className="edit-building-input h-9"
+                                            onKeyDown={handleKeyDown}
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[9px] font-bold uppercase">Seats</Label>
+                                          <Input 
+                                            type="number" 
+                                            value={room.totalSeats || ""} 
+                                            placeholder="Seats"
+                                            onChange={e => updateRoomSeatCount(apt.id, room.id, e.target.value)} 
+                                            className="edit-building-input h-9"
+                                            onKeyDown={handleKeyDown}
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[9px] font-bold uppercase text-primary">Rent/Seat (৳)</Label>
+                                          <Input 
+                                            type="number" 
+                                            value={room.rentPerSeat || ""} 
+                                            placeholder="Price"
+                                            onChange={e => { const updated = [...editApts]; updated[aIdx].rooms[roomIdx].rentPerSeat = cleanNumberValue(e.target.value); setEditApts(updated) }} 
+                                            className="edit-building-input h-9"
+                                            onKeyDown={handleKeyDown}
+                                          />
+                                        </div>
+                                        <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(apt.id, room.id)} className="text-destructive h-9 w-9">
+                                          <XCircle size={16} />
+                                        </Button>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label className="text-[9px] uppercase font-bold text-muted-foreground">Room Facilities</Label>
+                                        <div className="flex flex-wrap gap-4">
+                                          {['AC', 'Balcony', 'Attached Washroom'].map((fac) => (
+                                            <div key={fac} className="flex items-center gap-1.5">
+                                              <Checkbox 
+                                                id={`edit-fac-${room.id}-${fac}`} 
+                                                checked={room.facilities?.includes(fac)} 
+                                                onCheckedChange={() => toggleFacility(apt.id, room.id, fac)}
+                                              />
+                                              <Label htmlFor={`edit-fac-${room.id}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1.5 pt-2 border-t mt-2">
+                                        {room.seats?.map((seat) => (
+                                          <button 
+                                            key={seat.id} 
+                                            onClick={() => toggleSeatStatus(apt.id, room.id, seat.id)} 
+                                            className={cn("px-2 py-1 rounded text-[10px] font-bold border", seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive")}
+                                          >
+                                            S-{seat.seatNo}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(apt.id)} className="text-primary h-8"><Plus size={14} className="mr-1" /> Add Room to {apt.name || 'Apt'}</Button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
-                   </div>
+                        ))}
+                      </div>
+                   </ScrollArea>
                 </div>
-                <DialogFooter><Button onClick={handleUpdate} disabled={isUpdating} className="w-full h-12 text-lg font-bold">{isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}</Button></DialogFooter>
+                <DialogFooter>
+                  <Button onClick={handleUpdate} disabled={isUpdating} className="w-full h-12 text-lg font-bold">
+                    {isUpdating ? <Loader2 className="animate-spin" /> : "Save Changes"}
+                  </Button>
+                </DialogFooter>
              </DialogContent>
            </Dialog>
            {userRole === 'Admin' && (

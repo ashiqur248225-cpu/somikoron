@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,9 @@ import {
   Bath,
   Sparkles,
   ChevronDown,
-  RotateCcw
+  RotateCcw,
+  ChevronUp,
+  ChevronRight
 } from "lucide-react"
 import {
   Dialog,
@@ -70,11 +72,13 @@ import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 interface SeatDetail {
+  id: string;
   seatNo: string;
   status: 'empty' | 'occupied';
 }
 
 interface RoomDetail {
+  id: string;
   roomNo: string;
   seatCount: string;
   seats: SeatDetail[];
@@ -83,12 +87,15 @@ interface RoomDetail {
 }
 
 interface ApartmentDetail {
+  id: string;
   name: string;
   meterNo: string;
   rooms: RoomDetail[];
 }
 
 const AVAILABLE_FACILITIES = ["AC", "Balcony", "Attached Washroom"];
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export default function BuildingsPage() {
   const { toast } = useToast()
@@ -121,12 +128,20 @@ export default function BuildingsPage() {
     name: "", 
     address: "",
     branch: "",
-    buildingRentCost: "0"
+    buildingRentCost: ""
   })
   
   const [apartments, setApartments] = useState<ApartmentDetail[]>([
-    { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] }
+    { 
+      id: generateId(), 
+      name: "", 
+      meterNo: "", 
+      rooms: [{ id: generateId(), roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] 
+    }
   ])
+
+  const [expandedAptId, setExpandedAptId] = useState<string | null>(apartments[0].id)
+  const scrollAreaRef = useRef<HTMLDivElement>(null)
 
   // Branch Selection Logic
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
@@ -186,70 +201,168 @@ export default function BuildingsPage() {
 
   const isFiltering = searchTerm !== "" || filterBuilding !== "all" || filterRoomType !== "all" || filterAvailability !== "all" || filterFacilities.length > 0
 
+  // Focus and Enter Key Handlers
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const target = e.target as HTMLElement;
+      const focusableElements = Array.from(document.querySelectorAll('.building-input')) as HTMLElement[];
+      const currentIndex = focusableElements.indexOf(target);
+      
+      if (currentIndex !== -1 && currentIndex < focusableElements.length - 1) {
+        focusableElements[currentIndex + 1].focus();
+      }
+    }
+  }
+
   // Create Building Logic
   const addApartment = () => {
-    setApartments([...apartments, { name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] }])
-  }
-
-  const removeApartment = (idx: number) => {
-    if (apartments.length > 1) setApartments(apartments.filter((_, i) => i !== idx))
-  }
-
-  const addRoomToApartment = (aptIdx: number) => {
-    const updated = [...apartments]
-    updated[aptIdx].rooms.push({ roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] })
-    setApartments(updated)
-  }
-
-  const removeRoomFromApartment = (aptIdx: number, roomIdx: number) => {
-    const updated = [...apartments]
-    if (updated[aptIdx].rooms.length > 1) {
-      updated[aptIdx].rooms = updated[aptIdx].rooms.filter((_, i) => i !== roomIdx)
-      setApartments(updated)
-    }
-  }
-
-  const updateApartmentField = (aptIdx: number, field: keyof ApartmentDetail, value: string) => {
-    const updated = [...apartments]
-    ;(updated[aptIdx] as any)[field] = value
-    setApartments(updated)
-  }
-
-  const updateRoomField = (aptIdx: number, roomIdx: number, field: keyof RoomDetail, value: string | string[]) => {
-    const updated = [...apartments]
-    const room = updated[aptIdx].rooms[roomIdx]
+    const newId = generateId();
+    setApartments([...apartments, { 
+      id: newId, 
+      name: "", 
+      meterNo: "", 
+      rooms: [{ id: generateId(), roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] 
+    }])
+    setExpandedAptId(newId)
     
-    if (field === "seatCount") {
-      const count = parseInt(value as string) || 0
-      room.seats = Array.from({ length: count }, (_, i) => ({
-        seatNo: (i + 1).toString(),
-        status: 'empty'
-      }))
-      room.seatCount = value as string
-    } else {
-      (room as any)[field] = value
-    }
-    setApartments(updated)
+    // Auto scroll to bottom
+    setTimeout(() => {
+      const scrollContainer = document.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
+      }
+    }, 100);
   }
 
-  const toggleFacility = (aptIdx: number, roomIdx: number, facility: string) => {
-    const updated = [...apartments]
-    const room = updated[aptIdx].rooms[roomIdx]
-    if (!room.facilities) room.facilities = []
-    
-    if (room.facilities.includes(facility)) {
-      room.facilities = room.facilities.filter(f => f !== facility)
-    } else {
-      room.facilities.push(facility)
+  const removeApartment = (id: string) => {
+    if (apartments.length > 1) {
+      setApartments(apartments.filter(a => a.id !== id))
     }
-    setApartments(updated)
   }
 
-  const toggleSeatStatus = (aptIdx: number, roomIdx: number, seatIdx: number) => {
-    const updated = [...apartments]
-    const current = updated[aptIdx].rooms[roomIdx].seats[seatIdx].status
-    updated[aptIdx].rooms[roomIdx].seats[seatIdx].status = current === 'empty' ? 'occupied' : 'empty'
-    setApartments(updated)
+  const addRoomToApartment = (aptId: string) => {
+    const updated = apartments.map(apt => {
+      if (apt.id === aptId) {
+        return {
+          ...apt,
+          rooms: [...apt.rooms, { id: generateId(), roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }]
+        }
+      }
+      return apt;
+    });
+    setApartments(updated);
+  }
+
+  const removeRoomFromApartment = (aptId: string, roomId: string) => {
+    const updated = apartments.map(apt => {
+      if (apt.id === aptId && apt.rooms.length > 1) {
+        return {
+          ...apt,
+          rooms: apt.rooms.filter(r => r.id !== roomId)
+        }
+      }
+      return apt;
+    });
+    setApartments(updated);
+  }
+
+  const updateApartmentField = (aptId: string, field: keyof ApartmentDetail, value: string) => {
+    const updated = apartments.map(apt => {
+      if (apt.id === aptId) {
+        return { ...apt, [field]: value }
+      }
+      return apt;
+    });
+    setApartments(updated);
+  }
+
+  const cleanNumberValue = (val: string) => {
+    if (val === "") return "";
+    const num = parseInt(val);
+    return isNaN(num) ? "" : num.toString();
+  }
+
+  const updateRoomField = (aptId: string, roomId: string, field: keyof RoomDetail, value: string | string[]) => {
+    const updated = apartments.map(apt => {
+      if (apt.id === aptId) {
+        return {
+          ...apt,
+          rooms: apt.rooms.map(r => {
+            if (r.id === roomId) {
+              if (field === "seatCount") {
+                const cleaned = cleanNumberValue(value as string);
+                const count = parseInt(cleaned) || 0
+                return {
+                  ...r,
+                  seatCount: cleaned,
+                  seats: Array.from({ length: count }, (_, i) => ({
+                    id: generateId(),
+                    seatNo: (i + 1).toString(),
+                    status: 'empty' as const
+                  }))
+                }
+              } else if (field === "rentPerSeat") {
+                return { ...r, [field]: cleanNumberValue(value as string) }
+              } else {
+                return { ...r, [field]: value }
+              }
+            }
+            return r;
+          })
+        }
+      }
+      return apt;
+    });
+    setApartments(updated);
+  }
+
+  const toggleFacility = (aptId: string, roomId: string, facility: string) => {
+    const updated = apartments.map(apt => {
+      if (apt.id === aptId) {
+        return {
+          ...apt,
+          rooms: apt.rooms.map(r => {
+            if (r.id === roomId) {
+              const currentFac = r.facilities || [];
+              const newFac = currentFac.includes(facility) 
+                ? currentFac.filter(f => f !== facility) 
+                : [...currentFac, facility];
+              return { ...r, facilities: newFac }
+            }
+            return r;
+          })
+        }
+      }
+      return apt;
+    });
+    setApartments(updated);
+  }
+
+  const toggleSeatStatus = (aptId: string, roomId: string, seatId: string) => {
+    const updated = apartments.map(apt => {
+      if (apt.id === aptId) {
+        return {
+          ...apt,
+          rooms: apt.rooms.map(r => {
+            if (r.id === roomId) {
+              return {
+                ...r,
+                seats: r.seats.map(s => {
+                  if (s.id === seatId) {
+                    return { ...s, status: s.status === 'empty' ? 'occupied' : 'empty' }
+                  }
+                  return s;
+                })
+              }
+            }
+            return r;
+          })
+        }
+      }
+      return apt;
+    });
+    setApartments(updated);
   }
 
   const stats = useMemo(() => {
@@ -280,17 +393,19 @@ export default function BuildingsPage() {
 
     addDocumentNonBlocking(collection(db, "buildings"), {
       ...newBuilding,
+      id: generateId(),
       branch: userBranch,
       buildingRentCost: Number(newBuilding.buildingRentCost || 0),
       apartmentsCount: validApts.length,
       apartmentsDetail: validApts.map(apt => ({
-        id: Math.random().toString(36).substr(2, 9),
+        id: apt.id,
         name: apt.name,
         meterNo: apt.meterNo,
         rooms: apt.rooms.filter(r => r.roomNo).map(r => ({
+          id: r.id,
           roomNo: r.roomNo,
           totalSeats: r.seats.length,
-          seats: r.seats,
+          seats: r.seats.map(s => ({ id: s.id, seatNo: s.seatNo, status: s.status })),
           rentPerSeat: Number(r.rentPerSeat || 0),
           facilities: r.facilities || []
         }))
@@ -303,8 +418,14 @@ export default function BuildingsPage() {
     })
 
     setOpen(false)
-    setNewBuilding({ name: "", address: "", branch: userBranch, buildingRentCost: "0" })
-    setApartments([{ name: "", meterNo: "", rooms: [{ roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] }])
+    setNewBuilding({ name: "", address: "", branch: userBranch, buildingRentCost: "" })
+    setApartments([{ 
+      id: generateId(), 
+      name: "", 
+      meterNo: "", 
+      rooms: [{ id: generateId(), roomNo: "", seatCount: "", seats: [], rentPerSeat: "", facilities: [] }] 
+    }])
+    setExpandedAptId(null)
     toast({ title: "Building Created" })
   }
 
@@ -378,78 +499,142 @@ export default function BuildingsPage() {
                     </div>
 
                     <ScrollArea className="h-[400px] border rounded-md p-4">
-                      <div className="space-y-8">
+                      <div className="space-y-4">
                         {apartments.map((apt, aptIdx) => (
-                          <div key={aptIdx} className="p-4 border-2 rounded-xl bg-secondary/5 space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                              <div className="space-y-1">
-                                <Label className="text-[10px] font-bold uppercase">Apt Name/No</Label>
-                                <Input value={apt.name} placeholder="e.g. C2" onChange={e => updateApartmentField(aptIdx, "name", e.target.value)} />
+                          <div key={apt.id} className="border-2 rounded-xl bg-secondary/5 overflow-hidden">
+                            {/* Collapsible Header */}
+                            <div 
+                              className="p-4 flex items-center justify-between cursor-pointer hover:bg-secondary/10 transition-colors"
+                              onClick={() => setExpandedAptId(expandedAptId === apt.id ? null : apt.id)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="bg-primary/10 p-2 rounded-lg text-primary">
+                                  <LayoutGrid size={18} />
+                                </div>
+                                <div>
+                                  <h3 className="font-bold text-slate-800">{apt.name || `Apartment ${aptIdx + 1}`}</h3>
+                                  <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                                    Meter: {apt.meterNo || 'Not set'} • {apt.rooms.length} Rooms
+                                  </p>
+                                </div>
                               </div>
-                              <div className="space-y-1">
-                                <Label className="text-[10px] font-bold uppercase flex items-center gap-1"><Zap size={10} className="text-primary"/> Meter No.</Label>
-                                <Input value={apt.meterNo} placeholder="Meter ID" onChange={e => updateApartmentField(aptIdx, "meterNo", e.target.value)} />
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-destructive" 
+                                  onClick={(e) => { e.stopPropagation(); removeApartment(apt.id); }}
+                                >
+                                  <Trash2 size={16} />
+                                </Button>
+                                {expandedAptId === apt.id ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
                               </div>
-                              <Button variant="ghost" size="sm" onClick={() => removeApartment(aptIdx)} className="text-destructive h-10">
-                                <Trash2 size={16} />
-                              </Button>
                             </div>
 
-                            <div className="ml-4 space-y-4 pl-4 border-l-2 border-primary/20">
-                              {apt.rooms.map((room, roomIdx) => (
-                                <div key={roomIdx} className="space-y-3 bg-background p-3 rounded-lg border">
-                                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-                                    <div className="space-y-1">
-                                      <Label className="text-[9px] font-bold uppercase">Room No.</Label>
-                                      <Input value={room.roomNo} placeholder="301" onChange={e => updateRoomField(aptIdx, roomIdx, "roomNo", e.target.value)} />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <Label className="text-[9px] font-bold uppercase">Seats</Label>
-                                      <Input type="number" value={room.seatCount} placeholder="Seats" onChange={e => updateRoomField(aptIdx, roomIdx, "seatCount", e.target.value)} />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <Label className="text-[9px] font-bold uppercase">Rent/Seat (৳)</Label>
-                                      <Input type="number" value={room.rentPerSeat} placeholder="Price" onChange={e => updateRoomField(aptIdx, roomIdx, "rentPerSeat", e.target.value)} />
-                                    </div>
-                                    <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(aptIdx, roomIdx)} className="text-destructive h-10 w-10">
-                                      <XCircle size={16} />
-                                    </Button>
+                            {/* Collapsible Content */}
+                            {expandedAptId === apt.id && (
+                              <div className="p-4 pt-0 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                                <Separator className="mb-4" />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold uppercase">Apt Name/No</Label>
+                                    <Input 
+                                      value={apt.name} 
+                                      placeholder="e.g. C2" 
+                                      onChange={e => updateApartmentField(apt.id, "name", e.target.value)} 
+                                      className="building-input"
+                                      onKeyDown={handleKeyDown}
+                                    />
                                   </div>
-
-                                  <div className="space-y-2">
-                                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Room Facilities</Label>
-                                    <div className="flex flex-wrap gap-4">
-                                      {AVAILABLE_FACILITIES.map((fac) => (
-                                        <div key={fac} className="flex items-center gap-1.5">
-                                          <Checkbox 
-                                            id={`fac-${aptIdx}-${roomIdx}-${fac}`}
-                                            checked={room.facilities?.includes(fac)}
-                                            onCheckedChange={() => toggleFacility(aptIdx, roomIdx, fac)}
-                                          />
-                                          <Label htmlFor={`fac-${aptIdx}-${roomIdx}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-
-                                  <div className="flex flex-wrap gap-1.5 pt-2 border-t">
-                                    {room.seats.map((seat, sIdx) => (
-                                      <button
-                                        key={sIdx}
-                                        onClick={() => toggleSeatStatus(aptIdx, roomIdx, sIdx)}
-                                        className={cn(
-                                          "px-2 py-1 rounded text-[10px] font-bold border",
-                                          seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive"
-                                        )}
-                                      >
-                                        S-{seat.seatNo}
-                                      </button>
-                                    ))}
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold uppercase flex items-center gap-1"><Zap size={10} className="text-primary"/> Meter No.</Label>
+                                    <Input 
+                                      value={apt.meterNo} 
+                                      placeholder="Meter ID" 
+                                      onChange={e => updateApartmentField(apt.id, "meterNo", e.target.value)} 
+                                      className="building-input"
+                                      onKeyDown={handleKeyDown}
+                                    />
                                   </div>
                                 </div>
-                              ))}
-                              <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(aptIdx)} className="text-primary h-8"><Plus size={14} className="mr-1"/> Add Room to {apt.name || 'Apt'}</Button>
-                            </div>
+
+                                <div className="space-y-4 pl-2 border-l-2 border-primary/20">
+                                  {apt.rooms.map((room, roomIdx) => (
+                                    <div key={room.id} className="space-y-3 bg-background p-3 rounded-lg border shadow-sm">
+                                      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                                        <div className="space-y-1">
+                                          <Label className="text-[9px] font-bold uppercase">Room No.</Label>
+                                          <Input 
+                                            value={room.roomNo} 
+                                            placeholder="301" 
+                                            onChange={e => updateRoomField(apt.id, room.id, "roomNo", e.target.value)} 
+                                            className="building-input h-9"
+                                            onKeyDown={handleKeyDown}
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[9px] font-bold uppercase">Seats</Label>
+                                          <Input 
+                                            type="number" 
+                                            value={room.seatCount} 
+                                            placeholder="Seats" 
+                                            onChange={e => updateRoomField(apt.id, room.id, "seatCount", e.target.value)} 
+                                            className="building-input h-9"
+                                            onKeyDown={handleKeyDown}
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[9px] font-bold uppercase">Rent/Seat (৳)</Label>
+                                          <Input 
+                                            type="number" 
+                                            value={room.rentPerSeat} 
+                                            placeholder="Price" 
+                                            onChange={e => updateRoomField(apt.id, room.id, "rentPerSeat", e.target.value)} 
+                                            className="building-input h-9"
+                                            onKeyDown={handleKeyDown}
+                                          />
+                                        </div>
+                                        <Button variant="ghost" size="icon" onClick={() => removeRoomFromApartment(apt.id, room.id)} className="text-destructive h-9 w-9">
+                                          <XCircle size={16} />
+                                        </Button>
+                                      </div>
+
+                                      <div className="space-y-2">
+                                        <Label className="text-[9px] uppercase font-bold text-muted-foreground">Room Facilities</Label>
+                                        <div className="flex flex-wrap gap-4">
+                                          {AVAILABLE_FACILITIES.map((fac) => (
+                                            <div key={fac} className="flex items-center gap-1.5">
+                                              <Checkbox 
+                                                id={`fac-${room.id}-${fac}`}
+                                                checked={room.facilities?.includes(fac)}
+                                                onCheckedChange={() => toggleFacility(apt.id, room.id, fac)}
+                                              />
+                                              <Label htmlFor={`fac-${room.id}-${fac}`} className="text-[10px] cursor-pointer">{fac}</Label>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex flex-wrap gap-1.5 pt-2 border-t">
+                                        {room.seats.map((seat) => (
+                                          <button
+                                            key={seat.id}
+                                            onClick={() => toggleSeatStatus(apt.id, room.id, seat.id)}
+                                            className={cn(
+                                              "px-2 py-1 rounded text-[10px] font-bold border",
+                                              seat.status === 'occupied' ? "bg-success/10 border-success text-success" : "bg-destructive/10 border-destructive text-destructive"
+                                            )}
+                                          >
+                                            S-{seat.seatNo}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <Button variant="ghost" size="sm" onClick={() => addRoomToApartment(apt.id)} className="text-primary h-8"><Plus size={14} className="mr-1"/> Add Room to {apt.name || 'Apt'}</Button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
