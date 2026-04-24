@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { UserCog, Search, Plus, Phone, Loader2, Trash2, Shield, Building2, MapPin, CheckCircle2, XCircle, Wallet, UserCircle, Briefcase, Eye, ShieldCheck, Lock, RefreshCw } from "lucide-react"
+import { UserCog, Search, Plus, Phone, Loader2, Trash2, Shield, Building2, MapPin, CheckCircle2, XCircle, Wallet, UserCircle, Briefcase, Eye, ShieldCheck, Lock, RefreshCw, Utensils } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { 
   Dialog, 
@@ -73,7 +73,8 @@ function StaffPageContent() {
     canRequestIncome: false,
     canRequestExpense: false,
     canDirectEntryIncome: false,
-    canDirectEntryExpense: false
+    canDirectEntryExpense: false,
+    canDirectEntryBulkMeal: false
   })
 
   // Queries
@@ -132,7 +133,8 @@ function StaffPageContent() {
       canRequestIncome: false,
       canRequestExpense: false,
       canDirectEntryIncome: false,
-      canDirectEntryExpense: false
+      canDirectEntryExpense: false,
+      canDirectEntryBulkMeal: false
     })
     setIsAddOpen(true)
   }
@@ -161,6 +163,7 @@ function StaffPageContent() {
         canRequestExpense: formData.role === 'Building Manager' ? formData.canRequestExpense : true,
         canDirectEntryIncome: formData.role === 'Building Manager' ? formData.canDirectEntryIncome : true,
         canDirectEntryExpense: formData.role === 'Building Manager' ? formData.canDirectEntryExpense : true,
+        canDirectEntryBulkMeal: formData.role === 'Building Manager' ? formData.canDirectEntryBulkMeal : true,
       })
       toast({ title: "Success", description: "Staff member added." })
       setIsAddOpen(false)
@@ -417,6 +420,13 @@ function StaffPageContent() {
                       <p className="text-[10px] text-muted-foreground">Skip approval for expense entries.</p>
                     </div>
                     <Switch checked={formData.canDirectEntryExpense} onCheckedChange={val => setFormData({...formData, canDirectEntryExpense: val, canRequestExpense: !val})} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm flex items-center gap-1">Direct Bulk Meal Entry <Utensils size={12}/></Label>
+                      <p className="text-[10px] text-muted-foreground">Skip approval for bulk meal updates.</p>
+                    </div>
+                    <Switch checked={formData.canDirectEntryBulkMeal} onCheckedChange={val => setFormData({...formData, canDirectEntryBulkMeal: val})} />
                   </div>
                 </div>
               </div>

@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -12,7 +13,7 @@ import {
   Phone, MapPin, 
   History, Loader2, 
   ChevronLeft, Calendar, Shield, Briefcase,
-  Lock, Edit, Save, CheckCircle2, Building2, ShieldCheck, RefreshCw
+  Lock, Edit, Save, CheckCircle2, Building2, ShieldCheck, RefreshCw, Utensils
 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Separator } from "@/components/ui/separator"
@@ -111,138 +112,13 @@ export default function StaffProfilePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full">
-            <ChevronLeft />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-primary tracking-tight">Staff Profile</h1>
-            <p className="text-muted-foreground text-sm">Detailed information and payroll history.</p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {userRole === 'Admin' && (
-            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2 font-bold h-10 px-6 rounded-xl border-primary/20 text-primary">
-                  <Edit size={16} /> Edit Profile
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl">
-                <DialogHeader>
-                  <DialogTitle>Edit Staff Member</DialogTitle>
-                  <DialogDescription>Update credentials, role assignments, and access permissions.</DialogDescription>
-                </DialogHeader>
-                
-                {editForm && (
-                  <div className="space-y-6 py-4">
-                    {/* Basic Info */}
-                    <div className="space-y-4">
-                      <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">Basic Info</h3>
-                      <div className="space-y-2">
-                        <Label>Full Name</Label>
-                        <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Phone Number</Label>
-                          <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Access Password</Label>
-                          <div className="flex gap-2">
-                            <Input value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} />
-                            <Button variant="outline" size="icon" onClick={generateRandomPassword}><RefreshCw size={14}/></Button>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Address</Label>
-                        <Input value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Role & Assignments */}
-                    <div className="space-y-4">
-                      <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">Role & Assignment</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Role</Label>
-                          <Select value={editForm.role} onValueChange={v => setEditForm({...editForm, role: v})}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Admin">Super Admin</SelectItem>
-                              <SelectItem value="Branch Manager">Branch Manager</SelectItem>
-                              <SelectItem value="Building Manager">Building Manager</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Monthly Salary</Label>
-                          <Input type="number" value={editForm.monthlySalary} onChange={e => setEditForm({...editForm, monthlySalary: e.target.value})} />
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Assigned Branch</Label>
-                          <Select value={editForm.branch} onValueChange={v => setEditForm({...editForm, branch: v, assignedBuildingId: 'none'})}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {branches?.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Assigned Building</Label>
-                          <Select value={editForm.assignedBuildingId} onValueChange={v => setEditForm({...editForm, assignedBuildingId: v})}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Full Branch Access</SelectItem>
-                              {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Workflow Permissions */}
-                    {editForm.role === 'Building Manager' && (
-                      <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-4">
-                        <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">Approval Workflow</h3>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm">Direct Income Entry</Label>
-                            <Switch 
-                              checked={editForm.canDirectEntryIncome} 
-                              onCheckedChange={v => setEditForm({...editForm, canDirectEntryIncome: v, canRequestIncome: !v})} 
-                            />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm">Direct Expense Entry</Label>
-                            <Switch 
-                              checked={editForm.canDirectEntryExpense} 
-                              onCheckedChange={v => setEditForm({...editForm, canDirectEntryExpense: v, canRequestExpense: !v})} 
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <DialogFooter>
-                  <Button onClick={handleUpdate} className="w-full h-12 text-lg font-bold" disabled={isUpdating}>
-                    {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} className="mr-2" />} Save Changes
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-          <Button variant="ghost" onClick={() => router.push("/staff")}>Back to List</Button>
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full">
+          <ChevronLeft />
+        </Button>
+        <div>
+          <h1 className="text-3xl font-bold text-primary tracking-tight">Staff Profile</h1>
+          <p className="text-muted-foreground text-sm">Detailed information and payroll history.</p>
         </div>
       </div>
 
@@ -299,16 +175,111 @@ export default function StaffProfilePage() {
             {staff.role === 'Building Manager' && (
               <div className="pt-4 space-y-2">
                 <p className="text-[10px] font-black uppercase text-primary tracking-widest text-left ml-1">Workflow Mode</p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-2">
                   <Badge variant="outline" className={cn("text-[8px] justify-center py-1", staff.canDirectEntryIncome ? "bg-success/5 text-success border-success/20" : "bg-orange-50 text-orange-600 border-orange-200")}>
                     Income: {staff.canDirectEntryIncome ? 'Direct' : 'Request'}
                   </Badge>
                   <Badge variant="outline" className={cn("text-[8px] justify-center py-1", staff.canDirectEntryExpense ? "bg-success/5 text-success border-success/20" : "bg-orange-50 text-orange-600 border-orange-200")}>
                     Expense: {staff.canDirectEntryExpense ? 'Direct' : 'Request'}
                   </Badge>
+                  <Badge variant="outline" className={cn("text-[8px] justify-center py-1", staff.canDirectEntryBulkMeal ? "bg-success/5 text-success border-success/20" : "bg-orange-50 text-orange-600 border-orange-200")}>
+                    Bulk Meal: {staff.canDirectEntryBulkMeal ? 'Direct' : 'No Access'}
+                  </Badge>
                 </div>
               </div>
             )}
+            
+            <div className="pt-4">
+              {userRole === 'Admin' && (
+                <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full gap-2 font-bold rounded-xl h-10 border-primary/20 text-primary">
+                      <Edit size={16} /> Edit Profile
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl">
+                    <DialogHeader>
+                      <DialogTitle>Edit Staff Member</DialogTitle>
+                      <DialogDescription>Update credentials and access permissions.</DialogDescription>
+                    </DialogHeader>
+                    
+                    {editForm && (
+                      <div className="space-y-6 py-4">
+                        <div className="space-y-4">
+                          <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">Basic Info</h3>
+                          <div className="space-y-2">
+                            <Label>Full Name</Label>
+                            <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Phone Number</Label>
+                              <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Password</Label>
+                              <div className="flex gap-2">
+                                <Input value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} />
+                                <Button variant="outline" size="icon" onClick={generateRandomPassword}><RefreshCw size={14}/></Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Separator />
+
+                        <div className="space-y-4">
+                          <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">Role & Assignment</h3>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Role</Label>
+                              <Select value={editForm.role} onValueChange={v => setEditForm({...editForm, role: v})}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Admin">Super Admin</SelectItem>
+                                  <SelectItem value="Branch Manager">Branch Manager</SelectItem>
+                                  <SelectItem value="Building Manager">Building Manager</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Monthly Salary</Label>
+                              <Input type="number" value={editForm.monthlySalary} onChange={e => setEditForm({...editForm, monthlySalary: e.target.value})} />
+                            </div>
+                          </div>
+                        </div>
+
+                        {editForm.role === 'Building Manager' && (
+                          <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-4">
+                            <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">Approval Workflow</h3>
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-sm">Direct Income Entry</Label>
+                                <Switch checked={editForm.canDirectEntryIncome} onCheckedChange={v => setEditForm({...editForm, canDirectEntryIncome: v, canRequestIncome: !v})} />
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <Label className="text-sm">Direct Expense Entry</Label>
+                                <Switch checked={editForm.canDirectEntryExpense} onCheckedChange={v => setEditForm({...editForm, canDirectEntryExpense: v, canRequestExpense: !v})} />
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <Label className="text-sm flex items-center gap-1">Direct Bulk Meal Entry <Utensils size={12}/></Label>
+                                <Switch checked={editForm.canDirectEntryBulkMeal} onCheckedChange={v => setEditForm({...editForm, canDirectEntryBulkMeal: v})} />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <DialogFooter>
+                      <Button onClick={handleUpdate} className="w-full h-12 text-lg font-bold" disabled={isUpdating}>
+                        {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} className="mr-2" />} Save Changes
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
           </CardContent>
         </Card>
 

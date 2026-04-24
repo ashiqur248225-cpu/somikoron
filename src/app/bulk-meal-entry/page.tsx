@@ -36,6 +36,8 @@ export default function BulkMealEntryPage() {
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
+  const [userRole, setUserRole] = useState("")
+  const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [mealLogFilter, setMealLogFilter] = useState({
@@ -46,20 +48,37 @@ export default function BulkMealEntryPage() {
   const [mealInputs, setMealInputs] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
-    setUserName(localStorage.getItem("user_name") || "User")
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const name = localStorage.getItem("user_name") || "User"
+    const role = localStorage.getItem("user_role") || "Manager"
+    const bId = localStorage.getItem("assigned_building_id") || "none"
+
+    setUserBranch(branch)
+    setUserName(name)
+    setUserRole(role)
+    setAssignedBuildingId(bId)
+
+    if (role === 'Building Manager' && bId !== 'none') {
+      setMealLogFilter(prev => ({ ...prev, buildingId: bId }))
+    }
   }, [])
 
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
+    }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
+    if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
+      return query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
+    }
     return query(collection(db, "students"), where("branch", "==", userBranch))
-  }, [db, userBranch])
+  }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students } = useCollection(studentsQuery)
 
   const mealConfigRef = useMemoFirebase(() => 
@@ -213,7 +232,20 @@ export default function BulkMealEntryPage() {
         <div className="px-8 py-6 bg-slate-50 border-y flex flex-wrap gap-6 items-end">
           <div className="flex-1 min-w-[150px] space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Select Month</Label><Select value={mealLogFilter.month} onValueChange={v => setMealLogFilter({...mealLogFilter, month: v})}><SelectTrigger className="h-12 rounded-2xl bg-white shadow-sm border-none font-bold"><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
           <div className="flex-1 min-w-[150px] space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Select Year</Label><Select value={mealLogFilter.year} onValueChange={v => setMealLogFilter({...mealLogFilter, year: v})}><SelectTrigger className="h-12 rounded-2xl bg-white shadow-sm border-none font-bold"><SelectValue /></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
-          <div className="flex-1 min-w-[200px] space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Filter Building</Label><Select value={mealLogFilter.buildingId} onValueChange={v => setMealLogFilter({...mealLogFilter, buildingId: v})}><SelectTrigger className="h-12 rounded-2xl bg-white shadow-sm border-none font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+          <div className="flex-1 min-w-[200px] space-y-1.5">
+            <Label className="text-[10px] font-black uppercase ml-1">Filter Building</Label>
+            <Select 
+              disabled={userRole === 'Building Manager'}
+              value={mealLogFilter.buildingId} 
+              onValueChange={v => setMealLogFilter({...mealLogFilter, buildingId: v})}
+            >
+              <SelectTrigger className="h-12 rounded-2xl bg-white shadow-sm border-none font-bold"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {userRole !== 'Building Manager' && <SelectItem value="all">All Buildings</SelectItem>}
+                {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl text-muted-foreground bg-white shadow-sm" onClick={() => { setMealInputs({}); toast({ title: "Inputs Cleared" }); }}><RotateCcw size={20}/></Button>
         </div>
 

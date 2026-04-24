@@ -21,7 +21,8 @@ import {
   ChevronRight,
   MessageSquareQuote,
   ScrollText,
-  PlusCircle
+  PlusCircle,
+  Utensils
 } from "lucide-react"
 import {
   Sidebar,
@@ -97,7 +98,6 @@ export function AppSidebar() {
     : "/buildings";
 
   // Menu Definition with strict role access
-  // Order: Dashboard, Students, Buildings, Due, Entries...
   const items = [
     { title: "Dashboard", url: "/", icon: LayoutDashboard, roles: ["Admin", "Branch Manager"] },
     { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
@@ -105,6 +105,7 @@ export function AppSidebar() {
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Payment Entry", url: "/payment-entry", icon: PlusCircle, roles: ["Building Manager"] },
     { title: "Expense Entry", url: "/expense-entry", icon: Receipt, roles: ["Building Manager"] },
+    { title: "Bulk Meal Entry", url: "/bulk-meal-entry", icon: Utensils, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
     { title: "Income", url: "/income", icon: Wallet, roles: ["Admin", "Branch Manager"] },
     { title: "Receipts", url: "/receipts", icon: ScrollText, roles: ["Admin", "Branch Manager"] },
@@ -123,10 +124,11 @@ export function AppSidebar() {
     const hasRole = item.roles.includes(userRole)
     if (!hasRole) return false
 
-    // 2. Permission Check for Building Manager (Direct Entry Buttons)
+    // 2. Permission Check for Building Manager
     if (userRole === 'Building Manager') {
       if (item.title === "Payment Entry" && staffData?.canDirectEntryIncome !== true) return false
       if (item.title === "Expense Entry" && staffData?.canDirectEntryExpense !== true) return false
+      if (item.title === "Bulk Meal Entry" && staffData?.canDirectEntryBulkMeal !== true) return false
     }
 
     return true
@@ -209,4 +211,3 @@ export function AppSidebar() {
     </Sidebar>
   )
 }
-

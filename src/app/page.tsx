@@ -82,21 +82,32 @@ export default function DashboardPage() {
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
   const [userBranch, setUserBranch] = useState("")
+  const [authId, setAuthId] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [timeRange, setTimeRange] = useState("this_month")
 
   useEffect(() => {
     const role = localStorage.getItem("user_role") || "Manager"
+    const name = localStorage.getItem("user_name") || "User"
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const id = localStorage.getItem("somikoron_auth_id") || ""
+    const bId = localStorage.getItem("assigned_building_id") || "none"
+
     setUserRole(role)
-    setUserName(localStorage.getItem("user_name") || "User")
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
-    setAssignedBuildingId(localStorage.getItem("assigned_building_id") || "none")
+    setUserName(name)
+    setUserBranch(branch)
+    setAuthId(id)
+    setAssignedBuildingId(bId)
 
     // Redirect Building Manager if they land on Dashboard to Students list
     if (role === 'Building Manager') {
       router.push('/students')
     }
   }, [router])
+
+  // Fetch current user's permissions
+  const staffRef = useMemoFirebase(() => authId ? doc(db, "staff", authId) : null, [db, authId])
+  const { data: staffData } = useDoc(staffRef)
 
   // Optimized netBalance fetching
   const balanceRef = useMemoFirebase(() => userBranch ? doc(db, "netBalance", userBranch) : null, [db, userBranch])
@@ -318,10 +329,10 @@ export default function DashboardPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-60 rounded-2xl p-2 shadow-xl mb-4 border-slate-100">
-            <DropdownMenuItem onClick={() => router.push('/payment-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-success/10"><Wallet size={18} className="text-success"/> Payment Entry</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push('/expense-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-destructive/10"><Receipt size={18} className="text-destructive"/> Expense Entry</DropdownMenuItem>
-            {(userRole === 'Admin' || userRole === 'Branch Manager') && (
-              <DropdownMenuItem onClick={() => router.push('/bulk-meal-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-primary/10"><Utensils size={18} className="text-primary"/> Monthly Bulk Meal Entry</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push('/payment-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-success/10"><Wallet size={18} className="text-success" /> Payment Entry</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push('/expense-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-destructive/10"><Receipt size={18} className="text-destructive" /> Expense Entry</DropdownMenuItem>
+            {(userRole === 'Admin' || userRole === 'Branch Manager' || (userRole === 'Building Manager' && staffData?.canDirectEntryBulkMeal)) && (
+              <DropdownMenuItem onClick={() => router.push('/bulk-meal-entry')} className="gap-3 p-3 rounded-xl font-bold cursor-pointer hover:bg-primary/10"><Utensils size={18} className="text-primary" /> Monthly Bulk Meal Entry</DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
