@@ -59,7 +59,7 @@ export default function BulkMealEntryPage() {
     setUserRole(role)
     setAssignedBuildingId(bId)
 
-    // AUTO COLLECT DATE AND BUILDING FOR MANAGER
+    // AUTO COLLECT DATE - HYDRATION SAFE
     const now = new Date()
     const currentMonth = MONTHS[now.getMonth()]
     const currentYear = now.getFullYear().toString()
@@ -67,7 +67,7 @@ export default function BulkMealEntryPage() {
     setMealLogFilter({
       month: currentMonth,
       year: currentYear,
-      buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : "all"
+      buildingId: "all" // USER REQUEST: Not show auto filter building name
     })
   }, [])
 
@@ -254,13 +254,12 @@ export default function BulkMealEntryPage() {
           <div className="flex-1 min-w-[200px] space-y-1.5">
             <Label className="text-[10px] font-black uppercase ml-1">Filter Building</Label>
             <Select 
-              disabled={userRole === 'Building Manager'}
               value={mealLogFilter.buildingId} 
               onValueChange={v => setMealLogFilter({...mealLogFilter, buildingId: v})}
             >
               <SelectTrigger className="h-12 rounded-2xl bg-white shadow-sm border-none font-bold"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {userRole !== 'Building Manager' && <SelectItem value="all">All Buildings</SelectItem>}
+                <SelectItem value="all">All Buildings</SelectItem>
                 {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
