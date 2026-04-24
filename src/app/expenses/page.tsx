@@ -201,6 +201,7 @@ export default function ExpenseHistoryPage() {
             <tr>
               <th>Date</th>
               <th>Category</th>
+              <th>Building</th>
               <th>Spent By</th>
               <th>Description</th>
               <th className="text-right">Amount</th>
@@ -211,6 +212,7 @@ export default function ExpenseHistoryPage() {
               <tr key={e.id}>
                 <td>{formatCompactDate(e.expenseDate)}</td>
                 <td className="capitalize">{e.category}</td>
+                <td className="capitalize">{e.buildingName || "General"}</td>
                 <td className="font-bold">{e.expensePartyName || e.spentBy}</td>
                 <td className="italic text-[8pt]">{e.description || '-'}</td>
                 <td className="text-right font-bold">৳{e.amount?.toLocaleString()}</td>
@@ -219,7 +221,7 @@ export default function ExpenseHistoryPage() {
           </tbody>
           <tfoot>
             <tr className="total-row">
-              <td colSpan={4} className="text-right uppercase">Grand Total Expense</td>
+              <td colSpan={5} className="text-right uppercase">Grand Total Expense</td>
               <td className="text-right">৳{stats.total.toLocaleString()}</td>
             </tr>
           </tfoot>
@@ -249,6 +251,7 @@ export default function ExpenseHistoryPage() {
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Category</TableHead>
+                      <TableHead>Building</TableHead>
                       <TableHead>Spent By</TableHead>
                       <TableHead>Method</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
@@ -259,6 +262,7 @@ export default function ExpenseHistoryPage() {
                       <TableRow key={e.id} className="cursor-pointer hover:bg-slate-50/50" onClick={() => router.push(`/expenses/${e.id}`)}>
                         <TableCell className="text-xs font-bold text-slate-500">{formatCompactDate(e.expenseDate)}</TableCell>
                         <TableCell><Badge variant="secondary" className="capitalize text-[10px] font-bold">{e.category}</Badge></TableCell>
+                        <TableCell className="text-xs font-medium text-slate-600">{e.buildingName || "General"}</TableCell>
                         <TableCell className="font-bold text-slate-700">{e.expensePartyName || e.spentBy}</TableCell>
                         <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{e.method}</Badge></TableCell>
                         <TableCell className="text-right font-black text-destructive text-lg">৳{e.amount?.toLocaleString()}</TableCell>
@@ -296,7 +300,10 @@ export default function ExpenseHistoryPage() {
                     <Separator className="opacity-50" />
 
                     <div className="flex justify-between items-center">
-                      <p className="text-[10px] text-slate-500 italic line-clamp-1 flex-1 pr-4">{e.description || 'No description'}</p>
+                      <div className="space-y-1">
+                        <p className="text-[10px] text-slate-500 italic line-clamp-1 pr-4">{e.description || 'No description'}</p>
+                        <p className="text-[9px] font-bold text-primary uppercase">{e.buildingName || "General"}</p>
+                      </div>
                       <div className="text-right shrink-0">
                         <p className="text-[8px] font-bold text-muted-foreground uppercase leading-none mb-1">Cost</p>
                         <p className="text-xl font-black text-destructive">৳{e.amount?.toLocaleString()}</p>
