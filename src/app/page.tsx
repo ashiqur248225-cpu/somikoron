@@ -299,7 +299,7 @@ export default function DashboardPage() {
 
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b flex justify-between items-center">
-            <CardTitle className="text-lg font-bold flex items-center gap-2"><Wallet size={20} className="text-primary"/> Branch Fund</CardTitle>
+            <CardTitle className="text-lg font-bold flex items-center gap-2"><Wallet size={20} className="text-primary"/> Net Balance</CardTitle>
             <div className="text-right">
               <p className="text-[8px] font-bold text-muted-foreground uppercase">Net Balance</p>
               <p className="text-lg font-black text-primary">৳{(branchBalance?.totalHandCash || 0).toLocaleString()}</p>
