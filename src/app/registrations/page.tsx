@@ -195,6 +195,7 @@ export default function RegistrationsPage() {
     }
     setIsProcessing(true)
     try {
+      const batch = writeBatch(db); // Initialize Batch
       const studentId = doc(collection(db, "students")).id
       const isOld = selectedReg.type === 'old'
       const aptName = selectedRoom?.aptName || "General"
@@ -244,20 +245,23 @@ export default function RegistrationsPage() {
             method: approvalForm.method, receiver: approvalForm.receiver, month: currentMonth, year: currentYear,
             date: new Date().toISOString(), createdAt: new Date().toISOString()
           }
-          await setDoc(doc(db, "payments", pId), { ...initialPaymentRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
+          // Batch Payment Set
+          batch.set(doc(db, "payments", pId), { ...initialPaymentRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
 
           const balanceRef = doc(db, "netBalance", userBranch);
           const methodKeyMap: Record<string, string> = {
             'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
           };
           const methodKey = methodKeyMap[approvalForm.method] || 'totalCash';
-          await setDoc(balanceRef, { branchId: userBranch, [methodKey]: increment(totalNewReceived), totalHandCash: increment(totalNewReceived), lastUpdated: serverTimestamp() }, { merge: true });
+          // Batch Balance Update
+          batch.set(balanceRef, { branchId: userBranch, [methodKey]: increment(totalNewReceived), totalHandCash: increment(totalNewReceived), lastUpdated: serverTimestamp() }, { merge: true });
         }
       }
 
       const foodDueAmount = isOld ? Number(approvalForm.foodDueAmount || 0) : Number(approvalForm.initialFoodPayment);
 
-      await setDoc(doc(db, "students", studentId), {
+      // Batch Student Create
+      batch.set(doc(db, "students", studentId), {
         id: studentId, name: selectedReg.name, phone: selectedReg.phone, branch: userBranch,
         buildingId: approvalForm.buildingId, buildingName: selectedBuilding?.name,
         roomNumber: approvalForm.roomNumber, seatNumber: approvalForm.seatNumber, apartmentName: aptName,
@@ -299,42 +303,58 @@ export default function RegistrationsPage() {
         });
         const total = updatedApts.reduce((acc: number, apt: any) => acc + apt.rooms.reduce((rAcc: number, r: any) => rAcc + r.seats.length, 0), 0)
         const occupied = updatedApts.reduce((acc: number, apt: any) => acc + apt.rooms.reduce((rAcc: number, r: any) => rAcc + r.seats.filter((s: any) => s.status === 'occupied').length, 0), 0)
-        await updateDoc(doc(db, "buildings", approvalForm.buildingId), { apartmentsDetail: updatedApts, occupiedSeats: occupied, emptySeats: total - occupied, updatedAt: serverTimestamp() })
+        // Batch Building Update
+        batch.update(doc(db, "buildings", approvalForm.buildingId), { apartmentsDetail: updatedApts, occupiedSeats: occupied, emptySeats: total - occupied, updatedAt: serverTimestamp() })
       }
 
+      // Batch Delete Request
+      batch.delete(doc(db, "registrations", selectedReg.id))
+
+      // Execute all DB operations at once
+      await batch.commit()
+
+      // ASYNC Background SMS Task
       if (apiConfig?.apikey) {
-        const template = templatesData?.templates?.find((t: any) => t.id === 'admission')?.text || 
-                         "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আমাদের সাথে থাকার জন্য ধন্যবাদ।";
-        
-        const foodBalance = foodDueAmount > 0 ? foodDueAmount : 0;
-        const foodDue = foodDueAmount < 0 ? Math.abs(foodDueAmount) : 0;
-        const totalPayable = initialTotalDue + foodDue;
+        (async () => {
+          try {
+            const template = templatesData?.templates?.find((t: any) => t.id === 'admission')?.text || 
+                             "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আমাদের সাথে থাকার জন্য ধন্যবাদ।";
+            
+            const foodBalance = foodDueAmount > 0 ? foodDueAmount : 0;
+            const foodDue = foodDueAmount < 0 ? Math.abs(foodDueAmount) : 0;
+            const totalPayable = initialTotalDue + foodDue;
 
-        const msg = template
-          .replaceAll('[নাম]', selectedReg.name)
-          .replaceAll('[মাস]', currentMonth)
-          .replaceAll('[rent]', approvalForm.monthlyRent)
-          .replaceAll('[total_payable]', totalPayable.toString())
-          .replaceAll('[paid]', totalNewReceived.toString())
-          .replaceAll('[food_balance]', foodBalance.toString())
-          .replaceAll('[food_due]', foodDue.toString())
-          .replaceAll('[রুম]', approvalForm.roomNumber)
-          .replaceAll('[সিট]', approvalForm.seatNumber)
-          .replaceAll('[building]', selectedBuilding?.name || '')
-          .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
+            const msg = template
+              .replaceAll('[নাম]', selectedReg.name)
+              .replaceAll('[মাস]', currentMonth)
+              .replaceAll('[rent]', approvalForm.monthlyRent)
+              .replaceAll('[total_payable]', totalPayable.toString())
+              .replaceAll('[paid]', totalNewReceived.toString())
+              .replaceAll('[food_balance]', foodBalance.toString())
+              .replaceAll('[food_due]', foodDue.toString())
+              .replaceAll('[রুম]', approvalForm.roomNumber)
+              .replaceAll('[সিট]', approvalForm.seatNumber)
+              .replaceAll('[building]', selectedBuilding?.name || '')
+              .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
 
-        const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
-        const logId = doc(collection(db, "smsLogs")).id;
-        await setDoc(doc(db, "smsLogs", logId), { id: logId, to: selectedReg.phone, message: msg, branch: userBranch, sentBy: userName, status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp() });
+            const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
+            const logId = doc(collection(db, "smsLogs")).id;
+            await setDoc(doc(db, "smsLogs", logId), { id: logId, to: selectedReg.phone, message: msg, branch: userBranch, sentBy: userName, status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp() });
+          } catch (e) {
+            console.error("Background SMS Error:", e)
+          }
+        })();
       }
 
-      await deleteDoc(doc(db, "registrations", selectedReg.id))
       toast({ title: "ভর্তি সম্পন্ন হয়েছে!", description: `${selectedReg.name} এখন একজন সচল রেসিডেন্ট।` })
       setIsDetailOpen(false)
       setSelectedReg(null)
       router.refresh();
-    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) }
-    finally { setIsProcessing(false) }
+    } catch (e: any) { 
+      toast({ variant: "destructive", title: "Error", description: e.message }) 
+    } finally { 
+      setIsProcessing(false) 
+    }
   }
 
   const handleReject = async () => {

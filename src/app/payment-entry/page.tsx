@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, where, getDoc } from "firebase/firestore"
+import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, where, getDoc, writeBatch } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -115,9 +115,7 @@ export default function PaymentEntryPage() {
   const managementStaff = useMemo(() => {
     if (!staffList) return []
     return staffList.filter(s => {
-      // Super Admins are visible in all branches
       if (s.role === 'Admin') return true;
-      // Branch/Building Managers are only visible in their own branch
       return s.branch === userBranch && (s.staffType === 'management' || !s.staffType);
     })
   }, [staffList, userBranch])
@@ -128,7 +126,10 @@ export default function PaymentEntryPage() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
-  const mealConfigRef = useMemoFirebase(() => doc(db, "configs", "mealRate"), [db])
+  const mealConfigRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
+    [db, userBranch]
+  )
   const { data: mealConfig } = useDoc(mealConfigRef)
 
   const selectedStudent = useMemo(() => 
@@ -143,6 +144,7 @@ export default function PaymentEntryPage() {
     }
     setIsSubmitting(true)
     try {
+      const batch = writeBatch(db); // Use writeBatch for speed
       const seatPaid = Number(formData.seatAmount || 0)
       const foodPaid = Number(formData.foodAmount || 0)
       const extraAdvance = Number(formData.addAdvanceAmount || 0)
@@ -153,28 +155,14 @@ export default function PaymentEntryPage() {
       const needsApproval = isBM && (staffData?.canRequestIncome === true || !staffData?.canDirectEntryIncome)
 
       if (needsApproval) {
-        // Create Request
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), {
-          id: reqId,
-          requestType: "income",
-          amount: totalAmt,
-          seatAmount: seatPaid,
-          foodAmount: foodPaid,
-          advanceAmount: extraAdvance,
-          studentId: selectedStudent.id,
-          studentName: selectedStudent.name,
-          buildingId: selectedStudent.buildingId,
-          buildingName: selectedStudent.buildingName,
-          roomNumber: selectedStudent.roomNumber,
-          branch: userBranch,
-          month: formData.month,
-          year: formData.year,
-          method: formData.method,
-          receiver: formData.receiver,
-          description: formData.description,
-          requestedBy: staffId,
-          requestedByName: userName,
+          id: reqId, requestType: "income", amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid,
+          advanceAmount: extraAdvance, studentId: selectedStudent.id, studentName: selectedStudent.name,
+          buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName,
+          roomNumber: selectedStudent.roomNumber, branch: userBranch, month: formData.month,
+          year: formData.year, method: formData.method, receiver: formData.receiver,
+          description: formData.description, requestedBy: staffId, requestedByName: userName,
           createdAt: serverTimestamp()
         })
         toast({ title: "Request Sent", description: "Your income entry is pending for Admin approval." })
@@ -182,7 +170,7 @@ export default function PaymentEntryPage() {
         return
       }
 
-      // Direct Entry (Admin, Branch Manager, or BM with Direct Entry Permission)
+      // Direct Entry Optimization with Batch
       const pId = doc(collection(db, "payments")).id
       const pRecord = {
         id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
@@ -193,7 +181,7 @@ export default function PaymentEntryPage() {
         receiver: formData.receiver, description: formData.description, date: new Date().toISOString()
       }
 
-      await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
+      batch.set(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       
       const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
       const targetLabel = `${formData.month} ${formData.year}`;
@@ -232,7 +220,7 @@ export default function PaymentEntryPage() {
 
       const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
-      await updateDoc(doc(db, "students", selectedStudent.id), {
+      batch.update(doc(db, "students", selectedStudent.id), {
         paymentsHistory: arrayUnion(pRecord),
         advanceAmount: increment(extraAdvance),
         totalDue: finalTotalDue,
@@ -242,51 +230,54 @@ export default function PaymentEntryPage() {
         updatedAt: serverTimestamp()
       })
 
-      // Update Synchronized netBalance
       const balanceRef = doc(db, "netBalance", userBranch);
       const methodKeyMap: Record<string, string> = {
-        'cash': 'totalCash',
-        'bkash': 'totalBkash',
-        'nagad': 'totalNagad',
-        'bank': 'totalBank'
+        'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
       };
       const methodKey = methodKeyMap[formData.method] || 'totalCash';
 
-      await setDoc(balanceRef, {
+      batch.set(balanceRef, {
         branchId: userBranch,
         [methodKey]: increment(totalAmt),
         totalHandCash: increment(totalAmt),
         lastUpdated: serverTimestamp()
       }, { merge: true });
 
-      // SMS TRIGGER
+      // Execution of all DB tasks
+      await batch.commit()
+
+      // Non-blocking Background SMS
       if (apiConfig?.apikey) {
-        const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text || 
-                         "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[paid] টাকা। বর্তমান মোট বকেয়া: ৳[total_payable]। ধন্যবাদ। [Hostel Name]";
-        
-        const foodVal = Number(selectedStudent.foodDueAmount || 0) + foodPaid;
-        const foodBalance = foodVal > 0 ? foodVal : 0;
-        const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
-        const totalPayable = finalTotalDue + foodDue;
+        (async () => {
+          try {
+            const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text || 
+                             "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[paid] টাকা। বর্তমান মোট বকেয়া: ৳[total_payable]। ধন্যবাদ। [Hostel Name]";
+            
+            const foodVal = Number(selectedStudent.foodDueAmount || 0) + foodPaid;
+            const foodBalance = foodVal > 0 ? foodVal : 0;
+            const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
+            const totalPayable = finalTotalDue + foodDue;
+            const mealRate = Number(mealConfig?.rate || 0);
 
-        const msg = template
-          .replaceAll('[নাম]', selectedStudent.name)
-          .replaceAll('[মাস]', `${formData.month} ${formData.year}`)
-          .replaceAll('[total_payable]', totalPayable.toString())
-          .replaceAll('[paid]', totalAmt.toString())
-          .replaceAll('[food_balance]', foodBalance.toString())
-          .replaceAll('[food_due]', foodDue.toString())
-          .replaceAll('[রুম]', selectedStudent.roomNumber)
-          .replaceAll('[building]', selectedStudent.buildingName)
-          .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
+            const msg = template
+              .replaceAll('[নাম]', selectedStudent.name)
+              .replaceAll('[মাস]', `${formData.month} ${formData.year}`)
+              .replaceAll('[total_payable]', totalPayable.toString())
+              .replaceAll('[paid]', totalAmt.toString())
+              .replaceAll('[food_balance]', foodBalance.toString())
+              .replaceAll('[food_due]', foodDue.toString())
+              .replaceAll('[রুম]', selectedStudent.roomNumber)
+              .replaceAll('[building]', selectedStudent.buildingName)
+              .replaceAll('[meal_rate]', mealRate.toString())
+              .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
 
-        const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
-        
-        const logId = doc(collection(db, "smsLogs")).id;
-        await setDoc(doc(db, "smsLogs", logId), {
-          id: logId, to: selectedStudent.phone, message: msg, branch: userBranch, sentBy: userName,
-          status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp()
-        });
+            const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
+            const logId = doc(collection(db, "smsLogs")).id;
+            await setDoc(doc(db, "smsLogs", logId), { id: logId, to: selectedStudent.phone, message: msg, branch: userBranch, sentBy: userName, status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp() });
+          } catch (e) {
+            console.error("SMS processing error", e)
+          }
+        })();
       }
       
       toast({ title: "Payment Successful" })
@@ -314,7 +305,6 @@ export default function PaymentEntryPage() {
         </div>
       </div>
 
-      {/* Desktop Header */}
       <div className="hidden md:flex items-center gap-4">
         {userRole !== 'Building Manager' && (
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
