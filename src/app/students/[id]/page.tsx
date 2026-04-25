@@ -205,7 +205,6 @@ export default function StudentDetailsPage() {
 
   return (
     <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 relative">
-      {/* ... previous header section ... */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2"><ChevronLeft size={24} /></Button>
         <div className="flex-1 overflow-hidden"><h1 className="text-lg font-bold truncate">{student.name}</h1><p className="text-[10px] text-muted-foreground font-bold uppercase">{student.buildingName} • R-{student.roomNumber}</p></div>
@@ -233,7 +232,6 @@ export default function StudentDetailsPage() {
         </div>
       </div>
 
-      {/* Main Body */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="border-none shadow-sm rounded-3xl p-6 bg-white flex flex-col justify-between">
           <div><h2 className="text-xl font-bold text-slate-800 mb-6">Contact & Location</h2>
@@ -247,7 +245,6 @@ export default function StudentDetailsPage() {
           <Button variant="secondary" className="w-full mt-8 rounded-xl font-bold gap-2 text-xs uppercase" onClick={() => setIsDetailsDialogOpen(true)}><Info size={14} /> View All Information</Button>
         </Card>
         
-        {/* ... financials summary grid omitted for brevity ... */}
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card className="p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 bg-white">
             <div className="p-3 rounded-xl shrink-0 bg-blue-50 text-blue-600"><ShieldCheck size={24}/></div>
@@ -268,7 +265,6 @@ export default function StudentDetailsPage() {
         </div>
       </div>
 
-      {/* Details Dialog */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Info className="text-primary" /> Full Resident Profile</DialogTitle><DialogDescription>Comprehensive records for {student.name}</DialogDescription></DialogHeader>
@@ -291,13 +287,12 @@ export default function StudentDetailsPage() {
                 {student.occupation === 'student' ? (
                   <>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">School</Label><p className="font-bold text-slate-700">{student.school || 'N/A'}</p></div>
-                      <div className="space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">College</Label><p className="font-bold text-slate-700">{student.college || 'N/A'}</p></div>
+                      <div className="space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">School</Label><p className="font-bold text-slate-700">{student.school || 'N/A'} ({student.schoolSession || 'N/A'})</p></div>
+                      <div className="space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">College</Label><p className="font-bold text-slate-700">{student.college || 'N/A'} ({student.collegeSession || 'N/A'})</p></div>
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">University</Label><p className="font-bold text-slate-700">{student.university || 'N/A'}</p></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">University</Label><p className="font-bold text-slate-700">{student.university || 'N/A'} ({student.universitySession || 'N/A'})</p></div>
                       <div className="space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">Department</Label><p className="font-bold text-slate-700">{student.department || 'N/A'}</p></div>
-                      <div className="space-y-1"><Label className="text-[10px] font-bold text-muted-foreground uppercase">Session</Label><p className="font-bold text-slate-700">{student.session || 'N/A'}</p></div>
                     </div>
                   </>
                 ) : (
@@ -320,7 +315,6 @@ export default function StudentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Profile Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Resident Profile</DialogTitle><DialogDescription>Update contact, location, or personal details.</DialogDescription></DialogHeader>
@@ -344,12 +338,16 @@ export default function StudentDetailsPage() {
                     <>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1"><Label className="text-xs">School</Label><Input value={editForm.school} onChange={e => setEditForm({...editForm, school: e.target.value})} className="bg-white" /></div>
+                        <div className="space-y-1"><Label className="text-xs">School Session</Label><Input value={editForm.schoolSession} onChange={e => setEditForm({...editForm, schoolSession: e.target.value})} className="bg-white" /></div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1"><Label className="text-xs">College</Label><Input value={editForm.college} onChange={e => setEditForm({...editForm, college: e.target.value})} className="bg-white" /></div>
+                        <div className="space-y-1"><Label className="text-xs">College Session</Label><Input value={editForm.collegeSession} onChange={e => setEditForm({...editForm, collegeSession: e.target.value})} className="bg-white" /></div>
                       </div>
                       <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-1"><Label className="text-xs">University</Label><Input value={editForm.university} onChange={e => setEditForm({...editForm, university: e.target.value})} className="bg-white" /></div>
+                        <div className="space-y-1"><Label className="text-xs">Univ. Session</Label><Input value={editForm.universitySession} onChange={e => setEditForm({...editForm, universitySession: e.target.value})} className="bg-white" /></div>
                         <div className="space-y-1"><Label className="text-xs">Department</Label><Input value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} className="bg-white" /></div>
-                        <div className="space-y-1"><Label className="text-xs">Session</Label><Input value={editForm.session} onChange={e => setEditForm({...editForm, session: e.target.value})} className="bg-white" /></div>
                       </div>
                     </>
                   ) : (

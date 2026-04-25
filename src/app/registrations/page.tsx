@@ -98,13 +98,11 @@ export default function RegistrationsPage() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
-  // FILTERED STAFF FOR RECEIVER: Only Management
   const managementStaff = useMemo(() => {
     if (!staffList) return []
     return staffList.filter(s => s.staffType === 'management' || !s.staffType)
   }, [staffList])
 
-  // Approval Form State
   const [approvalForm, setApprovalForm] = useState({
     monthlyRent: "",
     serviceCharge: "0",
@@ -123,7 +121,6 @@ export default function RegistrationsPage() {
     duesBreakdown: [] as DueEntry[],
   })
 
-  // Set default form values when a registration is selected
   useEffect(() => {
     if (isDetailOpen && selectedReg && buildings) {
       const targetB = buildings.find(b => b.name === selectedReg.buildingName || b.id === selectedReg.buildingId)
@@ -249,7 +246,6 @@ export default function RegistrationsPage() {
           }
           await setDoc(doc(db, "payments", pId), { ...initialPaymentRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
 
-          // Update netBalance
           const balanceRef = doc(db, "netBalance", userBranch);
           const methodKeyMap: Record<string, string> = {
             'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
@@ -274,10 +270,10 @@ export default function RegistrationsPage() {
         fatherName: selectedReg.fatherName || "", motherName: selectedReg.motherName || "",
         dob: selectedReg.dob || "", bloodGroup: selectedReg.bloodGroup || "",
         address: selectedReg.village || "", occupation: selectedReg.occupation || "",
-        school: selectedReg.school || "", college: selectedReg.college || "",
-        university: selectedReg.university || "", department: selectedReg.department || "",
-        session: selectedReg.session || "", companyName: selectedReg.companyName || "",
-        designation: selectedReg.designation || "",
+        school: selectedReg.school || "", schoolSession: selectedReg.schoolSession || "",
+        college: selectedReg.college || "", collegeSession: selectedReg.collegeSession || "",
+        university: selectedReg.university || "", universitySession: selectedReg.universitySession || "",
+        department: selectedReg.department || "",
         parentPhone: selectedReg.parentPhone || "", guardianPhone: selectedReg.guardianPhone || "",
         paymentsHistory: initialPaymentRecord ? [initialPaymentRecord] : [],
         mealsHistory: []
@@ -306,7 +302,6 @@ export default function RegistrationsPage() {
         await updateDoc(doc(db, "buildings", approvalForm.buildingId), { apartmentsDetail: updatedApts, occupiedSeats: occupied, emptySeats: total - occupied, updatedAt: serverTimestamp() })
       }
 
-      // SMS Trigger
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'admission')?.text || 
                          "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আমাদের সাথে থাকার জন্য ধন্যবাদ।";
@@ -496,12 +491,19 @@ export default function RegistrationsPage() {
                       <p className="font-black text-slate-800">{selectedReg?.name}</p>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-muted-foreground uppercase">Phone Number</Label>
-                      <p className="font-bold text-slate-700">{selectedReg?.phone}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-muted-foreground uppercase">Address (Village)</Label>
-                      <p className="text-sm font-medium text-slate-600">{selectedReg?.village}, {selectedReg?.upazila}</p>
+                      <Label className="text-[10px] font-bold text-muted-foreground uppercase">Education Summary</Label>
+                      <div className="text-xs space-y-1 text-slate-600 font-medium">
+                        {selectedReg?.occupation === 'student' ? (
+                          <>
+                            <p>School: {selectedReg?.school} ({selectedReg?.schoolSession})</p>
+                            <p>College: {selectedReg?.college} ({selectedReg?.collegeSession})</p>
+                            {selectedReg?.university && <p>University: {selectedReg?.university} ({selectedReg?.universitySession})</p>}
+                            <p>Dept: {selectedReg?.department}</p>
+                          </>
+                        ) : (
+                          <p>Work: {selectedReg?.companyName} ({selectedReg?.designation || 'N/A'})</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

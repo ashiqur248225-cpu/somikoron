@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, addDoc, serverTimestamp, query, where, doc } from "firebase/firestore"
-import { UserPlus, CheckCircle2, Building2, MapPin, GraduationCap, Loader2, AlertTriangle, UserCircle, ScrollText, ShieldCheck, Briefcase } from "lucide-react"
+import { UserPlus, CheckCircle2, Building2, MapPin, GraduationCap, Loader2, AlertTriangle, UserCircle, ScrollText, ShieldCheck, Briefcase, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Accordion,
@@ -36,7 +36,6 @@ function RegistrationFormContent() {
   const [isSuccess, setIsSuccess] = useState(false)
   const [agreedToRules, setAgreedToRules] = useState(false)
 
-  // Get Branch and Type from URL via hook
   const urlBranch = searchParams.get('branch') || ""
   const urlType = searchParams.get('type') || "new"
 
@@ -66,10 +65,12 @@ function RegistrationFormContent() {
     postOffice: "",
     village: "",
     school: "",
+    schoolSession: "",
     college: "",
+    collegeSession: "",
     university: "",
+    universitySession: "",
     department: "",
-    session: "",
     companyName: "",
     designation: "",
     buildingId: "",
@@ -77,7 +78,6 @@ function RegistrationFormContent() {
     seatNumber: ""
   })
 
-  // Sync type if URL changes
   useEffect(() => {
     if (urlType) setFormData(prev => ({ ...prev, type: urlType }))
   }, [urlType])
@@ -124,10 +124,9 @@ function RegistrationFormContent() {
       }
     }
 
-    // Additional conditional requirements
     if (formData.occupation === 'student') {
-      if (!formData.school || !formData.college || !formData.department || !formData.session) {
-        toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "শিক্ষার্থীদের জন্য স্কুল, কলেজ, ডিপার্টমেন্ট এবং সেশন প্রদান বাধ্যতামূলক।" })
+      if (!formData.school || !formData.schoolSession || !formData.college || !formData.collegeSession || !formData.department) {
+        toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "শিক্ষার্থীদের জন্য স্কুল, কলেজ এবং সংশ্লিষ্ট সেশন প্রদান বাধ্যতামূলক।" })
         return
       }
     } else {
@@ -342,22 +341,32 @@ function RegistrationFormContent() {
                           <Input required value={formData.school} onChange={e => setFormData({...formData, school: e.target.value})} placeholder="স্কুলের নাম লিখুন" className="border-2 border-slate-200 h-11" />
                         </div>
                         <div className="space-y-2">
+                          <Label>School Session</Label>
+                          <Input required value={formData.schoolSession} onChange={e => setFormData({...formData, schoolSession: e.target.value})} placeholder="যেমন: 2018-19" className="border-2 border-slate-200 h-11" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
                           <Label>College Name</Label>
                           <Input required value={formData.college} onChange={e => setFormData({...formData, college: e.target.value})} placeholder="কলেজের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>College Session</Label>
+                          <Input required value={formData.collegeSession} onChange={e => setFormData({...formData, collegeSession: e.target.value})} placeholder="যেমন: 2020-21" className="border-2 border-slate-200 h-11" />
                         </div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
                           <Label>University Name (Optional)</Label>
-                          <Input value={formData.university} onChange={e => setFormData({...formData, university: e.target.value})} placeholder="বিশ্ববিদ্যালয়ের নাম (যদি থাকে)" className="border-2 border-slate-200 h-11" />
+                          <Input value={formData.university} onChange={e => setFormData({...formData, university: e.target.value})} placeholder="বিশ্ববিদ্যালয় (যদি থাকে)" className="border-2 border-slate-200 h-11" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Univ. Session (Optional)</Label>
+                          <Input value={formData.universitySession} onChange={e => setFormData({...formData, universitySession: e.target.value})} placeholder="যেমন: 2023-24" className="border-2 border-slate-200 h-11" />
                         </div>
                         <div className="space-y-2">
                           <Label>Department</Label>
-                          <Input required value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="যেমন: Science, Arts, BBA" className="border-2 border-slate-200 h-11" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Session</Label>
-                          <Input required value={formData.session} onChange={e => setFormData({...formData, session: e.target.value})} placeholder="যেমন: 2023-24" className="border-2 border-slate-200 h-11" />
+                          <Input required value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="Science, Arts, BBA" className="border-2 border-slate-200 h-11" />
                         </div>
                       </div>
                     </>
