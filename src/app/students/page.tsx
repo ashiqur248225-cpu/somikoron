@@ -125,7 +125,6 @@ export default function StudentsPage() {
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2"><SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mr-2 h-4 md:hidden" /><div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Students</h1></div></div>
         <div className="ml-auto flex items-center gap-3">
-          {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-3">
             <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={() => setIsFilterDialogOpen(true)}>
               <Filter size={16} /> Filter
@@ -135,7 +134,6 @@ export default function StudentsPage() {
             </Button>
           </div>
 
-          {/* Mobile Actions (3-dot menu) */}
           <div className="md:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -237,27 +235,28 @@ export default function StudentsPage() {
                       <TableRow 
                         key={s.id} 
                         className="cursor-pointer hover:bg-slate-50/50" 
+                        onClick={() => router.push(`/students/${s.id}`)}
                       >
-                        <TableCell onClick={() => router.push(`/students/${s.id}`)}>
+                        <TableCell>
                           <div className="font-bold text-slate-800">{s.name}</div>
                           <div className="text-[10px] text-muted-foreground flex items-center gap-1"><Smartphone size={10}/> {s.phone}</div>
                         </TableCell>
-                        <TableCell onClick={() => router.push(`/students/${s.id}`)}>
+                        <TableCell>
                           <div className="text-xs font-medium text-slate-600">{s.buildingName}</div>
                           <div className="text-[10px] text-muted-foreground uppercase font-bold">Room {s.roomNumber}</div>
                         </TableCell>
-                        <TableCell className="font-black text-slate-700" onClick={() => router.push(`/students/${s.id}`)}>৳{s.monthlyRent?.toLocaleString()}</TableCell>
-                        <TableCell onClick={() => router.push(`/students/${s.id}`)}>
+                        <TableCell className="font-black text-slate-700">৳{s.monthlyRent?.toLocaleString()}</TableCell>
+                        <TableCell>
                           <Badge variant="outline" className={cn("text-[9px] uppercase font-bold", s.paymentSystem === 'package' ? "text-primary border-primary/20" : "text-orange-600 border-orange-200")}>
                             {s.paymentSystem}
                           </Badge>
                         </TableCell>
-                        <TableCell onClick={() => router.push(`/students/${s.id}`)}>
+                        <TableCell>
                           <Badge className={cn("text-[9px] font-black uppercase rounded-full", s.isActive ? "bg-success" : "bg-destructive")}>
                             {s.isActive ? "Active" : "Inactive"}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8 text-primary">
@@ -293,11 +292,12 @@ export default function StudentsPage() {
               {processedStudents.map((s: any) => (
                 <Card 
                   key={s.id} 
-                  className="border-none shadow-sm rounded-2xl overflow-hidden bg-white group active:scale-[0.98] transition-transform"
+                  className="border-none shadow-sm rounded-2xl overflow-hidden bg-white group active:scale-[0.98] transition-transform cursor-pointer"
+                  onClick={() => router.push(`/students/${s.id}`)}
                 >
                   <CardContent className="p-4 space-y-4">
                     <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3" onClick={() => router.push(`/students/${s.id}`)}>
+                      <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black uppercase text-xs">
                           {s.name.substring(0, 2)}
                         </div>
@@ -306,7 +306,7 @@ export default function StudentsPage() {
                           <p className="text-[10px] text-muted-foreground font-bold flex items-center gap-1 mt-0.5"><Smartphone size={10}/> {s.phone}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         <Badge className={cn("text-[8px] font-black uppercase rounded-full", s.isActive ? "bg-success" : "bg-destructive")}>
                           {s.isActive ? "Active" : "Inactive"}
                         </Badge>
@@ -336,7 +336,7 @@ export default function StudentsPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 bg-secondary/30 p-3 rounded-xl border border-secondary" onClick={() => router.push(`/students/${s.id}`)}>
+                    <div className="grid grid-cols-2 gap-3 bg-secondary/30 p-3 rounded-xl border border-secondary">
                       <div className="space-y-1">
                         <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Location</p>
                         <div className="flex items-center gap-1 text-[10px] font-black text-slate-700">
@@ -349,7 +349,7 @@ export default function StudentsPage() {
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center pt-1" onClick={() => router.push(`/students/${s.id}`)}>
+                    <div className="flex justify-between items-center pt-1">
                       <Badge variant="secondary" className="text-[8px] font-black uppercase bg-primary/5 text-primary border-none">
                         {s.paymentSystem} PLAN
                       </Badge>

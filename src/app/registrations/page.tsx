@@ -411,7 +411,11 @@ export default function RegistrationsPage() {
                 </TableHeader>
                 <TableBody>
                   {registrations?.map((reg) => (
-                    <TableRow key={reg.id}>
+                    <TableRow 
+                      key={reg.id} 
+                      className="cursor-pointer hover:bg-slate-50/50"
+                      onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}
+                    >
                       <TableCell>
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-800">{reg.name}</span>
@@ -435,7 +439,7 @@ export default function RegistrationsPage() {
                           {reg.occupation}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <Button variant="outline" size="sm" className="gap-2 font-bold" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}>
                           <Eye size={14} /> Verify & Approve
                         </Button>
@@ -452,7 +456,11 @@ export default function RegistrationsPage() {
 
           <div className="md:hidden space-y-4">
             {registrations?.map((reg) => (
-              <Card key={reg.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}>
+              <Card 
+                key={reg.id} 
+                className="border-none shadow-sm rounded-2xl overflow-hidden bg-white cursor-pointer active:scale-[0.98] transition-transform" 
+                onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}
+              >
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-3">

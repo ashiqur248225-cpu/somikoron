@@ -266,7 +266,11 @@ export default function ReceiptsHistoryPage() {
               <TableHeader className="bg-slate-50"><TableRow><TableHead>Receipt No</TableHead><TableHead>Date</TableHead><TableHead>Resident</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Amount</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {filteredReceipts.map((p) => (
-                  <TableRow key={p.id} className="hover:bg-slate-50/50 transition-colors">
+                  <TableRow 
+                    key={p.id} 
+                    className="hover:bg-slate-50/50 transition-colors cursor-pointer"
+                    onClick={() => router.push(`/receipts/${p.id}`)}
+                  >
                     <TableCell className="font-black text-primary text-xs">RCPT-{p.id?.substring(0, 8).toUpperCase()}</TableCell>
                     <TableCell className="text-xs text-muted-foreground font-medium">{formatCompactDate(p.date)}</TableCell>
                     <TableCell>
@@ -274,7 +278,9 @@ export default function ReceiptsHistoryPage() {
                     </TableCell>
                     <TableCell><Badge variant="outline" className="uppercase text-[9px] font-black">{p.method}</Badge></TableCell>
                     <TableCell className="text-right font-black text-slate-800 text-lg">৳{p.amount?.toLocaleString()}</TableCell>
-                    <TableCell className="text-right"><Button variant="ghost" size="icon" className="text-primary" onClick={() => router.push(`/receipts/${p.id}`)}><Printer size={18} /></Button></TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="icon" className="text-primary" onClick={() => router.push(`/receipts/${p.id}`)}><Printer size={18} /></Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -282,7 +288,11 @@ export default function ReceiptsHistoryPage() {
           </Card>
           <div className="md:hidden space-y-4">
             {filteredReceipts.map((p) => (
-              <Card key={p.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/receipts/${p.id}`)}>
+              <Card 
+                key={p.id} 
+                className="border-none shadow-sm rounded-2xl overflow-hidden bg-white cursor-pointer active:scale-[0.98] transition-transform" 
+                onClick={() => router.push(`/receipts/${p.id}`)}
+              >
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start"><Badge variant="outline" className="text-[10px] font-black text-primary">RCPT-{p.id?.substring(0, 8).toUpperCase()}</Badge><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCompactDate(p.date)}</p></div>
                   <div className="flex justify-between items-end"><div><h3 className="font-black text-slate-800 text-lg">{p.studentName}</h3><p className="text-[10px] text-slate-400 uppercase">{p.buildingName} • Room {p.roomNumber}</p></div><div className="text-right"><p className="text-xl font-black text-success">৳{p.amount?.toLocaleString()}</p></div></div>

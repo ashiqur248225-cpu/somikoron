@@ -186,7 +186,11 @@ export default function ManagerRequestsPage() {
                 </TableHeader>
                 <TableBody>
                   {requests?.map((req) => (
-                    <TableRow key={req.id}>
+                    <TableRow 
+                      key={req.id} 
+                      className="cursor-pointer hover:bg-slate-50/50"
+                      onClick={() => { setSelectedReq(req); setIsDetailOpen(true); }}
+                    >
                       <TableCell>
                         <Badge variant="outline" className={req.requestType === 'income' ? 'border-success text-success' : 'border-destructive text-destructive'}>
                           {req.requestType === 'income' ? <ArrowUpRight size={12} className="mr-1"/> : <ArrowDownRight size={12} className="mr-1"/>}
@@ -207,7 +211,7 @@ export default function ManagerRequestsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-black">৳{req.amount?.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <Button variant="outline" size="sm" onClick={() => { setSelectedReq(req); setIsDetailOpen(true); }}>
                           <Eye size={14} className="mr-1" /> View
                         </Button>
@@ -222,7 +226,11 @@ export default function ManagerRequestsPage() {
           {/* Cards for Mobile */}
           <div className="md:hidden space-y-4">
             {requests?.map((req) => (
-              <Card key={req.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+              <Card 
+                key={req.id} 
+                className="border-none shadow-sm rounded-2xl overflow-hidden bg-white cursor-pointer active:scale-[0.98] transition-transform"
+                onClick={() => { setSelectedReq(req); setIsDetailOpen(true); }}
+              >
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start">
                     <Badge variant="outline" className={req.requestType === 'income' ? 'bg-success/5 border-success/20 text-success' : 'bg-destructive/5 border-destructive/20 text-destructive'}>

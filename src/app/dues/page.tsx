@@ -194,16 +194,33 @@ export default function DuesPage() {
               <CardContent className="p-0">
                 <Table>
                   <TableHeader className="bg-secondary/30"><TableRow><TableHead>Resident</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Total Due</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
-                  <TableBody>{processedData.map((s: any) => (<TableRow key={s.id}><TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone}</span></TableCell><TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell><TableCell className="text-right font-black text-destructive text-lg">৳{s.displayTotalDue.toLocaleString()}</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button></TableCell></TableRow>))}</TableBody>
+                  <TableBody>{processedData.map((s: any) => (
+                    <TableRow 
+                      key={s.id} 
+                      className="cursor-pointer hover:bg-slate-50/50" 
+                      onClick={() => router.push(`/students/${s.id}`)}
+                    >
+                      <TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone}</span></TableCell>
+                      <TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell>
+                      <TableCell className="text-right font-black text-destructive text-lg">৳{s.displayTotalDue.toLocaleString()}</TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}</TableBody>
                 </Table>
               </CardContent>
             </Card>
             <div className="md:hidden space-y-4">
               {processedData.map((s: any) => (
-                <Card key={s.id} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-4">
+                <Card 
+                  key={s.id} 
+                  className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-4 cursor-pointer active:scale-[0.98] transition-transform"
+                  onClick={() => router.push(`/students/${s.id}`)}
+                >
                   <div className="flex justify-between items-start"><div><h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3><p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p></div><Badge variant="destructive" className="text-[10px]">Due</Badge></div>
                   <div className="bg-secondary/30 p-3 rounded-xl flex justify-between items-center"><span className="text-[10px] font-bold text-destructive uppercase">Outstanding</span><span className="text-xl font-black text-destructive">৳{s.displayTotalDue.toLocaleString()}</span></div>
-                  <Button variant="outline" className="w-full h-10 rounded-xl font-bold" onClick={() => router.push(`/students/${s.id}`)}><Eye size={14} className="mr-2"/> Profile</Button>
+                  <Button variant="outline" className="w-full h-10 rounded-xl font-bold" onClick={(e) => { e.stopPropagation(); router.push(`/students/${s.id}`); }}><Eye size={14} className="mr-2"/> Profile</Button>
                 </Card>
               ))}
             </div>
