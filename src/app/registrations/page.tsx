@@ -270,8 +270,8 @@ export default function RegistrationsPage() {
         fatherName: selectedReg.fatherName || "", motherName: selectedReg.motherName || "",
         dob: selectedReg.dob || "", bloodGroup: selectedReg.bloodGroup || "",
         address: selectedReg.village || "", occupation: selectedReg.occupation || "",
-        school: selectedReg.school || "", schoolSession: selectedReg.schoolSession || "",
-        college: selectedReg.college || "", collegeSession: selectedReg.collegeSession || "",
+        school: selectedReg.school || "", schoolSession: selectedReg.schoolSession || "", schoolGroup: selectedReg.schoolGroup || "",
+        college: selectedReg.college || "", collegeSession: selectedReg.collegeSession || "", collegeGroup: selectedReg.collegeGroup || "",
         university: selectedReg.university || "", universitySession: selectedReg.universitySession || "",
         department: selectedReg.department || "",
         parentPhone: selectedReg.parentPhone || "", guardianPhone: selectedReg.guardianPhone || "",
@@ -492,13 +492,23 @@ export default function RegistrationsPage() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] font-bold text-muted-foreground uppercase">Education Summary</Label>
-                      <div className="text-xs space-y-1 text-slate-600 font-medium">
+                      <div className="text-xs space-y-2 text-slate-600 font-medium">
                         {selectedReg?.occupation === 'student' ? (
                           <>
-                            <p>School: {selectedReg?.school} ({selectedReg?.schoolSession})</p>
-                            <p>College: {selectedReg?.college} ({selectedReg?.collegeSession})</p>
-                            {selectedReg?.university && <p>University: {selectedReg?.university} ({selectedReg?.universitySession})</p>}
-                            <p>Dept: {selectedReg?.department}</p>
+                            <div className="p-2 bg-white rounded-lg border border-slate-200">
+                              <p className="font-bold">School: {selectedReg?.school}</p>
+                              <p className="text-[10px] uppercase text-muted-foreground">Session: {selectedReg?.schoolSession} | Group: {selectedReg?.schoolGroup}</p>
+                            </div>
+                            <div className="p-2 bg-white rounded-lg border border-slate-200">
+                              <p className="font-bold">College: {selectedReg?.college}</p>
+                              <p className="text-[10px] uppercase text-muted-foreground">Session: {selectedReg?.collegeSession} | Group: {selectedReg?.collegeGroup}</p>
+                            </div>
+                            {selectedReg?.university && (
+                              <div className="p-2 bg-white rounded-lg border border-slate-200">
+                                <p className="font-bold">University: {selectedReg?.university}</p>
+                                <p className="text-[10px] uppercase text-muted-foreground">Session: {selectedReg?.universitySession} | Dept: {selectedReg?.department}</p>
+                              </div>
+                            )}
                           </>
                         ) : (
                           <p>Work: {selectedReg?.companyName} ({selectedReg?.designation || 'N/A'})</p>

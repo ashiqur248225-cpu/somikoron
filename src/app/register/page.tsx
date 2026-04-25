@@ -26,6 +26,7 @@ const OCCUPATIONS = [
   { id: "student", label: "Student" },
   { id: "job_holder", label: "Job Holder" }
 ]
+const GROUPS = ["Science", "B.Studies", "Humanities"]
 
 function RegistrationFormContent() {
   const { toast } = useToast()
@@ -66,8 +67,10 @@ function RegistrationFormContent() {
     village: "",
     school: "",
     schoolSession: "",
+    schoolGroup: "Science",
     college: "",
     collegeSession: "",
+    collegeGroup: "Science",
     university: "",
     universitySession: "",
     department: "",
@@ -125,8 +128,8 @@ function RegistrationFormContent() {
     }
 
     if (formData.occupation === 'student') {
-      if (!formData.school || !formData.schoolSession || !formData.college || !formData.collegeSession || !formData.department) {
-        toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "শিক্ষার্থীদের জন্য স্কুল, কলেজ এবং সংশ্লিষ্ট সেশন প্রদান বাধ্যতামূলক।" })
+      if (!formData.school || !formData.schoolSession || !formData.college || !formData.collegeSession) {
+        toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "শিক্ষার্থীদের জন্য স্কুল ও কলেজের নাম এবং সেশন প্রদান বাধ্যতামূলক।" })
         return
       }
     } else {
@@ -335,38 +338,66 @@ function RegistrationFormContent() {
                 <CardContent className="space-y-6">
                   {formData.occupation === 'student' ? (
                     <>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>School Name</Label>
-                          <Input required value={formData.school} onChange={e => setFormData({...formData, school: e.target.value})} placeholder="স্কুলের নাম লিখুন" className="border-2 border-slate-200 h-11" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>School Session</Label>
-                          <Input required value={formData.schoolSession} onChange={e => setFormData({...formData, schoolSession: e.target.value})} placeholder="যেমন: 2018-19" className="border-2 border-slate-200 h-11" />
+                      {/* School Details */}
+                      <div className="p-4 border-2 border-slate-100 rounded-2xl space-y-4">
+                        <Label className="text-xs font-bold uppercase text-primary">School Information</Label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label>School Name</Label>
+                            <Input required value={formData.school} onChange={e => setFormData({...formData, school: e.target.value})} placeholder="স্কুলের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>School Session</Label>
+                            <Input required value={formData.schoolSession} onChange={e => setFormData({...formData, schoolSession: e.target.value})} placeholder="যেমন: 2018-19" className="border-2 border-slate-200 h-11" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>School Group</Label>
+                            <Select value={formData.schoolGroup} onValueChange={val => setFormData({...formData, schoolGroup: val})}>
+                              <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue /></SelectTrigger>
+                              <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>College Name</Label>
-                          <Input required value={formData.college} onChange={e => setFormData({...formData, college: e.target.value})} placeholder="কলেজের নাম লিখুন" className="border-2 border-slate-200 h-11" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>College Session</Label>
-                          <Input required value={formData.collegeSession} onChange={e => setFormData({...formData, collegeSession: e.target.value})} placeholder="যেমন: 2020-21" className="border-2 border-slate-200 h-11" />
+
+                      {/* College Details */}
+                      <div className="p-4 border-2 border-slate-100 rounded-2xl space-y-4">
+                        <Label className="text-xs font-bold uppercase text-primary">College Information</Label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label>College Name</Label>
+                            <Input required value={formData.college} onChange={e => setFormData({...formData, college: e.target.value})} placeholder="কলেজের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>College Session</Label>
+                            <Input required value={formData.collegeSession} onChange={e => setFormData({...formData, collegeSession: e.target.value})} placeholder="যেমন: 2020-21" className="border-2 border-slate-200 h-11" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>College Group</Label>
+                            <Select value={formData.collegeGroup} onValueChange={val => setFormData({...formData, collegeGroup: val})}>
+                              <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue /></SelectTrigger>
+                              <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label>University Name (Optional)</Label>
-                          <Input value={formData.university} onChange={e => setFormData({...formData, university: e.target.value})} placeholder="বিশ্ববিদ্যালয় (যদি থাকে)" className="border-2 border-slate-200 h-11" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Univ. Session (Optional)</Label>
-                          <Input value={formData.universitySession} onChange={e => setFormData({...formData, universitySession: e.target.value})} placeholder="যেমন: 2023-24" className="border-2 border-slate-200 h-11" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Department</Label>
-                          <Input required value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="Science, Arts, BBA" className="border-2 border-slate-200 h-11" />
+
+                      {/* University Details */}
+                      <div className="p-4 border-2 border-slate-100 rounded-2xl space-y-4">
+                        <Label className="text-xs font-bold uppercase text-primary">University Information (Optional)</Label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label>University Name</Label>
+                            <Input value={formData.university} onChange={e => setFormData({...formData, university: e.target.value})} placeholder="বিশ্ববিদ্যালয় নাম" className="border-2 border-slate-200 h-11" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Univ. Session</Label>
+                            <Input value={formData.universitySession} onChange={e => setFormData({...formData, universitySession: e.target.value})} placeholder="যেমন: 2023-24" className="border-2 border-slate-200 h-11" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Department</Label>
+                            <Input value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="বিভাগের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                          </div>
                         </div>
                       </div>
                     </>
