@@ -33,6 +33,7 @@ import {
   SidebarMenuItem,
   SidebarGroup,
   SidebarFooter,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -51,6 +52,7 @@ export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const db = useFirestore()
+  const { setOpenMobile, isMobile } = useSidebar()
   
   const [userRole, setUserRole] = React.useState("")
   const [userName, setUserName] = React.useState("")
@@ -143,6 +145,12 @@ export function AppSidebar() {
     window.location.reload()
   }
 
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
+
   return (
     <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader className="border-b px-4 py-4">
@@ -159,6 +167,7 @@ export function AppSidebar() {
                   asChild 
                   isActive={pathname === item.url}
                   tooltip={item.title}
+                  onClick={handleLinkClick}
                 >
                   <Link href={item.url} className="flex items-center w-full">
                     <item.icon />
