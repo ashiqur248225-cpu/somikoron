@@ -111,19 +111,15 @@ export default function StudentDetailsPage() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
-  // FILTERED STAFF FOR RECEIVER: Admins + Branch Management
   const managementStaff = useMemo(() => {
     if (!staffList) return []
     const userBranch = student?.branch || localStorage.getItem("user_branch") || "";
     return staffList.filter(s => {
-      // Super Admins are visible in all branches
       if (s.role === 'Admin') return true;
-      // Management staff from the student's specific branch
       return s.branch === userBranch && (s.staffType === 'management' || !s.staffType);
     })
   }, [staffList, student?.branch])
 
-  // BRANCH AWARE MEAL RATE
   const mealConfigRef = useMemoFirebase(() => 
     student?.branch ? doc(db, "configs", `mealRate_${student.branch}`) : null, 
     [db, student?.branch]
@@ -142,7 +138,6 @@ export default function StudentDetailsPage() {
     description: ""
   })
 
-  // AUTO POPULATE RECEIVER IN PAYMENT DIALOG
   useEffect(() => {
     if (isPaymentDialogOpen && userName) {
       setPaymentData(prev => ({ ...prev, receiver: userName }))
@@ -213,17 +208,12 @@ export default function StudentDetailsPage() {
     return { rentDue, foodBalance, totalDue, totalReceived, advanceRemaining: student.advanceAmount || 0, dueBreakdownList }
   }, [student])
 
-  // NEW SETTLEMENT CALCULATION LOGIC
   const settlementCalculation = useMemo(() => {
     if (!stats || !student) return null;
-    
     const securityAdvance = Number(student.advanceAmount || 0);
     const unpaidRent = stats.rentDue;
     const foodDueAmount = student.paymentSystem === 'non-package' ? Number(student.foodDueAmount || 0) : 0;
-    
-    // Formula: (Security Advance) + (Food Balance/Debt) - (Unpaid Rent)
     const netResult = securityAdvance + foodDueAmount - unpaidRent;
-    
     return { 
       pendingRent: unpaidRent, 
       foodDue: foodDueAmount, 
@@ -283,10 +273,7 @@ export default function StudentDetailsPage() {
       
       const balanceRef = doc(db, "netBalance", student.branch);
       const methodKeyMap: Record<string, string> = {
-        'cash': 'totalCash',
-        'bkash': 'totalBkash',
-        'nagad': 'totalNagad',
-        'bank': 'totalBank'
+        'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
       };
       const methodKey = methodKeyMap[paymentData.method] || 'totalCash';
 
@@ -324,41 +311,129 @@ export default function StudentDetailsPage() {
     if (!studentRef || !editForm || !student) return
     setIsUpdating(true)
     const batch = writeBatch(db)
-    const locationChanged = student.buildingId !== editForm.buildingId || student.roomNumber !== editForm.roomNumber || student.seatNumber !== editForm.seatNumber
+    
+    const locationChanged = student.buildingId !== editForm.buildingId || 
+                            student.roomNumber !== editForm.roomNumber || 
+                            student.seatNumber !== editForm.seatNumber
+    
+    let studentUpdateData = { ...editForm };
+    
     try {
       if (locationChanged) {
-        const oldBRef = doc(db, "buildings", student.buildingId); const oldBSnap = await getDoc(oldBRef)
-        if (oldBSnap.exists()) {
-          const oldBData = oldBSnap.data(); const updatedApts = oldBData.apartmentsDetail.map((apt: any) => {
-            if (apt.name === student.apartmentName) {
-              return { ...apt, rooms: apt.rooms.map((room: any) => {
-                if (String(room.roomNo) === String(student.roomNumber)) { return { ...room, seats: room.seats.map((seat: any) => seat.seatNo === student.seatNumber ? { ...seat, status: 'empty' } : seat) } }
-                return room
-              })}
-            } return apt
-          })
-          batch.update(oldBRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1), updatedAt: serverTimestamp() })
-        }
-        const newBRef = doc(db, "buildings", editForm.buildingId); const newBSnap = await getDoc(newBRef)
-        if (newBSnap.exists()) {
-          const newBData = newBSnap.data(); const newAptName = selectedRoomForEdit?.aptName || "General";
-          const updatedApts = newBData.apartmentsDetail.map((apt: any) => {
-            if (apt.name === newAptName) {
-              return { ...apt, rooms: apt.rooms.map((room: any) => {
-                if (String(room.roomNo) === String(editForm.roomNumber)) { return { ...room, seats: room.seats.map((seat: any) => seat.seatNo === editForm.seatNumber ? { ...seat, status: 'occupied' } : seat) } }
-                return room
-              })}
-            } return apt
-          })
-          batch.update(newBRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(1), emptySeats: increment(-1), updatedAt: serverTimestamp() })
-          editForm.buildingName = newBData.name; editForm.apartmentName = newAptName
+        if (student.buildingId === editForm.buildingId) {
+          // Internal Move: Same Building complex
+          const bRef = doc(db, "buildings", student.buildingId)
+          const bSnap = await getDoc(bRef)
+          
+          if (bSnap.exists()) {
+            const bData = bSnap.data()
+            const newAptName = selectedRoomForEdit?.aptName || "General"
+            
+            const updatedApts = bData.apartmentsDetail.map((apt: any) => {
+              let newApt = { ...apt, rooms: [...apt.rooms] };
+              newApt.rooms = newApt.rooms.map((room: any) => {
+                let newRoom = { ...room, seats: [...room.seats] };
+                
+                // Release old seat
+                if (apt.name === student.apartmentName && String(room.roomNo) === String(student.roomNumber)) {
+                  newRoom.seats = newRoom.seats.map((s: any) => 
+                    s.seatNo === student.seatNumber ? { ...s, status: 'empty' } : s
+                  );
+                }
+                
+                // Occupy new seat
+                if (apt.name === newAptName && String(room.roomNo) === String(editForm.roomNumber)) {
+                  newRoom.seats = newRoom.seats.map((s: any) => 
+                    s.seatNo === editForm.seatNumber ? { ...s, status: 'occupied' } : s
+                  );
+                }
+                
+                return newRoom;
+              });
+              return newApt;
+            });
+
+            batch.update(bRef, { apartmentsDetail: updatedApts, updatedAt: serverTimestamp() });
+            studentUpdateData.apartmentName = newAptName;
+          }
+        } else {
+          // Migration: Different Building complex
+          // 1. Release from Old Building
+          const oldBRef = doc(db, "buildings", student.buildingId)
+          const oldBSnap = await getDoc(oldBRef)
+          if (oldBSnap.exists()) {
+            const oldBData = oldBSnap.data()
+            const updatedOldApts = oldBData.apartmentsDetail.map((apt: any) => {
+              if (apt.name === student.apartmentName) {
+                return { 
+                  ...apt, 
+                  rooms: apt.rooms.map((room: any) => {
+                    if (String(room.roomNo) === String(student.roomNumber)) {
+                      return { 
+                        ...room, 
+                        seats: room.seats.map((s: any) => s.seatNo === student.seatNumber ? { ...s, status: 'empty' } : s) 
+                      }
+                    }
+                    return room
+                  })
+                }
+              }
+              return apt
+            })
+            batch.update(oldBRef, { 
+              apartmentsDetail: updatedOldApts, 
+              occupiedSeats: increment(-1), 
+              emptySeats: increment(1), 
+              updatedAt: serverTimestamp() 
+            })
+          }
+
+          // 2. Occupy in New Building
+          const newBRef = doc(db, "buildings", editForm.buildingId)
+          const newBSnap = await getDoc(newBRef)
+          if (newBSnap.exists()) {
+            const newBData = newBSnap.data()
+            const newAptName = selectedRoomForEdit?.aptName || "General"
+            const updatedNewApts = newBData.apartmentsDetail.map((apt: any) => {
+              if (apt.name === newAptName) {
+                return { 
+                  ...apt, 
+                  rooms: apt.rooms.map((room: any) => {
+                    if (String(room.roomNo) === String(editForm.roomNumber)) {
+                      return { 
+                        ...room, 
+                        seats: room.seats.map((s: any) => s.seatNo === editForm.seatNumber ? { ...s, status: 'occupied' } : s) 
+                      }
+                    }
+                    return room
+                  })
+                }
+              }
+              return apt
+            })
+            batch.update(newBRef, { 
+              apartmentsDetail: updatedNewApts, 
+              occupiedSeats: increment(1), 
+              emptySeats: increment(-1), 
+              updatedAt: serverTimestamp() 
+            })
+            
+            studentUpdateData.buildingName = newBData.name
+            studentUpdateData.apartmentName = newAptName
+          }
         }
       }
-      batch.update(studentRef, { ...editForm, updatedAt: serverTimestamp() })
+      
+      batch.update(studentRef, { ...studentUpdateData, updatedAt: serverTimestamp() })
       await batch.commit()
-      setIsEditDialogOpen(false); toast({ title: "Profile Updated" }); router.refresh();
-    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } 
-    finally { setIsUpdating(false) }
+      setIsEditDialogOpen(false)
+      toast({ title: "Profile Updated" })
+      router.refresh()
+    } catch (e: any) { 
+      toast({ variant: "destructive", title: "Error", description: e.message }) 
+    } finally { 
+      setIsUpdating(false) 
+    }
   }
 
   const handleConfirmExit = async () => {
@@ -370,7 +445,6 @@ export default function StudentDetailsPage() {
     const batch = writeBatch(db)
     
     try {
-      // 1. Release Seat Logic
       const bRef = doc(db, "buildings", student.buildingId)
       const buildingSnap = await getDoc(bRef)
       if (buildingSnap.exists()) {
@@ -395,7 +469,6 @@ export default function StudentDetailsPage() {
         batch.update(bRef, { apartmentsDetail: updatedApts, occupiedSeats: increment(-1), emptySeats: increment(1), updatedAt: serverTimestamp() })
       }
 
-      // 2. Advanced Settlement Math & Transaction Flow
       const processedAmt = Number(settlementInput)
       const balanceRef = doc(db, "netBalance", student.branch)
       const methodKeyMap: Record<string, string> = {
@@ -418,7 +491,6 @@ export default function StudentDetailsPage() {
           })
           batch.set(balanceRef, { [methodKey]: increment(-processedAmt), totalHandCash: increment(-processedAmt), lastUpdated: serverTimestamp() }, { merge: true })
         }
-        
         const delta = settlementCalculation.netResult - processedAmt;
         if (delta > 0) finalAdvance = delta;
         else if (delta < 0) finalTotalDue = Math.abs(delta);
@@ -435,13 +507,11 @@ export default function StudentDetailsPage() {
           })
           batch.set(balanceRef, { [methodKey]: increment(processedAmt), totalHandCash: increment(processedAmt), lastUpdated: serverTimestamp() }, { merge: true })
         }
-
         const delta = Math.abs(settlementCalculation.netResult) - processedAmt;
         if (delta > 0) finalTotalDue = delta;
         else if (delta < 0) finalAdvance = Math.abs(delta);
       }
 
-      // 3. Mark Student Inactive & PERSIST remaining dues
       batch.update(studentRef, { 
         isActive: false, 
         leftAt: serverTimestamp(), 
@@ -455,10 +525,8 @@ export default function StudentDetailsPage() {
         updatedAt: serverTimestamp() 
       })
 
-      // 4. Execution
       await batch.commit()
 
-      // 5. SMS Trigger
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'exit')?.text || "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।";
         const msg = template.replaceAll('[নাম]', student.name).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
@@ -470,11 +538,8 @@ export default function StudentDetailsPage() {
       toast({ title: "Settlement Complete", description: `Seat released. Remaining Due: ৳${finalTotalDue}` });
       setIsExitDialogOpen(false);
       router.push("/students");
-    } catch (e: any) { 
-      toast({ variant: "destructive", title: "Error", description: e.message }) 
-    } finally { 
-      setIsUpdating(false) 
-    }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } 
+    finally { setIsUpdating(false) }
   }
 
   if (studentLoading || buildingsLoading) {
@@ -760,14 +825,12 @@ export default function StudentDetailsPage() {
                   </div>
                 </div>
               </div>
-              
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase">Final Amount Processed (৳)</Label>
                   <Input type="number" value={settlementInput} onChange={e => setSettlementInput(e.target.value)} className="h-12 text-lg font-black" />
                   <p className="text-[9px] text-muted-foreground italic">Note: If processed amount is less than result, the remainder stays as "Due" in profile.</p>
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase">Payment Method</Label>
@@ -792,7 +855,6 @@ export default function StudentDetailsPage() {
                   </div>
                 </div>
               </div>
-
               <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex gap-3"><AlertCircle className="text-destructive h-5 w-5 shrink-0" /><p className="text-[10px] text-red-700 leading-tight">This action will release Seat {student.seatNumber} in Room {student.roomNumber} and mark the resident as inactive. Remaining dues will be preserved.</p></div>
             </div>
           )}
