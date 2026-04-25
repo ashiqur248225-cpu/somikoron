@@ -249,22 +249,13 @@ export default function RegistrationsPage() {
           }
           await setDoc(doc(db, "payments", pId), { ...initialPaymentRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
 
-          // Update Synchronized netBalance for Initial Collection
+          // Update netBalance
           const balanceRef = doc(db, "netBalance", userBranch);
           const methodKeyMap: Record<string, string> = {
-            'cash': 'totalCash',
-            'bkash': 'totalBkash',
-            'nagad': 'totalNagad',
-            'bank': 'totalBank'
+            'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
           };
           const methodKey = methodKeyMap[approvalForm.method] || 'totalCash';
-
-          await setDoc(balanceRef, {
-            branchId: userBranch,
-            [methodKey]: increment(totalNewReceived),
-            totalHandCash: increment(totalNewReceived),
-            lastUpdated: serverTimestamp()
-          }, { merge: true });
+          await setDoc(balanceRef, { branchId: userBranch, [methodKey]: increment(totalNewReceived), totalHandCash: increment(totalNewReceived), lastUpdated: serverTimestamp() }, { merge: true });
         }
       }
 
@@ -283,7 +274,10 @@ export default function RegistrationsPage() {
         fatherName: selectedReg.fatherName || "", motherName: selectedReg.motherName || "",
         dob: selectedReg.dob || "", bloodGroup: selectedReg.bloodGroup || "",
         address: selectedReg.village || "", occupation: selectedReg.occupation || "",
-        collegeUniversity: selectedReg.collegeUniversity || "", department: selectedReg.department || "",
+        school: selectedReg.school || "", college: selectedReg.college || "",
+        university: selectedReg.university || "", department: selectedReg.department || "",
+        session: selectedReg.session || "", companyName: selectedReg.companyName || "",
+        designation: selectedReg.designation || "",
         parentPhone: selectedReg.parentPhone || "", guardianPhone: selectedReg.guardianPhone || "",
         paymentsHistory: initialPaymentRecord ? [initialPaymentRecord] : [],
         mealsHistory: []
@@ -312,7 +306,7 @@ export default function RegistrationsPage() {
         await updateDoc(doc(db, "buildings", approvalForm.buildingId), { apartmentsDetail: updatedApts, occupiedSeats: occupied, emptySeats: total - occupied, updatedAt: serverTimestamp() })
       }
 
-      // INTELLIGENT SMS TRIGGER (ADMISSION SUCCESS)
+      // SMS Trigger
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'admission')?.text || 
                          "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আমাদের সাথে থাকার জন্য ধন্যবাদ।";
@@ -335,13 +329,8 @@ export default function RegistrationsPage() {
           .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
 
         const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
-        
         const logId = doc(collection(db, "smsLogs")).id;
-        await setDoc(doc(db, "smsLogs", logId), {
-          id: logId, to: selectedReg.phone, message: msg, branch: userBranch, sentBy: userName,
-          status: smsResult.error === 0 ? 'Success' : 'Failed', error: smsResult.error !== 0 ? smsResult.msg : null,
-          createdAt: serverTimestamp()
-        });
+        await setDoc(doc(db, "smsLogs", logId), { id: logId, to: selectedReg.phone, message: msg, branch: userBranch, sentBy: userName, status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp() });
       }
 
       await deleteDoc(doc(db, "registrations", selectedReg.id))
@@ -579,7 +568,6 @@ export default function RegistrationsPage() {
                     <div className="space-y-2">
                       <Label className="text-xs">Security Advance (৳)</Label>
                       <Input type="number" value={approvalForm.advanceAmount} onChange={e => setApprovalForm({...approvalForm, advanceAmount: e.target.value})} className="h-11" />
-                      <p className="text-[8px] text-muted-foreground font-bold uppercase">Locked: 1 Month Rent</p>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs">Admission Service Charge (৳)</Label>
@@ -622,12 +610,6 @@ export default function RegistrationsPage() {
                           </Button>
                         </div>
                         
-                        {approvalForm.duesBreakdown.length === 0 && (
-                          <div className="text-center py-6 border-2 border-dashed border-orange-200 rounded-2xl bg-white/50">
-                            <p className="text-[10px] font-bold text-orange-400 uppercase">বকেয়া থাকলে "Add Month Box" বাটনে ক্লিক করুন।</p>
-                          </div>
-                        )}
-
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {approvalForm.duesBreakdown.map((due) => (
                             <div key={due.id} className="p-3 bg-white rounded-xl border border-orange-200 shadow-sm flex items-end gap-2 group animate-in zoom-in-95">

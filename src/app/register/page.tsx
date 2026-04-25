@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, addDoc, serverTimestamp, query, where, doc } from "firebase/firestore"
-import { UserPlus, CheckCircle2, Building2, MapPin, GraduationCap, Loader2, AlertTriangle, UserCircle, ScrollText, ShieldCheck } from "lucide-react"
+import { UserPlus, CheckCircle2, Building2, MapPin, GraduationCap, Loader2, AlertTriangle, UserCircle, ScrollText, ShieldCheck, Briefcase } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Accordion,
@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/accordion"
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
-const GROUPS = ["Science", "Commerce", "Arts", "Other"]
 const OCCUPATIONS = [
   { id: "student", label: "Student" },
   { id: "job_holder", label: "Job Holder" }
@@ -66,8 +65,13 @@ function RegistrationFormContent() {
     upazila: "",
     postOffice: "",
     village: "",
-    collegeUniversity: "",
-    department: "Science",
+    school: "",
+    college: "",
+    university: "",
+    department: "",
+    session: "",
+    companyName: "",
+    designation: "",
     buildingId: "",
     roomNumber: "",
     seatNumber: ""
@@ -110,12 +114,25 @@ function RegistrationFormContent() {
     const requiredFields = [
       'name', 'fatherName', 'motherName', 'dob', 'bloodGroup', 'phone', 
       'parentPhone', 'district', 'upazila', 'postOffice', 'village', 
-      'collegeUniversity', 'department', 'occupation'
+      'occupation'
     ]
 
     for (const field of requiredFields) {
       if (!formData[field as keyof typeof formData]) {
         toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "অনুগ্রহ করে ফর্মে থাকা প্রতিটি তথ্য প্রদান করুন।" })
+        return
+      }
+    }
+
+    // Additional conditional requirements
+    if (formData.occupation === 'student') {
+      if (!formData.school || !formData.college || !formData.department || !formData.session) {
+        toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "শিক্ষার্থীদের জন্য স্কুল, কলেজ, ডিপার্টমেন্ট এবং সেশন প্রদান বাধ্যতামূলক।" })
+        return
+      }
+    } else {
+      if (!formData.companyName) {
+        toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "চাকরিজীবীদের জন্য কর্মস্থলের নাম প্রদান বাধ্যতামূলক।" })
         return
       }
     }
@@ -312,26 +329,50 @@ function RegistrationFormContent() {
               <Card className="border-none shadow-xl overflow-hidden rounded-3xl">
                 <CardHeader>
                   <div className="flex items-center gap-2 text-primary">
-                    <GraduationCap size={20} />
+                    {formData.occupation === 'student' ? <GraduationCap size={20} /> : <Briefcase size={20} />}
                     <CardTitle className="text-xl">{formData.occupation === 'student' ? 'Education Info (শিক্ষা প্রতিষ্ঠান)' : 'Work Info (কর্মসংস্থান)'}</CardTitle>
                   </div>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>{formData.occupation === 'student' ? 'College/University Name' : 'Company Name'}</Label>
-                    <Input required value={formData.collegeUniversity} onChange={e => setFormData({...formData, collegeUniversity: e.target.value})} placeholder="প্রতিষ্ঠানের নাম লিখুন" className="border-2 border-slate-200 h-11" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{formData.occupation === 'student' ? 'Department/Group' : 'Designation'}</Label>
-                    {formData.occupation === 'student' ? (
-                      <Select value={formData.department} onValueChange={val => setFormData({...formData, department: val})}>
-                        <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue placeholder="বিভাগ সিলেক্ট করুন" /></SelectTrigger>
-                        <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                      </Select>
-                    ) : (
-                      <Input required value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="আপনার পদবী লিখুন" className="border-2 border-slate-200 h-11" />
-                    )}
-                  </div>
+                <CardContent className="space-y-6">
+                  {formData.occupation === 'student' ? (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>School Name</Label>
+                          <Input required value={formData.school} onChange={e => setFormData({...formData, school: e.target.value})} placeholder="স্কুলের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>College Name</Label>
+                          <Input required value={formData.college} onChange={e => setFormData({...formData, college: e.target.value})} placeholder="কলেজের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>University Name (Optional)</Label>
+                          <Input value={formData.university} onChange={e => setFormData({...formData, university: e.target.value})} placeholder="বিশ্ববিদ্যালয়ের নাম (যদি থাকে)" className="border-2 border-slate-200 h-11" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Department</Label>
+                          <Input required value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="যেমন: Science, Arts, BBA" className="border-2 border-slate-200 h-11" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Session</Label>
+                          <Input required value={formData.session} onChange={e => setFormData({...formData, session: e.target.value})} placeholder="যেমন: 2023-24" className="border-2 border-slate-200 h-11" />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Company Name</Label>
+                        <Input required value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} placeholder="প্রতিষ্ঠানের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Designation (Optional)</Label>
+                        <Input value={formData.designation} onChange={e => setFormData({...formData, designation: e.target.value})} placeholder="আপনার পদবী লিখুন" className="border-2 border-slate-200 h-11" />
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -395,7 +436,7 @@ function RegistrationFormContent() {
             <Card className="sticky top-8 border-none shadow-xl rounded-3xl overflow-hidden h-[calc(100vh-100px)] flex flex-col">
               <div className="h-2 bg-primary w-full" />
               <CardHeader className="bg-slate-50/50 border-b pb-4">
-                <div className="flex items-center gap-2 text-primary">
+                <div className="flex items-center gap-3 text-primary">
                   <ScrollText size={20} />
                   <CardTitle className="text-lg">হোস্টেল নিয়মাবলী ও শর্তাবলী</CardTitle>
                 </div>
