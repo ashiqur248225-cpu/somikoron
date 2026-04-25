@@ -90,7 +90,6 @@ export default function BuildingDetailsPage({
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isMatrixOpen, setIsMatrixOpen] = useState(false)
   const [showRecentCollections, setShowRecentCollections] = useState(false)
 
@@ -354,6 +353,32 @@ export default function BuildingDetailsPage({
     setEditApts(updated);
   }
 
+  const toggleSeatStatus = (aptId: string, roomId: string, seatId: string) => {
+    const updated = editApts.map(apt => {
+      if (apt.id === aptId) {
+        return {
+          ...apt,
+          rooms: apt.rooms.map(r => {
+            if (r.id === roomId) {
+              return {
+                ...r,
+                seats: (r.seats || []).map(s => {
+                  if (s.id === seatId) {
+                    return { ...s, status: s.status === 'empty' ? 'occupied' : 'empty' }
+                  }
+                  return s;
+                })
+              }
+            }
+            return r;
+          })
+        }
+      }
+      return apt;
+    });
+    setEditApts(updated);
+  }
+
   const handleUpdate = async () => {
     if (!buildingRef) return
     setIsUpdating(true)
@@ -388,15 +413,6 @@ export default function BuildingDetailsPage({
     finally { setIsUpdating(false) }
   }
 
-  const handleDelete = async () => {
-    if (!buildingRef) return
-    setIsUpdating(true)
-    try {
-      await deleteDoc(buildingRef); toast({ title: "Deleted" }); router.push("/buildings")
-    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } 
-    finally { setIsUpdating(false) }
-  }
-
   const toggleFacility = (aptId: string, roomId: string, facility: string) => {
     const updated = editApts.map(apt => {
       if (apt.id === aptId) {
@@ -409,32 +425,6 @@ export default function BuildingDetailsPage({
                 ? currentFac.filter(f => f !== facility) 
                 : [...currentFac, facility];
               return { ...r, facilities: newFac }
-            }
-            return r;
-          })
-        }
-      }
-      return apt;
-    });
-    setEditApts(updated);
-  }
-
-  const toggleSeatStatus = (aptId: string, roomId: string, seatId: string) => {
-    const updated = editApts.map(apt => {
-      if (apt.id === aptId) {
-        return {
-          ...apt,
-          rooms: apt.rooms.map(r => {
-            if (r.id === roomId) {
-              return {
-                ...r,
-                seats: r.seats.map(s => {
-                  if (s.id === seatId) {
-                    return { ...s, status: s.status === 'empty' ? 'occupied' : 'empty' }
-                  }
-                  return s;
-                })
-              }
             }
             return r;
           })
@@ -592,7 +582,7 @@ export default function BuildingDetailsPage({
                                         </div>
                                       </div>
                                       <div className="flex flex-wrap gap-1.5 pt-2 border-t mt-2">
-                                        {room.seats?.map((seat) => (
+                                        {(room.seats || []).map((seat: any) => (
                                           <button 
                                             key={seat.id} 
                                             onClick={() => toggleSeatStatus(apt.id, room.id, seat.id)} 
@@ -620,12 +610,6 @@ export default function BuildingDetailsPage({
                 </DialogFooter>
              </DialogContent>
            </Dialog>
-           {userRole === 'Admin' && (
-             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-               <AlertDialogTrigger asChild><Button variant="destructive" size="icon" className="h-11 w-11 rounded-xl shadow-lg shadow-destructive/20"><Trash2 size={18}/></Button></AlertDialogTrigger>
-               <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Building?</AlertDialogTitle><AlertDialogDescription>Hierarchy Apartment &rarr; Room &rarr; Seat will be lost. This action is permanent.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 font-bold">{isUpdating ? <Loader2 className="animate-spin" /> : "Delete Permanently"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-             </AlertDialog>
-           )}
            {userRole !== 'Building Manager' && <Button variant="ghost" onClick={() => router.push("/buildings")} className="h-11 rounded-xl px-6">Back</Button>}
         </div>
       </div>
