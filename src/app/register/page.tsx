@@ -341,21 +341,23 @@ function RegistrationFormContent() {
                       {/* School Details */}
                       <div className="p-4 border-2 border-slate-100 rounded-2xl space-y-4">
                         <Label className="text-xs font-bold uppercase text-primary">School Information</Label>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-4">
                           <div className="space-y-2">
                             <Label>School Name</Label>
                             <Input required value={formData.school} onChange={e => setFormData({...formData, school: e.target.value})} placeholder="স্কুলের নাম লিখুন" className="border-2 border-slate-200 h-11" />
                           </div>
-                          <div className="space-y-2">
-                            <Label>School Session</Label>
-                            <Input required value={formData.schoolSession} onChange={e => setFormData({...formData, schoolSession: e.target.value})} placeholder="যেমন: 2018-19" className="border-2 border-slate-200 h-11" />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>School Group</Label>
-                            <Select value={formData.schoolGroup} onValueChange={val => setFormData({...formData, schoolGroup: val})}>
-                              <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue /></SelectTrigger>
-                              <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                            </Select>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>School Session</Label>
+                              <Input required value={formData.schoolSession} onChange={e => setFormData({...formData, schoolSession: e.target.value})} placeholder="যেমন: 2018-19" className="border-2 border-slate-200 h-11" />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>School Group</Label>
+                              <Select value={formData.schoolGroup} onValueChange={val => setFormData({...formData, schoolGroup: val})}>
+                                <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue /></SelectTrigger>
+                                <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -363,21 +365,23 @@ function RegistrationFormContent() {
                       {/* College Details */}
                       <div className="p-4 border-2 border-slate-100 rounded-2xl space-y-4">
                         <Label className="text-xs font-bold uppercase text-primary">College Information</Label>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-4">
                           <div className="space-y-2">
                             <Label>College Name</Label>
                             <Input required value={formData.college} onChange={e => setFormData({...formData, college: e.target.value})} placeholder="কলেজের নাম লিখুন" className="border-2 border-slate-200 h-11" />
                           </div>
-                          <div className="space-y-2">
-                            <Label>College Session</Label>
-                            <Input required value={formData.collegeSession} onChange={e => setFormData({...formData, collegeSession: e.target.value})} placeholder="যেমন: 2020-21" className="border-2 border-slate-200 h-11" />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>College Group</Label>
-                            <Select value={formData.collegeGroup} onValueChange={val => setFormData({...formData, collegeGroup: val})}>
-                              <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue /></SelectTrigger>
-                              <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                            </Select>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>College Session</Label>
+                              <Input required value={formData.collegeSession} onChange={e => setFormData({...formData, collegeSession: e.target.value})} placeholder="যেমন: 2020-21" className="border-2 border-slate-200 h-11" />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>College Group</Label>
+                              <Select value={formData.collegeGroup} onValueChange={val => setFormData({...formData, collegeGroup: val})}>
+                                <SelectTrigger className="border-2 border-slate-200 h-11"><SelectValue /></SelectTrigger>
+                                <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -385,18 +389,20 @@ function RegistrationFormContent() {
                       {/* University Details */}
                       <div className="p-4 border-2 border-slate-100 rounded-2xl space-y-4">
                         <Label className="text-xs font-bold uppercase text-primary">University Information (Optional)</Label>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-4">
                           <div className="space-y-2">
                             <Label>University Name</Label>
                             <Input value={formData.university} onChange={e => setFormData({...formData, university: e.target.value})} placeholder="বিশ্ববিদ্যালয় নাম" className="border-2 border-slate-200 h-11" />
                           </div>
-                          <div className="space-y-2">
-                            <Label>Univ. Session</Label>
-                            <Input value={formData.universitySession} onChange={e => setFormData({...formData, universitySession: e.target.value})} placeholder="যেমন: 2023-24" className="border-2 border-slate-200 h-11" />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Department</Label>
-                            <Input value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="বিভাগের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Univ. Session</Label>
+                              <Input value={formData.universitySession} onChange={e => setFormData({...formData, universitySession: e.target.value})} placeholder="যেমন: 2023-24" className="border-2 border-slate-200 h-11" />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Department</Label>
+                              <Input value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="বিভাগের নাম লিখুন" className="border-2 border-slate-200 h-11" />
+                            </div>
                           </div>
                         </div>
                       </div>
