@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -398,9 +397,6 @@ export default function BuildingDetailsPage({
     finally { setIsUpdating(false) }
   }
 
-  if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
-  if (!building) return <div className="text-center p-20">Building not found.</div>
-
   const toggleFacility = (aptId: string, roomId: string, facility: string) => {
     const updated = editApts.map(apt => {
       if (apt.id === aptId) {
@@ -422,6 +418,35 @@ export default function BuildingDetailsPage({
     });
     setEditApts(updated);
   }
+
+  const toggleSeatStatus = (aptId: string, roomId: string, seatId: string) => {
+    const updated = editApts.map(apt => {
+      if (apt.id === aptId) {
+        return {
+          ...apt,
+          rooms: apt.rooms.map(r => {
+            if (r.id === roomId) {
+              return {
+                ...r,
+                seats: r.seats.map(s => {
+                  if (s.id === seatId) {
+                    return { ...s, status: s.status === 'empty' ? 'occupied' : 'empty' }
+                  }
+                  return s;
+                })
+              }
+            }
+            return r;
+          })
+        }
+      }
+      return apt;
+    });
+    setEditApts(updated);
+  }
+
+  if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>
+  if (!building) return <div className="text-center p-20">Building not found.</div>
 
   return (
     <div className="space-y-8 pb-20 relative">
