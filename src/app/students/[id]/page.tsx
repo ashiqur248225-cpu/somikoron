@@ -63,13 +63,6 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
 const GROUPS = ["Science", "B.Studies", "Humanities"]
 
-interface DueEntry {
-  id: string;
-  month: string;
-  year: string;
-  amount: string;
-}
-
 export default function StudentDetailsPage() {
   const params = useParams()
   const id = params.id as string
@@ -85,16 +78,12 @@ export default function StudentDetailsPage() {
   
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
-  const [settlementInput, setSettlementInput] = useState("")
-  const [exitMethod, setExitMethod] = useState("cash")
-  const [exitStaff, setExitStaff] = useState("")
 
   useEffect(() => {
     const role = localStorage.getItem("user_role") || "Manager"
     const name = localStorage.getItem("user_name") || "User"
     setUserRole(role)
     setUserName(name)
-    setExitStaff(name)
   }, [])
 
   const studentRef = useMemoFirebase(() => id ? doc(db, "students", id) : null, [db, id])
@@ -108,30 +97,13 @@ export default function StudentDetailsPage() {
 
   const managementStaff = useMemo(() => {
     if (!staffList) return []
-    const userBranch = student?.branch || localStorage.getItem("user_branch") || "";
+    // Safe access to branch
+    const branch = student?.branch || "";
     return staffList.filter(s => {
       if (s.role === 'Admin') return true;
-      return s.branch === userBranch && (s.staffType === 'management' || !s.staffType);
+      return s.branch === branch && (s.staffType === 'management' || !s.staffType);
     })
   }, [staffList, student?.branch])
-
-  const [paymentData, setPaymentData] = useState({
-    month: MONTHS[new Date().getMonth()],
-    year: new Date().getFullYear().toString(),
-    amount: "",
-    seatAmount: "",
-    foodAmount: "",
-    addAdvanceAmount: "0",
-    method: "cash",
-    receiver: "",
-    description: ""
-  })
-
-  useEffect(() => {
-    if (isPaymentDialogOpen && userName) {
-      setPaymentData(prev => ({ ...prev, receiver: userName }))
-    }
-  }, [isPaymentDialogOpen, userName])
 
   const [editForm, setEditForm] = useState<any>(null)
 
@@ -287,27 +259,28 @@ export default function StudentDetailsPage() {
               <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
                 {student.occupation === 'student' ? (
                   <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold text-muted-foreground uppercase">School</Label>
-                        <p className="font-bold text-slate-700">{student.school || 'N/A'}</p>
-                        <p className="text-[10px] text-primary uppercase font-bold">Session: {student.schoolSession || 'N/A'} • Group: {student.schoolGroup || 'N/A'}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold text-muted-foreground uppercase">College</Label>
-                        <p className="font-bold text-slate-700">{student.college || 'N/A'}</p>
-                        <p className="text-[10px] text-primary uppercase font-bold">Session: {student.collegeSession || 'N/A'} • Group: {student.collegeGroup || 'N/A'}</p>
+                    <div className="p-4 bg-white rounded-2xl border border-slate-100 space-y-3">
+                      <Label className="text-[10px] font-bold text-primary uppercase">School Information</Label>
+                      <p className="font-bold text-slate-700">{student.school || 'N/A'}</p>
+                      <div className="flex gap-4 text-[10px] font-bold text-muted-foreground uppercase">
+                        <span>Session: {student.schoolSession || 'N/A'}</span>
+                        <span>Group: {student.schoolGroup || 'N/A'}</span>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold text-muted-foreground uppercase">University</Label>
-                        <p className="font-bold text-slate-700">{student.university || 'N/A'}</p>
-                        <p className="text-[10px] text-primary uppercase font-bold">Session: {student.universitySession || 'N/A'}</p>
+                    <div className="p-4 bg-white rounded-2xl border border-slate-100 space-y-3">
+                      <Label className="text-[10px] font-bold text-primary uppercase">College Information</Label>
+                      <p className="font-bold text-slate-700">{student.college || 'N/A'}</p>
+                      <div className="flex gap-4 text-[10px] font-bold text-muted-foreground uppercase">
+                        <span>Session: {student.collegeSession || 'N/A'}</span>
+                        <span>Group: {student.collegeGroup || 'N/A'}</span>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold text-muted-foreground uppercase">Department</Label>
-                        <p className="font-bold text-slate-700">{student.department || 'N/A'}</p>
+                    </div>
+                    <div className="p-4 bg-white rounded-2xl border border-slate-100 space-y-3">
+                      <Label className="text-[10px] font-bold text-primary uppercase">University Information</Label>
+                      <p className="font-bold text-slate-700">{student.university || 'N/A'}</p>
+                      <div className="flex gap-4 text-[10px] font-bold text-muted-foreground uppercase">
+                        <span>Session: {student.universitySession || 'N/A'}</span>
+                        <span>Dept: {student.department || 'N/A'}</span>
                       </div>
                     </div>
                   </>
@@ -338,10 +311,10 @@ export default function StudentDetailsPage() {
             <div className="space-y-8 py-4">
               <div className="space-y-4"><Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Smartphone size={14}/> Communication & Contacts</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="space-y-1"><Label className="text-xs">Full Name</Label><Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="bg-white" /></div>
-                  <div className="space-y-1"><Label className="text-xs">Personal Phone</Label><Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="bg-white" /></div>
-                  <div className="space-y-1"><Label className="text-xs">Parent's Mobile</Label><Input value={editForm.parentPhone} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} className="bg-white" /></div>
-                  <div className="space-y-1"><Label className="text-xs">Guardian Mobile</Label><Input value={editForm.guardianPhone} onChange={e => setEditForm({...editForm, guardianPhone: e.target.value})} className="bg-white" /></div>
+                  <div className="space-y-1"><Label className="text-xs">Full Name</Label><Input value={editForm.name || ""} onChange={e => setEditForm({...editForm, name: e.target.value})} className="bg-white" /></div>
+                  <div className="space-y-1"><Label className="text-xs">Personal Phone</Label><Input value={editForm.phone || ""} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="bg-white" /></div>
+                  <div className="space-y-1"><Label className="text-xs">Parent's Mobile</Label><Input value={editForm.parentPhone || ""} onChange={e => setEditForm({...editForm, parentPhone: e.target.value})} className="bg-white" /></div>
+                  <div className="space-y-1"><Label className="text-xs">Guardian Mobile</Label><Input value={editForm.guardianPhone || ""} onChange={e => setEditForm({...editForm, guardianPhone: e.target.value})} className="bg-white" /></div>
                 </div>
               </div>
 
@@ -349,47 +322,56 @@ export default function StudentDetailsPage() {
                 <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                   {editForm.occupation === 'student' ? <GraduationCap size={14}/> : <Briefcase size={14}/>} {editForm.occupation === 'student' ? 'Education Info' : 'Work Info'}
                 </Label>
-                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-6">
                   {editForm.occupation === 'student' ? (
                     <>
-                      <div className="space-y-4">
-                        <div className="space-y-1"><Label className="text-xs">School Name</Label><Input value={editForm.school} onChange={e => setEditForm({...editForm, school: e.target.value})} className="bg-white" /></div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1"><Label className="text-xs">School Session</Label><Input value={editForm.schoolSession} onChange={e => setEditForm({...editForm, schoolSession: e.target.value})} className="bg-white" /></div>
-                          <div className="space-y-1"><Label className="text-xs">School Group</Label>
-                            <Select value={editForm.schoolGroup} onValueChange={v => setEditForm({...editForm, schoolGroup: v})}>
-                              <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                              <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                            </Select>
+                      <div className="space-y-4 p-4 bg-white rounded-2xl border border-slate-200">
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">School</Label>
+                        <div className="space-y-4">
+                          <div className="space-y-1"><Label className="text-xs">School Name</Label><Input value={editForm.school || ""} onChange={e => setEditForm({...editForm, school: e.target.value})} className="bg-white" /></div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1"><Label className="text-xs">School Session</Label><Input value={editForm.schoolSession || ""} onChange={e => setEditForm({...editForm, schoolSession: e.target.value})} className="bg-white" /></div>
+                            <div className="space-y-1"><Label className="text-xs">School Group</Label>
+                              <Select value={editForm.schoolGroup || "Science"} onValueChange={v => setEditForm({...editForm, schoolGroup: v})}>
+                                <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                                <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
                           </div>
                         </div>
                       </div>
-                      <Separator />
-                      <div className="space-y-4">
-                        <div className="space-y-1"><Label className="text-xs">College Name</Label><Input value={editForm.college} onChange={e => setEditForm({...editForm, college: e.target.value})} className="bg-white" /></div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1"><Label className="text-xs">College Session</Label><Input value={editForm.collegeSession} onChange={e => setEditForm({...editForm, collegeSession: e.target.value})} className="bg-white" /></div>
-                          <div className="space-y-1"><Label className="text-xs">College Group</Label>
-                            <Select value={editForm.collegeGroup} onValueChange={v => setEditForm({...editForm, collegeGroup: v})}>
-                              <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                              <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                            </Select>
+
+                      <div className="space-y-4 p-4 bg-white rounded-2xl border border-slate-200">
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">College</Label>
+                        <div className="space-y-4">
+                          <div className="space-y-1"><Label className="text-xs">College Name</Label><Input value={editForm.college || ""} onChange={e => setEditForm({...editForm, college: e.target.value})} className="bg-white" /></div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1"><Label className="text-xs">College Session</Label><Input value={editForm.collegeSession || ""} onChange={e => setEditForm({...editForm, collegeSession: e.target.value})} className="bg-white" /></div>
+                            <div className="space-y-1"><Label className="text-xs">College Group</Label>
+                              <Select value={editForm.collegeGroup || "Science"} onValueChange={v => setEditForm({...editForm, collegeGroup: v})}>
+                                <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                                <SelectContent>{GROUPS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
                           </div>
                         </div>
                       </div>
-                      <Separator />
-                      <div className="space-y-4">
-                        <div className="space-y-1"><Label className="text-xs">University (Optional)</Label><Input value={editForm.university} onChange={e => setEditForm({...editForm, university: e.target.value})} className="bg-white" /></div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1"><Label className="text-xs">Univ. Session</Label><Input value={editForm.universitySession} onChange={e => setEditForm({...editForm, universitySession: e.target.value})} className="bg-white" /></div>
-                          <div className="space-y-1"><Label className="text-xs">Department</Label><Input value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} className="bg-white" /></div>
+
+                      <div className="space-y-4 p-4 bg-white rounded-2xl border border-slate-200">
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">University</Label>
+                        <div className="space-y-4">
+                          <div className="space-y-1"><Label className="text-xs">University (Optional)</Label><Input value={editForm.university || ""} onChange={e => setEditForm({...editForm, university: e.target.value})} className="bg-white" /></div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1"><Label className="text-xs">Univ. Session</Label><Input value={editForm.universitySession || ""} onChange={e => setEditForm({...editForm, universitySession: e.target.value})} className="bg-white" /></div>
+                            <div className="space-y-1"><Label className="text-xs">Department</Label><Input value={editForm.department || ""} onChange={e => setEditForm({...editForm, department: e.target.value})} className="bg-white" /></div>
+                          </div>
                         </div>
                       </div>
                     </>
                   ) : (
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1"><Label className="text-xs">Company Name</Label><Input value={editForm.companyName} onChange={e => setEditForm({...editForm, companyName: e.target.value})} className="bg-white" /></div>
-                      <div className="space-y-1"><Label className="text-xs">Designation</Label><Input value={editForm.designation} onChange={e => setEditForm({...editForm, designation: e.target.value})} className="bg-white" /></div>
+                      <div className="space-y-1"><Label className="text-xs">Company Name</Label><Input value={editForm.companyName || ""} onChange={e => setEditForm({...editForm, companyName: e.target.value})} className="bg-white" /></div>
+                      <div className="space-y-1"><Label className="text-xs">Designation</Label><Input value={editForm.designation || ""} onChange={e => setEditForm({...editForm, designation: e.target.value})} className="bg-white" /></div>
                     </div>
                   )}
                 </div>
@@ -397,12 +379,12 @@ export default function StudentDetailsPage() {
 
               <div className="space-y-4"><Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Building2 size={14}/> Location Shifting</Label>
                 <div className="p-5 border-2 border-primary/10 bg-primary/5 rounded-3xl space-y-4">
-                  <div className="space-y-2"><Label className="text-xs">Select Building</Label><Select value={editForm.buildingId} onValueChange={val => setEditForm({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Choose Building" /></SelectTrigger><SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-2"><Label className="text-xs">Select Building</Label><Select value={editForm.buildingId || ""} onValueChange={val => setEditForm({...editForm, buildingId: val, roomNumber: "", seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Choose Building" /></SelectTrigger><SelectContent>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label className="text-xs">Room No.</Label><Select disabled={!editForm.buildingId} value={editForm.roomNumber} onValueChange={val => setEditForm({...editForm, roomNumber: val, seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Room" /></SelectTrigger><SelectContent>{roomsInBuildingForEdit.map((r: any, idx: number) => (<SelectItem key={idx} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>))}</SelectContent></Select></div>
-                    <div className="space-y-2"><Label className="text-xs">Available Seat</Label><Select disabled={!editForm.roomNumber} value={editForm.seatNumber} onValueChange={val => setEditForm({...editForm, seatNumber: val})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Seat" /></SelectTrigger><SelectContent>{emptySeatsForEdit.map((s: any) => (<SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>))}</SelectContent></Select></div>
+                    <div className="space-y-2"><Label className="text-xs">Room No.</Label><Select disabled={!editForm.buildingId} value={editForm.roomNumber || ""} onValueChange={val => setEditForm({...editForm, roomNumber: val, seatNumber: ""})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Room" /></SelectTrigger><SelectContent>{roomsInBuildingForEdit.map((r: any, idx: number) => (<SelectItem key={idx} value={String(r.roomNo)}>R-{r.roomNo} ({r.aptName})</SelectItem>))}</SelectContent></Select></div>
+                    <div className="space-y-2"><Label className="text-xs">Available Seat</Label><Select disabled={!editForm.roomNumber} value={editForm.seatNumber || ""} onValueChange={val => setEditForm({...editForm, seatNumber: val})}><SelectTrigger className="bg-white rounded-xl h-11"><SelectValue placeholder="Seat" /></SelectTrigger><SelectContent>{emptySeatsForEdit.map((s: any) => (<SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>))}</SelectContent></Select></div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4 pt-2"><div className="space-y-1"><Label className="text-xs font-bold text-orange-600">Monthly Rent (Auto-sync)</Label><Input type="number" value={editForm.monthlyRent} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} className="bg-white font-black" /></div><div className="space-y-1"><Label className="text-xs">Billing Start Date</Label><Input type="date" value={editForm.billingStartDate} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} className="bg-white" /></div></div>
+                  <div className="grid grid-cols-2 gap-4 pt-2"><div className="space-y-1"><Label className="text-xs font-bold text-orange-600">Monthly Rent (Auto-sync)</Label><Input type="number" value={editForm.monthlyRent || ""} onChange={e => setEditForm({...editForm, monthlyRent: Number(e.target.value)})} className="bg-white font-black" /></div><div className="space-y-1"><Label className="text-xs">Billing Start Date</Label><Input type="date" value={editForm.billingStartDate || ""} onChange={e => setEditForm({...editForm, billingStartDate: e.target.value})} className="bg-white" /></div></div>
                 </div>
               </div>
               <Button onClick={handleUpdateProfile} className="w-full h-14 rounded-2xl font-black text-lg shadow-xl" disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Save Profile Updates"}</Button>
