@@ -180,7 +180,7 @@ export default function StudentsPage() {
               <th className="text-right">Monthly Rent</th>
               <th className="text-right">Total Received</th>
               <th className="text-right">Rent Due</th>
-              <th className="text-right">Food Balance</th>
+              {planFilter !== 'package' && <th className="text-right">Food Balance</th>}
             </tr>
           </thead>
           <tbody>
@@ -191,9 +191,11 @@ export default function StudentsPage() {
                 <td className="text-right">৳{s.monthlyRent}</td>
                 <td className="text-right">৳{s.totalReceived.toLocaleString()}</td>
                 <td className="text-right font-bold text-destructive">৳{s.rentDue.toLocaleString()}</td>
-                <td className="text-right">
-                  {s.paymentSystem === 'non-package' ? "৳" + s.foodBalance.toLocaleString() : "-"}
-                </td>
+                {planFilter !== 'package' && (
+                  <td className="text-right">
+                    {s.paymentSystem === 'non-package' ? "৳" + s.foodBalance.toLocaleString() : "-"}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -201,7 +203,7 @@ export default function StudentsPage() {
             <tr className="total-row">
               <td colSpan={4} className="text-right uppercase">Total Due Overview</td>
               <td className="text-right">৳{processedStudents.reduce((a, b) => a + b.rentDue, 0).toLocaleString()}</td>
-              <td className="text-right"></td>
+              {planFilter !== 'package' && <td className="text-right"></td>}
             </tr>
           </tfoot>
         </table>
