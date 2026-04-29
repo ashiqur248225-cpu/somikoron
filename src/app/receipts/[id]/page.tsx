@@ -188,6 +188,7 @@ export default function ReceiptPage() {
                 {payment.seatAmount > 0 && (<tr><td className="p-4 font-bold text-slate-700">Rent</td><td className="p-4 text-center text-xs text-muted-foreground">{payment.month} {payment.year}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.seatAmount.toLocaleString()}</td></tr>)}
                 {payment.foodAmount > 0 && (<tr><td className="p-4 font-bold text-slate-700">Food Deposit</td><td className="p-4 text-center text-xs text-muted-foreground">{payment.month} {payment.year}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.foodAmount.toLocaleString()}</td></tr>)}
                 {payment.advanceAmount > 0 && (<tr><td className="p-4 font-bold text-primary">Advance</td><td className="p-4 text-center text-xs text-muted-foreground">{payment.month} {payment.year}</td><td className="p-4 text-right font-black text-primary">৳{payment.advanceAmount.toLocaleString()}</td></tr>)}
+                {payment.serviceCharge > 0 && (<tr><td className="p-4 font-bold text-purple-600">Service Charge</td><td className="p-4 text-center text-xs text-muted-foreground">One-time</td><td className="p-4 text-right font-black text-purple-700">৳{payment.serviceCharge.toLocaleString()}</td></tr>)}
               </tbody>
             </table>
           </div>
