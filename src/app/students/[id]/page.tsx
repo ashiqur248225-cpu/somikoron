@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -185,9 +186,21 @@ export default function StudentDetailsPage() {
   useEffect(() => {
     if (selectedRoomForEdit && isEditDialogOpen) {
       const newRent = Number(selectedRoomForEdit.rentPerSeat || 0)
-      if (editForm?.monthlyRent !== newRent) {
-        setEditForm((prev: any) => ({ ...prev, monthlyRent: newRent }))
+      
+      // AUTO SELECT LOGIC: If room changed or current seat invalid, pick first available
+      const isOriginalRoom = student?.buildingId === editForm?.buildingId && String(student?.roomNumber) === String(editForm?.roomNumber);
+      let nextSeat = editForm?.seatNumber;
+
+      if (!isOriginalRoom || !editForm?.seatNumber) {
+        const firstAvailable = selectedRoomForEdit.seats?.find((s: any) => s.status === 'empty')?.seatNo || "";
+        nextSeat = firstAvailable;
       }
+
+      setEditForm((prev: any) => ({ 
+        ...prev, 
+        monthlyRent: newRent,
+        seatNumber: nextSeat
+      }))
     }
   }, [selectedRoomForEdit, isEditDialogOpen])
 
@@ -229,6 +242,11 @@ export default function StudentDetailsPage() {
       setSettlementInput(settlementCalculation.absResult.toString());
     }
   }, [isExitDialogOpen, settlementCalculation]);
+
+  const toggleSeatStatus = (aptId: string, roomId: string, seatId: string) => {
+    // This is typically used in Building details, but if implemented here for quick seat release/take...
+    // Currently not directly used for student individual updates through this page's logic.
+  };
 
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
@@ -292,7 +310,7 @@ export default function StudentDetailsPage() {
           const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
           const totalPayable = finalTotalDue + foodDue;
           const mealRate = Number(mealConfig?.rate || 0);
-          const msg = template.replaceAll('[নাম]', student.name).replaceAll('[মাস]', `${paymentData.month} ${paymentData.year}`).replaceAll('[total_payable]', totalPayable.toString()).replaceAll('[paid]', totalAmt.toString()).replaceAll('[food_balance]', foodBalance.toString()).replaceAll('[food_due]', foodDue.toString()).replaceAll('[রুম]', student.roomNumber).replaceAll('[building]', student.buildingName).replaceAll('[meal_rate]', mealRate.toString()).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
+          const msg = template.replaceAll('[নাম]', student.name).replaceAll('[মাস]', `${paymentData.month} ${paymentData.year}`).replaceAll('[total_payable]', totalPayable.toString()).replaceAll('[paid]', totalAmt.toString()).replaceAll('[food_balance]', foodBalance.toString()).replaceAll('[food_due]', foodDue.toString()).replaceAll('[রুম]', student.roomNumber).replaceAll('[সিট]', student.seatNumber).replaceAll('[building]', student.buildingName).replaceAll('[meal_rate]', mealRate.toString()).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
           const res = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
           const logId = doc(collection(db, "smsLogs")).id;
           await setDoc(doc(db, "smsLogs", logId), { id: logId, to: student.phone, message: msg, status: res.error === 0 ? 'Success' : 'Failed', branch: student.branch, sentBy: userName, createdAt: serverTimestamp() });

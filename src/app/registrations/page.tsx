@@ -149,11 +149,14 @@ export default function RegistrationsPage() {
   useEffect(() => {
     if (selectedRoom) {
       const rent = String(selectedRoom.rentPerSeat || 0)
+      const firstAvailableSeat = selectedRoom.seats?.find((s: any) => s.status === 'empty')?.seatNo || ""
+      
       setApprovalForm(prev => ({ 
         ...prev, 
         monthlyRent: rent, 
         advanceAmount: rent,
-        initialRentPayment: rent 
+        initialRentPayment: rent,
+        seatNumber: firstAvailableSeat // AUTO SELECT FIRST EMPTY SEAT
       }))
     }
   }, [selectedRoom])

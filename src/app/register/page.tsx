@@ -96,6 +96,14 @@ function RegistrationFormContent() {
   const selectedRoom = roomsInBuilding.find((r: any) => String(r.roomNo) === String(formData.roomNumber))
   const emptySeats = selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || []
 
+  // AUTO SELECT FIRST EMPTY SEAT WHEN ROOM CHANGES
+  useEffect(() => {
+    if (selectedRoom) {
+      const firstSeat = selectedRoom.seats?.find((s: any) => s.status === 'empty')?.seatNo || ""
+      setFormData(prev => ({ ...prev, seatNumber: firstSeat }))
+    }
+  }, [selectedRoom])
+
   const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>, field: 'phone' | 'parentPhone' | 'guardianPhone') => {
     const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 11)
     setFormData({ ...formData, [field]: val })
@@ -311,7 +319,7 @@ function RegistrationFormContent() {
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>District (জেলা)</Label>
-                    <Input required value={formData.district || ""} onChange={e => setFormData({...formData, district: e.target.value})} placeholder=" can " className="border-2 border-slate-200 h-11" />
+                    <Input required value={formData.district || ""} onChange={e => setFormData({...formData, district: e.target.value})} placeholder=" জেলার নাম লিখুন " className="border-2 border-slate-200 h-11" />
                   </div>
                   <div className="space-y-2">
                     <Label>Upazila (উপজেলা)</Label>
@@ -450,7 +458,9 @@ function RegistrationFormContent() {
                       <Label>Seat</Label>
                       <Select disabled={!formData.roomNumber} value={formData.seatNumber || ""} onValueChange={val => setFormData({...formData, seatNumber: val})}>
                         <SelectTrigger className="bg-white border-2 border-slate-200 h-11 shadow-sm"><SelectValue placeholder="সিট নম্বর" /></SelectTrigger>
-                        <SelectContent>{emptySeats.map((s: any) => <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>)}</SelectContent>
+                        <SelectContent>{emptySeats.map((s: any) => (
+                          <SelectItem key={s.seatNo} value={s.seatNo}>Seat {s.seatNo}</SelectItem>
+                        ))}</SelectContent>
                       </Select>
                     </div>
                   </CardContent>
