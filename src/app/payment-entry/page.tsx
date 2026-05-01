@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -316,16 +315,13 @@ export default function PaymentEntryPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-8 pb-20">
       {/* Sticky App Bar for Mobile */}
-      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
-        {userRole === 'Building Manager' ? (
-          <SidebarTrigger className="-ml-2" />
-        ) : (
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
-            <ChevronLeft size={24} />
-          </Button>
-        )}
-        <div className="flex-1 overflow-hidden">
-          <h1 className="text-lg font-bold truncate">Payment Entry</h1>
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex items-center gap-2">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
+          <div>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Payment Entry</h1>
+          </div>
         </div>
       </div>
 
@@ -426,8 +422,8 @@ export default function PaymentEntryPage() {
                 </div>
               )}
 
-              {/* SPECIAL OPTION: PAY RENT FROM ADVANCE */}
-              {Number(selectedStudent.advanceAmount || 0) >= Number(selectedStudent.monthlyRent || 0) && (
+              {/* SPECIAL OPTION: PAY RENT FROM ADVANCE (Locked to keep at least 1 month) */}
+              {Number(selectedStudent.advanceAmount || 0) >= (Number(selectedStudent.monthlyRent || 0) * 2) && (
                 <div className="mt-4 pt-4 border-t border-white/10">
                    <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-2xl border border-primary/20 hover:bg-primary/20 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, payFromAdvance: !formData.payFromAdvance})}>
                       <div className={cn("h-6 w-6 rounded-lg flex items-center justify-center transition-all", formData.payFromAdvance ? "bg-primary text-white" : "bg-white/10 text-white/40")}>
@@ -435,7 +431,7 @@ export default function PaymentEntryPage() {
                       </div>
                       <div className="flex-1">
                         <p className="text-[10px] font-black uppercase tracking-tight">Collect Rent from Advance</p>
-                        <p className="text-[8px] text-white/50">Deduct ৳{selectedStudent.monthlyRent} from security deposit.</p>
+                        <p className="text-[8px] text-white/50">Deduct ৳{selectedStudent.monthlyRent} from surplus security.</p>
                       </div>
                       <Checkbox 
                         id="payFromAdvance" 
@@ -446,12 +442,17 @@ export default function PaymentEntryPage() {
                    </div>
                 </div>
               )}
+              {Number(selectedStudent.advanceAmount || 0) < (Number(selectedStudent.monthlyRent || 0) * 2) && Number(selectedStudent.advanceAmount || 0) >= Number(selectedStudent.monthlyRent || 0) && (
+                <p className="mt-2 text-[7px] text-orange-400 font-bold uppercase tracking-widest text-center">
+                  1 Month Advance (৳{selectedStudent.monthlyRent}) is Locked until Exit.
+                </p>
+              )}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
           </div>
 
           <div className="p-6 border-2 border-success/10 bg-success/5 rounded-3xl space-y-4 shadow-sm">
@@ -481,10 +482,7 @@ export default function PaymentEntryPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label className="text-xs">Method</Label>
-              <Select disabled={formData.payFromAdvance && Number(formData.foodAmount || 0) === 0 && Number(formData.addAdvanceAmount || 0) === 0} value={formData.method} onValueChange={v => setFormData({...formData, method: v})}>
-                <SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger>
-                <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
-              </Select>
+              <Select disabled={formData.payFromAdvance && Number(formData.foodAmount || 0) === 0 && Number(formData.addAdvanceAmount || 0) === 0} value={formData.method} onValueChange={v => setFormData({...formData, method: v})}><SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select>
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Receiver</Label>
