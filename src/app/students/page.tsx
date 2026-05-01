@@ -130,7 +130,7 @@ export default function StudentsPage() {
               <Filter size={16} /> Filter
             </Button>
             <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={handlePrint}>
-              <Printer size={16} /> Print Report
+              <Printer size={16} />    
             </Button>
           </div>
 

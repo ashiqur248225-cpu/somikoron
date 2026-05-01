@@ -22,7 +22,9 @@ import {
   Loader2, 
   CheckCircle2, 
   ChevronLeft,
-  Smartphone
+  Smartphone,
+  RefreshCw,
+  Coins
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -30,6 +32,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { sendSMS } from "@/app/actions/sms"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028", "2029", "2030", "2031", "2032", "2033" ,"2034", "2035", "2036", "2037", "2038"];
@@ -56,7 +59,8 @@ export default function PaymentEntryPage() {
     addAdvanceAmount: "0",
     method: "cash",
     receiver: "",
-    description: ""
+    description: "",
+    payFromAdvance: false
   })
 
   useEffect(() => {
@@ -137,6 +141,16 @@ export default function PaymentEntryPage() {
     [students, formData.studentId]
   )
 
+  // Auto-fill seat amount when "Pay from Advance" is toggled
+  useEffect(() => {
+    if (formData.payFromAdvance && selectedStudent) {
+      setFormData(prev => ({
+        ...prev,
+        seatAmount: (selectedStudent.monthlyRent || 0).toString()
+      }))
+    }
+  }, [formData.payFromAdvance, selectedStudent])
+
   const handleCreatePayment = async () => {
     if (!formData.studentId || !formData.receiver || !selectedStudent) {
       toast({ variant: "destructive", title: "Error", description: "Please complete all fields." })
@@ -148,7 +162,13 @@ export default function PaymentEntryPage() {
       const seatPaid = Number(formData.seatAmount || 0)
       const foodPaid = Number(formData.foodAmount || 0)
       const extraAdvance = Number(formData.addAdvanceAmount || 0)
-      const totalAmt = seatPaid + foodPaid + extraAdvance
+      
+      // LOGIC: If payFromAdvance is true, the student isn't paying extra for rent.
+      // The seatPaid amount is deducted from their advance instead of being added to wallet.
+      const cashReceivedFromUser = foodPaid + extraAdvance + (formData.payFromAdvance ? 0 : seatPaid)
+      const advanceBalanceChange = extraAdvance - (formData.payFromAdvance ? seatPaid : 0)
+      
+      const totalAmtToLog = seatPaid + foodPaid + extraAdvance
 
       // ROLE BASED BRANCHING: Request vs Direct Entry
       const isBM = userRole === 'Building Manager'
@@ -157,12 +177,13 @@ export default function PaymentEntryPage() {
       if (needsApproval) {
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), {
-          id: reqId, requestType: "income", amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid,
+          id: reqId, requestType: "income", amount: totalAmtToLog, seatAmount: seatPaid, foodAmount: foodPaid,
           advanceAmount: extraAdvance, studentId: selectedStudent.id, studentName: selectedStudent.name,
           buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName,
           roomNumber: selectedStudent.roomNumber, branch: userBranch, month: formData.month,
           year: formData.year, method: formData.method, receiver: formData.receiver,
           description: formData.description, requestedBy: staffId, requestedByName: userName,
+          payFromAdvance: formData.payFromAdvance,
           createdAt: serverTimestamp()
         })
         toast({ title: "Request Sent", description: "Your income entry is pending for Admin approval." })
@@ -173,12 +194,12 @@ export default function PaymentEntryPage() {
       // Direct Entry Optimization with Batch
       const pId = doc(collection(db, "payments")).id
       const pRecord = {
-        id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
+        id: pId, amount: totalAmtToLog, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
         studentName: selectedStudent.name, studentId: selectedStudent.id, 
         buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName, 
         roomNumber: selectedStudent.roomNumber, branch: userBranch,
-        type: "income", month: formData.month, year: formData.year, method: formData.method, 
-        receiver: formData.receiver, description: formData.description, date: new Date().toISOString()
+        type: "income", month: formData.month, year: formData.year, method: formData.payFromAdvance ? "adjustment" : formData.method, 
+        receiver: formData.receiver, description: formData.payFromAdvance ? `Adjusted from advance. ${formData.description}` : formData.description, date: new Date().toISOString()
       }
 
       batch.set(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
@@ -222,26 +243,29 @@ export default function PaymentEntryPage() {
 
       batch.update(doc(db, "students", selectedStudent.id), {
         paymentsHistory: arrayUnion(pRecord),
-        advanceAmount: increment(extraAdvance),
+        advanceAmount: increment(advanceBalanceChange),
         totalDue: finalTotalDue,
         duesBreakdown: currentDues,
         foodDueAmount: increment(foodPaid),
-        historicalTotalReceived: increment(totalAmt),
+        historicalTotalReceived: increment(totalAmtToLog),
         updatedAt: serverTimestamp()
       })
 
-      const balanceRef = doc(db, "netBalance", userBranch);
-      const methodKeyMap: Record<string, string> = {
-        'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
-      };
-      const methodKey = methodKeyMap[formData.method] || 'totalCash';
+      // Update Synchronized Net Balance (Only actual cash received)
+      if (cashReceivedFromUser > 0) {
+        const balanceRef = doc(db, "netBalance", userBranch);
+        const methodKeyMap: Record<string, string> = {
+          'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
+        };
+        const methodKey = methodKeyMap[formData.method] || 'totalCash';
 
-      batch.set(balanceRef, {
-        branchId: userBranch,
-        [methodKey]: increment(totalAmt),
-        totalHandCash: increment(totalAmt),
-        lastUpdated: serverTimestamp()
-      }, { merge: true });
+        batch.set(balanceRef, {
+          branchId: userBranch,
+          [methodKey]: increment(cashReceivedFromUser),
+          totalHandCash: increment(cashReceivedFromUser),
+          lastUpdated: serverTimestamp()
+        }, { merge: true });
+      }
 
       // Execution of all DB tasks
       await batch.commit()
@@ -263,7 +287,7 @@ export default function PaymentEntryPage() {
               .replaceAll('[নাম]', selectedStudent.name)
               .replaceAll('[মাস]', `${formData.month} ${formData.year}`)
               .replaceAll('[total_payable]', totalPayable.toString())
-              .replaceAll('[paid]', totalAmt.toString())
+              .replaceAll('[paid]', totalAmtToLog.toString())
               .replaceAll('[food_balance]', foodBalance.toString())
               .replaceAll('[food_due]', foodDue.toString())
               .replaceAll('[রুম]', selectedStudent.roomNumber)
@@ -352,7 +376,7 @@ export default function PaymentEntryPage() {
           
           <div className="space-y-1">
             <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Select Student</Label>
-            <Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}>
+            <Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val, payFromAdvance: false})}>
               <SelectTrigger className="bg-slate-50 border-none h-12 rounded-xl shadow-inner font-black text-lg"><SelectValue placeholder="Choose Resident" /></SelectTrigger>
               <SelectContent>
                 {students?.filter(s => 
@@ -364,7 +388,7 @@ export default function PaymentEntryPage() {
           </div>
 
           {selectedStudent && (
-            <div className="p-6 bg-slate-900 rounded-3xl text-white space-y-4 shadow-xl">
+            <div className="p-6 bg-slate-900 rounded-3xl text-white space-y-4 shadow-xl animate-in zoom-in-95 duration-200">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-0.5">
                   <p className="text-[8px] font-black uppercase text-success/70 tracking-widest">Monthly Rent</p>
@@ -401,6 +425,27 @@ export default function PaymentEntryPage() {
                   </span>
                 </div>
               )}
+
+              {/* SPECIAL OPTION: PAY RENT FROM ADVANCE */}
+              {Number(selectedStudent.advanceAmount || 0) >= Number(selectedStudent.monthlyRent || 0) && (
+                <div className="mt-4 pt-4 border-t border-white/10">
+                   <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-2xl border border-primary/20 hover:bg-primary/20 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, payFromAdvance: !formData.payFromAdvance})}>
+                      <div className={cn("h-6 w-6 rounded-lg flex items-center justify-center transition-all", formData.payFromAdvance ? "bg-primary text-white" : "bg-white/10 text-white/40")}>
+                        <Coins size={14} className={cn(formData.payFromAdvance && "animate-bounce")} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[10px] font-black uppercase tracking-tight">Collect Rent from Advance</p>
+                        <p className="text-[8px] text-white/50">Deduct ৳{selectedStudent.monthlyRent} from security deposit.</p>
+                      </div>
+                      <Checkbox 
+                        id="payFromAdvance" 
+                        checked={formData.payFromAdvance} 
+                        onCheckedChange={(val) => setFormData({...formData, payFromAdvance: val === true})}
+                        className="border-white/20 data-[state=checked]:bg-primary"
+                      />
+                   </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -413,7 +458,14 @@ export default function PaymentEntryPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500">Rent Amount</Label>
-                <Input type="number" value={formData.seatAmount} onChange={e => setFormData({...formData, seatAmount: e.target.value})} className="bg-white h-12 text-xl font-black" placeholder="0.00" />
+                <Input 
+                  type="number" 
+                  value={formData.seatAmount} 
+                  onChange={e => setFormData({...formData, seatAmount: e.target.value})} 
+                  className={cn("bg-white h-12 text-xl font-black", formData.payFromAdvance && "opacity-60 border-primary/40 text-primary")} 
+                  placeholder="0.00"
+                  readOnly={formData.payFromAdvance}
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500">Food Amount</Label>
@@ -429,7 +481,7 @@ export default function PaymentEntryPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label className="text-xs">Method</Label>
-              <Select value={formData.method} onValueChange={v => setFormData({...formData, method: v})}>
+              <Select disabled={formData.payFromAdvance && Number(formData.foodAmount || 0) === 0 && Number(formData.addAdvanceAmount || 0) === 0} value={formData.method} onValueChange={v => setFormData({...formData, method: v})}>
                 <SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger>
                 <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent>
               </Select>
@@ -445,8 +497,8 @@ export default function PaymentEntryPage() {
           <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Additional notes..." className="rounded-2xl bg-slate-50 border-none shadow-inner min-h-[100px]" />
         </CardContent>
         <CardFooter className="p-8 bg-slate-50 border-t">
-          <Button onClick={handleCreatePayment} disabled={isSubmitting || !formData.studentId} className="w-full h-16 rounded-2xl text-xl font-black bg-success hover:bg-success/90 shadow-2xl shadow-success/20">
-            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2"/>} Confirm Payment
+          <Button onClick={handleCreatePayment} disabled={isSubmitting || !formData.studentId} className="w-full h-16 rounded-2xl text-xl font-black bg-success hover:bg-success/90 shadow-2xl shadow-success/20 transition-all hover:scale-[1.01]">
+            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2"/>} {formData.payFromAdvance ? "Process Adjustment" : "Confirm Payment"}
           </Button>
         </CardFooter>
       </Card>
