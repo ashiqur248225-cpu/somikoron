@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -177,9 +176,10 @@ export default function DashboardPage() {
       return true // all_time
     }
 
+    // CRITICAL: Filter out adjustments from global income stats
     const filteredPayments = (allPayments || []).filter(p => {
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
-      return isWithinRange(pDate, timeRange)
+      return isWithinRange(pDate, timeRange) && p.method !== 'adjustment'
     })
     const filteredExpenses = (allExpenses || []).filter(e => {
       const eDate = e.expenseDate ? new Date(e.expenseDate.replace(/-/g, '/')) : null

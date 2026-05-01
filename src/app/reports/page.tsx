@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -116,7 +115,11 @@ export default function ReportsPage() {
 
     const income = payments.filter(p => {
       const d = p.date?.toDate ? p.date.toDate() : (typeof p.date === 'string' && p.date.includes('-') ? new Date(p.date.replace(/-/g, '/')) : new Date(p.date))
-      return d >= sDate && d <= eDate && (buildingFilter === "all" || p.buildingId === buildingFilter)
+      
+      // CRITICAL: Filter out adjustments from report income
+      const isNotAdjustment = p.method !== 'adjustment'
+      
+      return d >= sDate && d <= eDate && (buildingFilter === "all" || p.buildingId === buildingFilter) && isNotAdjustment
     })
     const expense = expenses.filter(e => {
       const d = new Date(e.expenseDate.replace(/-/g, '/'))

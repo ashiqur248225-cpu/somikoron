@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -79,8 +78,9 @@ export default function LedgerPage() {
   const { data: expenses, isLoading: eLoading } = useCollection(expensesQuery)
 
   const rawLedgerData = useMemo(() => {
+    // CRITICAL: Filter out adjustments from global ledger
     const combined = [
-      ...(payments || []).map(p => ({ ...p, txType: 'income', debit: 0, credit: p.amount })),
+      ...(payments || []).filter(p => p.method !== 'adjustment').map(p => ({ ...p, txType: 'income', debit: 0, credit: p.amount })),
       ...(expenses || []).map(e => ({ ...e, txType: 'expense', debit: e.amount, credit: 0, date: e.expenseDate }))
     ]
     return combined.sort((a, b) => {

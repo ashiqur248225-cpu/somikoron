@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -109,7 +108,11 @@ export default function IncomeHistoryPage() {
       const matchesRoom = roomFilter === "all" || String(p.roomNumber) === roomFilter
       const matchesMethod = methodFilter === "all" || p.method === methodFilter
       const matchesReceiver = receiverFilter === "all" || p.receiver === receiverFilter
-      return matchesStartDate && matchesEndDate && matchesBuilding && matchesRoom && matchesMethod && matchesReceiver
+      
+      // CRITICAL: Filter out adjustments from global income list
+      const isNotAdjustment = p.method !== 'adjustment'
+
+      return matchesStartDate && matchesEndDate && matchesBuilding && matchesRoom && matchesMethod && matchesReceiver && isNotAdjustment
     }).sort((a, b) => {
       const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date)
       const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date)

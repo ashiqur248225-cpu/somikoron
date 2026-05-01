@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -120,6 +119,9 @@ export default function ReceiptsHistoryPage() {
     const todayYMD = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`
 
     return payments.filter(p => {
+      // CRITICAL: Filter out adjustments from global receipts history
+      if (p.method === 'adjustment') return false;
+
       const search = searchTerm.toLowerCase()
       const receiptNo = `RCPT-${p.id?.substring(0, 8).toUpperCase()}`
       
