@@ -93,7 +93,6 @@ export default function StudentDetailsPage() {
     const name = localStorage.getItem("user_name") || "User"
     setUserRole(role)
     setUserName(name)
-    // AUTO POPULATE PROCESSED BY
     setExitStaff(name)
   }, [])
 
@@ -186,8 +185,6 @@ export default function StudentDetailsPage() {
   useEffect(() => {
     if (selectedRoomForEdit && isEditDialogOpen) {
       const newRent = Number(selectedRoomForEdit.rentPerSeat || 0)
-      
-      // AUTO SELECT LOGIC: If room changed or current seat invalid, pick first available
       const isOriginalRoom = student?.buildingId === editForm?.buildingId && String(student?.roomNumber) === String(editForm?.roomNumber);
       let nextSeat = editForm?.seatNumber;
 
@@ -242,11 +239,6 @@ export default function StudentDetailsPage() {
       setSettlementInput(settlementCalculation.absResult.toString());
     }
   }, [isExitDialogOpen, settlementCalculation]);
-
-  const toggleSeatStatus = (aptId: string, roomId: string, seatId: string) => {
-    // This is typically used in Building details, but if implemented here for quick seat release/take...
-    // Currently not directly used for student individual updates through this page's logic.
-  };
 
   const handlePaymentSubmit = async () => {
     if (!student || !studentRef) return
@@ -339,44 +331,29 @@ export default function StudentDetailsPage() {
     try {
       if (locationChanged) {
         if (student.buildingId === editForm.buildingId) {
-          // Internal Move: Same Building complex
           const bRef = doc(db, "buildings", student.buildingId)
           const bSnap = await getDoc(bRef)
-          
           if (bSnap.exists()) {
             const bData = bSnap.data()
             const newAptName = selectedRoomForEdit?.aptName || "General"
-            
             const updatedApts = bData.apartmentsDetail.map((apt: any) => {
               let newApt = { ...apt, rooms: [...apt.rooms] };
               newApt.rooms = newApt.rooms.map((room: any) => {
                 let newRoom = { ...room, seats: [...room.seats] };
-                
-                // Release old seat
                 if (apt.name === student.apartmentName && String(room.roomNo) === String(student.roomNumber)) {
-                  newRoom.seats = newRoom.seats.map((s: any) => 
-                    s.seatNo === student.seatNumber ? { ...s, status: 'empty' } : s
-                  );
+                  newRoom.seats = newRoom.seats.map((s: any) => s.seatNo === student.seatNumber ? { ...s, status: 'empty' } : s);
                 }
-                
-                // Occupy new seat
                 if (apt.name === newAptName && String(room.roomNo) === String(editForm.roomNumber)) {
-                  newRoom.seats = newRoom.seats.map((s: any) => 
-                    s.seatNo === editForm.seatNumber ? { ...s, status: 'occupied' } : s
-                  );
+                  newRoom.seats = newRoom.seats.map((s: any) => s.seatNo === editForm.seatNumber ? { ...s, status: 'occupied' } : s);
                 }
-                
                 return newRoom;
               });
               return newApt;
             });
-
             batch.update(bRef, { apartmentsDetail: updatedApts, updatedAt: serverTimestamp() });
             studentUpdateData.apartmentName = newAptName;
           }
         } else {
-          // Migration: Different Building complex
-          // 1. Release from Old Building
           const oldBRef = doc(db, "buildings", student.buildingId)
           const oldBSnap = await getDoc(oldBRef)
           if (oldBSnap.exists()) {
@@ -398,15 +375,9 @@ export default function StudentDetailsPage() {
               }
               return apt
             })
-            batch.update(oldBRef, { 
-              apartmentsDetail: updatedOldApts, 
-              occupiedSeats: increment(-1), 
-              emptySeats: increment(1), 
-              updatedAt: serverTimestamp() 
-            })
+            batch.update(oldBRef, { apartmentsDetail: updatedOldApts, occupiedSeats: increment(-1), emptySeats: increment(1), updatedAt: serverTimestamp() })
           }
 
-          // 2. Occupy in New Building
           const newBRef = doc(db, "buildings", editForm.buildingId)
           const newBSnap = await getDoc(newBRef)
           if (newBSnap.exists()) {
@@ -429,29 +400,19 @@ export default function StudentDetailsPage() {
               }
               return apt
             })
-            batch.update(newBRef, { 
-              apartmentsDetail: updatedNewApts, 
-              occupiedSeats: increment(1), 
-              emptySeats: increment(-1), 
-              updatedAt: serverTimestamp() 
-            })
-            
+            batch.update(newBRef, { apartmentsDetail: updatedNewApts, occupiedSeats: increment(1), emptySeats: increment(-1), updatedAt: serverTimestamp() })
             studentUpdateData.buildingName = newBData.name
             studentUpdateData.apartmentName = newAptName
           }
         }
       }
-      
       batch.update(studentRef, { ...studentUpdateData, updatedAt: serverTimestamp() })
       await batch.commit()
       setIsEditDialogOpen(false)
       toast({ title: "Profile Updated" })
       router.refresh()
-    } catch (e: any) { 
-      toast({ variant: "destructive", title: "Error", description: e.message }) 
-    } finally { 
-      setIsUpdating(false) 
-    }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } 
+    finally { setIsUpdating(false) }
   }
 
   const handleConfirmExit = async () => {
@@ -461,7 +422,6 @@ export default function StudentDetailsPage() {
     }
     setIsUpdating(true)
     const batch = writeBatch(db)
-    
     try {
       const bRef = doc(db, "buildings", student.buildingId)
       const buildingSnap = await getDoc(bRef)
@@ -489,14 +449,10 @@ export default function StudentDetailsPage() {
 
       const processedAmt = Number(settlementInput)
       const balanceRef = doc(db, "netBalance", student.branch)
-      const methodKeyMap: Record<string, string> = {
-        'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
-      }
+      const methodKeyMap: Record<string, string> = { 'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank' }
       const methodKey = methodKeyMap[exitMethod] || 'totalCash'
 
-      let finalTotalDue = 0;
-      let finalAdvance = 0;
-
+      let finalTotalDue = 0; let finalAdvance = 0;
       if (settlementCalculation.isRefund) {
         if (processedAmt > 0) {
           const expenseId = doc(collection(db, "expenses")).id
@@ -510,8 +466,7 @@ export default function StudentDetailsPage() {
           batch.set(balanceRef, { [methodKey]: increment(-processedAmt), totalHandCash: increment(-processedAmt), lastUpdated: serverTimestamp() }, { merge: true })
         }
         const delta = settlementCalculation.netResult - processedAmt;
-        if (delta > 0) finalAdvance = delta;
-        else if (delta < 0) finalTotalDue = Math.abs(delta);
+        if (delta > 0) finalAdvance = delta; else if (delta < 0) finalTotalDue = Math.abs(delta);
       } else {
         if (processedAmt > 0) {
           const paymentId = doc(collection(db, "payments")).id
@@ -526,25 +481,10 @@ export default function StudentDetailsPage() {
           batch.set(balanceRef, { [methodKey]: increment(processedAmt), totalHandCash: increment(processedAmt), lastUpdated: serverTimestamp() }, { merge: true })
         }
         const delta = Math.abs(settlementCalculation.netResult) - processedAmt;
-        if (delta > 0) finalTotalDue = delta;
-        else if (delta < 0) finalAdvance = Math.abs(delta);
+        if (delta > 0) finalTotalDue = delta; else if (delta < 0) finalAdvance = Math.abs(delta);
       }
-
-      batch.update(studentRef, { 
-        isActive: false, 
-        leftAt: serverTimestamp(), 
-        totalDue: finalTotalDue,
-        advanceAmount: finalAdvance,
-        foodDueAmount: 0,
-        duesBreakdown: {},
-        finalSettlementAmount: processedAmt,
-        finalSettlementMethod: exitMethod,
-        finalSettlementProcessedBy: exitStaff,
-        updatedAt: serverTimestamp() 
-      })
-
+      batch.update(studentRef, { isActive: false, leftAt: serverTimestamp(), totalDue: finalTotalDue, advanceAmount: finalAdvance, foodDueAmount: 0, duesBreakdown: {}, finalSettlementAmount: processedAmt, finalSettlementMethod: exitMethod, finalSettlementProcessedBy: exitStaff, updatedAt: serverTimestamp() })
       await batch.commit()
-
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'exit')?.text || "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।";
         const msg = template.replaceAll('[নাম]', student.name).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
@@ -552,21 +492,14 @@ export default function StudentDetailsPage() {
         const logId = doc(collection(db, "smsLogs")).id;
         await setDoc(doc(db, "smsLogs", logId), { id: logId, to: student.phone, message: msg, status: smsResult.error === 0 ? 'Success' : 'Failed', branch: student.branch, sentBy: userName, createdAt: serverTimestamp() });
       }
-
       toast({ title: "Settlement Complete", description: `Seat released. Remaining Due: ৳${finalTotalDue}` });
-      setIsExitDialogOpen(false);
-      router.push("/students");
+      setIsExitDialogOpen(false); router.push("/students");
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } 
     finally { setIsUpdating(false) }
   }
 
-  if (studentLoading || buildingsLoading) {
-    return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
-  }
-
-  if (!student) {
-    return <div className="text-center p-20">Resident not found.</div>
-  }
+  if (studentLoading || buildingsLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
+  if (!student) return <div className="text-center p-20">Resident not found.</div>
 
   const financialCards = [
     { label: "Advance", val: student.advanceAmount, color: "blue-600", icon: ShieldCheck, bg: "bg-blue-50" },
@@ -637,16 +570,39 @@ export default function StudentDetailsPage() {
         <TabsContent value="payments">
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
-              <TableBody>{student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
-                <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}><TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell><TableCell className="font-bold">{p.month} {p.year}</TableCell><TableCell>৳{p.seatAmount || 0}</TableCell><TableCell>৳{p.foodAmount || 0}</TableCell><TableCell>৳{p.advanceAmount || 0}</TableCell><TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{p.method}</Badge></TableCell><TableCell className="text-right font-black text-success">৳{p.amount.toLocaleString()}</TableCell></TableRow>
+              <TableBody>{student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
+                <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
+                  <TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
+                  <TableCell className="font-bold">{p.month} {p.year}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span>৳{p.seatAmount || 0}</span>
+                      {p.method === 'adjustment' && <span className="text-[8px] font-bold text-primary uppercase">From Advance</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell>৳{p.foodAmount || 0}</TableCell>
+                  <TableCell>৳{p.advanceAmount || 0}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={cn("text-[9px] uppercase font-bold", p.method === 'adjustment' ? "border-primary text-primary bg-primary/5" : "text-muted-foreground")}>
+                      {p.method}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-black text-success">৳{p.amount.toLocaleString()}</TableCell>
+                </TableRow>
               ))}</TableBody>
             </Table>
           </Card>
-          <div className="md:hidden space-y-4">{student.paymentsHistory?.slice().reverse().map((p: any, idx: number) => (
+          <div className="md:hidden space-y-4">{student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
             <Card key={idx} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
               <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p><h3 className="font-black text-slate-800">{p.month} {p.year}</h3></div><Badge className="bg-success font-black">৳{p.amount.toLocaleString()}</Badge></div>
               <div className="grid grid-cols-3 gap-2 bg-secondary/30 p-2 rounded-xl text-[9px] font-bold uppercase text-slate-500"><div className="text-center"><p className="opacity-60">Rent</p><p className="text-slate-800">৳{p.seatAmount || 0}</p></div><div className="text-center"><p className="opacity-60">Food</p><p className="text-slate-800">৳{p.foodAmount || 0}</p></div><div className="text-center"><p className="opacity-60">Adv.</p><p className="text-primary">৳{p.advanceAmount || 0}</p></div></div>
-              <div className="flex justify-between items-center text-[10px]"><span className="font-bold text-muted-foreground uppercase flex items-center gap-1"><Wallet size={10}/> {p.method}</span><Button variant="ghost" size="sm" className="h-6 text-primary gap-1 font-bold">Receipt <ChevronRight size={12}/></Button></div>
+              {p.description && <p className="text-[9px] text-slate-400 italic line-clamp-1">{p.description}</p>}
+              <div className="flex justify-between items-center text-[10px]">
+                <span className={cn("font-bold uppercase flex items-center gap-1", p.method === 'adjustment' ? "text-primary" : "text-muted-foreground")}>
+                  <Wallet size={10}/> {p.method === 'adjustment' ? 'Adjusted from Advance' : p.method}
+                </span>
+                <Button variant="ghost" size="sm" className="h-6 text-primary gap-1 font-bold">Receipt <ChevronRight size={12}/></Button>
+              </div>
             </Card>
           ))}</div>
         </TabsContent>
@@ -666,12 +622,12 @@ export default function StudentDetailsPage() {
           <TabsContent value="meals">
             <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
               <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Month</TableHead><TableHead>Meal Count</TableHead><TableHead className="text-right">Total Cost</TableHead></TableRow></TableHeader>
-                <TableBody>{student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
+                <TableBody>{student.mealsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((m: any, idx: number) => (
                   <TableRow key={idx}><TableCell className="text-xs text-slate-500">{new Date(m.date).toLocaleDateString()}</TableCell><TableCell className="font-bold">{m.month}</TableCell><TableCell><Badge variant="secondary" className="font-bold">{m.totalMeals} Meals</Badge></TableCell><TableCell className="text-right font-black text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell></TableRow>
                 ))}</TableBody>
               </Table>
             </Card>
-            <div className="md:hidden space-y-4">{student.mealsHistory?.slice().reverse().map((m: any, idx: number) => (
+            <div className="md:hidden space-y-4">{student.mealsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((m: any, idx: number) => (
               <Card key={idx} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-2"><div className="flex justify-between items-center"><p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(m.date).toLocaleDateString()}</p><Badge variant="secondary" className="font-black">{m.totalMeals} MEALS</Badge></div><div className="flex justify-between items-end"><h3 className="font-black text-slate-800">{m.month}</h3><p className="text-xl font-black text-destructive">৳{m.totalCost?.toLocaleString()}</p></div></Card>
             ))}</div>
           </TabsContent>
