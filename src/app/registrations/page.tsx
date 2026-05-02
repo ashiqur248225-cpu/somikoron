@@ -97,7 +97,7 @@ export default function RegistrationsPage() {
     if (!userBranch) return null
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
   }, [db, userBranch])
-  const { data: buildings } = useCollection(buildingsQuery)
+  const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
 
   const staffQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -216,7 +216,7 @@ export default function RegistrationsPage() {
   }
 
   const handleApprove = async () => {
-    if (!approvalForm.monthlyRent || !approvalForm.buildingId || !approvalForm.roomNumber || !approvalForm.seatNumber) {
+    if (!selectedReq || !approvalForm.monthlyRent || !approvalForm.buildingId || !approvalForm.roomNumber || !approvalForm.seatNumber) {
       toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "সিট বরাদ্দ এবং ভাড়ার তথ্য প্রদান করুন।" })
       return
     }
@@ -224,7 +224,7 @@ export default function RegistrationsPage() {
     try {
       const batch = writeBatch(db); 
       const studentId = doc(collection(db, "students")).id
-      const isOld = selectedReg.type === 'old'
+      const isOld = selectedReq.type === 'old'
       const aptName = selectedRoom?.aptName || "General"
       
       const now = new Date()
@@ -274,7 +274,7 @@ export default function RegistrationsPage() {
           const pId = doc(collection(db, "payments")).id
           initialPaymentRecord = {
             id: pId, amount: totalNewReceived, seatAmount: rentPaid, foodAmount: foodPaid,
-            advanceAmount: advAmount, serviceCharge: svcCharge, studentId, studentName: selectedReg.name,
+            advanceAmount: advAmount, serviceCharge: svcCharge, studentId, studentName: selectedReq.name,
             buildingId: approvalForm.buildingId, buildingName: selectedBuilding?.name,
             roomNumber: approvalForm.roomNumber, branch: userBranch, type: "income", 
             method: approvalForm.method, receiver: approvalForm.receiver, month: currentMonth, year: currentYear,
@@ -294,7 +294,7 @@ export default function RegistrationsPage() {
       const foodDueAmount = isOld ? Number(approvalForm.foodDueAmount || 0) : Number(approvalForm.initialFoodPayment);
 
       batch.set(doc(db, "students", studentId), {
-        id: studentId, name: selectedReg.name, phone: selectedReg.phone, branch: userBranch,
+        id: studentId, name: selectedReq.name, phone: selectedReq.phone, branch: userBranch,
         buildingId: approvalForm.buildingId, buildingName: selectedBuilding?.name,
         roomNumber: approvalForm.roomNumber, seatNumber: approvalForm.seatNumber, apartmentName: aptName,
         monthlyRent: Number(approvalForm.monthlyRent), advanceAmount: Number(approvalForm.advanceAmount),
@@ -303,14 +303,14 @@ export default function RegistrationsPage() {
         historicalTotalReceived: isOld ? Number(approvalForm.historicalTotalReceived) : totalNewReceived,
         isActive: true, billingStartDate: approvalForm.billingStartDate,
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-        fatherName: selectedReg.fatherName || "", motherName: selectedReg.motherName || "",
-        dob: selectedReg.dob || "", bloodGroup: selectedReg.bloodGroup || "",
-        address: selectedReg.village || "", occupation: selectedReg.occupation || "",
-        school: selectedReg.school || "", schoolSession: selectedReg.schoolSession || "", schoolGroup: selectedReg.schoolGroup || "",
-        college: selectedReg.college || "", collegeSession: selectedReg.collegeSession || "", collegeGroup: selectedReg.collegeGroup || "",
-        university: selectedReg.university || "", universitySession: selectedReg.universitySession || "",
-        department: selectedReg.department || "",
-        parentPhone: selectedReg.parentPhone || "", guardianPhone: selectedReg.guardianPhone || "",
+        fatherName: selectedReq.fatherName || "", motherName: selectedReq.motherName || "",
+        dob: selectedReq.dob || "", bloodGroup: selectedReq.bloodGroup || "",
+        address: selectedReq.village || "", occupation: selectedReq.occupation || "",
+        school: selectedReq.school || "", schoolSession: selectedReq.schoolSession || "", schoolGroup: selectedReq.schoolGroup || "",
+        college: selectedReq.college || "", collegeSession: selectedReq.collegeSession || "", collegeGroup: selectedReq.collegeGroup || "",
+        university: selectedReq.university || "", universitySession: selectedReq.universitySession || "",
+        department: selectedReq.department || "",
+        parentPhone: selectedReq.parentPhone || "", guardianPhone: selectedReq.guardianPhone || "",
         paymentsHistory: initialPaymentRecord ? [initialPaymentRecord] : [],
         mealsHistory: []
       })
@@ -338,7 +338,7 @@ export default function RegistrationsPage() {
         batch.update(doc(db, "buildings", approvalForm.buildingId), { apartmentsDetail: updatedApts, occupiedSeats: occupied, emptySeats: total - occupied, updatedAt: serverTimestamp() })
       }
 
-      batch.delete(doc(db, "registrations", selectedReg.id))
+      batch.delete(doc(db, "registrations", selectedReq.id))
 
       await batch.commit()
 
@@ -355,7 +355,7 @@ export default function RegistrationsPage() {
             const totalPayable = initialTotalDue + foodDue;
 
             const msg = template
-              .replaceAll('[নাম]', selectedReg.name)
+              .replaceAll('[নাম]', selectedReq.name)
               .replaceAll('[মাস]', currentMonth)
               .replaceAll('[rent]', approvalForm.monthlyRent)
               .replaceAll('[total_payable]', totalPayable.toString())
@@ -367,18 +367,18 @@ export default function RegistrationsPage() {
               .replaceAll('[building]', selectedBuilding?.name || '')
               .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
 
-            const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReg.phone, msg);
+            const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReq.phone, msg);
             const logId = doc(collection(db, "smsLogs")).id;
-            await setDoc(doc(db, "smsLogs", logId), { id: logId, to: selectedReg.phone, message: msg, branch: userBranch, sentBy: userName, status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp() });
+            await setDoc(doc(db, "smsLogs", logId), { id: logId, to: selectedReq.phone, message: msg, branch: userBranch, sentBy: userName, status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp() });
           } catch (e) {
             console.error("Background SMS Error:", e)
           }
         })();
       }
 
-      toast({ title: "ভর্তি সম্পন্ন হয়েছে!", description: `${selectedReg.name} এখন একজন সচল রেসিডেন্ট।` })
+      toast({ title: "ভর্তি সম্পন্ন হয়েছে!", description: `${selectedReq.name} এখন একজন সচল রেসিডেন্ট।` })
       setIsDetailOpen(false)
-      setSelectedReg(null)
+      setSelectedReq(null)
       router.refresh();
     } catch (e: any) { 
       toast({ variant: "destructive", title: "Error", description: e.message }) 
@@ -388,13 +388,13 @@ export default function RegistrationsPage() {
   }
 
   const handleReject = async () => {
-    if (!selectedReg) return
+    if (!selectedReq) return
     setIsProcessing(true)
     try {
-      await deleteDoc(doc(db, "registrations", selectedReg.id))
+      await deleteDoc(doc(db, "registrations", selectedReq.id))
       toast({ title: "বাতিল করা হয়েছে", description: "আবেদনটি লিস্ট থেকে সরিয়ে দেওয়া হয়েছে।" })
       setIsDetailOpen(false)
-      setSelectedReg(null)
+      setSelectedReq(null)
       router.refresh();
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
@@ -444,7 +444,7 @@ export default function RegistrationsPage() {
                     <TableRow 
                       key={reg.id} 
                       className="cursor-pointer hover:bg-slate-50/50"
-                      onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}
+                      onClick={() => { setSelectedReq(reg); setIsDetailOpen(true); }}
                     >
                       <TableCell>
                         <div className="flex flex-col">
@@ -470,7 +470,7 @@ export default function RegistrationsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="outline" size="sm" className="gap-2 font-bold" onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}>
+                        <Button variant="outline" size="sm" className="gap-2 font-bold" onClick={() => { setSelectedReq(reg); setIsDetailOpen(true); }}>
                           <Eye size={14} /> Verify & Approve
                         </Button>
                       </TableCell>
@@ -489,7 +489,7 @@ export default function RegistrationsPage() {
               <Card 
                 key={reg.id} 
                 className="border-none shadow-sm rounded-2xl overflow-hidden bg-white cursor-pointer active:scale-[0.98] transition-transform" 
-                onClick={() => { setSelectedReg(reg); setIsDetailOpen(true); }}
+                onClick={() => { setSelectedReq(reg); setIsDetailOpen(true); }}
               >
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-start">
@@ -529,7 +529,7 @@ export default function RegistrationsPage() {
               <Send className="text-primary" size={20}/> Confirm Admission & SMS?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will enroll <b>{selectedReg?.name}</b> as an active resident and send an automated admission confirmation SMS. 1 SMS credit will be used.
+              This will enroll <b>{selectedReq?.name}</b> as an active resident and send an automated admission confirmation SMS. 1 SMS credit will be used.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -550,7 +550,7 @@ export default function RegistrationsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">Reject Registration?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to permanently remove <b>{selectedReg?.name}</b>'s registration request? This action cannot be undone.
+              Are you sure you want to permanently remove <b>{selectedReq?.name}</b>'s registration request? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -574,10 +574,10 @@ export default function RegistrationsPage() {
                 <DialogTitle className="text-2xl font-black flex items-center gap-2">
                   <ShieldCheck className="text-primary" /> Approval Verification
                 </DialogTitle>
-                <DialogDescription>Verify details and assign infrastructure for <b>{selectedReg?.name}</b>.</DialogDescription>
+                <DialogDescription>Verify details and assign infrastructure for <b>{selectedReq?.name}</b>.</DialogDescription>
               </div>
-              <Badge variant="outline" className={cn("text-[10px] font-bold h-6", selectedReg?.type === 'old' ? 'border-primary text-primary' : 'border-orange-500 text-orange-500')}>
-                {selectedReg?.type === 'old' ? 'MIGRATION ACCOUNT' : 'NEW ADMISSION'}
+              <Badge variant="outline" className={cn("text-[10px] font-bold h-6", selectedReq?.type === 'old' ? 'border-primary text-primary' : 'border-orange-500 text-orange-500')}>
+                {selectedReq?.type === 'old' ? 'MIGRATION ACCOUNT' : 'NEW ADMISSION'}
               </Badge>
             </div>
           </DialogHeader>
@@ -590,24 +590,24 @@ export default function RegistrationsPage() {
                   <div className="p-5 border-2 border-slate-100 bg-slate-50 rounded-3xl space-y-4">
                     <div className="space-y-1">
                       <Label className="text-[10px] font-bold text-muted-foreground uppercase">Full Name</Label>
-                      <p className="font-black text-slate-800">{selectedReg?.name || "N/A"}</p>
+                      <p className="font-black text-slate-800">{selectedReq?.name || "N/A"}</p>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] font-bold text-muted-foreground uppercase">Education Summary</Label>
                       <div className="text-xs space-y-2 text-slate-600 font-medium">
-                        {selectedReg?.occupation === 'student' ? (
+                        {selectedReq?.occupation === 'student' ? (
                           <>
                             <div className="p-2 bg-white rounded-lg border border-slate-200">
-                              <p className="font-bold">School: {selectedReg?.school || "N/A"}</p>
-                              <p className="text-[10px] uppercase text-muted-foreground">Session: {selectedReg?.schoolSession || "N/A"} | Group: {selectedReg?.schoolGroup || "N/A"}</p>
+                              <p className="font-bold">School: {selectedReq?.school || "N/A"}</p>
+                              <p className="text-[10px] uppercase text-muted-foreground">Session: {selectedReq?.schoolSession || "N/A"} | Group: {selectedReq?.schoolGroup || "N/A"}</p>
                             </div>
                             <div className="p-2 bg-white rounded-lg border border-slate-200">
-                              <p className="font-bold">College: {selectedReg?.college || "N/A"}</p>
-                              <p className="text-[10px] uppercase text-muted-foreground">Session: {selectedReg?.collegeSession || "N/A"} | Group: {selectedReg?.collegeGroup || "N/A"}</p>
+                              <p className="font-bold">College: {selectedReq?.college || "N/A"}</p>
+                              <p className="text-[10px] uppercase text-muted-foreground">Session: {selectedReq?.collegeSession || "N/A"} | Group: {selectedReq?.collegeGroup || "N/A"}</p>
                             </div>
                           </>
                         ) : (
-                          <p>Work: {selectedReg?.companyName || "N/A"} ({selectedReg?.designation || 'N/A'})</p>
+                          <p>Work: {selectedReq?.companyName || "N/A"} ({selectedReq?.designation || 'N/A'})</p>
                         )}
                       </div>
                     </div>
@@ -698,10 +698,10 @@ export default function RegistrationsPage() {
 
                 <div className="space-y-4">
                   <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
-                    <Calculator size={14}/> Section 4: {selectedReg?.type === 'old' ? 'Migration History' : 'Initial Collection'}
+                    <Calculator size={14}/> Section 4: {selectedReq?.type === 'old' ? 'Migration History' : 'Initial Collection'}
                   </h3>
                   
-                  {selectedReg?.type === 'old' ? (
+                  {selectedReq?.type === 'old' ? (
                     <div className="p-6 border-2 border-orange-200 bg-orange-50/50 rounded-3xl space-y-6 shadow-sm">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
@@ -774,7 +774,7 @@ export default function RegistrationsPage() {
                   )}
                 </div>
 
-                {selectedReg?.type !== 'old' && (
+                {selectedReq?.type !== 'old' && (
                   <div className="space-y-6">
                     <div className="space-y-4">
                       <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><HandCoins size={14}/> Section 5: Collection Details</h3>
@@ -855,52 +855,52 @@ export default function RegistrationsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><FileText className="text-primary" /> Application Details</DialogTitle>
           </DialogHeader>
-          {selectedReg && (
+          {selectedReq && (
             <div className="space-y-6 py-4">
               <div className="space-y-4">
                 <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Personal Details</h4>
                 <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                   <div><Label className="text-[9px] uppercase">Father's Name</Label><p className="font-bold text-sm">{selectedReg.fatherName || 'N/A'}</p></div>
-                   <div><Label className="text-[9px] uppercase">Mother's Name</Label><p className="font-bold text-sm">{selectedReg.motherName || 'N/A'}</p></div>
-                   <div><Label className="text-[9px] uppercase">Date of Birth</Label><p className="font-bold text-sm">{selectedReg.dob || 'N/A'}</p></div>
-                   <div><Label className="text-[9px] uppercase">Blood Group</Label><p className="font-bold text-sm">{selectedReg.bloodGroup || 'N/A'}</p></div>
-                   <div><Label className="text-[9px] uppercase">Personal Phone</Label><p className="font-bold text-sm">{selectedReg.phone || 'N/A'}</p></div>
-                   <div><Label className="text-[9px] uppercase">Parent Phone</Label><p className="font-bold text-sm">{selectedReg.parentPhone || 'N/A'}</p></div>
-                   <div><Label className="text-[9px] uppercase">Guardian Phone</Label><p className="font-bold text-sm">{selectedReg.guardianPhone || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Father's Name</Label><p className="font-bold text-sm">{selectedReq.fatherName || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Mother's Name</Label><p className="font-bold text-sm">{selectedReq.motherName || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Date of Birth</Label><p className="font-bold text-sm">{selectedReq.dob || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Blood Group</Label><p className="font-bold text-sm">{selectedReq.bloodGroup || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Personal Phone</Label><p className="font-bold text-sm">{selectedReq.phone || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Parent Phone</Label><p className="font-bold text-sm">{selectedReq.parentPhone || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Guardian Phone</Label><p className="font-bold text-sm">{selectedReq.guardianPhone || 'N/A'}</p></div>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Permanent Address</h4>
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                   <p className="text-sm font-medium">{selectedReg.village || 'N/A'}, PO: {selectedReg.postOffice || 'N/A'}, {selectedReg.upazila || 'N/A'}, {selectedReg.district || 'N/A'}</p>
+                   <p className="text-sm font-medium">{selectedReq.village || 'N/A'}, PO: {selectedReq.postOffice || 'N/A'}, {selectedReq.upazila || 'N/A'}, {selectedReq.district || 'N/A'}</p>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Education / Professional Info</h4>
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
-                  {selectedReg.occupation === 'student' ? (
+                  {selectedReq.occupation === 'student' ? (
                     <>
                       <div className="space-y-1">
-                        <p className="text-xs font-bold text-slate-700">School: {selectedReg.school || 'N/A'}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase">Session: {selectedReg.schoolSession || 'N/A'} | Group: {selectedReg.schoolGroup || 'N/A'}</p>
+                        <p className="text-xs font-bold text-slate-700">School: {selectedReq.school || 'N/A'}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">Session: {selectedReq.schoolSession || 'N/A'} | Group: {selectedReq.schoolGroup || 'N/A'}</p>
                       </div>
                       <div className="space-y-1">
-                        <p className="text-xs font-bold text-slate-700">College: {selectedReg.college || 'N/A'}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase">Session: {selectedReg.collegeSession || 'N/A'} | Group: {selectedReg.collegeGroup || 'N/A'}</p>
+                        <p className="text-xs font-bold text-slate-700">College: {selectedReq.college || 'N/A'}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">Session: {selectedReq.collegeSession || 'N/A'} | Group: {selectedReq.collegeGroup || 'N/A'}</p>
                       </div>
-                      {selectedReg.university && (
+                      {selectedReq.university && (
                         <div className="space-y-1">
-                          <p className="text-xs font-bold text-slate-700">University: {selectedReg.university}</p>
-                          <p className="text-[10px] text-muted-foreground uppercase">Session: {selectedReg.universitySession || 'N/A'} | Dept: {selectedReg.department || 'N/A'}</p>
+                          <p className="text-xs font-bold text-slate-700">University: {selectedReq.university}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase">Session: {selectedReq.universitySession || 'N/A'} | Dept: {selectedReq.department || 'N/A'}</p>
                         </div>
                       )}
                     </>
                   ) : (
                     <div className="space-y-1">
-                      <p className="text-xs font-bold text-slate-700">Company: {selectedReg.companyName || 'N/A'}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase">Designation: {selectedReg.designation || 'N/A'}</p>
+                      <p className="text-xs font-bold text-slate-700">Company: {selectedReq.companyName || 'N/A'}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">Designation: {selectedReq.designation || 'N/A'}</p>
                     </div>
                   )}
                 </div>
