@@ -12,11 +12,11 @@ import {
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
   AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2,
   Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft, ListOrdered, Hash,
-  User, ChevronRight, LayoutGrid, CircleDollarSign
+  User, ChevronRight, LayoutGrid, CircleDollarSign, Send
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where, getDoc, writeBatch } from "firebase/firestore"
+import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where, getDocs, limit, arrayUnion, writeBatch } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -27,6 +27,16 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -54,6 +64,8 @@ export default function RegistrationsPage() {
   const [selectedReg, setSelectedReg] = useState<any>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isConfirmSmsOpen, setIsConfirmSmsOpen] = useState(false)
+  const [isConfirmRejectOpen, setIsConfirmRejectOpen] = useState(false)
   
   const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
@@ -156,7 +168,7 @@ export default function RegistrationsPage() {
         monthlyRent: rent, 
         advanceAmount: rent,
         initialRentPayment: rent,
-        seatNumber: firstAvailableSeat // AUTO SELECT FIRST EMPTY SEAT
+        seatNumber: firstAvailableSeat 
       }))
     }
   }, [selectedRoom])
@@ -198,7 +210,7 @@ export default function RegistrationsPage() {
     }
     setIsProcessing(true)
     try {
-      const batch = writeBatch(db); // Initialize Batch
+      const batch = writeBatch(db); 
       const studentId = doc(collection(db, "students")).id
       const isOld = selectedReg.type === 'old'
       const aptName = selectedRoom?.aptName || "General"
@@ -248,7 +260,6 @@ export default function RegistrationsPage() {
             method: approvalForm.method, receiver: approvalForm.receiver, month: currentMonth, year: currentYear,
             date: new Date().toISOString(), createdAt: new Date().toISOString()
           }
-          // Batch Payment Set
           batch.set(doc(db, "payments", pId), { ...initialPaymentRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
 
           const balanceRef = doc(db, "netBalance", userBranch);
@@ -256,14 +267,12 @@ export default function RegistrationsPage() {
             'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
           };
           const methodKey = methodKeyMap[approvalForm.method] || 'totalCash';
-          // Batch Balance Update
           batch.set(balanceRef, { branchId: userBranch, [methodKey]: increment(totalNewReceived), totalHandCash: increment(totalNewReceived), lastUpdated: serverTimestamp() }, { merge: true });
         }
       }
 
       const foodDueAmount = isOld ? Number(approvalForm.foodDueAmount || 0) : Number(approvalForm.initialFoodPayment);
 
-      // Batch Student Create
       batch.set(doc(db, "students", studentId), {
         id: studentId, name: selectedReg.name, phone: selectedReg.phone, branch: userBranch,
         buildingId: approvalForm.buildingId, buildingName: selectedBuilding?.name,
@@ -306,25 +315,23 @@ export default function RegistrationsPage() {
         });
         const total = updatedApts.reduce((acc: number, apt: any) => acc + apt.rooms.reduce((rAcc: number, r: any) => rAcc + r.seats.length, 0), 0)
         const occupied = updatedApts.reduce((acc: number, apt: any) => acc + apt.rooms.reduce((rAcc: number, r: any) => rAcc + r.seats.filter((s: any) => s.status === 'occupied').length, 0), 0)
-        // Batch Building Update
         batch.update(doc(db, "buildings", approvalForm.buildingId), { apartmentsDetail: updatedApts, occupiedSeats: occupied, emptySeats: total - occupied, updatedAt: serverTimestamp() })
       }
 
-      // Batch Delete Request
       batch.delete(doc(db, "registrations", selectedReg.id))
 
-      // Execute all DB operations at once
       await batch.commit()
 
-      // ASYNC Background SMS Task
       if (apiConfig?.apikey) {
         (async () => {
           try {
             const template = templatesData?.templates?.find((t: any) => t.id === 'admission')?.text || 
                              "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আমাদের সাথে থাকার জন্য ধন্যবাদ।";
             
-            const foodBalance = foodDueAmount > 0 ? foodDueAmount : 0;
-            const foodDue = foodDueAmount < 0 ? Math.abs(foodDueAmount) : 0;
+            const mealRate = Number(mealConfig?.rate || 0);
+            const foodVal = foodDueAmount;
+            const foodBalance = foodVal > 0 ? foodVal : 0;
+            const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
             const totalPayable = initialTotalDue + foodDue;
 
             const msg = template
@@ -493,6 +500,50 @@ export default function RegistrationsPage() {
           </div>
         </>
       )}
+
+      {/* Confirmation for Approval & SMS */}
+      <AlertDialog open={isConfirmSmsOpen} onOpenChange={setIsConfirmSmsOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Send className="text-primary" size={20}/> Confirm Admission & SMS?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will enroll <b>{selectedReg?.name}</b> as an active resident and send an automated admission confirmation SMS. 1 SMS credit will be used.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleApprove} 
+              className="bg-success hover:bg-success/90 rounded-xl font-bold"
+            >
+              Confirm & Send SMS
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmation for Rejection */}
+      <AlertDialog open={isConfirmRejectOpen} onOpenChange={setIsConfirmRejectOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Reject Registration?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently remove <b>{selectedReg?.name}</b>'s registration request? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Keep Request</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleReject} 
+              className="bg-destructive hover:bg-destructive/90 rounded-xl font-bold"
+            >
+              Yes, Reject Request
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto rounded-3xl p-0">
@@ -752,10 +803,19 @@ export default function RegistrationsPage() {
           </div>
 
           <DialogFooter className="p-8 bg-slate-50 border-t sticky bottom-0 z-20 flex flex-col md:flex-row gap-4">
-            <Button variant="outline" className="h-14 flex-1 text-destructive border-destructive/20 hover:bg-red-50 font-bold text-lg rounded-2xl" onClick={handleReject} disabled={isProcessing}>
+            <Button 
+              variant="outline" 
+              className="h-14 flex-1 text-destructive border-destructive/20 hover:bg-red-50 font-bold text-lg rounded-2xl" 
+              onClick={() => setIsConfirmRejectOpen(true)} 
+              disabled={isProcessing}
+            >
               Reject Request
             </Button>
-            <Button className="h-14 flex-[2] bg-success hover:bg-success/90 text-white font-black text-xl rounded-2xl shadow-xl shadow-success/20 gap-2" onClick={handleApprove} disabled={isProcessing}>
+            <Button 
+              className="h-14 flex-[2] bg-success hover:bg-success/90 text-white font-black text-xl rounded-2xl shadow-xl shadow-success/20 gap-2" 
+              onClick={() => setIsConfirmSmsOpen(true)} 
+              disabled={isProcessing}
+            >
               {isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
               Confirm Approval & Sync Data
             </Button>
