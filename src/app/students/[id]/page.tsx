@@ -152,6 +152,63 @@ export default function StudentDetailsPage() {
     }
   }, [student])
 
+  // AUTO DUE GENERATION LOGIC
+  useEffect(() => {
+    if (!student || !student.isActive || !studentRef || isUpdating) return;
+
+    const syncDues = async () => {
+      const now = new Date();
+      const billingDateStr = student.billingStartDate || "";
+      const billingDate = new Date(billingDateStr);
+      if (isNaN(billingDate.getTime())) return;
+
+      const updatedDues = { ...(student.duesBreakdown || {}) };
+      let totalDueIncrement = 0;
+      let hasChanges = false;
+
+      // Start from billing month and go up to current month
+      // Using 1st of each month to avoid date overflow issues
+      let checkDate = new Date(billingDate.getFullYear(), billingDate.getMonth(), 1);
+      const todayLimit = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      while (checkDate <= todayLimit) {
+        const m = MONTHS[checkDate.getMonth()];
+        const y = checkDate.getFullYear().toString();
+        const label = `${m} ${y}`;
+
+        // Check breakdown
+        const inBreakdown = updatedDues[label];
+        // Check history
+        const inHistory = student.paymentsHistory?.some((p: any) => 
+          p.month === m && p.year === y && (Number(p.seatAmount) > 0 || p.method === 'adjustment')
+        );
+
+        if (!inBreakdown && !inHistory) {
+          const rent = Number(student.monthlyRent || 0);
+          if (rent > 0) {
+            updatedDues[label] = { month: m, year: y, amount: rent };
+            totalDueIncrement += rent;
+            hasChanges = true;
+          }
+        }
+        
+        // Move to next month
+        checkDate.setMonth(checkDate.getMonth() + 1);
+      }
+
+      if (hasChanges) {
+        // Trigger non-blocking silent update
+        updateDoc(studentRef, {
+          duesBreakdown: updatedDues,
+          totalDue: increment(totalDueIncrement),
+          updatedAt: serverTimestamp()
+        }).catch(() => {});
+      }
+    };
+
+    syncDues();
+  }, [student, studentRef, isUpdating]);
+
   const selectedBuildingForEdit = useMemo(() => 
     buildings?.find(b => b.id === editForm?.buildingId), 
     [buildings, editForm?.buildingId]

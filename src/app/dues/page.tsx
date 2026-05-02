@@ -12,7 +12,7 @@ import { Users, Search, Loader2, Eye, Printer, TrendingUp, Filter, MoreVertical 
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, where } from "firebase/firestore"
+import { collection, query, where, doc, updateDoc, increment, serverTimestamp } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -25,6 +25,8 @@ import {
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function DuesPage() {
   const router = useRouter()
@@ -64,10 +66,66 @@ export default function DuesPage() {
   }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
+  // AUTO DUE GENERATION LOGIC FOR ALL STUDENTS IN VIEW
+  useEffect(() => {
+    if (!students || !db) return;
+
+    const syncMissingDues = async () => {
+      const now = new Date();
+      const todayLimit = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      students.forEach((s: any) => {
+        if (!s.isActive) return;
+        
+        const billingDateStr = s.billingStartDate || "";
+        const billingDate = new Date(billingDateStr);
+        if (isNaN(billingDate.getTime())) return;
+
+        const updatedDues = { ...(s.duesBreakdown || {}) };
+        let totalDueIncrement = 0;
+        let hasChanges = false;
+
+        let checkDate = new Date(billingDate.getFullYear(), billingDate.getMonth(), 1);
+
+        while (checkDate <= todayLimit) {
+          const m = MONTHS[checkDate.getMonth()];
+          const y = checkDate.getFullYear().toString();
+          const label = `${m} ${y}`;
+
+          const inBreakdown = updatedDues[label];
+          const inHistory = s.paymentsHistory?.some((p: any) => 
+            p.month === m && p.year === y && (Number(p.seatAmount) > 0 || p.method === 'adjustment')
+          );
+
+          if (!inBreakdown && !inHistory) {
+            const rent = Number(s.monthlyRent || 0);
+            if (rent > 0) {
+              updatedDues[label] = { month: m, year: y, amount: rent };
+              totalDueIncrement += rent;
+              hasChanges = true;
+            }
+          }
+          checkDate.setMonth(checkDate.getMonth() + 1);
+        }
+
+        if (hasChanges) {
+          const sRef = doc(db, "students", s.id);
+          updateDoc(sRef, {
+            duesBreakdown: updatedDues,
+            totalDue: increment(totalDueIncrement),
+            updatedAt: serverTimestamp()
+          }).catch(() => {});
+        }
+      });
+    };
+
+    syncMissingDues();
+  }, [students, db]);
+
   const processedData = useMemo(() => {
     if (!students) return []
     return students.map(s => {
-      const rentDue = s.totalDue || 0;
+      const rentDue = Object.values(s.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
       const foodBalance = s.foodDueAmount || 0;
       const displayTotalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0);
       return { ...s, foodBalance, displayTotalDue }
@@ -161,7 +219,7 @@ export default function DuesPage() {
               <tr key={s.id}>
                 <td className="font-bold">{s.name}<br/><span className="text-[7pt] text-slate-500 font-normal">{s.phone}</span></td>
                 <td>{s.buildingName} • R-{s.roomNumber}</td>
-                <td className="text-right">৳{(s.totalDue || 0).toLocaleString()}</td>
+                <td className="text-right">৳{(s.rentDue || 0).toLocaleString()}</td>
                 <td className={cn("text-right", s.foodBalance < 0 ? "text-destructive font-bold" : "text-success")}>
                   ৳{s.foodBalance.toLocaleString()}
                 </td>
