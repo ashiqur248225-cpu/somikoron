@@ -12,7 +12,7 @@ import {
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
   AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2,
   Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft, ListOrdered, Hash,
-  User, ChevronRight, LayoutGrid, CircleDollarSign, Send
+  User, ChevronRight, LayoutGrid, CircleDollarSign, Send, FileText
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -61,9 +61,10 @@ export default function RegistrationsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
-  const [selectedReg, setSelectedReg] = useState<any>(null)
+  const [selectedReq, setSelectedReq] = useState<any>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isFullInfoOpen, setIsFullInfoOpen] = useState(false)
   const [isConfirmSmsOpen, setIsConfirmSmsOpen] = useState(false)
   const [isConfirmRejectOpen, setIsConfirmRejectOpen] = useState(false)
   
@@ -141,19 +142,19 @@ export default function RegistrationsPage() {
   })
 
   useEffect(() => {
-    if (isDetailOpen && selectedReg && buildings) {
-      const targetB = buildings.find(b => b.name === selectedReg.buildingName || b.id === selectedReg.buildingId)
+    if (isDetailOpen && selectedReq && buildings) {
+      const targetB = buildings.find(b => b.name === selectedReq.buildingName || b.id === selectedReq.buildingId)
       setApprovalForm(prev => ({
         ...prev,
         buildingId: targetB?.id || "",
-        roomNumber: String(selectedReg.roomNumber || ""),
-        seatNumber: String(selectedReg.seatNumber || ""),
-        paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
+        roomNumber: String(selectedReq.roomNumber || ""),
+        seatNumber: String(selectedReq.seatNumber || ""),
+        paymentSystem: selectedReq.occupation === 'job_holder' ? 'non-package' : 'package',
         advanceAmount: prev.monthlyRent || "0",
         migrationDue: "0"
       }));
     }
-  }, [isDetailOpen, selectedReg, buildings]);
+  }, [isDetailOpen, selectedReq, buildings]);
 
   const selectedBuilding = useMemo(() => buildings?.find(b => b.id === approvalForm.buildingId), [buildings, approvalForm.buildingId])
   const roomsInBuilding = useMemo(() => {
@@ -604,18 +605,20 @@ export default function RegistrationsPage() {
                               <p className="font-bold">College: {selectedReg?.college || "N/A"}</p>
                               <p className="text-[10px] uppercase text-muted-foreground">Session: {selectedReg?.collegeSession || "N/A"} | Group: {selectedReg?.collegeGroup || "N/A"}</p>
                             </div>
-                            {selectedReg?.university && (
-                              <div className="p-2 bg-white rounded-lg border border-slate-200">
-                                <p className="font-bold">University: {selectedReg?.university}</p>
-                                <p className="text-[10px] uppercase text-muted-foreground">Session: {selectedReg?.universitySession || "N/A"} | Dept: {selectedReg?.department || "N/A"}</p>
-                              </div>
-                            )}
                           </>
                         ) : (
                           <p>Work: {selectedReg?.companyName || "N/A"} ({selectedReg?.designation || 'N/A'})</p>
                         )}
                       </div>
                     </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full mt-4 h-9 rounded-xl font-bold text-[10px] uppercase gap-2 border-primary/20 text-primary"
+                      onClick={() => setIsFullInfoOpen(true)}
+                    >
+                      <Info size={14} /> View Detailed Application
+                    </Button>
                   </div>
                 </div>
 
@@ -842,6 +845,70 @@ export default function RegistrationsPage() {
               {isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
               Confirm Approval & Sync Data
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* FULL INFO DIALOG */}
+      <Dialog open={isFullInfoOpen} onOpenChange={setIsFullInfoOpen}>
+        <DialogContent className="max-w-2xl rounded-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><FileText className="text-primary" /> Application Details</DialogTitle>
+          </DialogHeader>
+          {selectedReg && (
+            <div className="space-y-6 py-4">
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Personal Details</h4>
+                <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                   <div><Label className="text-[9px] uppercase">Father's Name</Label><p className="font-bold text-sm">{selectedReg.fatherName || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Mother's Name</Label><p className="font-bold text-sm">{selectedReg.motherName || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Date of Birth</Label><p className="font-bold text-sm">{selectedReg.dob || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Blood Group</Label><p className="font-bold text-sm">{selectedReg.bloodGroup || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Personal Phone</Label><p className="font-bold text-sm">{selectedReg.phone || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Parent Phone</Label><p className="font-bold text-sm">{selectedReg.parentPhone || 'N/A'}</p></div>
+                   <div><Label className="text-[9px] uppercase">Guardian Phone</Label><p className="font-bold text-sm">{selectedReg.guardianPhone || 'N/A'}</p></div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Permanent Address</h4>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                   <p className="text-sm font-medium">{selectedReg.village || 'N/A'}, PO: {selectedReg.postOffice || 'N/A'}, {selectedReg.upazila || 'N/A'}, {selectedReg.district || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Education / Professional Info</h4>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+                  {selectedReg.occupation === 'student' ? (
+                    <>
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-slate-700">School: {selectedReg.school || 'N/A'}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">Session: {selectedReg.schoolSession || 'N/A'} | Group: {selectedReg.schoolGroup || 'N/A'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-slate-700">College: {selectedReg.college || 'N/A'}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">Session: {selectedReg.collegeSession || 'N/A'} | Group: {selectedReg.collegeGroup || 'N/A'}</p>
+                      </div>
+                      {selectedReg.university && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-slate-700">University: {selectedReg.university}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase">Session: {selectedReg.universitySession || 'N/A'} | Dept: {selectedReg.department || 'N/A'}</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-slate-700">Company: {selectedReg.companyName || 'N/A'}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">Designation: {selectedReg.designation || 'N/A'}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsFullInfoOpen(false)} className="w-full rounded-2xl h-12 font-bold">Close Details</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
