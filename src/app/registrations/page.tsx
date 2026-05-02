@@ -110,6 +110,12 @@ export default function RegistrationsPage() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
+  const mealConfigRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
   const managementStaff = useMemo(() => {
     if (!staffList) return []
     return staffList.filter(s => s.staffType === 'management' || !s.staffType)
