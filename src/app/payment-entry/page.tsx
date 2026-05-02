@@ -1,7 +1,8 @@
+
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useMemo, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, serverTimestamp, doc, setDoc, increment, updateDoc, arrayUnion, query, where, getDoc, writeBatch } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
@@ -36,10 +37,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028", "2029", "2030", "2031", "2032", "2033" ,"2034", "2035", "2036", "2037", "2038"];
 
-export default function PaymentEntryPage() {
+function PaymentEntryForm() {
   const { toast } = useToast()
   const db = useFirestore()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const urlStudentId = searchParams.get('studentId')
   
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
@@ -73,7 +76,6 @@ export default function PaymentEntryPage() {
     setUserRole(role)
     setAssignedBuildingId(bId)
 
-    // AUTO COLLECT DATE AND POPULATE RECEIVER
     const now = new Date()
     const currentMonth = MONTHS[now.getMonth()]
     const currentYear = now.getFullYear().toString()
@@ -83,11 +85,11 @@ export default function PaymentEntryPage() {
       receiver: name,
       month: currentMonth,
       year: currentYear,
-      buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : prev.buildingId
+      buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : prev.buildingId,
+      studentId: urlStudentId || prev.studentId
     }))
-  }, [])
+  }, [urlStudentId])
 
-  // Check permissions for Building Manager
   const staffId = typeof window !== 'undefined' ? localStorage.getItem("somikoron_auth_id") : ""
   const staffRef = useMemoFirebase(() => staffId ? doc(db, "staff", staffId) : null, [db, staffId])
   const { data: staffData } = useDoc(staffRef)
@@ -140,7 +142,6 @@ export default function PaymentEntryPage() {
     [students, formData.studentId]
   )
 
-  // Auto-fill seat amount when "Pay from Advance" is toggled
   useEffect(() => {
     if (formData.payFromAdvance && selectedStudent) {
       setFormData(prev => ({
@@ -157,19 +158,16 @@ export default function PaymentEntryPage() {
     }
     setIsSubmitting(true)
     try {
-      const batch = writeBatch(db); // Use writeBatch for speed
+      const batch = writeBatch(db); 
       const seatPaid = Number(formData.seatAmount || 0)
       const foodPaid = Number(formData.foodAmount || 0)
       const extraAdvance = Number(formData.addAdvanceAmount || 0)
       
-      // LOGIC: If payFromAdvance is true, the student isn't paying extra for rent.
-      // The seatPaid amount is deducted from their advance instead of being added to wallet.
       const cashReceivedFromUser = foodPaid + extraAdvance + (formData.payFromAdvance ? 0 : seatPaid)
       const advanceBalanceChange = extraAdvance - (formData.payFromAdvance ? seatPaid : 0)
       
       const totalAmtToLog = seatPaid + foodPaid + extraAdvance
 
-      // ROLE BASED BRANCHING: Request vs Direct Entry
       const isBM = userRole === 'Building Manager'
       const needsApproval = isBM && (staffData?.canRequestIncome === true || !staffData?.canDirectEntryIncome)
 
@@ -190,7 +188,6 @@ export default function PaymentEntryPage() {
         return
       }
 
-      // Direct Entry Optimization with Batch
       const pId = doc(collection(db, "payments")).id
       const pRecord = {
         id: pId, amount: totalAmtToLog, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
@@ -250,7 +247,6 @@ export default function PaymentEntryPage() {
         updatedAt: serverTimestamp()
       })
 
-      // Update Synchronized Net Balance (Only actual cash received)
       if (cashReceivedFromUser > 0) {
         const balanceRef = doc(db, "netBalance", userBranch);
         const methodKeyMap: Record<string, string> = {
@@ -266,10 +262,8 @@ export default function PaymentEntryPage() {
         }, { merge: true });
       }
 
-      // Execution of all DB tasks
       await batch.commit()
 
-      // Non-blocking Background SMS
       if (apiConfig?.apikey) {
         (async () => {
           try {
@@ -314,7 +308,6 @@ export default function PaymentEntryPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 pb-20">
-      {/* Sticky App Bar for Mobile */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -422,7 +415,6 @@ export default function PaymentEntryPage() {
                 </div>
               )}
 
-              {/* SPECIAL OPTION: PAY RENT FROM ADVANCE (Locked to keep at least 1 month) */}
               {Number(selectedStudent.advanceAmount || 0) >= (Number(selectedStudent.monthlyRent || 0) * 2) && (
                 <div className="mt-4 pt-4 border-t border-white/10">
                    <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-2xl border border-primary/20 hover:bg-primary/20 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, payFromAdvance: !formData.payFromAdvance})}>
@@ -501,5 +493,13 @@ export default function PaymentEntryPage() {
         </CardFooter>
       </Card>
     </div>
+  )
+}
+
+export default function PaymentEntryPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>}>
+      <PaymentEntryForm />
+    </Suspense>
   )
 }

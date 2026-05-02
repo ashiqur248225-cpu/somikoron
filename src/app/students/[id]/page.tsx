@@ -166,8 +166,6 @@ export default function StudentDetailsPage() {
       let totalDueIncrement = 0;
       let hasChanges = false;
 
-      // Start from billing month and go up to current month
-      // Using 1st of each month to avoid date overflow issues
       let checkDate = new Date(billingDate.getFullYear(), billingDate.getMonth(), 1);
       const todayLimit = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -176,9 +174,7 @@ export default function StudentDetailsPage() {
         const y = checkDate.getFullYear().toString();
         const label = `${m} ${y}`;
 
-        // Check breakdown
         const inBreakdown = updatedDues[label];
-        // Check history
         const inHistory = student.paymentsHistory?.some((p: any) => 
           p.month === m && p.year === y && (Number(p.seatAmount) > 0 || p.method === 'adjustment')
         );
@@ -191,13 +187,10 @@ export default function StudentDetailsPage() {
             hasChanges = true;
           }
         }
-        
-        // Move to next month
         checkDate.setMonth(checkDate.getMonth() + 1);
       }
 
       if (hasChanges) {
-        // Trigger non-blocking silent update
         updateDoc(studentRef, {
           duesBreakdown: updatedDues,
           totalDue: increment(totalDueIncrement),
@@ -667,12 +660,12 @@ export default function StudentDetailsPage() {
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
             <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Month</TableHead><TableHead>Due Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
               <TableBody>{stats?.dueBreakdownList.map((d, i) => (
-                <TableRow key={i}><TableCell className="font-bold">{d.month}</TableCell><TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell><TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive uppercase">Unpaid</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => setIsPaymentDialogOpen(true)}>Record Pay</Button></TableCell></TableRow>
+                <TableRow key={i}><TableCell className="font-bold">{d.month}</TableCell><TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell><TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive uppercase">Unpaid</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => router.push(`/payment-entry?studentId=${student.id}`)}>Record Pay</Button></TableCell></TableRow>
               ))}</TableBody>
             </Table>
           </Card>
           <div className="md:hidden space-y-4">{stats?.dueBreakdownList.map((d, i) => (
-            <Card key={i} className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-destructive p-4 flex justify-between items-center"><div><h3 className="font-black text-slate-800">{d.month}</h3><p className="text-xl font-black text-destructive">৳{d.amount.toLocaleString()}</p></div><Button size="sm" className="rounded-xl h-9 px-4 font-bold" onClick={() => setIsPaymentDialogOpen(true)}>Record</Button></Card>
+            <Card key={i} className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-destructive p-4 flex justify-between items-center"><div><h3 className="font-black text-slate-800">{d.month}</h3><p className="text-xl font-black text-destructive">৳{d.amount.toLocaleString()}</p></div><Button size="sm" className="rounded-xl h-9 px-4 font-bold" onClick={() => router.push(`/payment-entry?studentId=${student.id}`)}>Record</Button></Card>
           ))}</div>
         </TabsContent>
         {student.paymentSystem === 'non-package' && (
