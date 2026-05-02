@@ -137,6 +137,7 @@ export default function RegistrationsPage() {
     roomNumber: "",
     seatNumber: "",
     duesBreakdown: [] as DueEntry[],
+    migrationDue: "0",
   })
 
   useEffect(() => {
@@ -148,7 +149,8 @@ export default function RegistrationsPage() {
         roomNumber: String(selectedReg.roomNumber || ""),
         seatNumber: String(selectedReg.seatNumber || ""),
         paymentSystem: selectedReg.occupation === 'job_holder' ? 'non-package' : 'package',
-        advanceAmount: prev.monthlyRent || "0" 
+        advanceAmount: prev.monthlyRent || "0",
+        migrationDue: "0"
       }));
     }
   }, [isDetailOpen, selectedReg, buildings]);
@@ -162,7 +164,10 @@ export default function RegistrationsPage() {
   }, [selectedBuilding])
 
   const selectedRoom = useMemo(() => roomsInBuilding.find((r: any) => String(r.roomNo) === String(approvalForm.roomNumber)), [roomsInBuilding, approvalForm.roomNumber])
-  const emptySeats = useMemo(() => selectedRoom?.seats?.filter((s: any) => s.status === 'empty') || [], [selectedRoom])
+  const emptySeats = useMemo(() => {
+    if (!selectedRoom) return [];
+    return selectedRoom.seats?.filter((s: any) => s.status === 'empty') || [];
+  }, [selectedRoom])
 
   useEffect(() => {
     if (selectedRoom) {
@@ -230,12 +235,20 @@ export default function RegistrationsPage() {
       let initialTotalDue = 0;
       
       if (isOld) {
+        // Add monthly breakdown entries
         approvalForm.duesBreakdown.forEach(d => {
           const label = `${d.month} ${d.year}`;
           const amt = Number(d.amount);
           finalDuesBreakdown[label] = { month: d.month, year: d.year, amount: amt };
           initialTotalDue += amt;
         });
+
+        // Add consolidated migration due if any
+        const migrationAmt = Number(approvalForm.migrationDue || 0);
+        if (migrationAmt > 0) {
+          finalDuesBreakdown["Historical Total"] = { month: "Migration", year: "Consolidated", amount: migrationAmt };
+          initialTotalDue += migrationAmt;
+        }
       } else {
         const rentPaid = Number(approvalForm.initialRentPayment || 0)
         const monthlyRent = Number(approvalForm.monthlyRent || 0)
@@ -687,10 +700,14 @@ export default function RegistrationsPage() {
                   
                   {selectedReg?.type === 'old' ? (
                     <div className="p-6 border-2 border-orange-200 bg-orange-50/50 rounded-3xl space-y-6 shadow-sm">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-xs font-bold text-orange-700">Lifetime Total Received (৳)</Label>
-                          <Input type="number" value={approvalForm.historicalTotalReceived || "0"} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} placeholder="Total collected so far" className="bg-white" />
+                          <Label className="text-xs font-bold text-orange-700">Lifetime Received (৳)</Label>
+                          <Input type="number" value={approvalForm.historicalTotalReceived || "0"} onChange={e => setApprovalForm({...approvalForm, historicalTotalReceived: e.target.value})} placeholder="Total so far" className="bg-white" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold text-orange-700">Consolidated Due (৳)</Label>
+                          <Input type="number" value={approvalForm.migrationDue} onChange={e => setApprovalForm({...approvalForm, migrationDue: e.target.value})} placeholder="Total old due" className="bg-white" />
                         </div>
                         {approvalForm.paymentSystem === 'non-package' && (
                           <div className="space-y-2">
