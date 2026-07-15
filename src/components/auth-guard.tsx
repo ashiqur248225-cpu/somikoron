@@ -2,20 +2,21 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useFirestore } from "@/firebase"
 import { collection, query, where, getDocs, limit, doc, getDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Loader2, Lock, Smartphone, ShieldCheck } from "lucide-react"
+import { Loader2, Lock, Smartphone, ShieldCheck, UserCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Image from 'next/image';
-import logoIcon from '../../public/icon.png'; // পাথটি আপনার ফাইল অনুযায়ী চেক করুন (AuthGuard থেকে public ফোল্ডার)
+import logoIcon from '../../public/icon.png';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const isPublicPage = pathname?.startsWith('/register') || pathname?.startsWith('/hostel-registration')
   
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
@@ -25,23 +26,19 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { toast } = useToast()
 
   useEffect(() => {
-    // Speed optimization: Skip session checks for public pages
     if (isPublicPage) {
       setIsAuthenticated(true)
       return
     }
 
     const checkSecuritySession = async () => {
-      // 1. Check if enhanced security is enabled in cloud
       try {
         const secSnap = await getDoc(doc(db, "configs", "securityConfig"));
         const isEnhanced = secSnap.exists() ? secSnap.data().enhancedSecurity : false;
 
         if (isEnhanced) {
-          // Check if this specific browser session is active
           const sessionActive = sessionStorage.getItem("somikoron_session_active");
           if (!sessionActive) {
-            // First load or tab was closed - force logout
             localStorage.removeItem("somikoron_auth");
             setIsAuthenticated(false);
             return;
@@ -51,7 +48,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         console.warn("Security config fetch failed, falling back to local storage.");
       }
 
-      // 2. Fallback to standard check
       const auth = localStorage.getItem("somikoron_auth")
       setIsAuthenticated(auth === "true")
     }
@@ -68,33 +64,57 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     setIsLoading(true)
     try {
+      // 1. Try Staff Login
       const staffRef = collection(db, "staff")
-      const q = query(staffRef, 
+      const staffQ = query(staffRef, 
         where("phone", "==", formData.number), 
         where("password", "==", formData.password),
         limit(1)
       )
-      
-      const querySnapshot = await getDocs(q)
+      const staffSnap = await getDocs(staffQ)
 
-      if (!querySnapshot.empty) {
-        const userData = querySnapshot.docs[0].data()
-        
+      if (!staffSnap.empty) {
+        const userData = staffSnap.docs[0].data()
         localStorage.setItem("somikoron_auth", "true")
-        localStorage.setItem("somikoron_auth_id", querySnapshot.docs[0].id)
+        localStorage.setItem("somikoron_auth_id", staffSnap.docs[0].id)
         localStorage.setItem("user_role", userData.role || "Manager")
         localStorage.setItem("user_branch", userData.branch || "Main Branch")
         localStorage.setItem("user_name", userData.name)
         localStorage.setItem("assigned_building_id", userData.assignedBuildingId || "none")
-        
-        // Track session for enhanced security
         sessionStorage.setItem("somikoron_session_active", "true");
-        
         setIsAuthenticated(true)
         toast({ title: "Welcome to Somikoron", description: `Logged in as ${userData.role}` })
-      } else {
-        toast({ variant: "destructive", title: "Unauthorized", description: "Incorrect number or password." })
+        return
       }
+
+      // 2. Try Student Login
+      const studentRef = collection(db, "students")
+      const studentQ = query(studentRef,
+        where("phone", "==", formData.number),
+        where("password", "==", formData.password),
+        limit(1)
+      )
+      const studentSnap = await getDocs(studentQ)
+
+      if (!studentSnap.empty) {
+        const userData = studentSnap.docs[0].data()
+        if (!userData.isActive) {
+          toast({ variant: "destructive", title: "Access Denied", description: "This account is inactive." })
+          return
+        }
+        localStorage.setItem("somikoron_auth", "true")
+        localStorage.setItem("somikoron_auth_id", studentSnap.docs[0].id)
+        localStorage.setItem("user_role", "Student")
+        localStorage.setItem("user_branch", userData.branch)
+        localStorage.setItem("user_name", userData.name)
+        sessionStorage.setItem("somikoron_session_active", "true");
+        setIsAuthenticated(true)
+        toast({ title: "Welcome", description: "Successfully logged into student portal." })
+        router.push('/student/dashboard')
+        return
+      }
+
+      toast({ variant: "destructive", title: "Unauthorized", description: "Incorrect number or password." })
     } catch (error: any) {
       toast({ variant: "destructive", title: "Connection Error", description: "Failed to connect to security server." })
     } finally {
@@ -102,7 +122,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Immediately render public pages to avoid flash of loading
   if (isPublicPage) {
     return <>{children}</>
   }
@@ -123,50 +142,53 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       <div className="fixed inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 z-[9999]">
         <div className="w-full max-w-[400px] space-y-8 animate-in fade-in zoom-in duration-300">
           <div className="text-center space-y-2">
-            
-            {/* লোগো কন্টেইনার */}
             <div className="inline-flex items-center justify-center">
               <Image 
-                src={logoIcon}  // ফাইলটি public ফোল্ডারে থাকলে এটিই সঠিক পাথ
-                width={100} 
-                height={100} 
+                src={logoIcon}
+                width={80} 
+                height={80} 
                 alt="Somikoron Logo" 
                 className="object-contain"
                 priority
               />
             </div>
-  
-            <h2 className="text-4xl font-black tracking-tighter text-primary">SOMIKORON</h2>
-            <p className="text-muted-foreground text-sm font-medium tracking-wide">HOSTEL ERP & ACCOUNTING SYSTEM</p>
+            <h2 className="text-3xl font-black tracking-tighter text-primary">SOMIKORON</h2>
+            <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-widest">Hostel ERP & Accounting</p>
           </div>
   
-          <Card className="border-none shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden rounded-2xl">
-            <div className="h-2 bg-gradient-to-r from-primary/50 via-primary to-primary/50 w-full" />
+          <Card className="border-none shadow-2xl overflow-hidden rounded-3xl bg-white">
+            <div className="h-2 bg-primary w-full" />
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl">User Login</CardTitle>
-              <CardDescription>Verify your credentials to access your branch.</CardDescription>
+              <CardTitle className="text-xl font-bold">Portal Access</CardTitle>
+              <CardDescription>Login with your verified mobile number.</CardDescription>
             </CardHeader>
             <CardContent className="pt-4">
               <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="number" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Mobile No.</Label>
+                  <Label htmlFor="number" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Mobile / Student ID</Label>
                   <div className="relative">
                     <Smartphone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input id="number" type="text" placeholder="01XXXXXXXXX" className="pl-10 h-11 bg-secondary/20 border-none" value={formData.number} onChange={e => setFormData({ ...formData, number: e.target.value })} required />
+                    <Input id="number" type="text" placeholder="01XXXXXXXXX" className="pl-10 h-12 bg-slate-50 border-none rounded-xl" value={formData.number} onChange={e => setFormData({ ...formData, number: e.target.value })} required />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input id="password" type="password" placeholder="••••••••" className="pl-10 h-11 bg-secondary/20 border-none" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
+                    <Input id="password" type="password" placeholder="••••••••" className="pl-10 h-12 bg-slate-50 border-none rounded-xl" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
                   </div>
                 </div>
-                <Button type="submit" className="w-full h-12 text-lg font-bold shadow-lg" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="animate-spin mr-2" /> : "Verify & Access"}
+                <Button type="submit" className="w-full h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="animate-spin mr-2" /> : <ShieldCheck className="mr-2" />} 
+                  Verify & Access
                 </Button>
               </form>
             </CardContent>
+            <CardFooter className="bg-slate-50 py-4 justify-center">
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <UserCircle size={10}/> Admin, Manager & Student Login supported
+              </p>
+            </CardFooter>
           </Card>
         </div>
       </div>

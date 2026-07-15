@@ -24,7 +24,9 @@ import {
   ChevronLeft,
   Smartphone,
   RefreshCw,
-  Coins
+  Coins,
+  Wifi,
+  UtensilsCrossed
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -62,7 +64,9 @@ function PaymentEntryForm() {
     method: "cash",
     receiver: "",
     description: "",
-    payFromAdvance: false
+    payFromAdvance: false,
+    applyCookingBill: false,
+    applyWifiBill: false
   })
 
   useEffect(() => {
@@ -131,6 +135,13 @@ function PaymentEntryForm() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
+  // Advanced Billing Configs
+  const billingConfigRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `billingConfig_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: billingConfig } = useDoc(billingConfigRef)
+
   const mealConfigRef = useMemoFirebase(() => 
     userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
     [db, userBranch]
@@ -163,10 +174,14 @@ function PaymentEntryForm() {
       const foodPaid = Number(formData.foodAmount || 0)
       const extraAdvance = Number(formData.addAdvanceAmount || 0)
       
-      const cashReceivedFromUser = foodPaid + extraAdvance + (formData.payFromAdvance ? 0 : seatPaid)
-      const advanceBalanceChange = extraAdvance - (formData.payFromAdvance ? seatPaid : 0)
+      // Calculate Utilities
+      const cookingBill = formData.applyCookingBill ? Number(billingConfig?.cookingBill || 0) : 0
+      const wifiBill = formData.applyWifiBill ? Number(billingConfig?.wifiBill || 0) : 0
       
-      const totalAmtToLog = seatPaid + foodPaid + extraAdvance
+      const cashReceivedFromUser = foodPaid + extraAdvance + (formData.payFromAdvance ? 0 : seatPaid)
+      const advanceBalanceChange = extraAdvance - (formData.payFromAdvance ? (seatPaid + cookingBill + wifiBill) : 0)
+      
+      const totalAmtToLog = seatPaid + foodPaid + extraAdvance + cookingBill + wifiBill
 
       const isBM = userRole === 'Building Manager'
       const needsApproval = isBM && (staffData?.canRequestIncome === true || !staffData?.canDirectEntryIncome)
@@ -175,7 +190,7 @@ function PaymentEntryForm() {
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), {
           id: reqId, requestType: "income", amount: totalAmtToLog, seatAmount: seatPaid, foodAmount: foodPaid,
-          advanceAmount: extraAdvance, studentId: selectedStudent.id, studentName: selectedStudent.name,
+          advanceAmount: extraAdvance, cookingBill, wifiBill, studentId: selectedStudent.id, studentName: selectedStudent.name,
           buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName,
           roomNumber: selectedStudent.roomNumber, branch: userBranch, month: formData.month,
           year: formData.year, method: formData.method, receiver: formData.receiver,
@@ -191,6 +206,7 @@ function PaymentEntryForm() {
       const pId = doc(collection(db, "payments")).id
       const pRecord = {
         id: pId, amount: totalAmtToLog, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
+        cookingBill, wifiBill,
         studentName: selectedStudent.name, studentId: selectedStudent.id, 
         buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName, 
         roomNumber: selectedStudent.roomNumber, branch: userBranch,
@@ -245,6 +261,19 @@ function PaymentEntryForm() {
         foodDueAmount: increment(foodPaid),
         historicalTotalReceived: increment(totalAmtToLog),
         updatedAt: serverTimestamp()
+      })
+
+      // Send Notice to Student
+      const noticeId = doc(collection(db, "notices")).id
+      batch.set(doc(db, "notices", noticeId), {
+        id: noticeId,
+        studentId: selectedStudent.id,
+        title: "Payment Received",
+        message: `Amount: ${totalAmtToLog} Tk. Seat: ${seatPaid}, Food: ${foodPaid}, Cooking: ${cookingBill}, WiFi: ${wifiBill}. Thank you.`,
+        type: "payment",
+        isRead: false,
+        createdAt: serverTimestamp(),
+        branch: userBranch
       })
 
       if (cashReceivedFromUser > 0) {
@@ -468,6 +497,26 @@ function PaymentEntryForm() {
             <div className="space-y-1">
               <Label className="text-[10px] font-black uppercase text-primary">Add to Advance (Security)</Label>
               <Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} className="bg-white h-12 border-primary/20" />
+            </div>
+            
+            {/* Optional Utility Billing */}
+            <div className="pt-4 border-t border-success/10 grid grid-cols-1 sm:grid-cols-2 gap-4">
+               <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, applyCookingBill: !formData.applyCookingBill})}>
+                  <UtensilsCrossed size={16} className={cn("transition-all", formData.applyCookingBill ? "text-orange-500 scale-110" : "text-slate-300")} />
+                  <div className="flex-1">
+                    <p className="text-[10px] font-bold uppercase leading-none">Cooking Bill</p>
+                    <p className="text-[9px] text-muted-foreground mt-1">৳{billingConfig?.cookingBill || 0}</p>
+                  </div>
+                  <Checkbox checked={formData.applyCookingBill} onCheckedChange={(val) => setFormData({...formData, applyCookingBill: val === true})} />
+               </div>
+               <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, applyWifiBill: !formData.applyWifiBill})}>
+                  <Wifi size={16} className={cn("transition-all", formData.applyWifiBill ? "text-blue-500 scale-110" : "text-slate-300")} />
+                  <div className="flex-1">
+                    <p className="text-[10px] font-bold uppercase leading-none">WiFi Bill</p>
+                    <p className="text-[9px] text-muted-foreground mt-1">৳{billingConfig?.wifiBill || 0}</p>
+                  </div>
+                  <Checkbox checked={formData.applyWifiBill} onCheckedChange={(val) => setFormData({...formData, applyWifiBill: val === true})} />
+               </div>
             </div>
           </div>
 

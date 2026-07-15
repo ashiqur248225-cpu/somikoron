@@ -22,7 +22,9 @@ import {
   MessageSquareQuote,
   ScrollText,
   PlusCircle,
-  Utensils
+  Utensils,
+  LayoutGrid,
+  ShoppingBag
 } from "lucide-react"
 import {
   Sidebar,
@@ -105,6 +107,8 @@ export function AppSidebar() {
     { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Buildings", url: buildingsUrl, icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Meal Analytics", url: "/meals-dashboard", icon: Utensils, roles: ["Admin", "Branch Manager"] },
+    { title: "Market Tracking", url: "/market", icon: ShoppingBag, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Payment Entry", url: "/payment-entry", icon: PlusCircle, roles: ["Building Manager"] },
     { title: "Expense Entry", url: "/expense-entry", icon: Receipt, roles: ["Building Manager"] },
     { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
@@ -120,12 +124,21 @@ export function AppSidebar() {
     { title: "Settings", url: "/settings", icon: Settings, roles: ["Admin"] },
   ]
 
-  const filteredItems = items.filter(item => {
-    // 1. Base Role Check
+  // Student Menu (Bottom Nav used in pages, sidebar used for Desktop if needed)
+  const studentItems = [
+    { title: "My Dashboard", url: "/student/dashboard", icon: LayoutDashboard, roles: ["Student"] },
+    { title: "My Meals", url: "/student/meals", icon: Utensils, roles: ["Student"] },
+    { title: "Payment Request", url: "/student/payments", icon: Wallet, roles: ["Student"] },
+    { title: "Notice Center", url: "/student/notices", icon: BellRing, roles: ["Student"] },
+    { title: "My Profile", url: "/student/profile", icon: UserCircle, roles: ["Student"] },
+  ]
+
+  const activeItems = userRole === 'Student' ? studentItems : items;
+
+  const filteredItems = activeItems.filter(item => {
     const hasRole = item.roles.includes(userRole)
     if (!hasRole) return false
 
-    // 2. Permission Check for Building Manager
     if (userRole === 'Building Manager') {
       if (item.title === "Payment Entry" && staffData?.canDirectEntryIncome !== true) return false
       if (item.title === "Expense Entry" && staffData?.canDirectEntryExpense !== true) return false
@@ -208,12 +221,10 @@ export function AppSidebar() {
           </div>
         </div>
 
-        {userRole !== 'Admin' && (
-          <Button variant="ghost" className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 h-9" onClick={handleLogout}>
-            <LogOut size={16} />
-            <span className="text-xs">Logout Session</span>
-          </Button>
-        )}
+        <Button variant="ghost" className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 h-9" onClick={handleLogout}>
+          <LogOut size={16} />
+          <span className="text-xs">Logout Session</span>
+        </Button>
       </SidebarFooter>
     </Sidebar>
   )
