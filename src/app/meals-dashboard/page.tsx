@@ -20,8 +20,7 @@ import {
   LayoutGrid,
   CheckCircle2,
   XCircle,
-  MoreVertical,
-  SidebarTrigger
+  MoreVertical
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,6 +32,8 @@ import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export default function AdminMealDashboardPage() {
   const db = useFirestore()
