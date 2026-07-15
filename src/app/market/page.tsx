@@ -14,7 +14,6 @@ import {
   CheckCircle2, 
   ArrowUpRight,
   TrendingDown,
-  SidebarTrigger,
   Receipt
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -34,6 +33,8 @@ import {
   DialogFooter
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function MarketTrackingPage() {
   const { toast } = useToast()
