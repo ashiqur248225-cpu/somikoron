@@ -110,6 +110,7 @@ export function AppSidebar() {
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Meal Analytics", url: "/meals-dashboard", icon: Utensils, roles: ["Admin", "Branch Manager"] },
     { title: "Market Tracking", url: "/market", icon: ShoppingBag, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Notices & SMS", url: "/sms", icon: BellRing, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Payment Entry", url: "/payment-entry", icon: PlusCircle, roles: ["Building Manager"] },
     { title: "Expense Entry", url: "/expense-entry", icon: Receipt, roles: ["Building Manager"] },
     { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
@@ -117,7 +118,6 @@ export function AppSidebar() {
     { title: "Receipts", url: "/receipts", icon: ScrollText, roles: ["Admin", "Branch Manager"] },
     { title: "Expense", url: "/expenses", icon: Receipt, roles: ["Admin", "Branch Manager"] },
     { title: "Ledgers", url: "/ledger", icon: History, roles: ["Admin", "Branch Manager"] },
-    { title: "SMS Panel", url: "/sms", icon: MessageSquareQuote, roles: ["Admin"], badge: birthdayCount > 0 ? birthdayCount : null },
     { title: "Staff & Roles", url: "/staff", icon: UserCog, roles: ["Admin"] },
     { title: "Branches", url: "/branches", icon: MapPin, roles: ["Admin"] },
     { title: "Transfers", url: "/transfers", icon: ArrowLeftRight, roles: ["Admin", "Branch Manager"] },
@@ -125,7 +125,7 @@ export function AppSidebar() {
     { title: "Settings", url: "/settings", icon: Settings, roles: ["Admin"] },
   ]
 
-  // Student Menu (Bottom Nav used in pages, sidebar used for Desktop if needed)
+  // Student Menu
   const studentItems = [
     { title: "My Dashboard", url: "/student/dashboard", icon: LayoutDashboard, roles: ["Student"] },
     { title: "My Meals", url: "/student/meals", icon: Utensils, roles: ["Student"] },

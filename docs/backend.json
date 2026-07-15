@@ -69,6 +69,8 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "phone": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "default": "Student" },
         "dob": { "type": "string" },
         "bloodGroup": { "type": "string" },
         "fatherName": { "type": "string" },
@@ -76,23 +78,7 @@
         "parentPhone": { "type": "string" },
         "guardianPhone": { "type": "string" },
         "village": { "type": "string" },
-        "postOffice": { "type": "string" },
-        "upazila": { "type": "string" },
-        "district": { "type": "string" },
         "address": { "type": "string" },
-        "school": { "type": "string" },
-        "schoolSession": { "type": "string" },
-        "schoolGroup": { "type": "string" },
-        "college": { "type": "string" },
-        "collegeSession": { "type": "string" },
-        "collegeGroup": { "type": "string" },
-        "university": { "type": "string" },
-        "universitySession": { "type": "string" },
-        "department": { "type": "string" },
-        "session": { "type": "string" },
-        "companyName": { "type": "string" },
-        "designation": { "type": "string" },
-        "occupation": { "type": "string" },
         "buildingId": { "type": "string" },
         "buildingName": { "type": "string" },
         "branch": { "type": "string" },
@@ -101,11 +87,27 @@
         "apartmentName": { "type": "string" },
         "isActive": { "type": "boolean" },
         "monthlyRent": { "type": "number" },
-        "serviceCharge": { "type": "number" },
         "advanceAmount": { "type": "number" },
         "billingStartDate": { "type": "string" },
         "paymentSystem": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "MarketExpense": {
+      "title": "Market Expense",
+      "type": "object",
+      "description": "Grocery and bazaar records.",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "category": { "type": "string" },
+        "subCategory": { "type": "string" },
+        "itemName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "totalPrice": { "type": "number" },
+        "purchasedBy": { "type": "string" },
+        "branch": { "type": "string" }
       }
     },
     "Staff": {
@@ -122,65 +124,7 @@
         "monthlySalary": { "type": "number" },
         "branch": { "type": "string" },
         "assignedBuildingId": { "type": "string" },
-        "password": { "type": "string" },
-        "salaryHistory": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "amount": { "type": "number" },
-              "month": { "type": "string" },
-              "year": { "type": "string" },
-              "date": { "type": "string", "format": "date-time" },
-              "method": { "type": "string" }
-            }
-          }
-        }
-      }
-    },
-    "ManagerRequest": {
-      "title": "Manager Request",
-      "type": "object",
-      "description": "Income or Expense approval requests from Building Managers.",
-      "properties": {
-        "id": { "type": "string" },
-        "requestType": { "type": "string", "enum": ["income", "expense"] },
-        "amount": { "type": "number" },
-        "branch": { "type": "string" },
-        "buildingName": { "type": "string" },
-        "requestedByName": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "FoodCostBreakdown": {
-      "title": "Food Cost Breakdown",
-      "type": "object",
-      "description": "Daily food cost and meal count tracking.",
-      "properties": {
-        "id": { "type": "string" },
-        "expenseId": { "type": "string" },
-        "branch": { "type": "string" },
-        "branchName": { "type": "string" },
-        "date": { "type": "string", "format": "date" },
-        "amount": { "type": "number" },
-        "totalMeals": { "type": "number" },
-        "createdBy": { "type": "string" },
-        "createdByName": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "NetBalance": {
-      "title": "Net Balance",
-      "type": "object",
-      "description": "Pre-calculated balances for a branch to optimize dashboard reads.",
-      "properties": {
-        "branchId": { "type": "string" },
-        "totalCash": { "type": "number" },
-        "totalBkash": { "type": "number" },
-        "totalNagad": { "type": "number" },
-        "totalBank": { "type": "number" },
-        "totalHandCash": { "type": "number" },
-        "lastUpdated": { "type": "string", "format": "date-time" }
+        "password": { "type": "string" }
       }
     }
   },
@@ -192,13 +136,14 @@
     "/buildings/{buildingId}": { "schema": "Building", "description": "Buildings list" },
     "/students/{studentId}": { "schema": "Student", "description": "Residents list" },
     "/staff/{staffId}": { "schema": "Staff", "description": "Staff directory" },
+    "/marketExpenses/{id}": { "schema": "MarketExpense", "description": "Bazaar tracking" },
     "/payments/{paymentId}": { "schema": "object", "description": "Income transactions" },
     "/expenses/{expenseId}": { "schema": "object", "description": "Expense records" },
-    "/transfers/{transferId}": { "schema": "object", "description": "Inter-account transfers" },
     "/managerRequests/{requestId}": { "schema": "ManagerRequest", "description": "Pending approval requests" },
     "/registrations/{regId}": { "schema": "object", "description": "Public admission forms" },
     "/configs/{configId}": { "schema": "object", "description": "Global settings" },
-    "/foodCostBreakdown/{id}": { "schema": "FoodCostBreakdown", "description": "Daily food cost analysis" },
+    "/smsLogs/{logId}": { "schema": "object", "description": "SMS history" },
+    "/notices/{noticeId}": { "schema": "object", "description": "In-app notifications" },
     "/netBalance/{branchName}": { "schema": "NetBalance", "description": "Consolidated balances per branch" }
   }
 }

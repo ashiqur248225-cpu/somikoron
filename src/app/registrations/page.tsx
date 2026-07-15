@@ -236,15 +236,12 @@ export default function RegistrationsPage() {
       let initialTotalDue = 0;
       
       if (isOld) {
-        // Add monthly breakdown entries
         approvalForm.duesBreakdown.forEach(d => {
           const label = `${d.month} ${d.year}`;
           const amt = Number(d.amount);
           finalDuesBreakdown[label] = { month: d.month, year: d.year, amount: amt };
           initialTotalDue += amt;
         });
-
-        // Add consolidated migration due if any
         const migrationAmt = Number(approvalForm.migrationDue || 0);
         if (migrationAmt > 0) {
           finalDuesBreakdown["Historical Total"] = { month: "Migration", year: "Consolidated", amount: migrationAmt };
@@ -292,9 +289,13 @@ export default function RegistrationsPage() {
       }
 
       const foodDueAmount = isOld ? Number(approvalForm.foodDueAmount || 0) : Number(approvalForm.initialFoodPayment);
+      
+      // AUTO PASSWORD GENERATION
+      const autoPassword = Math.random().toString(36).slice(-8);
 
       batch.set(doc(db, "students", studentId), {
         id: studentId, name: selectedReq.name, phone: selectedReq.phone, branch: userBranch,
+        password: autoPassword, role: "Student", // Student role default
         buildingId: approvalForm.buildingId, buildingName: selectedBuilding?.name,
         roomNumber: approvalForm.roomNumber, seatNumber: approvalForm.seatNumber, apartmentName: aptName,
         monthlyRent: Number(approvalForm.monthlyRent), advanceAmount: Number(approvalForm.advanceAmount),
@@ -376,7 +377,7 @@ export default function RegistrationsPage() {
         })();
       }
 
-      toast({ title: "ভর্তি সম্পন্ন হয়েছে!", description: `${selectedReq.name} এখন একজন সচল রেসিডেন্ট।` })
+      toast({ title: "ভর্তি সম্পন্ন হয়েছে!", description: `${selectedReq.name} এখন একজন সচল রেসিডেন্ট। পাসওয়ার্ড: ${autoPassword}` })
       setIsDetailOpen(false)
       setSelectedReq(null)
       router.refresh();

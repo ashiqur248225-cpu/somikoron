@@ -25,7 +25,10 @@ import {
   X,
   Briefcase,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  Lock,
+  Eye,
+  ShieldAlert
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -81,6 +84,7 @@ export default function StudentDetailsPage() {
   const [isExitDialogOpen, setIsExitDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   
   const [userRole, setUserRole] = useState("")
   const [userName, setUserName] = useState("")
@@ -579,7 +583,11 @@ export default function StudentDetailsPage() {
         <div className="flex items-center gap-6">
           <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner"><UserCircle size={48} strokeWidth={1.5} /></div>
           <div><h1 className="text-3xl font-black text-slate-800 tracking-tight">{student.name}</h1>
-            <div className="flex gap-2 mt-1"><Badge className={cn("rounded-full", student.isActive ? "bg-success" : "bg-destructive")}>{student.isActive ? "Active Resident" : "Ex-Resident"}</Badge><Badge variant="secondary" className="rounded-full uppercase text-[10px] font-bold">{student.paymentSystem} Plan</Badge></div>
+            <div className="flex gap-2 mt-1">
+               <Badge className={cn("rounded-full", student.isActive ? "bg-success" : "bg-destructive")}>{student.isActive ? "Active Resident" : "Ex-Resident"}</Badge>
+               <Badge variant="secondary" className="rounded-full uppercase text-[10px] font-bold">{student.paymentSystem} Plan</Badge>
+               <Badge variant="outline" className="rounded-full uppercase text-[10px] font-bold text-primary border-primary/20">Role: {student.role || 'Student'}</Badge>
+            </div>
           </div>
         </div>
         <div className="flex gap-3">
@@ -596,7 +604,29 @@ export default function StudentDetailsPage() {
               <div className="flex items-center gap-4 text-slate-600"><div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Phone size={18}/></div><div><p className="text-[10px] uppercase font-bold text-muted-foreground">Personal Mobile</p><p className="font-bold">{student.phone}</p></div></div>
               <div className="flex items-center gap-4 text-slate-600"><div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Smartphone size={18}/></div><div><p className="text-[10px] uppercase font-bold text-muted-foreground">Parent Mobile</p><p className="font-bold">{student.parentPhone || 'N/A'}</p></div></div>
               <div className="flex items-center gap-4 text-slate-600"><div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Building2 size={18}/></div><div><p className="text-[10px] uppercase font-bold text-muted-foreground">Location</p><p className="font-bold">{student.buildingName} • R-{student.roomNumber} | S-{student.seatNumber}</p></div></div>
-              <div className="flex items-center gap-4 text-slate-600"><div className="bg-primary/5 p-2.5 rounded-xl text-primary"><Calendar size={18}/></div><div><p className="text-[10px] uppercase font-bold text-muted-foreground">Billing Start</p><p className="font-bold">{student.billingStartDate}</p></div></div>
+              
+              <Separator />
+
+              <div className="pt-2 space-y-4">
+                 <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3 shadow-xl">
+                    <div className="flex justify-between items-center">
+                       <p className="text-[8px] font-black uppercase text-primary tracking-widest flex items-center gap-1"><Lock size={10}/> Portal Access</p>
+                       <Badge variant="outline" className="text-[8px] font-bold text-white border-white/20">Secured</Badge>
+                    </div>
+                    <div className="flex justify-between items-end">
+                       <div className="space-y-1">
+                          <p className="text-[10px] text-white/50 font-bold uppercase">System Password</p>
+                          <p className="text-lg font-mono font-black tracking-wider">
+                             {showPassword ? student.password : "••••••••"}
+                          </p>
+                       </div>
+                       <Button variant="ghost" size="icon" className="text-white/60 hover:text-white" onClick={() => setShowPassword(!showPassword)}>
+                          {showPassword ? <X size={18}/> : <Eye size={18}/>}
+                       </Button>
+                    </div>
+                    <p className="text-[8px] text-white/30 italic">Generated during admission. Give this to the resident for portal login.</p>
+                 </div>
+              </div>
             </div>
           </div>
           <Button variant="secondary" className="w-full mt-8 rounded-xl font-bold gap-2 text-xs uppercase" onClick={() => setIsDetailsDialogOpen(true)}><Info size={14} /> View All Information</Button>
