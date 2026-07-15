@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
@@ -65,33 +64,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const PRODUCTION_DOMAIN = "https://somikoron-one.vercel.app";
-
-interface RoomGroup {
-  id: string;
-  rooms: string;
-  spr: string;
-  pRent: string;
-  npRent: string;
-}
-
 export default function SettingsPage() {
   const { toast } = useToast()
   const db = useFirestore()
   const [isUpdating, setIsUpdating] = useState(false)
-  const [rate, setRate] = useState("")
   const [rules, setRules] = useState("")
   const [userBranch, setUserBranch] = useState("")
   const [userName, setUserName] = useState("")
   const [userRole, setUserRole] = useState("")
   
   // Admin/Dev States
-  const [isDevDialogOpen, setIsDevDialogOpen] = useState(false)
-  const [isSecurityDialogOpen, setIsSecurityDialogOpen] = useState(false)
-  const [isPlannerOpen, setIsPlannerOpen] = useState(false)
-  const [devPassword, setDevPassword] = useState("")
   const [isDevMode, setIsDevMode] = useState(false)
-  const [enhancedSecurity, setEnhancedSecurity] = useState(false)
 
   // Advanced Meal & Utility States
   const [mealConfigForm, setMealConfigForm] = useState({
@@ -165,7 +148,7 @@ export default function SettingsPage() {
     const updated = [...officialAccounts, newAccount]
     setIsUpdating(true)
     try {
-      await setDoc(accountsRef, { accounts: updated, updatedAt: serverTimestamp() })
+      await setDoc(accountsRef, { accounts: updated, updatedAt: serverTimestamp() }, { merge: true })
       setOfficialAccounts(updated)
       setNewAccount({ label: "Bkash Personal", number: "" })
       toast({ title: "Account Added" })
@@ -177,9 +160,27 @@ export default function SettingsPage() {
     if (!accountsRef) return
     const updated = officialAccounts.filter((_, i) => i !== idx)
     try {
-      await setDoc(accountsRef, { accounts: updated, updatedAt: serverTimestamp() })
+      await setDoc(accountsRef, { accounts: updated, updatedAt: serverTimestamp() }, { merge: true })
       setOfficialAccounts(updated)
+      toast({ title: "Account Removed" })
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
+  }
+
+  const handleSaveRules = async () => {
+    const ref = doc(db, "configs", "hostelRules")
+    setIsUpdating(true)
+    try {
+      await setDoc(ref, { 
+        rulesText: rules,
+        updatedAt: serverTimestamp(),
+        updatedBy: userName
+      }, { merge: true })
+      toast({ title: "Rules Published", description: "Registration rules have been updated." })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
   }
 
   const execCommand = (command: string, value?: string) => {
