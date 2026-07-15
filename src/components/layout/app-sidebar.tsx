@@ -24,7 +24,8 @@ import {
   PlusCircle,
   Utensils,
   LayoutGrid,
-  ShoppingBag
+  ShoppingBag,
+  UserCircle
 } from "lucide-react"
 import {
   Sidebar,
