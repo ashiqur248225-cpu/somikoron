@@ -16,7 +16,8 @@ import {
   Zap,
   Info,
   ChevronRight,
-  ListOrdered
+  ListOrdered,
+  Loader2
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, collection, query, where } from "firebase/firestore"
