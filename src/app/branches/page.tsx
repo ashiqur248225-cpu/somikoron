@@ -92,9 +92,6 @@ export default function BranchesPage() {
       {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2 md:hidden">
-            <ChevronLeft size={24} />
-          </Button>
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
