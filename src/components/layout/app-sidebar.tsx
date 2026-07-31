@@ -25,7 +25,8 @@ import {
   Utensils,
   LayoutGrid,
   ShoppingBag,
-  UserCircle
+  UserCircle,
+  Soup
 } from "lucide-react"
 import {
   Sidebar,
@@ -90,13 +91,6 @@ export function AppSidebar() {
   }, [db, userBranch])
   const { data: students } = useCollection(studentsQuery)
 
-  const birthdayCount = React.useMemo(() => {
-    if (!students) return 0
-    const today = new Date()
-    const todayStr = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`
-    return students.filter(s => s.dob?.endsWith(todayStr)).length
-  }, [students])
-
   // Intelligent URL for Buildings based on role
   const buildingsUrl = (userRole === 'Building Manager' && assignedBuildingId !== 'none') 
     ? `/buildings/${assignedBuildingId}` 
@@ -109,8 +103,10 @@ export function AppSidebar() {
     { title: "Buildings", url: buildingsUrl, icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Meal Analytics", url: "/meals-dashboard", icon: Utensils, roles: ["Admin", "Branch Manager"] },
+    { title: "Meal Routine", url: "/meal-routine", icon: Soup, roles: ["Admin", "Branch Manager"] },
     { title: "Market Tracking", url: "/market", icon: ShoppingBag, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Notices & SMS", url: "/sms", icon: BellRing, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Student Payments", url: "/student-payments", icon: Wallet, roles: ["Admin", "Branch Manager"] },
     { title: "Payment Entry", url: "/payment-entry", icon: PlusCircle, roles: ["Building Manager"] },
     { title: "Expense Entry", url: "/expense-entry", icon: Receipt, roles: ["Building Manager"] },
     { title: "Admission Requests", url: "/registrations", icon: UserPlus, roles: ["Admin", "Branch Manager"] },
@@ -186,11 +182,6 @@ export function AppSidebar() {
                   <Link href={item.url} className="flex items-center w-full">
                     <item.icon />
                     <span>{item.title}</span>
-                    {item.badge && (
-                      <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-black text-destructive-foreground animate-pulse">
-                        {item.badge}
-                      </span>
-                    )}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

@@ -90,7 +90,20 @@
         "advanceAmount": { "type": "number" },
         "billingStartDate": { "type": "string" },
         "paymentSystem": { "type": "string" },
+        "mealStatus": { "type": "object" },
+        "mealChoices": { "type": "object" },
         "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "MealRoutine": {
+      "title": "Meal Routine",
+      "type": "object",
+      "properties": {
+        "day": { "type": "string" },
+        "breakfast": { "type": "string" },
+        "lunch": { "type": "string" },
+        "dinner": { "type": "string" },
+        "options": { "type": "object" }
       }
     },
     "MarketExpense": {
@@ -101,7 +114,6 @@
         "id": { "type": "string" },
         "date": { "type": "string", "format": "date" },
         "category": { "type": "string" },
-        "subCategory": { "type": "string" },
         "itemName": { "type": "string" },
         "quantity": { "type": "number" },
         "unitPrice": { "type": "number" },
@@ -137,6 +149,8 @@
     "/students/{studentId}": { "schema": "Student", "description": "Residents list" },
     "/staff/{staffId}": { "schema": "Staff", "description": "Staff directory" },
     "/marketExpenses/{id}": { "schema": "MarketExpense", "description": "Bazaar tracking" },
+    "/mealRoutines/{day}": { "schema": "MealRoutine", "description": "Weekly food menu" },
+    "/paymentRequests/{id}": { "schema": "object", "description": "Student payment submissions" },
     "/payments/{paymentId}": { "schema": "object", "description": "Income transactions" },
     "/expenses/{expenseId}": { "schema": "object", "description": "Expense records" },
     "/managerRequests/{requestId}": { "schema": "ManagerRequest", "description": "Pending approval requests" },
