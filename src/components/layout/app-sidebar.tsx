@@ -85,12 +85,6 @@ export function AppSidebar() {
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
   const { data: branches } = useCollection(branchesQuery)
 
-  const studentsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "students"), where("branch", "==", userBranch), where("isActive", "==", true))
-  }, [db, userBranch])
-  const { data: students } = useCollection(studentsQuery)
-
   // Intelligent URL for Buildings based on role
   const buildingsUrl = (userRole === 'Building Manager' && assignedBuildingId !== 'none') 
     ? `/buildings/${assignedBuildingId}` 
@@ -102,7 +96,7 @@ export function AppSidebar() {
     { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Buildings", url: buildingsUrl, icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
-    { title: "Meal Analytics", url: "/meals-dashboard", icon: Utensils, roles: ["Admin", "Branch Manager"] },
+    { title: "Meal Analytics", url: "/meals-dashboard", icon: Utensils, roles: ["Admin", "Branch Manager", "Building Manager", "Staff", "Worker"] },
     { title: "Meal Routine", url: "/meal-routine", icon: Soup, roles: ["Admin", "Branch Manager"] },
     { title: "Market Tracking", url: "/market", icon: ShoppingBag, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Notices & SMS", url: "/sms", icon: BellRing, roles: ["Admin", "Branch Manager", "Building Manager"] },
