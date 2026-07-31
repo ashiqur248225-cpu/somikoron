@@ -17,15 +17,36 @@ import {
   Calendar,
   Building2,
   Lock,
-  Loader2
+  Loader2,
+  Eye,
+  EyeOff,
+  Edit,
+  Save,
+  History,
+  Smartphone,
+  Key
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
-import { doc } from "firebase/firestore"
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore"
 import { Separator } from "@/components/ui/separator"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+  DialogTrigger
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useToast } from "@/hooks/use-toast"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 export default function ProfilePage() {
   const router = useRouter()
   const db = useFirestore()
+  const { toast } = useToast()
   
   const [userInfo, setUserInfo] = useState({
     id: "",
@@ -33,6 +54,11 @@ export default function ProfilePage() {
     role: "",
     branch: "",
   })
+
+  const [showPassword, setShowPassword] = useState(false)
+  const [isChangingPass, setIsChangingPass] = useState(false)
+  const [newPassword, setNewPassword] = useState("")
+  const [isUpdating, setIsUpdating] = useState(false)
 
   useEffect(() => {
     setUserInfo({
@@ -51,6 +77,24 @@ export default function ProfilePage() {
     window.location.href = "/"
   }
 
+  const handleChangePassword = async () => {
+    if (!newPassword || !staffRef) return
+    setIsUpdating(true)
+    try {
+      await updateDoc(staffRef, {
+        password: newPassword,
+        updatedAt: serverTimestamp()
+      })
+      toast({ title: "Password Updated", description: "Your login password has been changed successfully." })
+      setIsChangingPass(false)
+      setNewPassword("")
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -60,8 +104,10 @@ export default function ProfilePage() {
     )
   }
 
+  const sortedSalaryHistory = [...(staffData?.salaryHistory || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
   return (
-    <div className="max-w-2xl mx-auto space-y-8 pb-20">
+    <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => router.back()}>
           <ChevronLeft />
@@ -107,9 +153,9 @@ export default function ProfilePage() {
               <div className="space-y-1">
                 <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest ml-1">Contact Information</p>
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
-                  <div className="bg-white p-2 rounded-lg shadow-sm text-primary border border-slate-100"><Phone size={18} /></div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground font-bold uppercase">Mobile Number</p>
+                  <div className="bg-white p-2 rounded-lg shadow-sm text-primary border border-slate-100"><Smartphone size={18} /></div>
+                  <div className="flex-1">
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase">Login Mobile Number</p>
                     <p className="font-bold text-slate-700 tracking-tight">{staffData?.phone || "N/A"}</p>
                   </div>
                 </div>
@@ -132,44 +178,88 @@ export default function ProfilePage() {
             <div className="space-y-6">
               <div className="space-y-1">
                 <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest ml-1">Account Security</p>
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
-                  <div className="bg-white p-2 rounded-lg shadow-sm text-primary border border-slate-100"><Lock size={18} /></div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground font-bold uppercase">System Password</p>
-                    <p className="font-bold text-slate-700">••••••••</p>
+                <div className="p-4 bg-slate-900 rounded-3xl text-white space-y-3 shadow-xl">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] text-white/50 font-bold uppercase flex items-center gap-2"><Lock size={12}/> Current Password</p>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-white/60 hover:text-white" onClick={() => setShowPassword(!showPassword)}>
+                      {showPassword ? <EyeOff size={14}/> : <Eye size={14}/>}
+                    </Button>
                   </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest ml-1">Administrative Tenure</p>
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
-                  <div className="bg-white p-2 rounded-lg shadow-sm text-primary border border-slate-100"><Calendar size={18} /></div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground font-bold uppercase">Registered On</p>
-                    <p className="font-bold text-slate-700 tracking-tight">
-                      {staffData?.createdAt?.toDate ? staffData.createdAt.toDate().toLocaleDateString('en-IN', { dateStyle: 'long' }) : 'Verified Staff'}
-                    </p>
-                  </div>
+                  <p className="text-lg font-mono font-black tracking-widest">
+                    {showPassword ? (staffData?.password || "N/A") : "••••••••"}
+                  </p>
+                  <Separator className="bg-white/10" />
+                  <Dialog open={isChangingPass} onOpenChange={setIsChangingPass}>
+                    <DialogTrigger asChild>
+                      <Button variant="ghost" className="w-full h-8 text-[10px] font-bold uppercase text-primary hover:bg-primary/20">
+                        <Edit size={12} className="mr-2"/> Change Password
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="rounded-3xl max-w-sm">
+                      <DialogHeader>
+                        <DialogTitle>Update Password</DialogTitle>
+                        <DialogDescription>Enter a new secure password for your account.</DialogDescription>
+                      </DialogHeader>
+                      <div className="py-4 space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">New Password</Label>
+                          <Input 
+                            type="text" 
+                            value={newPassword} 
+                            onChange={e => setNewPassword(e.target.value)} 
+                            placeholder="Min 6 characters"
+                            className="h-11 rounded-xl"
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button onClick={handleChangePassword} disabled={isUpdating || !newPassword} className="w-full h-12 rounded-xl font-bold">
+                          {isUpdating ? <Loader2 className="animate-spin" /> : "Save New Password"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card className="border-none shadow-sm bg-primary/5 rounded-2xl p-6 border border-primary/10">
-        <div className="flex gap-4 items-start">
-          <div className="p-2 bg-white rounded-lg shadow-sm text-primary"><Shield size={20} /></div>
-          <div className="space-y-1">
-            <h3 className="font-bold text-slate-800">Permissions & Access</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Your account has <b>{userInfo.role}</b> privileges. This allows you to manage data for the <b>{userInfo.branch}</b>. 
-              {staffData?.canRequestIncome !== false && " You can submit income requests for approval."}
-              {staffData?.canRequestExpense !== false && " You can log building expenses."}
-            </p>
+          {/* Salary History Section for Staff */}
+          <div className="mt-12 space-y-4">
+            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+              <History className="text-primary" size={20} /> Salary Payment Records
+            </h3>
+            <Card className="border-none shadow-sm overflow-hidden bg-slate-50 rounded-2xl">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-100/50">
+                      <TableHead className="font-bold">Date</TableHead>
+                      <TableHead className="font-bold">Month</TableHead>
+                      <TableHead className="font-bold">Method</TableHead>
+                      <TableHead className="text-right font-bold">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedSalaryHistory.map((h: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="text-xs text-muted-foreground">{new Date(h.date).toLocaleDateString()}</TableCell>
+                        <TableCell className="font-bold text-slate-700">{h.month} {h.year}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold">{h.method}</Badge></TableCell>
+                        <TableCell className="text-right font-black text-slate-900">৳{h.amount.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                    {sortedSalaryHistory.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-12 text-muted-foreground italic">No salary records found yet.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </div>
-        </div>
+        </CardContent>
       </Card>
     </div>
   )

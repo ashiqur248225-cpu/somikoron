@@ -19,10 +19,14 @@ import {
   ScrollText,
   ShieldCheck,
   Smartphone,
-  ChevronRight
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Edit,
+  Key
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
-import { doc } from "firebase/firestore"
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore"
 import { Separator } from "@/components/ui/separator"
 import {
   Dialog,
@@ -30,13 +34,24 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useToast } from "@/hooks/use-toast"
 
 export default function StudentProfilePage() {
   const router = useRouter()
   const db = useFirestore()
+  const { toast } = useToast()
+  
   const [studentId, setStudentId] = useState("")
   const [isMounted, setIsMounted] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [isChangingPass, setIsChangingPass] = useState(false)
+  const [newPassword, setNewPassword] = useState("")
+  const [isUpdating, setIsUpdating] = useState(false)
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
@@ -52,6 +67,24 @@ export default function StudentProfilePage() {
   const handleLogout = () => {
     localStorage.clear()
     window.location.href = "/"
+  }
+
+  const handleChangePassword = async () => {
+    if (!newPassword || !studentRef) return
+    setIsUpdating(true)
+    try {
+      await updateDoc(studentRef, {
+        password: newPassword,
+        updatedAt: serverTimestamp()
+      })
+      toast({ title: "Password Updated", description: "Your portal login password has been changed." })
+      setIsChangingPass(false)
+      setNewPassword("")
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
   }
 
   if (isLoading) return <div className="flex justify-center p-20 animate-pulse text-sm font-bold text-muted-foreground uppercase">Syncing Profile...</div>
@@ -87,6 +120,65 @@ export default function StudentProfilePage() {
 
           <Separator className="opacity-50" />
 
+          {/* New Security & Account Access Section */}
+          <div className="space-y-4">
+            <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Lock size={12}/> Account Access</h3>
+            <div className="p-5 bg-slate-900 rounded-[2rem] text-white space-y-4 shadow-xl">
+               <div className="space-y-1">
+                  <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Login Mobile Number</p>
+                  <div className="flex items-center gap-2">
+                    <Smartphone size={14} className="text-primary"/>
+                    <p className="text-md font-bold">{student.phone}</p>
+                  </div>
+               </div>
+               <Separator className="bg-white/10" />
+               <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Portal Password</p>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-white/40 hover:text-white" onClick={() => setShowPassword(!showPassword)}>
+                      {showPassword ? <EyeOff size={14}/> : <Eye size={14}/>}
+                    </Button>
+                  </div>
+                  <p className="text-lg font-mono font-black tracking-widest">
+                    {showPassword ? student.password : "••••••••"}
+                  </p>
+               </div>
+               
+               <Dialog open={isChangingPass} onOpenChange={setIsChangingPass}>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" className="w-full h-9 rounded-xl border border-white/10 text-[10px] font-black uppercase hover:bg-white/10">
+                      <Edit size={12} className="mr-2"/> Change Password
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="rounded-3xl max-w-sm">
+                    <DialogHeader>
+                      <DialogTitle>Update Portal Password</DialogTitle>
+                      <DialogDescription>Enter a new password for your resident portal access.</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">New Password</Label>
+                        <Input 
+                          type="text" 
+                          value={newPassword} 
+                          onChange={e => setNewPassword(e.target.value)} 
+                          placeholder="Create new password"
+                          className="h-11 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button onClick={handleChangePassword} disabled={isUpdating || !newPassword} className="w-full h-12 rounded-xl font-bold">
+                        {isUpdating ? <Loader2 className="animate-spin" /> : "Save Updates"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+               </Dialog>
+            </div>
+          </div>
+
+          <Separator className="opacity-50" />
+
           <div className="space-y-4">
             <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Smartphone size={12}/> Contacts</h3>
             <div className="space-y-3">
@@ -104,7 +196,7 @@ export default function StudentProfilePage() {
           <Separator className="opacity-50" />
 
           <div className="space-y-4">
-             <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Lock size={12}/> Security</h3>
+             <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><ScrollText size={12}/> Documents</h3>
              <Dialog>
                <DialogTrigger asChild>
                  <Button variant="outline" className="w-full h-12 rounded-2xl gap-3 font-bold border-primary/20 text-primary">
