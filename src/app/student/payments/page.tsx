@@ -115,7 +115,9 @@ export default function PaymentRequestPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {accountsData?.accounts?.map((acc: any, i: number) => (
-                        <SelectItem key={i} value={acc.number}>{acc.label}: {acc.number}</SelectItem>
+                        <SelectItem key={`account-${acc.number}-${i}`} value={acc.number}>
+                          {acc.label}: {acc.number}
+                        </SelectItem>
                       ))}
                       {!accountsData?.accounts && <SelectItem disabled value="none">No accounts configured</SelectItem>}
                     </SelectContent>
