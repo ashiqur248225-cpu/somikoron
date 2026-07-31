@@ -21,7 +21,8 @@ import {
   ChevronUp,
   Hash,
   ShoppingBag,
-  ListOrdered
+  ListOrdered,
+  Truck
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -122,7 +123,8 @@ export default function AdminMealDashboardPage() {
           name: s.name,
           phone: s.phone,
           status: s.mealStatus,
-          choices: s.mealChoices
+          choices: s.mealChoices,
+          delivered: s.mealDelivered || {}
         })
       }
     })
@@ -135,6 +137,18 @@ export default function AdminMealDashboardPage() {
       const sRef = doc(db, "students", studentId)
       await updateDoc(sRef, {
         [`mealStatus.${mealId}`]: !currentVal,
+        updatedAt: serverTimestamp()
+      })
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleToggleDelivery = async (studentId: string, mealId: string, currentVal: boolean) => {
+    try {
+      const sRef = doc(db, "students", studentId)
+      await updateDoc(sRef, {
+        [`mealDelivered.${mealId}`]: !currentVal,
         updatedAt: serverTimestamp()
       })
     } catch (e) {
@@ -362,9 +376,9 @@ export default function AdminMealDashboardPage() {
               <CardHeader className="bg-slate-50/50 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                  <div>
                    <CardTitle className="text-lg flex items-center gap-2 text-primary">
-                     <ChefHat size={20}/> Meal Manager (Emergency Override)
+                     <ChefHat size={20}/> Meal Manager (Delivery & Toggle)
                    </CardTitle>
-                   <CardDescription>Manually toggle meals for students in real-time.</CardDescription>
+                   <CardDescription>Order by room number. Staff can mark as delivered.</CardDescription>
                  </div>
                  <div className="flex gap-2">
                    <Select value={buildingFilter} onValueChange={setBuildingFilter}>
@@ -395,10 +409,9 @@ export default function AdminMealDashboardPage() {
                    <Table>
                      <TableHeader className="bg-slate-50/50 sticky top-0 z-10">
                        <TableRow>
-                         <TableHead>Student</TableHead>
-                         <TableHead className="text-center">B</TableHead>
-                         <TableHead className="text-center">L</TableHead>
-                         <TableHead className="text-center">D</TableHead>
+                         <TableHead>Resident (Room Wise)</TableHead>
+                         <TableHead className="text-center">Status (B/L/D)</TableHead>
+                         <TableHead className="text-center">Delivery Track</TableHead>
                        </TableRow>
                      </TableHeader>
                      <TableBody>
@@ -406,35 +419,76 @@ export default function AdminMealDashboardPage() {
                          const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.phone?.includes(searchTerm)
                          const matchBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
                          return matchSearch && matchBuilding && s.isActive
-                       }).map(s => (
-                         <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors">
-                           <TableCell className="py-3">
-                             <div className="font-bold text-slate-700 text-xs">{s.name}</div>
-                             <div className="text-[9px] text-muted-foreground uppercase font-black">{s.buildingName} • R-{s.roomNumber}</div>
+                       })
+                       .sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, {numeric: true}))
+                       .map(s => (
+                         <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors border-b">
+                           <TableCell className="py-4">
+                             <div className="flex items-center gap-3">
+                               <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">
+                                 R-{s.roomNumber}
+                               </div>
+                               <div>
+                                 <p className="font-black text-slate-800 text-xs">{s.name}</p>
+                                 <p className="text-[9px] text-muted-foreground font-bold uppercase">{s.buildingName}</p>
+                               </div>
+                             </div>
                            </TableCell>
                            <TableCell className="text-center">
-                             <button 
-                               onClick={() => handleToggleMeal(s.id, 'breakfast', s.mealStatus?.breakfast)}
-                               className={cn("h-7 w-7 rounded-xl mx-auto flex items-center justify-center transition-all", s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 scale-110 shadow-sm" : "bg-slate-100 text-slate-300")}
-                             >
-                               {s.mealStatus?.breakfast ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}
-                             </button>
+                             <div className="flex gap-2 justify-center">
+                               <button 
+                                 title="Toggle Breakfast"
+                                 onClick={() => handleToggleMeal(s.id, 'breakfast', s.mealStatus?.breakfast)}
+                                 className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-slate-100 text-slate-300")}
+                               >
+                                 <span className="text-[10px] font-black">B</span>
+                               </button>
+                               <button 
+                                 title="Toggle Lunch"
+                                 onClick={() => handleToggleMeal(s.id, 'lunch', s.mealStatus?.lunch)}
+                                 className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-slate-100 text-slate-300")}
+                               >
+                                 <span className="text-[10px] font-black">L</span>
+                               </button>
+                               <button 
+                                 title="Toggle Dinner"
+                                 onClick={() => handleToggleMeal(s.id, 'dinner', s.mealStatus?.dinner)}
+                                 className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-slate-100 text-slate-300")}
+                               >
+                                 <span className="text-[10px] font-black">D</span>
+                               </button>
+                             </div>
                            </TableCell>
                            <TableCell className="text-center">
-                             <button 
-                               onClick={() => handleToggleMeal(s.id, 'lunch', s.mealStatus?.lunch)}
-                               className={cn("h-7 w-7 rounded-xl mx-auto flex items-center justify-center transition-all", s.mealStatus?.lunch ? "bg-success/10 text-success scale-110 shadow-sm" : "bg-slate-100 text-slate-300")}
-                             >
-                               {s.mealStatus?.lunch ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}
-                             </button>
-                           </TableCell>
-                           <TableCell className="text-center">
-                             <button 
-                               onClick={() => handleToggleMeal(s.id, 'dinner', s.mealStatus?.dinner)}
-                               className={cn("h-7 w-7 rounded-xl mx-auto flex items-center justify-center transition-all", s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 scale-110 shadow-sm" : "bg-slate-100 text-slate-300")}
-                             >
-                               {s.mealStatus?.dinner ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}
-                             </button>
+                             <div className="flex gap-2 justify-center">
+                                {s.mealStatus?.breakfast && (
+                                  <button 
+                                    onClick={() => handleToggleDelivery(s.id, 'breakfast', s.mealDelivered?.breakfast)}
+                                    className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.breakfast ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
+                                  >
+                                    <Truck size={10}/> <span className="text-[8px] font-bold">B</span>
+                                  </button>
+                                )}
+                                {s.mealStatus?.lunch && (
+                                  <button 
+                                    onClick={() => handleToggleDelivery(s.id, 'lunch', s.mealDelivered?.lunch)}
+                                    className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.lunch ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
+                                  >
+                                    <Truck size={10}/> <span className="text-[8px] font-bold">L</span>
+                                  </button>
+                                )}
+                                {s.mealStatus?.dinner && (
+                                  <button 
+                                    onClick={() => handleToggleDelivery(s.id, 'dinner', s.mealDelivered?.dinner)}
+                                    className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.dinner ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
+                                  >
+                                    <Truck size={10}/> <span className="text-[8px] font-bold">D</span>
+                                  </button>
+                                )}
+                                {!s.mealStatus?.breakfast && !s.mealStatus?.lunch && !s.mealStatus?.dinner && (
+                                  <span className="text-[10px] font-bold text-slate-300 italic">No Active Meals</span>
+                                )}
+                             </div>
                            </TableCell>
                          </TableRow>
                        ))}
