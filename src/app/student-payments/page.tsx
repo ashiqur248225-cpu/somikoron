@@ -8,14 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { 
   CheckCircle2, XCircle, Loader2, Eye, Wallet, Smartphone, 
-  UserCircle, Building2, Calendar, Trash2, ArrowUpRight, Info, AlertCircle, Clock, History, Receipt
+  UserCircle, Building2, Calendar, Trash2, ArrowUpRight, Info, AlertCircle, Clock, History, Receipt, ChevronRight
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, query, doc, deleteDoc, updateDoc, setDoc, serverTimestamp, increment, where, getDoc, arrayUnion, writeBatch } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
@@ -65,6 +65,8 @@ export default function StudentPaymentsPage() {
         setIsStudentLoading(false)
       }
       fetchStudent()
+    } else {
+      setStudentData(null)
     }
   }, [selectedReq, db])
 
@@ -95,10 +97,8 @@ export default function StudentPaymentsPage() {
 
       batch.set(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() })
       
-      // Update Student History and Balances (Simplified for MVP, assuming rent-first then extra to advance/food)
-      const monthlyRent = Number(studentData.monthlyRent || 0)
+      // Update Student History and Balances
       const rentPaid = Math.min(amount, studentData.totalDue || 0)
-      const extra = amount - rentPaid
 
       batch.update(doc(db, "students", selectedReq.studentId), {
         paymentsHistory: arrayUnion(pRecord),
@@ -121,7 +121,7 @@ export default function StudentPaymentsPage() {
       setIsDetailOpen(false)
       setSelectedReq(null)
     } catch (e: any) {
-      toast({ variant: "destructive", description: e.message })
+      toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
       setIsProcessing(false)
     }
@@ -135,7 +135,7 @@ export default function StudentPaymentsPage() {
       toast({ title: "Request Rejected" })
       setIsDetailOpen(false)
     } catch (e: any) {
-      toast({ variant: "destructive", description: e.message })
+      toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
       setIsProcessing(false)
     }
@@ -155,7 +155,7 @@ export default function StudentPaymentsPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
       ) : (
         <Card className="border-none shadow-sm overflow-hidden bg-white rounded-3xl">
           <CardContent className="p-0">
