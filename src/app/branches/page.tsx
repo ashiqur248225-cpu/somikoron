@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Table, 
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { MapPin, Plus, Loader2, Trash2, Search, MoreVertical, Building2 } from "lucide-react"
+import { MapPin, Plus, Loader2, Trash2, Search, MoreVertical, Building2, ChevronLeft } from "lucide-react"
 import { 
   Dialog, 
   DialogContent, 
@@ -31,6 +32,7 @@ import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export default function BranchesPage() {
+  const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()
   const [isAddOpen, setIsAddOpen] = useState(false)
@@ -90,6 +92,9 @@ export default function BranchesPage() {
       {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2 md:hidden">
+            <ChevronLeft size={24} />
+          </Button>
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
