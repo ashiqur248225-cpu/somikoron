@@ -92,7 +92,7 @@ export default function StudentPaymentsPage() {
         receiver: userName,
         date: new Date().toISOString(),
         description: `Student App Payment: ${selectedReq.purpose}. TXID: ${selectedReq.transactionId}`,
-        createdAt: serverTimestamp()
+        createdAt: new Date().toISOString() // Fixed: serverTimestamp() cannot be used inside arrayUnion
       }
 
       batch.set(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() })
