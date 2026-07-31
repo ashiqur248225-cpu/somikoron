@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,7 +22,9 @@ import {
   Smartphone,
   Landmark,
   History,
-  Info
+  Info,
+  CircleDollarSign,
+  User
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, serverTimestamp, doc, addDoc, query, where, limit } from "firebase/firestore"
@@ -58,6 +60,7 @@ export default function PaymentRequestPage() {
     account: "",
     amount: "",
     transactionId: "",
+    senderInfo: "", // New field for sender mobile/bank info
     purpose: "Monthly Rent & Food",
     description: ""
   })
@@ -68,10 +71,21 @@ export default function PaymentRequestPage() {
   }, [db, studentId])
   const { data: recentRequests } = useCollection(requestsQuery)
 
+  const duesSummary = useMemo(() => {
+    if (!student) return { rent: 0, totalDue: 0 }
+    const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0)
+    const foodVal = Number(student.foodDueAmount || 0)
+    const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0
+    return {
+      monthlyRent: Number(student.monthlyRent || 0),
+      outstandingDue: rentDue + foodDue
+    }
+  }, [student])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.amount || !formData.transactionId || !formData.account) {
-      toast({ variant: "destructive", title: "Error", description: "Please fill all fields correctly." })
+    if (!formData.amount || !formData.transactionId || !formData.account || !formData.senderInfo) {
+      toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "অনুগ্রহ করে সব তথ্য সঠিকভাবে পূরণ করুন।" })
       return
     }
 
@@ -86,8 +100,8 @@ export default function PaymentRequestPage() {
         status: "pending",
         createdAt: serverTimestamp()
       })
-      toast({ title: "Request Submitted", description: "Manager will verify your transaction soon." })
-      setFormData({ method: "", account: "", amount: "", transactionId: "", purpose: "Monthly Rent & Food", description: "" })
+      toast({ title: "আবেদন জমা হয়েছে", description: "ম্যানেজার আপনার ট্রানজেকশনটি ভেরিফাই করবেন।" })
+      setFormData({ method: "", account: "", amount: "", transactionId: "", senderInfo: "", purpose: "Monthly Rent & Food", description: "" })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -102,16 +116,34 @@ export default function PaymentRequestPage() {
         <p className="text-muted-foreground text-sm font-medium">Submit your digital payment for verification.</p>
       </header>
 
+      {/* Dues Awareness Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="border-none shadow-sm bg-primary/5 rounded-2xl p-4 flex items-center gap-4">
+          <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary"><CircleDollarSign size={20}/></div>
+          <div>
+            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Monthly Rent</p>
+            <p className="text-lg font-black text-primary">৳{duesSummary.monthlyRent}</p>
+          </div>
+        </Card>
+        <Card className="border-none shadow-sm bg-destructive/5 rounded-2xl p-4 flex items-center gap-4 border-l-4 border-l-destructive">
+          <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center text-destructive"><AlertCircle size={20}/></div>
+          <div>
+            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Outstanding Dues</p>
+            <p className="text-lg font-black text-destructive">৳{duesSummary.outstandingDue}</p>
+          </div>
+        </Card>
+      </div>
+
       <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
         <div className="h-2 bg-primary w-full" />
         <CardContent className="p-8 space-y-6">
            <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-4 p-5 bg-slate-50 rounded-3xl border border-slate-100">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Official Account</Label>
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Official Account (যেখানে টাকা পাঠিয়েছেন)</Label>
                   <Select value={formData.account} onValueChange={v => setFormData({...formData, account: v})}>
                     <SelectTrigger className="bg-white h-12 rounded-xl shadow-sm border-none font-bold">
-                      <SelectValue placeholder="Select Receiver Number" />
+                      <SelectValue placeholder="রিসিভার নাম্বার সিলেক্ট করুন" />
                     </SelectTrigger>
                     <SelectContent>
                       {accountsData?.accounts?.map((acc: any, i: number) => (
@@ -149,6 +181,19 @@ export default function PaymentRequestPage() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Sender Info (আপনার নাম্বার/ব্যাংক অ্যাকাউন্ট)</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      value={formData.senderInfo} 
+                      onChange={e => setFormData({...formData, senderInfo: e.target.value})} 
+                      className="pl-10 bg-white h-12 rounded-xl font-bold border-none shadow-sm"
+                      placeholder="যেমন: 017XXXXXXXX বা ব্যাংক নাম"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Transaction ID / Reference</Label>
                   <div className="relative">
                     <Smartphone className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
@@ -165,13 +210,13 @@ export default function PaymentRequestPage() {
               <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3">
                  <AlertCircle className="text-amber-600 h-5 w-5 shrink-0 mt-0.5" />
                  <p className="text-[9px] text-amber-700 leading-tight font-bold uppercase">
-                   Warning: Payments sent to any unofficial account or incorrect Transaction IDs will not be accepted.
+                   Warning: ভুল তথ্য দিলে পেমেন্ট রিকোয়েস্ট বাতিল হতে পারে। সেন্ডার নাম্বার এবং TRX ID মিলিয়ে নিন।
                  </p>
               </div>
 
-              <Button type="submit" disabled={isSubmitting} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-xl shadow-primary/20 gap-3">
+              <Button type="submit" disabled={isSubmitting} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-xl shadow-primary/20 gap-3 transition-all hover:scale-[1.01]">
                 {isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={20} />}
-                Submit Request
+                Confirm Request
               </Button>
            </form>
         </CardContent>
@@ -189,7 +234,7 @@ export default function PaymentRequestPage() {
                   {isMounted && req.createdAt?.toDate ? new Date(req.createdAt.toDate()).toLocaleDateString() : 'Loading...'}
                 </p>
                 <h4 className="font-black text-slate-800 text-sm">৳{req.amount}</h4>
-                <p className="text-[9px] font-mono text-slate-400">{req.transactionId}</p>
+                <p className="text-[9px] font-mono text-slate-400">Sender: {req.senderInfo}</p>
               </div>
               <Badge className={cn(
                 "rounded-full text-[8px] font-black uppercase px-3",
