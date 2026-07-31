@@ -312,7 +312,7 @@ export default function SettingsPage() {
       return; 
     }
     const docSnap = await getDoc(doc(db, "configs", "devConfig"));
-    const cloudPassword = docSnap.exists() ? docSnap.data().password : "123456789";
+    const cloudPassword = docSnap.exists() ? docSnap.data().password : "01643894287";
     if (devPassword === cloudPassword) { 
       localStorage.setItem("isDeveloperMode", "true"); 
       setIsDevMode(true); 

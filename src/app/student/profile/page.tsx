@@ -36,9 +36,11 @@ export default function StudentProfilePage() {
   const router = useRouter()
   const db = useFirestore()
   const [studentId, setStudentId] = useState("")
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
+    setIsMounted(true)
   }, [])
 
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])

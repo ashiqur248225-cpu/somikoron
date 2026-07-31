@@ -1,11 +1,13 @@
+
 "use client"
 
 import * as React from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
-import { Printer, ChevronLeft, User, Building2, Calculator, Smartphone, CheckCircle2, Loader2 } from "lucide-react"
+import { Printer, ChevronLeft, User, Building2, Calculator, Smartphone, CheckCircle2, Loader2, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
@@ -14,6 +16,11 @@ export default function ReceiptPage() {
   const id = params.id as string
   const router = useRouter()
   const db = useFirestore()
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const paymentRef = useMemoFirebase(() => id ? doc(db, "payments", id) : null, [db, id])
   const { data: payment, isLoading: pLoading } = useDoc(paymentRef)
@@ -23,7 +30,6 @@ export default function ReceiptPage() {
 
   const handlePrint = () => {
     if (typeof window !== "undefined") {
-      // Safety delay to ensure layout is ready and margin:0 is applied
       setTimeout(() => { window.print(); }, 500);
     }
   }
@@ -32,7 +38,7 @@ export default function ReceiptPage() {
   if (!payment) return <div className="text-center p-20">Payment record not found.</div>
 
   const receiptNo = payment.id?.substring(0, 8).toUpperCase() || "N/A"
-  const dateStr = payment.date?.toDate ? payment.date.toDate().toLocaleString() : (payment.date ? new Date(payment.date).toLocaleString() : 'N/A')
+  const dateStr = isMounted ? (payment.date?.toDate ? payment.date.toDate().toLocaleString() : (payment.date ? new Date(payment.date).toLocaleString() : 'N/A')) : 'Loading date...'
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-20 pt-4 px-4">
@@ -158,7 +164,7 @@ export default function ReceiptPage() {
           </div>
         </div>
 
-        {/* SCREEN PREVIEW DESIGN (Design Preservation) */}
+        {/* SCREEN PREVIEW DESIGN */}
         <div className="p-8 md:p-12 space-y-8 print:hidden">
           <div className="text-center space-y-1">
             <h1 className="text-3xl font-black uppercase text-primary tracking-tighter">SOMIKORON HOSTEL</h1>

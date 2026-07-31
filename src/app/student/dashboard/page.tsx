@@ -17,7 +17,8 @@ import {
   CircleDollarSign,
   Zap,
   Wifi,
-  ChefHat
+  ChefHat,
+  Loader2
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
@@ -27,9 +28,11 @@ import Link from "next/link"
 export default function StudentDashboardPage() {
   const db = useFirestore()
   const [studentId, setStudentId] = useState("")
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
+    setIsMounted(true)
   }, [])
 
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
@@ -51,12 +54,14 @@ export default function StudentDashboardPage() {
   if (isLoading) return <div className="flex justify-center p-20 animate-pulse">Loading Dashboard...</div>
   if (!student) return <div className="text-center p-20">Access Denied. Please Login.</div>
 
+  const displayName = (student.name || "Resident").split(' ')[0]
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="flex justify-between items-end mb-2">
         <div className="space-y-1">
           <p className="text-[10px] font-black uppercase text-primary tracking-widest">Resident Portal</p>
-          <h1 className="text-2xl font-black text-slate-800">Hello, {student.name.split(' ')[0]}!</h1>
+          <h1 className="text-2xl font-black text-slate-800">Hello, {displayName}!</h1>
         </div>
         <Badge className="bg-primary/10 text-primary border-none font-black text-[9px] uppercase px-3 rounded-full">
           R-{student.roomNumber}
@@ -104,12 +109,12 @@ export default function StudentDashboardPage() {
          <Card className="border-none shadow-sm bg-white rounded-2xl p-4 text-center space-y-1">
             <div className="h-8 w-8 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-2"><Wifi size={16}/></div>
             <p className="text-[8px] font-bold text-muted-foreground uppercase">WiFi</p>
-            <p className="text-xs font-black">Paid</p>
+            <p className="text-xs font-black">Active</p>
          </Card>
          <Card className="border-none shadow-sm bg-white rounded-2xl p-4 text-center space-y-1">
             <div className="h-8 w-8 rounded-xl bg-purple-50 text-purple-500 flex items-center justify-center mx-auto mb-2"><ChefHat size={16}/></div>
             <p className="text-[8px] font-bold text-muted-foreground uppercase">Cooking</p>
-            <p className="text-xs font-black">Monthly</p>
+            <p className="text-xs font-black">Standard</p>
          </Card>
       </div>
 
@@ -118,7 +123,7 @@ export default function StudentDashboardPage() {
         <CardHeader className="bg-slate-50/50 border-b py-4">
           <div className="flex justify-between items-center">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-primary uppercase tracking-tight">
-              <Utensils size={16}/> Meal Management
+              <Utensils size={16}/> Meal Status
             </CardTitle>
             <Link href="/student/meals" className="text-[10px] font-bold text-primary flex items-center gap-1 uppercase">Manage <ChevronRight size={12}/></Link>
           </div>
@@ -157,7 +162,9 @@ export default function StudentDashboardPage() {
           <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
             <div>
               <p className="text-[10px] font-black uppercase text-slate-400">Date</p>
-              <p className="text-xs font-bold text-slate-700">{new Date(stats.lastPayment.date).toLocaleDateString()}</p>
+              <p className="text-xs font-bold text-slate-700">
+                {isMounted ? new Date(stats.lastPayment.date).toLocaleDateString() : 'Loading...'}
+              </p>
             </div>
             <div className="text-right">
               <p className="text-[10px] font-black uppercase text-slate-400">Amount</p>

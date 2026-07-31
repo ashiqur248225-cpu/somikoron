@@ -35,15 +35,16 @@ export default function StudentMealPage() {
   const db = useFirestore()
   const [studentId, setStudentId] = useState("")
   const [isUpdating, setIsUpdating] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
+    setIsMounted(true)
   }, [])
 
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
   const { data: student, isLoading } = useDoc(studentRef)
 
-  // Branch Configs for Deadline and Availability
   const userBranch = student?.branch || ""
   const mealConfigRef = useMemoFirebase(() => 
     userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
@@ -51,7 +52,7 @@ export default function StudentMealPage() {
   )
   const { data: mealConfig } = useDoc(mealConfigRef)
 
-  const [localMeals, setLocalTemplates] = useState({
+  const [localMeals, setLocalMeals] = useState({
     breakfast: false,
     lunch: false,
     dinner: false,
@@ -60,7 +61,7 @@ export default function StudentMealPage() {
 
   useEffect(() => {
     if (student?.mealStatus) {
-      setLocalTemplates({
+      setLocalMeals({
         breakfast: student.mealStatus.breakfast || false,
         lunch: student.mealStatus.lunch || false,
         dinner: student.mealStatus.dinner || false,
@@ -70,13 +71,18 @@ export default function StudentMealPage() {
   }, [student])
 
   const canChange = useMemo(() => {
+    if (!isMounted) return true
     if (!mealConfig?.cutoffTime) return true
-    const now = new Date()
-    const [hours, minutes] = mealConfig.cutoffTime.split(':')
-    const deadline = new Date()
-    deadline.setHours(parseInt(hours), parseInt(minutes), 0, 0)
-    return now < deadline
-  }, [mealConfig])
+    try {
+      const now = new Date()
+      const [hours, minutes] = (mealConfig.cutoffTime || "10:00").split(':')
+      const deadline = new Date()
+      deadline.setHours(parseInt(hours || "10"), parseInt(minutes || "0"), 0, 0)
+      return now < deadline
+    } catch (e) {
+      return true
+    }
+  }, [mealConfig, isMounted])
 
   const handleUpdateMeals = async () => {
     if (!studentRef) return
@@ -119,7 +125,7 @@ export default function StudentMealPage() {
           <p className="text-[10px] font-black uppercase tracking-widest">Daily Deadline</p>
           <p className="text-xs font-bold">{canChange ? `Deadline: ${mealConfig?.cutoffTime || '10:00 AM'}` : "Time Expired - Cannot change today."}</p>
         </div>
-        {!canChange && <Badge variant="destructive" className="text-[8px] font-black">LOCKED</Badge>}
+        {!canChange && isMounted && <Badge variant="destructive" className="text-[8px] font-black">LOCKED</Badge>}
       </div>
 
       <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
@@ -145,7 +151,7 @@ export default function StudentMealPage() {
                   <Switch 
                     disabled={!isAvailable || !canChange}
                     checked={isChecked as boolean}
-                    onCheckedChange={(val) => setLocalTemplates({...localMeals, [type.id]: val})}
+                    onCheckedChange={(val) => setLocalMeals({...localMeals, [type.id]: val})}
                   />
                 </div>
               )
@@ -161,7 +167,7 @@ export default function StudentMealPage() {
              </div>
              <Switch 
                checked={localMeals.autoMode}
-               onCheckedChange={(val) => setLocalTemplates({...localMeals, autoMode: val})}
+               onCheckedChange={(val) => setLocalMeals({...localMeals, autoMode: val})}
              />
           </div>
 

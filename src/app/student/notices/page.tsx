@@ -24,9 +24,11 @@ export default function StudentNoticePage() {
   const { toast } = useToast()
   const db = useFirestore()
   const [studentId, setStudentId] = useState("")
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
+    setIsMounted(true)
   }, [])
 
   const noticesQuery = useMemoFirebase(() => {
@@ -92,7 +94,7 @@ export default function StudentNoticePage() {
                   </h3>
                 </div>
                 <Badge variant="ghost" className="text-[8px] font-bold text-slate-400 uppercase">
-                  {notice.createdAt?.toDate ? new Date(notice.createdAt.toDate()).toLocaleDateString() : 'Just now'}
+                  {isMounted && notice.createdAt?.toDate ? new Date(notice.createdAt.toDate()).toLocaleDateString() : 'Just now'}
                 </Badge>
               </div>
 

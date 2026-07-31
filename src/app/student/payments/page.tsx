@@ -36,9 +36,11 @@ export default function PaymentRequestPage() {
   const db = useFirestore()
   const [studentId, setStudentId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
+    setIsMounted(true)
   }, [])
 
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
@@ -87,7 +89,7 @@ export default function PaymentRequestPage() {
       toast({ title: "Request Submitted", description: "Manager will verify your transaction soon." })
       setFormData({ method: "", account: "", amount: "", transactionId: "", purpose: "Monthly Rent & Food", description: "" })
     } catch (e: any) {
-      toast({ variant: "destructive", description: e.message })
+      toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
       setIsSubmitting(false)
     }
@@ -181,7 +183,9 @@ export default function PaymentRequestPage() {
           {recentRequests?.map((req: any) => (
             <div key={req.id} className="p-4 bg-white rounded-3xl shadow-sm border border-slate-100 flex justify-between items-center">
               <div>
-                <p className="text-[8px] font-bold text-muted-foreground uppercase">{new Date(req.createdAt?.toDate?.()).toLocaleDateString()}</p>
+                <p className="text-[8px] font-bold text-muted-foreground uppercase">
+                  {isMounted && req.createdAt?.toDate ? new Date(req.createdAt.toDate()).toLocaleDateString() : 'Loading...'}
+                </p>
                 <h4 className="font-black text-slate-800 text-sm">৳{req.amount}</h4>
                 <p className="text-[9px] font-mono text-slate-400">{req.transactionId}</p>
               </div>
