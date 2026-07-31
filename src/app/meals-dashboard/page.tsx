@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -250,9 +249,9 @@ export default function AdminMealDashboardPage() {
             </CardHeader>
             <CardContent className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
                <div className="space-y-4">
-                  <p className="text-[10px] font-black uppercase text-success tracking-widest border-b border-white/10 pb-2 flex items-center gap-2">
+                  <div className="text-[10px] font-black uppercase text-success tracking-widest border-b border-white/10 pb-2 flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-success"/> Lunch Prep
-                  </p>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     {Object.entries(mealStats.choices.lunch).length > 0 ? Object.entries(mealStats.choices.lunch).map(([choice, count]) => (
                       <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center">
@@ -263,9 +262,9 @@ export default function AdminMealDashboardPage() {
                   </div>
                </div>
                <div className="space-y-4">
-                  <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest border-b border-white/10 pb-2 flex items-center gap-2">
+                  <div className="text-[10px] font-black uppercase text-blue-400 tracking-widest border-b border-white/10 pb-2 flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-400"/> Dinner Prep
-                  </p>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     {Object.entries(mealStats.choices.dinner).length > 0 ? Object.entries(mealStats.choices.dinner).map(([choice, count]) => (
                       <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center">
