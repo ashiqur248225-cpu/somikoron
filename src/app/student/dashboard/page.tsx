@@ -23,6 +23,7 @@ import {
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 import Link from "next/link"
 
 export default function StudentDashboardPage() {
@@ -52,7 +53,7 @@ export default function StudentDashboardPage() {
   }, [student])
 
   if (!isMounted) return null;
-  if (isLoading) return <div className="flex justify-center p-20 animate-pulse">Loading Dashboard...</div>
+  if (isLoading) return <div className="flex justify-center p-20 animate-pulse text-sm font-bold text-muted-foreground uppercase">Syncing Dashboard...</div>
   if (!student) return <div className="text-center p-20">Access Denied. Please Login.</div>
 
   const displayName = (student.name || "Resident").split(' ')[0]
@@ -164,7 +165,7 @@ export default function StudentDashboardPage() {
             <div>
               <p className="text-[10px] font-black uppercase text-slate-400">Date</p>
               <p className="text-xs font-bold text-slate-700">
-                {new Date(stats.lastPayment.date).toLocaleDateString()}
+                {isMounted && stats.lastPayment.date ? new Date(stats.lastPayment.date).toLocaleDateString() : 'N/A'}
               </p>
             </div>
             <div className="text-right">
