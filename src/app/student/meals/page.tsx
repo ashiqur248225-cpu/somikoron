@@ -17,7 +17,10 @@ import {
   Info,
   ChevronRight,
   ListOrdered,
-  Loader2
+  Loader2,
+  Receipt,
+  Calculator,
+  Coins
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, collection, query, where } from "firebase/firestore"
@@ -28,6 +31,14 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 const MEAL_TYPES = [
   { id: "breakfast", label: "Breakfast", icon: "🍳" },
@@ -43,6 +54,8 @@ export default function StudentMealPage() {
   const [studentId, setStudentId] = useState("")
   const [isUpdating, setIsUpdating] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const [selectedBill, setSelectedBill] = useState<any>(null)
+  const [isBillDialogOpen, setIsBillDialogOpen] = useState(false)
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
@@ -103,6 +116,18 @@ export default function StudentMealPage() {
   const todayDay = isMounted ? WEEKDAYS[new Date().getDay()] : "Saturday"
   const tomorrowDay = isMounted ? WEEKDAYS[(new Date().getDay() + 1) % 7] : "Saturday"
   const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
+
+  const mealHistory = useMemo(() => {
+    if (!student?.mealsHistory) return []
+    return [...student.mealsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [student?.mealsHistory])
+
+  const thisMonthSummary = useMemo(() => {
+    if (!mealHistory.length) return null;
+    const now = new Date();
+    const currentMonthLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+    return mealHistory.find(m => m.month === currentMonthLabel) || mealHistory[0];
+  }, [mealHistory])
 
   if (isLoading) return <div className="flex justify-center p-20 animate-pulse">Syncing Kitchen...</div>
 
@@ -178,27 +203,115 @@ export default function StudentMealPage() {
 
       {/* History Log */}
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-         <CardHeader className="bg-slate-50/50 border-b"><CardTitle className="text-xs font-black uppercase text-muted-foreground flex items-center gap-2"><History size={14}/> Consumption History</CardTitle></CardHeader>
+         <CardHeader className="bg-slate-50/50 border-b">
+            <div className="flex justify-between items-center">
+               <CardTitle className="text-xs font-black uppercase text-muted-foreground flex items-center gap-2"><History size={14}/> Consumption History</CardTitle>
+               <Badge variant="secondary" className="font-black text-[10px]">{mealHistory.length} Finished Months</Badge>
+            </div>
+         </CardHeader>
          <CardContent className="p-0">
-            <div className="p-6 space-y-4">
-               <div className="flex justify-between items-center">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase">This Month</p>
-                  <Badge variant="secondary" className="font-black">{(student?.mealsHistory?.length || 0)} Sessions</Badge>
-               </div>
-               <div className="grid grid-cols-1 gap-2">
-                  {student?.mealsHistory?.slice(-5).reverse().map((m: any, i: number) => (
-                    <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border text-xs">
-                       <span className="font-bold">{m.month}</span>
-                       <span className="font-black text-primary">{m.totalMeals} Meals</span>
+            <div className="p-6 space-y-6">
+               {thisMonthSummary && (
+                 <div className="p-5 bg-primary/5 rounded-[2rem] border-2 border-primary/10 space-y-4">
+                    <div className="flex justify-between items-center">
+                       <p className="text-[10px] font-black uppercase text-primary tracking-widest">Latest Record ({thisMonthSummary.month})</p>
+                       <Badge className="bg-primary text-[8px] font-black">LATEST</Badge>
                     </div>
-                  ))}
+                    <div className="flex justify-between items-end">
+                       <div className="space-y-1">
+                          <p className="text-3xl font-black text-slate-800">{thisMonthSummary.totalMeals}</p>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Meals Consumed</p>
+                       </div>
+                       <Button 
+                         variant="outline" 
+                         size="sm" 
+                         className="rounded-xl font-bold h-9 gap-2 border-primary/20 text-primary hover:bg-primary/10"
+                         onClick={() => { setSelectedBill(thisMonthSummary); setIsBillDialogOpen(true); }}
+                       >
+                          <Receipt size={14}/> View Billing
+                       </Button>
+                    </div>
+                 </div>
+               )}
+
+               <div className="space-y-3">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Previous Reports</p>
+                  <div className="grid grid-cols-1 gap-2">
+                     {mealHistory.map((m: any, i: number) => (
+                       <div key={i} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:bg-white hover:shadow-md transition-all">
+                          <div className="space-y-0.5">
+                             <p className="text-xs font-bold text-slate-700">{m.month}</p>
+                             <p className="text-[9px] font-medium text-muted-foreground uppercase">{m.totalMeals} Meals logged</p>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-8 rounded-lg text-primary font-bold text-[10px] uppercase gap-1"
+                            onClick={() => { setSelectedBill(m); setIsBillDialogOpen(true); }}
+                          >
+                             Details <ChevronRight size={12}/>
+                          </Button>
+                       </div>
+                     ))}
+                  </div>
                </div>
             </div>
          </CardContent>
          <CardFooter className="bg-slate-50/50 border-t p-4">
-            <p className="text-[9px] text-center w-full text-muted-foreground font-medium italic">Costs are calculated at month-end based on total count and current branch rate.</p>
+            <p className="text-[9px] text-center w-full text-muted-foreground font-medium italic">Costs are finalized at month-end by management.</p>
          </CardFooter>
       </Card>
+
+      {/* Bill Details Dialog */}
+      <Dialog open={isBillDialogOpen} onOpenChange={setIsBillDialogOpen}>
+        <DialogContent className="max-w-md rounded-3xl p-0 overflow-hidden">
+          <div className="h-2 bg-primary w-full" />
+          <DialogHeader className="p-8 pb-4">
+            <DialogTitle className="text-2xl font-black flex items-center gap-2">
+               <Receipt className="text-primary"/> Monthly Billing Report
+            </DialogTitle>
+            <DialogDescription className="font-bold uppercase text-[10px] text-muted-foreground tracking-widest">
+               Summary for {selectedBill?.month}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="px-8 pb-8 space-y-6">
+             <div className="grid grid-cols-1 gap-4">
+                <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex justify-between items-center">
+                   <div className="space-y-1">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground">Total Consumption</p>
+                      <p className="text-2xl font-black text-slate-800">{selectedBill?.totalMeals} <span className="text-xs font-bold text-slate-400">Meals</span></p>
+                   </div>
+                   <div className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-primary">
+                      <Utensils size={24}/>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="p-5 bg-primary/5 rounded-3xl border border-primary/10 space-y-1">
+                      <p className="text-[8px] font-black uppercase text-primary/60">Per Meal Rate</p>
+                      <p className="text-lg font-black text-primary">৳{selectedBill?.perMealCost}</p>
+                   </div>
+                   <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-1 shadow-xl">
+                      <p className="text-[8px] font-black uppercase text-white/40">Total Charged</p>
+                      <p className="text-lg font-black text-success">৳{selectedBill?.totalCost}</p>
+                   </div>
+                </div>
+             </div>
+
+             <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100 flex gap-3 items-start">
+                <Info size={16} className="text-orange-600 shrink-0 mt-0.5" />
+                <p className="text-[9px] text-orange-800 font-bold uppercase leading-tight">
+                   The total bill has been deducted from your food balance. Please ensure you have sufficient balance for the next period.
+                </p>
+             </div>
+          </div>
+          
+          <DialogFooter className="p-6 bg-slate-50 border-t">
+             <Button className="w-full h-12 rounded-2xl font-black text-xs uppercase" onClick={() => setIsBillDialogOpen(false)}>Close Report</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
