@@ -19,7 +19,8 @@ import {
   Zap,
   Wifi,
   ChefHat,
-  Loader2
+  Loader2,
+  Receipt
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
@@ -49,8 +50,9 @@ export default function StudentDashboardPage() {
     const totalDue = rentDue + foodDue
     
     const lastPayment = student.paymentsHistory?.[student.paymentsHistory.length - 1] || null
+    const lastMonthFood = student.mealsHistory?.[student.mealsHistory.length - 1] || null
     
-    return { rentDue, foodBalance, foodDue, totalDue, lastPayment }
+    return { rentDue, foodBalance, foodDue, totalDue, lastPayment, lastMonthFood }
   }, [student])
 
   if (!isMounted) return null;
@@ -109,6 +111,31 @@ export default function StudentDashboardPage() {
           </Link>
         </CardContent>
       </Card>
+
+      {/* Last Month Food Summary Card */}
+      {stats?.lastMonthFood && (
+        <Card className="border-none shadow-md bg-white rounded-[2rem] overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b py-4">
+             <div className="flex justify-between items-center">
+                <CardTitle className="text-[10px] font-black uppercase text-primary flex items-center gap-2">
+                  <Receipt size={14}/> Previous Month Food Report
+                </CardTitle>
+                <Badge variant="outline" className="text-[8px] font-black uppercase">{stats.lastMonthFood.month}</Badge>
+             </div>
+          </CardHeader>
+          <CardContent className="p-5 flex justify-between items-center">
+             <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-600">Total Bill: <span className="text-destructive font-black">৳{stats.lastMonthFood.totalCost}</span></p>
+                <p className="text-[10px] text-muted-foreground font-medium uppercase">{stats.lastMonthFood.totalMeals} Meals Consumed</p>
+             </div>
+             <Link href="/student/meals">
+                <Button variant="ghost" size="sm" className="h-8 text-primary font-bold text-[10px] uppercase gap-1">
+                   Details <ChevronRight size={14}/>
+                </Button>
+             </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Status Grid */}
       <div className="grid grid-cols-3 gap-3">
