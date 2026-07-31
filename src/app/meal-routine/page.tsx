@@ -22,9 +22,11 @@ export default function MealRoutinePage() {
   const router = useRouter()
   const [isUpdating, setIsUpdating] = useState(false)
   const [userBranch, setUserBranch] = useState("")
+  const [userRole, setUserRole] = useState("")
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setUserRole(localStorage.getItem("user_role") || "Manager")
   }, [])
 
   const routineQuery = useMemoFirebase(() => collection(db, "mealRoutines"), [db])
@@ -70,6 +72,8 @@ export default function MealRoutinePage() {
     }
   }
 
+  const isEditable = userRole === 'Admin' || userRole === 'Branch Manager';
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
@@ -78,7 +82,9 @@ export default function MealRoutinePage() {
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Routine</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Set weekly menu and choice options.</p>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
+              Weekly menu for <span className="font-bold text-foreground">{userBranch}</span>.
+            </p>
           </div>
         </div>
       </div>
@@ -91,38 +97,43 @@ export default function MealRoutinePage() {
                 <div className="bg-primary/10 p-2 rounded-xl text-primary"><Clock size={20}/></div>
                 <CardTitle className="text-lg">{day}</CardTitle>
               </div>
-              <Button onClick={() => handleSave(day)} disabled={isUpdating} size="sm" className="gap-2 rounded-xl h-9">
-                <Save size={16}/> Save {day}
-              </Button>
+              {isEditable && (
+                <Button onClick={() => handleSave(day)} disabled={isUpdating} size="sm" className="gap-2 rounded-xl h-9">
+                  <Save size={16}/> Save {day}
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Breakfast (সকাল)</Label>
                   <Input 
+                    disabled={!isEditable}
                     value={localRoutine[day]?.breakfast || ""} 
                     onChange={e => handleUpdateField(day, 'breakfast', e.target.value)}
                     placeholder="e.g. Khichuri / Ruti Dal"
-                    className="h-11 rounded-xl"
+                    className="h-11 rounded-xl bg-white"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Lunch (দুপুর)</Label>
                   <Input 
+                    disabled={!isEditable}
                     value={localRoutine[day]?.lunch || ""} 
                     onChange={e => handleUpdateField(day, 'lunch', e.target.value)}
-                    placeholder="e.g. Rice, Fish/Egg, Veg"
-                    className="h-11 rounded-xl"
+                    placeholder="e.g. Rice, Dal, Fish/Egg"
+                    className="h-11 rounded-xl bg-white"
                   />
-                  <p className="text-[9px] text-primary font-bold">Tip: Use '/' for choices (e.g. Fish/Egg)</p>
+                  {isEditable && <p className="text-[9px] text-primary font-bold">Tip: Common items first, then slash (/) for choices (e.g. Rice, Fish/Egg)</p>}
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Dinner (রাত)</Label>
                   <Input 
+                    disabled={!isEditable}
                     value={localRoutine[day]?.dinner || ""} 
                     onChange={e => handleUpdateField(day, 'dinner', e.target.value)}
                     placeholder="e.g. Rice, Beef/Chicken"
-                    className="h-11 rounded-xl"
+                    className="h-11 rounded-xl bg-white"
                   />
                 </div>
               </div>

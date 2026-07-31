@@ -47,6 +47,7 @@ const MEAL_TYPES = [
 ]
 
 const WEEKDAYS = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function StudentMealPage() {
   const { toast } = useToast()
@@ -108,9 +109,21 @@ export default function StudentMealPage() {
     finally { setIsUpdating(false) }
   }
 
-  const parseOptions = (text: string) => {
-    if (!text || !text.includes('/')) return null
-    return text.split('/').map(t => t.trim())
+  // SMART MEAL PARSER: Separates common items and slash-based choices
+  const getMealDetails = (text: string) => {
+    if (!text) return { common: "Regular Diet", options: null };
+    if (!text.includes('/')) return { common: text, options: null };
+
+    const parts = text.split(',');
+    const lastPart = parts[parts.length - 1];
+
+    if (lastPart.includes('/')) {
+      const common = parts.length > 1 ? parts.slice(0, -1).join(', ').trim() : "";
+      const options = lastPart.split('/').map(t => t.trim());
+      return { common, options };
+    }
+
+    return { common: text, options: null };
   }
 
   const todayDay = isMounted ? WEEKDAYS[new Date().getDay()] : "Saturday"
@@ -158,22 +171,27 @@ export default function StudentMealPage() {
                 const isAvailable = mealConfig?.[`${type.id}Available`] !== false
                 const isChecked = localMeals[type.id as keyof typeof localMeals]
                 const menuText = tomorrowMenu?.[type.id] || ""
-                const options = parseOptions(menuText)
+                const { common, options } = getMealDetails(menuText)
                 
                 return (
                   <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", !isAvailable ? "opacity-30 pointer-events-none" : (isChecked ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <span className="text-2xl">{type.icon}</span>
-                        <div><h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">{type.label}</h3><p className="text-[9px] font-bold text-primary uppercase">{menuText || 'Regular Diet'}</p></div>
+                        <div>
+                          <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">{type.label}</h3>
+                          <p className="text-[9px] font-bold text-primary uppercase">
+                            {common || (options ? 'Mixed Options' : 'Regular Diet')}
+                          </p>
+                        </div>
                       </div>
                       <Switch disabled={!canChange} checked={isChecked as boolean} onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} />
                     </div>
 
                     {isChecked && options && (
                       <div className="pt-3 border-t border-success/10 animate-in slide-in-from-top-2">
-                        <p className="text-[8px] font-black uppercase text-success/60 mb-2">Choose Your Dish</p>
-                        <RadioGroup value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4">
+                        <p className="text-[8px] font-black uppercase text-success/60 mb-2">Pick Your Selection</p>
+                        <RadioGroup value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
                            {options.map(opt => (
                              <div key={opt} className="flex items-center gap-2">
                                 <RadioGroupItem value={opt} id={`${type.id}-${opt}`} className="border-success text-success" />
@@ -195,7 +213,7 @@ export default function StudentMealPage() {
               <Switch checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
            </div>
 
-           <Button onClick={handleUpdateMeals} disabled={isUpdating || !canChange} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl shadow-primary/20 gap-3">
+           <Button onClick={handleUpdateMeals} disabled={isUpdating || !canChange} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95">
               {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} Save Preferences
            </Button>
         </CardContent>

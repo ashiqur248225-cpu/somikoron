@@ -97,7 +97,7 @@ export function AppSidebar() {
     { title: "Buildings", url: buildingsUrl, icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Meal Analytics", url: "/meals-dashboard", icon: Utensils, roles: ["Admin", "Branch Manager", "Building Manager", "Staff", "Worker"] },
-    { title: "Meal Routine", url: "/meal-routine", icon: Soup, roles: ["Admin", "Branch Manager"] },
+    { title: "Meal Routine", url: "/meal-routine", icon: Soup, roles: ["Admin", "Branch Manager", "Building Manager", "Staff", "Worker", "Student"] },
     { title: "Market Tracking", url: "/market", icon: ShoppingBag, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Notices & SMS", url: "/sms", icon: BellRing, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Student Payments", url: "/student-payments", icon: Wallet, roles: ["Admin", "Branch Manager"] },
@@ -119,6 +119,7 @@ export function AppSidebar() {
   const studentItems = [
     { title: "My Dashboard", url: "/student/dashboard", icon: LayoutDashboard, roles: ["Student"] },
     { title: "My Meals", url: "/student/meals", icon: Utensils, roles: ["Student"] },
+    { title: "Meal Routine", url: "/meal-routine", icon: Soup, roles: ["Student"] },
     { title: "Payment Request", url: "/student/payments", icon: Wallet, roles: ["Student"] },
     { title: "Notice Center", url: "/student/notices", icon: BellRing, roles: ["Student"] },
     { title: "My Profile", url: "/student/profile", icon: UserCircle, roles: ["Student"] },
