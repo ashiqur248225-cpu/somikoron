@@ -20,7 +20,8 @@ import {
   Loader2,
   Receipt,
   Calculator,
-  Coins
+  Coins,
+  Table as TableIcon
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, collection, query, where } from "firebase/firestore"
@@ -39,6 +40,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
+import Link from "next/link"
 
 const MEAL_TYPES = [
   { id: "breakfast", label: "Breakfast", icon: "🍳" },
@@ -146,9 +148,16 @@ export default function StudentMealPage() {
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-black text-slate-800">Catering Panel</h1>
-        <p className="text-muted-foreground text-sm font-medium">Manage tomorrow's meal choices.</p>
+      <header className="flex justify-between items-start mb-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-black text-slate-800">Catering Panel</h1>
+          <p className="text-muted-foreground text-sm font-medium">Manage tomorrow's meal choices.</p>
+        </div>
+        <Link href="/meal-routine">
+          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl bg-primary/10 text-primary shadow-inner">
+             <TableIcon size={20} />
+          </Button>
+        </Link>
       </header>
 
       {/* Routine Preview */}
