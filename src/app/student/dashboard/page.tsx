@@ -170,7 +170,7 @@ export default function StudentDashboardPage() {
             <History size={18}/>
             <h3 className="font-bold text-sm uppercase tracking-tight">Recent Transaction</h3>
           </div>
-          <Link href="/student/payments">
+          <Link href="/student/history">
              <Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase gap-1 text-primary">
                 History <ChevronRight size={14}/>
              </Button>
