@@ -91,8 +91,8 @@ export default function MealRoutinePage() {
               <ChevronLeft size={24} />
             </Button>
           )}
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
+          {userRole !== 'Student' && <SidebarTrigger className="-ml-1" />}
+          {userRole !== 'Student' && <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />}
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Routine</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
