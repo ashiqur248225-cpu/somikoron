@@ -92,6 +92,14 @@ export default function StudentDashboardPage() {
                 <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Food Balance</p>
                 <p className="text-lg font-black">৳{stats?.foodBalance.toLocaleString()}</p>
              </div>
+             <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Rent Due</p>
+                <p className="text-lg font-black">৳{stats?.rentDue.toLocaleString()}</p>
+             </div>
+             <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Service Chrg</p>
+                <p className="text-lg font-black">৳{student.serviceCharge || 0}</p>
+             </div>
           </div>
 
           <Link href="/student/payments">
