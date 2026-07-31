@@ -165,9 +165,16 @@ export default function StudentDashboardPage() {
 
       {/* Last Payment */}
       <Card className="border-none shadow-sm rounded-3xl bg-white p-6 space-y-4">
-        <div className="flex items-center gap-3 text-primary">
-          <History size={18}/>
-          <h3 className="font-bold text-sm uppercase tracking-tight">Recent Transaction</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 text-primary">
+            <History size={18}/>
+            <h3 className="font-bold text-sm uppercase tracking-tight">Recent Transaction</h3>
+          </div>
+          <Link href="/student/payments">
+             <Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase gap-1 text-primary">
+                History <ChevronRight size={14}/>
+             </Button>
+          </Link>
         </div>
         {stats?.lastPayment ? (
           <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
