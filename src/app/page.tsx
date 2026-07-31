@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -206,10 +207,11 @@ export default function DashboardPage() {
   }, [allPayments, allExpenses, students, timeRange])
 
   // Prevent UI rendering for non-management roles before redirect
-  if (['Building Manager', 'Staff', 'Worker'].includes(userRole)) {
+  if (['Staff', 'Worker'].includes(userRole)) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="animate-spin h-10 w-10 text-primary" />
+        <p className="text-sm font-bold text-muted-foreground uppercase">Loading Staff Portal...</p>
       </div>
     )
   }
