@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -191,7 +190,7 @@ export default function ProfilePage() {
                   <Separator className="bg-white/10" />
                   <Dialog open={isChangingPass} onOpenChange={setIsChangingPass}>
                     <DialogTrigger asChild>
-                      <Button variant="ghost" className="w-full h-8 text-[10px] font-bold uppercase text-primary hover:bg-primary/20">
+                      <Button variant="ghost" className="w-full h-8 text-[10px] font-bold uppercase text-primary hover:bg-white/10">
                         <Edit size={12} className="mr-2"/> Change Password
                       </Button>
                     </DialogTrigger>
@@ -224,7 +223,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Salary History Section for Staff */}
           <div className="mt-12 space-y-4">
             <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
               <History className="text-primary" size={20} /> Salary Payment Records
