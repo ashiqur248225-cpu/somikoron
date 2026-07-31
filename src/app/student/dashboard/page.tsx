@@ -1,9 +1,9 @@
-
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { 
   Home, 
   Wallet, 
@@ -51,6 +51,7 @@ export default function StudentDashboardPage() {
     return { rentDue, foodBalance, foodDue, totalDue, lastPayment }
   }, [student])
 
+  if (!isMounted) return null;
   if (isLoading) return <div className="flex justify-center p-20 animate-pulse">Loading Dashboard...</div>
   if (!student) return <div className="text-center p-20">Access Denied. Please Login.</div>
 
@@ -163,7 +164,7 @@ export default function StudentDashboardPage() {
             <div>
               <p className="text-[10px] font-black uppercase text-slate-400">Date</p>
               <p className="text-xs font-bold text-slate-700">
-                {isMounted ? new Date(stats.lastPayment.date).toLocaleDateString() : 'Loading...'}
+                {new Date(stats.lastPayment.date).toLocaleDateString()}
               </p>
             </div>
             <div className="text-right">
