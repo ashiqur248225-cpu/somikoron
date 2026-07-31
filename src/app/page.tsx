@@ -100,9 +100,10 @@ export default function DashboardPage() {
     setAssignedBuildingId(bId)
 
     // Redirect Building Manager, Staff or Workers to relevant pages
+    // We check for "General Staff" as well
     if (role === 'Building Manager') {
       router.push('/students')
-    } else if (role === 'Staff' || role === 'Worker') {
+    } else if (role === 'Staff' || role === 'Worker' || role === 'General Staff') {
       router.push('/meals-dashboard')
     }
   }, [router])
@@ -207,7 +208,7 @@ export default function DashboardPage() {
   }, [allPayments, allExpenses, students, timeRange])
 
   // Prevent UI rendering for non-management roles before redirect
-  if (['Staff', 'Worker'].includes(userRole)) {
+  if (['Staff', 'Worker', 'General Staff'].includes(userRole)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="animate-spin h-10 w-10 text-primary" />

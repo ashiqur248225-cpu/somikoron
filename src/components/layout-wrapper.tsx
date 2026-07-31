@@ -20,7 +20,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
     setUserRole(localStorage.getItem("user_role") || "")
   }, [pathname])
 
-  const isStaffUI = userRole === 'Staff' || userRole === 'Worker'
+  const isStaffUI = userRole === 'Staff' || userRole === 'Worker' || userRole === 'General Staff'
 
   if (isPublicPage) {
     return <main className="min-h-screen bg-background">{children}</main>
