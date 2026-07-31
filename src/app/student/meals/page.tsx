@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
 const MEAL_TYPES = [
