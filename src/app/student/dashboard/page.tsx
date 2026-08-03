@@ -103,12 +103,6 @@ export default function StudentDashboardPage() {
                 <p className="text-lg font-black">৳{student.serviceCharge || 0}</p>
              </div>
           </div>
-
-          <Link href="/student/payments">
-            <Button className="w-full bg-white text-primary hover:bg-slate-50 h-12 rounded-2xl font-black text-sm uppercase gap-2 shadow-xl shadow-primary/20">
-              <CircleDollarSign size={18} /> Make Payment Request
-            </Button>
-          </Link>
         </CardContent>
       </Card>
 
