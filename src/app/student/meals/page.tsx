@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -27,7 +28,7 @@ import {
   ChevronDown
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, serverTimestamp, updateDoc, collection, query, where } from "firebase/firestore"
+import { doc, serverTimestamp, updateDoc, collection, query, where, increment } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -172,16 +173,35 @@ export default function StudentMealPage() {
         }
       }
 
-      await updateDoc(studentRef, { 
+      // Monthly counter increment logic
+      const now = new Date();
+      const currentLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+      const isNewMonth = student?.currentMonthLabel !== currentLabel;
+
+      const updates: any = { 
         mealStatus: finalMeals, 
         mealChoices: finalChoices, 
-        weeklySchedule, // Save the schedule
+        weeklySchedule, 
         lastMealUpdate: serverTimestamp(),
-        updatedAt: serverTimestamp() 
-      })
+        updatedAt: serverTimestamp(),
+        currentMonthLabel: currentLabel
+      }
+
+      // If it's a new month, reset counters. Otherwise, increment.
+      if (isNewMonth) {
+        updates.currentMonthBreakfast = finalMeals.breakfast ? 1 : 0;
+        updates.currentMonthLunch = finalMeals.lunch ? 1 : 0;
+        updates.currentMonthDinner = finalMeals.dinner ? 1 : 0;
+      } else {
+        if (finalMeals.breakfast) updates.currentMonthBreakfast = increment(1);
+        if (finalMeals.lunch) updates.currentMonthLunch = increment(1);
+        if (finalMeals.dinner) updates.currentMonthDinner = increment(1);
+      }
+
+      await updateDoc(studentRef, updates)
       setLocalMeals(finalMeals)
       setMealChoices(finalChoices)
-      toast({ title: "Preferences Saved", description: "Your meals for tomorrow are locked and saved." })
+      toast({ title: "Preferences Saved", description: "Your meals for tomorrow are locked and totals updated." })
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
     finally { setIsUpdating(false) }
   }

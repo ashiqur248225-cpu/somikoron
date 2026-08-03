@@ -92,6 +92,10 @@
         "paymentSystem": { "type": "string" },
         "mealStatus": { "type": "object" },
         "mealChoices": { "type": "object" },
+        "currentMonthLabel": { "type": "string" },
+        "currentMonthBreakfast": { "type": "number" },
+        "currentMonthLunch": { "type": "number" },
+        "currentMonthDinner": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
