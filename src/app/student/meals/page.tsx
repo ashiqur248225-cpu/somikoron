@@ -44,6 +44,14 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table"
 import Link from "next/link"
 
 const MEAL_TYPES = [
