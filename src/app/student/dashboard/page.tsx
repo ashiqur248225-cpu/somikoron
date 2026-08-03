@@ -20,13 +20,16 @@ import {
   Wifi,
   ChefHat,
   Loader2,
-  Receipt
+  Receipt,
+  Calculator
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function StudentDashboardPage() {
   const db = useFirestore()
@@ -51,8 +54,10 @@ export default function StudentDashboardPage() {
     
     const lastPayment = student.paymentsHistory?.[student.paymentsHistory.length - 1] || null
     const lastMonthFood = student.mealsHistory?.[student.mealsHistory.length - 1] || null
+
+    const currentMonthMeals = (student.currentMonthBreakfast || 0) + (student.currentMonthLunch || 0) + (student.currentMonthDinner || 0)
     
-    return { rentDue, foodBalance, foodDue, totalDue, lastPayment, lastMonthFood }
+    return { rentDue, foodBalance, foodDue, totalDue, lastPayment, lastMonthFood, currentMonthMeals }
   }, [student])
 
   if (!isMounted) return null;
@@ -92,17 +97,35 @@ export default function StudentDashboardPage() {
              </div>
              <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
                 <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Food Balance</p>
-                <p className="text-lg font-black">৳{stats?.foodBalance.toLocaleString()}</p>
+                <p className={cn("text-lg font-black", (student.foodDueAmount || 0) < 0 ? "text-red-300" : "text-green-300")}>
+                  ৳{stats?.foodBalance.toLocaleString()}
+                </p>
              </div>
              <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
                 <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Rent Due</p>
-                <p className="text-lg font-black">৳{stats?.rentDue.toLocaleString()}</p>
+                <p className="text-lg font-black text-red-200">৳{stats?.rentDue.toLocaleString()}</p>
              </div>
              <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
-                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Service Chrg</p>
-                <p className="text-lg font-black">৳{student.serviceCharge || 0}</p>
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Total Received</p>
+                <p className="text-lg font-black text-green-200">৳{student.historicalTotalReceived || 0}</p>
              </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Consumption Progress Card */}
+      <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
+        <CardContent className="p-5 flex justify-between items-center">
+           <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shadow-inner"><Calculator size={20}/></div>
+              <div>
+                <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Current Month Meals</p>
+                <p className="text-lg font-black text-slate-800">{stats?.currentMonthMeals} <span className="text-[10px] font-medium text-slate-400">Meals</span></p>
+              </div>
+           </div>
+           <Link href="/student/meals">
+             <Button variant="ghost" size="sm" className="h-8 text-primary font-bold text-[10px] uppercase gap-1">Update <ChevronRight size={14}/></Button>
+           </Link>
         </CardContent>
       </Card>
 
@@ -112,7 +135,7 @@ export default function StudentDashboardPage() {
           <CardHeader className="bg-slate-50/50 border-b py-4">
              <div className="flex justify-between items-center">
                 <CardTitle className="text-[10px] font-black uppercase text-primary flex items-center gap-2">
-                  <Receipt size={14}/> Previous Month Food Report
+                  <Receipt size={14}/> Previous Month Final Bill
                 </CardTitle>
                 <Badge variant="outline" className="text-[8px] font-black uppercase">{stats.lastMonthFood.month}</Badge>
              </div>
@@ -150,72 +173,7 @@ export default function StudentDashboardPage() {
          </Card>
       </div>
 
-      {/* Meal Summary Card */}
-      <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-        <CardHeader className="bg-slate-50/50 border-b py-4">
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-sm font-bold flex items-center gap-2 text-primary uppercase tracking-tight">
-              <Utensils size={16}/> Meal Status
-            </CardTitle>
-            <Link href="/student/meals" className="text-[10px] font-bold text-primary flex items-center gap-1 uppercase">Manage <ChevronRight size={12}/></Link>
-          </div>
-        </CardHeader>
-        <CardContent className="p-6">
-          <div className="flex justify-around text-center">
-            <div>
-              <p className="text-[8px] font-bold text-muted-foreground uppercase mb-2">Breakfast</p>
-              <div className={cn("h-10 w-10 rounded-full flex items-center justify-center mx-auto text-xs font-black", student.mealStatus?.breakfast ? "bg-success/10 text-success" : "bg-slate-100 text-slate-400")}>
-                {student.mealStatus?.breakfast ? "ON" : "OFF"}
-              </div>
-            </div>
-            <div>
-              <p className="text-[8px] font-bold text-muted-foreground uppercase mb-2">Lunch</p>
-              <div className={cn("h-10 w-10 rounded-full flex items-center justify-center mx-auto text-xs font-black", student.mealStatus?.lunch ? "bg-success/10 text-success" : "bg-slate-100 text-slate-400")}>
-                {student.mealStatus?.lunch ? "ON" : "OFF"}
-              </div>
-            </div>
-            <div>
-              <p className="text-[8px] font-bold text-muted-foreground uppercase mb-2">Dinner</p>
-              <div className={cn("h-10 w-10 rounded-full flex items-center justify-center mx-auto text-xs font-black", student.mealStatus?.dinner ? "bg-success/10 text-success" : "bg-slate-100 text-slate-400")}>
-                {student.mealStatus?.dinner ? "ON" : "OFF"}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Last Payment */}
-      <Card className="border-none shadow-sm rounded-3xl bg-white p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-primary">
-            <History size={18}/>
-            <h3 className="font-bold text-sm uppercase tracking-tight">Recent Transaction</h3>
-          </div>
-          <Link href="/student/history">
-             <Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold uppercase gap-1 text-primary">
-                History <ChevronRight size={14}/>
-             </Button>
-          </Link>
-        </div>
-        {stats?.lastPayment ? (
-          <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-400">Date</p>
-              <p className="text-xs font-bold text-slate-700">
-                {isMounted && stats.lastPayment.date ? new Date(stats.lastPayment.date).toLocaleDateString() : 'N/A'}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] font-black uppercase text-slate-400">Amount</p>
-              <p className="text-lg font-black text-success">৳{stats.lastPayment.amount.toLocaleString()}</p>
-            </div>
-          </div>
-        ) : (
-          <p className="text-center text-xs text-muted-foreground italic py-4">No recent payments found.</p>
-        )}
-      </Card>
-      
-      <p className="text-center text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em] pt-4">
+      <p className="text-center text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em] pt-4 pb-8">
         Protected by Somikoron Digital
       </p>
     </div>

@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { 
@@ -95,7 +95,6 @@ export default function StudentMealPage() {
   )
   const { data: mealConfig } = useDoc(mealConfigRef)
 
-  // Fetch Weekly Routine
   const routineQuery = useMemoFirebase(() => collection(db, "mealRoutines"), [db])
   const { data: routines } = useCollection(routineQuery)
   
@@ -114,16 +113,9 @@ export default function StudentMealPage() {
     if (student?.weeklySchedule) {
       setWeeklySchedule(student.weeklySchedule)
     } else {
-      // Initialize default schedule if not exists
       const defaultSched: any = {}
       WEEKDAYS.forEach(day => {
-        defaultSched[day] = { 
-          breakfast: true, 
-          lunch: true, 
-          dinner: true,
-          lunchChoice: "",
-          dinnerChoice: ""
-        }
+        defaultSched[day] = { breakfast: true, lunch: true, dinner: true, lunchChoice: "", dinnerChoice: "" }
       })
       setWeeklySchedule(defaultSched)
     }
@@ -148,32 +140,25 @@ export default function StudentMealPage() {
   const tomorrowDay = isMounted ? WEEKDAYS[(new Date().getDay() + 1) % 7] : "Saturday"
   const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
 
-  const handleUpdateMeals = async () => {
-    if (!studentRef || !canChange) return
+  const handleUpdateMeals = useCallback(async () => {
+    if (!studentRef || !canChange || isUpdating || !student) return
     setIsUpdating(true)
     try {
       let finalMeals = { ...localMeals }
       let finalChoices = { ...mealChoices }
       
-      // If Auto Mode is ON, populate tomorrow's meals AND choices from the weekly schedule
       if (localMeals.autoMode) {
         const schedForTomorrow = weeklySchedule[tomorrowDay] || { breakfast: true, lunch: true, dinner: true }
         finalMeals = {
           ...finalMeals,
-          breakfast: schedForTomorrow.breakfast,
-          lunch: schedForTomorrow.lunch,
-          dinner: schedForTomorrow.dinner
+          breakfast: !!schedForTomorrow.breakfast,
+          lunch: !!schedForTomorrow.lunch,
+          dinner: !!schedForTomorrow.dinner
         }
-        
-        if (schedForTomorrow.lunchChoice) {
-          finalChoices.lunch = schedForTomorrow.lunchChoice
-        }
-        if (schedForTomorrow.dinnerChoice) {
-          finalChoices.dinner = schedForTomorrow.dinnerChoice
-        }
+        if (schedForTomorrow.lunchChoice) finalChoices.lunch = schedForTomorrow.lunchChoice
+        if (schedForTomorrow.dinnerChoice) finalChoices.dinner = schedForTomorrow.dinnerChoice
       }
 
-      // Monthly counter increment logic
       const now = new Date();
       const currentLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
       const isNewMonth = student?.currentMonthLabel !== currentLabel;
@@ -187,7 +172,6 @@ export default function StudentMealPage() {
         currentMonthLabel: currentLabel
       }
 
-      // If it's a new month, reset counters. Otherwise, increment.
       if (isNewMonth) {
         updates.currentMonthBreakfast = finalMeals.breakfast ? 1 : 0;
         updates.currentMonthLunch = finalMeals.lunch ? 1 : 0;
@@ -199,47 +183,45 @@ export default function StudentMealPage() {
       }
 
       await updateDoc(studentRef, updates)
-      setLocalMeals(finalMeals)
-      setMealChoices(finalChoices)
-      toast({ title: "Preferences Saved", description: "Your meals for tomorrow are locked and totals updated." })
-    } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
-    finally { setIsUpdating(false) }
-  }
+      toast({ title: "Preferences Locked", description: "Meals for tomorrow have been added to your monthly total." })
+    } catch (e: any) { 
+      toast({ variant: "destructive", title: "Error", description: e.message }) 
+    } finally { 
+      setIsUpdating(false) 
+    }
+  }, [student, studentRef, canChange, isUpdating, localMeals, mealChoices, weeklySchedule, tomorrowDay, toast]);
+
+  // AUTO SAVE FOR AUTO MODE USERS ON VISIT
+  useEffect(() => {
+    if (student && student.mealStatus?.autoMode && !isLocked && canChange && !isUpdating) {
+      handleUpdateMeals();
+    }
+  }, [student, isLocked, canChange, isUpdating, handleUpdateMeals]);
 
   const toggleScheduleMeal = (day: string, meal: string) => {
     setWeeklySchedule(prev => ({
       ...prev,
-      [day]: {
-        ...prev[day],
-        [meal]: !prev[day][meal]
-      }
+      [day]: { ...prev[day], [meal]: !prev[day][meal] }
     }))
   }
 
   const updateScheduleChoice = (day: string, mealType: string, choice: string) => {
     setWeeklySchedule(prev => ({
       ...prev,
-      [day]: {
-        ...prev[day],
-        [`${mealType}Choice`]: choice
-      }
+      [day]: { ...prev[day], [`${mealType}Choice`]: choice }
     }))
   }
 
   const getMealDetails = (text: string) => {
     if (!text) return { common: "Regular Diet", options: null };
     if (!text.includes('/')) return { common: text, options: null };
-    
-    // Improved option parsing logic
     const parts = text.split(',');
     const lastPart = parts[parts.length - 1];
-    
     if (lastPart.includes('/')) {
       const common = parts.length > 1 ? parts.slice(0, -1).join(', ').trim() : "";
       const options = lastPart.split('/').map(t => t.trim());
       return { common, options };
     }
-    
     return { common: text, options: null };
   }
 
@@ -250,7 +232,7 @@ export default function StudentMealPage() {
 
   const previousMonthSummary = useMemo(() => {
     if (!mealHistory.length) return null;
-    return mealHistory[0]; // Already sorted by date descending
+    return mealHistory[0];
   }, [mealHistory])
 
   const currentMonthConsumption = useMemo(() => {
@@ -362,7 +344,7 @@ export default function StudentMealPage() {
 
            <Button onClick={handleUpdateMeals} disabled={isUpdating || !canChange} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95">
               {isUpdating ? <Loader2 className="animate-spin" /> : (isLocked ? <Lock size={20}/> : <CheckCircle2 />)} 
-              {isLocked ? "Preferences Locked" : "Confirm & Save Changes"}
+              {isLocked ? "Preferences Locked" : "Confirm & Save Preferences"}
            </Button>
         </CardContent>
       </Card>
@@ -375,7 +357,7 @@ export default function StudentMealPage() {
                 <div className="p-2 bg-white/10 rounded-xl"><CalendarDays size={20}/></div>
                 <div>
                   <CardTitle className="text-lg">Weekly Meal Schedule</CardTitle>
-                  <CardDescription className="text-white/40">Setup your recurring weekly plan and food choices.</CardDescription>
+                  <CardDescription className="text-white/40">Setup your recurring weekly plan.</CardDescription>
                 </div>
              </div>
           </CardHeader>
@@ -467,7 +449,7 @@ export default function StudentMealPage() {
         </Card>
       )}
 
-      {/* Consumption Breakdown Card */}
+      {/* Consumption Progress Card */}
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
         <CardHeader className="bg-slate-50/50 border-b py-4">
            <CardTitle className="text-xs font-black uppercase text-primary flex items-center gap-2"><Calculator size={14}/> Current Month Progress</CardTitle>
@@ -495,24 +477,13 @@ export default function StudentMealPage() {
                         <p className="text-10px font-black uppercase text-primary tracking-widest">{previousMonthSummary.month}</p>
                         <h3 className="text-2xl font-black text-slate-800">{previousMonthSummary.totalMeals} Meals</h3>
                      </div>
-                     <Button 
-                       variant="outline" 
-                       size="sm" 
-                       className="rounded-xl font-bold h-9 gap-2 border-primary/20 text-primary"
-                       onClick={() => { setSelectedBill(previousMonthSummary); setIsBillDialogOpen(true); }}
-                     >
+                     <Button variant="outline" size="sm" className="rounded-xl font-bold h-9 gap-2 border-primary/20 text-primary" onClick={() => { setSelectedBill(previousMonthSummary); setIsBillDialogOpen(true); }}>
                         <Receipt size={14}/> Details
                      </Button>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                     <div className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase">Meal Rate</span>
-                        <span className="font-black text-primary">৳{previousMonthSummary.perMealCost}</span>
-                     </div>
-                     <div className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase">Total Bill</span>
-                        <span className="font-black text-destructive">৳{previousMonthSummary.totalCost}</span>
-                     </div>
+                     <div className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center"><span className="text-[10px] font-bold text-muted-foreground uppercase">Meal Rate</span><span className="font-black text-primary">৳{previousMonthSummary.perMealCost}</span></div>
+                     <div className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center"><span className="text-[10px] font-bold text-muted-foreground uppercase">Total Bill</span><span className="font-black text-destructive">৳{previousMonthSummary.totalCost}</span></div>
                   </div>
                </div>
             ) : (
@@ -523,7 +494,7 @@ export default function StudentMealPage() {
             )}
          </CardContent>
          <CardFooter className="bg-slate-50/50 border-t p-4 text-center">
-             <p className="text-[9px] w-full text-muted-foreground font-medium italic">Data is cleared automatically after 2 months to ensure speed.</p>
+             <p className="text-[9px] w-full text-muted-foreground font-medium italic">Data is updated daily in database based on your preferences.</p>
          </CardFooter>
       </Card>
 
@@ -535,46 +506,19 @@ export default function StudentMealPage() {
             <DialogTitle className="text-2xl font-black flex items-center gap-2">
                <Receipt className="text-primary"/> Monthly Billing Report
             </DialogTitle>
-            <DialogDescription className="font-bold uppercase text-[10px] text-muted-foreground tracking-widest">
-               Summary for {selectedBill?.month}
-            </DialogDescription>
+            <DialogDescription className="font-bold uppercase text-[10px] text-muted-foreground tracking-widest">Summary for {selectedBill?.month}</DialogDescription>
           </DialogHeader>
-          
           <div className="px-8 pb-8 space-y-6">
-             <div className="grid grid-cols-1 gap-4">
-                <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex justify-between items-center">
-                   <div className="space-y-1">
-                      <p className="text-[10px] font-black uppercase text-muted-foreground">Total Consumption</p>
-                      <p className="text-2xl font-black text-slate-800">{selectedBill?.totalMeals} <span className="text-xs font-bold text-slate-400">Meals</span></p>
-                   </div>
-                   <div className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-primary">
-                      <Utensils size={24}/>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="p-5 bg-primary/5 rounded-3xl border border-primary/10 space-y-1">
-                      <p className="text-[8px] font-black uppercase text-primary/60">Per Meal Rate</p>
-                      <p className="text-lg font-black text-primary">৳{selectedBill?.perMealCost}</p>
-                   </div>
-                   <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-1 shadow-xl">
-                      <p className="text-[8px] font-black uppercase text-white/40">Total Charged</p>
-                      <p className="text-lg font-black text-success">৳{selectedBill?.totalCost}</p>
-                   </div>
-                </div>
+             <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex justify-between items-center">
+                <div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground">Total Consumption</p><p className="text-2xl font-black text-slate-800">{selectedBill?.totalMeals} <span className="text-xs font-bold text-slate-400">Meals</span></p></div>
+                <div className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-primary"><Utensils size={24}/></div>
              </div>
-
-             <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100 flex gap-3 items-start">
-                <Info size={16} className="text-orange-600 shrink-0 mt-0.5" />
-                <p className="text-[9px] text-orange-800 font-bold uppercase leading-tight">
-                   The total bill has been deducted from your food balance. Please ensure you have sufficient balance for the next period.
-                </p>
+             <div className="grid grid-cols-2 gap-4">
+                <div className="p-5 bg-primary/5 rounded-3xl border border-primary/10 space-y-1"><p className="text-[8px] font-black uppercase text-primary/60">Per Meal Rate</p><p className="text-lg font-black text-primary">৳{selectedBill?.perMealCost}</p></div>
+                <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-1 shadow-xl"><p className="text-[8px] font-black uppercase text-white/40">Total Charged</p><p className="text-lg font-black text-success">৳{selectedBill?.totalCost}</p></div>
              </div>
           </div>
-          
-          <DialogFooter className="p-6 bg-slate-50 border-t">
-             <Button className="w-full h-12 rounded-2xl font-black text-xs uppercase" onClick={() => setIsBillDialogOpen(false)}>Close Report</Button>
-          </DialogFooter>
+          <DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-12 rounded-2xl font-black text-xs uppercase" onClick={() => setIsBillDialogOpen(false)}>Close Report</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
