@@ -22,7 +22,9 @@ import {
   Calculator,
   Coins,
   Table as TableIcon,
-  Lock
+  Lock,
+  ListChecks,
+  CalendarDays
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, collection, query, where } from "firebase/firestore"
@@ -33,6 +35,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -87,10 +90,21 @@ export default function StudentMealPage() {
 
   const [localMeals, setLocalMeals] = useState({ breakfast: false, lunch: false, dinner: false, autoMode: false })
   const [mealChoices, setMealChoices] = useState<Record<string, string>>({})
+  const [weeklySchedule, setWeeklySchedule] = useState<Record<string, any>>({})
 
   useEffect(() => {
     if (student?.mealStatus) setLocalMeals(student.mealStatus)
     if (student?.mealChoices) setMealChoices(student.mealChoices)
+    if (student?.weeklySchedule) {
+      setWeeklySchedule(student.weeklySchedule)
+    } else {
+      // Initialize default schedule if not exists
+      const defaultSched: any = {}
+      WEEKDAYS.forEach(day => {
+        defaultSched[day] = { breakfast: true, lunch: true, dinner: true }
+      })
+      setWeeklySchedule(defaultSched)
+    }
   }, [student])
 
   const isLocked = useMemo(() => {
@@ -109,19 +123,47 @@ export default function StudentMealPage() {
     } catch (e) { return true }
   }, [mealConfig, isMounted, isLocked])
 
+  const tomorrowDay = isMounted ? WEEKDAYS[(new Date().getDay() + 1) % 7] : "Saturday"
+  const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
+
   const handleUpdateMeals = async () => {
     if (!studentRef || !canChange) return
     setIsUpdating(true)
     try {
+      let finalMeals = { ...localMeals }
+      
+      // If Auto Mode is ON, populate tomorrow's meals from the weekly schedule
+      if (localMeals.autoMode) {
+        const schedForTomorrow = weeklySchedule[tomorrowDay] || { breakfast: true, lunch: true, dinner: true }
+        finalMeals = {
+          ...finalMeals,
+          breakfast: schedForTomorrow.breakfast,
+          lunch: schedForTomorrow.lunch,
+          dinner: schedForTomorrow.dinner
+        }
+      }
+
       await updateDoc(studentRef, { 
-        mealStatus: localMeals, 
+        mealStatus: finalMeals, 
         mealChoices, 
+        weeklySchedule, // Save the schedule
         lastMealUpdate: serverTimestamp(),
         updatedAt: serverTimestamp() 
       })
+      setLocalMeals(finalMeals)
       toast({ title: "Preferences Saved", description: "Your meals for tomorrow are locked and saved." })
     } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
     finally { setIsUpdating(false) }
+  }
+
+  const toggleScheduleMeal = (day: string, meal: string) => {
+    setWeeklySchedule(prev => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        [meal]: !prev[day][meal]
+      }
+    }))
   }
 
   const getMealDetails = (text: string) => {
@@ -137,9 +179,6 @@ export default function StudentMealPage() {
     return { common: text, options: null };
   }
 
-  const tomorrowDay = isMounted ? WEEKDAYS[(new Date().getDay() + 1) % 7] : "Saturday"
-  const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
-
   const mealHistory = useMemo(() => {
     if (!student?.mealsHistory) return []
     return [...student.mealsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -154,7 +193,6 @@ export default function StudentMealPage() {
   const currentMonthConsumption = useMemo(() => {
     const now = new Date();
     const currentLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
-    // In a real system, we'd have a running counter in the student document
     return {
       month: currentLabel,
       breakfast: student?.currentMonthBreakfast || 0,
@@ -203,58 +241,125 @@ export default function StudentMealPage() {
                 </p>
              </div>
            )}
+           
            <div className="space-y-6">
-              {MEAL_TYPES.map((type) => {
-                const isAvailable = mealConfig?.[`${type.id}Available`] !== false
-                const isChecked = localMeals[type.id as keyof typeof localMeals]
-                const menuText = tomorrowMenu?.[type.id] || ""
-                const { common, options } = getMealDetails(menuText)
-                
-                return (
-                  <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable || isLocked) ? "opacity-40" : (isChecked ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <span className="text-2xl">{type.icon}</span>
-                        <div>
-                          <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">{type.label}</h3>
-                          <p className="text-[9px] font-bold text-primary uppercase">
-                            {common || (options ? 'Mixed Options' : 'Regular Diet')}
-                          </p>
+              <div className="flex items-center justify-between p-4 bg-slate-900 rounded-3xl text-white">
+                <div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest">Auto Mode</p><p className="text-[8px] text-white/40 uppercase">Sync meals with weekly schedule</p></div>
+                <Switch disabled={isLocked} checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
+              </div>
+
+              {!localMeals.autoMode ? (
+                <div className="space-y-6 animate-in slide-in-from-top-2">
+                  <p className="text-[10px] font-black uppercase text-primary tracking-widest ml-1">Manual Override (Tomorrow)</p>
+                  {MEAL_TYPES.map((type) => {
+                    const isAvailable = mealConfig?.[`${type.id}Available`] !== false
+                    const isChecked = localMeals[type.id as keyof typeof localMeals]
+                    const menuText = tomorrowMenu?.[type.id] || ""
+                    const { common, options } = getMealDetails(menuText)
+                    
+                    return (
+                      <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable || isLocked) ? "opacity-40" : (isChecked ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <span className="text-2xl">{type.icon}</span>
+                            <div>
+                              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">{type.label}</h3>
+                              <p className="text-[9px] font-bold text-primary uppercase">
+                                {common || (options ? 'Mixed Options' : 'Regular Diet')}
+                              </p>
+                            </div>
+                          </div>
+                          <Switch disabled={!canChange} checked={isChecked as boolean} onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} />
                         </div>
+
+                        {isChecked && options && (
+                          <div className="pt-3 border-t border-success/10 animate-in slide-in-from-top-2">
+                            <p className="text-[8px] font-black uppercase text-success/60 mb-2">Pick Your Selection</p>
+                            <RadioGroup disabled={!canChange} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
+                               {options.map(opt => (
+                                 <div key={opt} className="flex items-center gap-2">
+                                    <RadioGroupItem value={opt} id={`${type.id}-${opt}`} className="border-success text-success" />
+                                    <Label htmlFor={`${type.id}-${opt}`} className="text-xs font-bold text-slate-700">{opt}</Label>
+                                 </div>
+                               ))}
+                            </RadioGroup>
+                          </div>
+                        )}
                       </div>
-                      <Switch disabled={!canChange} checked={isChecked as boolean} onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} />
-                    </div>
-
-                    {isChecked && options && (
-                      <div className="pt-3 border-t border-success/10 animate-in slide-in-from-top-2">
-                        <p className="text-[8px] font-black uppercase text-success/60 mb-2">Pick Your Selection</p>
-                        <RadioGroup disabled={!canChange} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
-                           {options.map(opt => (
-                             <div key={opt} className="flex items-center gap-2">
-                                <RadioGroupItem value={opt} id={`${type.id}-${opt}`} className="border-success text-success" />
-                                <Label htmlFor={`${type.id}-${opt}`} className="text-xs font-bold text-slate-700">{opt}</Label>
-                             </div>
-                           ))}
-                        </RadioGroup>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-           </div>
-
-           <Separator className="opacity-50" />
-
-           <div className="flex items-center justify-between p-4 bg-slate-900 rounded-3xl text-white">
-              <div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest">Auto Mode</p><p className="text-[8px] text-white/40 uppercase">Keep meals ON daily</p></div>
-              <Switch disabled={!canChange} checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="p-6 bg-primary/5 rounded-3xl border border-dashed border-primary/20 flex flex-col items-center gap-3 text-center">
+                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary"><RefreshCw className="animate-spin-slow" /></div>
+                   <p className="text-xs font-bold text-slate-600">Auto Mode is active. Your meals will be automatically populated from your <b>Weekly Schedule</b> below.</p>
+                </div>
+              )}
            </div>
 
            <Button onClick={handleUpdateMeals} disabled={isUpdating || !canChange} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95">
               {isUpdating ? <Loader2 className="animate-spin" /> : (isLocked ? <Lock size={20}/> : <CheckCircle2 />)} 
-              {isLocked ? "Preferences Locked" : "Confirm & Save Preferences"}
+              {isLocked ? "Preferences Locked" : "Confirm & Save Changes"}
            </Button>
         </CardContent>
+      </Card>
+
+      {/* WEEKLY SCHEDULE SETUP */}
+      <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden">
+        <CardHeader className="bg-slate-900 text-white p-8">
+           <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/10 rounded-xl"><CalendarDays size={20}/></div>
+              <div>
+                <CardTitle className="text-lg">Weekly Meal Schedule</CardTitle>
+                <CardDescription className="text-white/40">Setup your recurring weekly plan.</CardDescription>
+              </div>
+           </div>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-slate-50">
+              <TableRow>
+                <TableHead className="w-28 font-black uppercase text-[10px]">Day</TableHead>
+                <TableHead className="text-center font-black uppercase text-[10px]">Breakfast</TableHead>
+                <TableHead className="text-center font-black uppercase text-[10px]">Lunch</TableHead>
+                <TableHead className="text-center font-black uppercase text-[10px]">Dinner</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {WEEKDAYS.map((day) => (
+                <TableRow key={day} className="hover:bg-slate-50 transition-colors">
+                  <TableCell className="font-bold text-xs text-slate-700">{day}</TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox 
+                      checked={weeklySchedule[day]?.breakfast || false} 
+                      onCheckedChange={() => toggleScheduleMeal(day, 'breakfast')}
+                      className="mx-auto"
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox 
+                      checked={weeklySchedule[day]?.lunch || false} 
+                      onCheckedChange={() => toggleScheduleMeal(day, 'lunch')}
+                      className="mx-auto"
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox 
+                      checked={weeklySchedule[day]?.dinner || false} 
+                      onCheckedChange={() => toggleScheduleMeal(day, 'dinner')}
+                      className="mx-auto"
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+        <CardFooter className="p-6 bg-slate-50 border-t flex justify-center">
+           <p className="text-[9px] text-muted-foreground font-medium italic text-center">
+             Changes to schedule will apply from the next available meal window.
+           </p>
+        </CardFooter>
       </Card>
 
       {/* Consumption Breakdown Card */}
