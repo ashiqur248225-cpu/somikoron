@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -312,63 +311,65 @@ export default function StudentMealPage() {
         </CardContent>
       </Card>
 
-      {/* WEEKLY SCHEDULE SETUP */}
-      <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden">
-        <CardHeader className="bg-slate-900 text-white p-8">
-           <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/10 rounded-xl"><CalendarDays size={20}/></div>
-              <div>
-                <CardTitle className="text-lg">Weekly Meal Schedule</CardTitle>
-                <CardDescription className="text-white/40">Setup your recurring weekly plan.</CardDescription>
-              </div>
-           </div>
-        </CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-slate-50">
-              <TableRow>
-                <TableHead className="w-28 font-black uppercase text-[10px]">Day</TableHead>
-                <TableHead className="text-center font-black uppercase text-[10px]">Breakfast</TableHead>
-                <TableHead className="text-center font-black uppercase text-[10px]">Lunch</TableHead>
-                <TableHead className="text-center font-black uppercase text-[10px]">Dinner</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {WEEKDAYS.map((day) => (
-                <TableRow key={day} className="hover:bg-slate-50 transition-colors">
-                  <TableCell className="font-bold text-xs text-slate-700">{day}</TableCell>
-                  <TableCell className="text-center">
-                    <Checkbox 
-                      checked={weeklySchedule[day]?.breakfast || false} 
-                      onCheckedChange={() => toggleScheduleMeal(day, 'breakfast')}
-                      className="mx-auto"
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Checkbox 
-                      checked={weeklySchedule[day]?.lunch || false} 
-                      onCheckedChange={() => toggleScheduleMeal(day, 'lunch')}
-                      className="mx-auto"
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Checkbox 
-                      checked={weeklySchedule[day]?.dinner || false} 
-                      onCheckedChange={() => toggleScheduleMeal(day, 'dinner')}
-                      className="mx-auto"
-                    />
-                  </TableCell>
+      {/* WEEKLY SCHEDULE SETUP - Only visible when Auto Mode is ON */}
+      {localMeals.autoMode && (
+        <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden animate-in slide-in-from-top-4 duration-500">
+          <CardHeader className="bg-slate-900 text-white p-8">
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/10 rounded-xl"><CalendarDays size={20}/></div>
+                <div>
+                  <CardTitle className="text-lg">Weekly Meal Schedule</CardTitle>
+                  <CardDescription className="text-white/40">Setup your recurring weekly plan.</CardDescription>
+                </div>
+             </div>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="w-28 font-black uppercase text-[10px]">Day</TableHead>
+                  <TableHead className="text-center font-black uppercase text-[10px]">Breakfast</TableHead>
+                  <TableHead className="text-center font-black uppercase text-[10px]">Lunch</TableHead>
+                  <TableHead className="text-center font-black uppercase text-[10px]">Dinner</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-        <CardFooter className="p-6 bg-slate-50 border-t flex justify-center">
-           <p className="text-[9px] text-muted-foreground font-medium italic text-center">
-             Changes to schedule will apply from the next available meal window.
-           </p>
-        </CardFooter>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {WEEKDAYS.map((day) => (
+                  <TableRow key={day} className="hover:bg-slate-50 transition-colors">
+                    <TableCell className="font-bold text-xs text-slate-700">{day}</TableCell>
+                    <TableCell className="text-center">
+                      <Checkbox 
+                        checked={weeklySchedule[day]?.breakfast || false} 
+                        onCheckedChange={() => toggleScheduleMeal(day, 'breakfast')}
+                        className="mx-auto"
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Checkbox 
+                        checked={weeklySchedule[day]?.lunch || false} 
+                        onCheckedChange={() => toggleScheduleMeal(day, 'lunch')}
+                        className="mx-auto"
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Checkbox 
+                        checked={weeklySchedule[day]?.dinner || false} 
+                        onCheckedChange={() => toggleScheduleMeal(day, 'dinner')}
+                        className="mx-auto"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+          <CardFooter className="p-6 bg-slate-50 border-t flex justify-center">
+             <p className="text-[9px] text-muted-foreground font-medium italic text-center">
+               Changes to schedule will apply from the next available meal window.
+             </p>
+          </CardFooter>
+        </Card>
+      )}
 
       {/* Consumption Breakdown Card */}
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
