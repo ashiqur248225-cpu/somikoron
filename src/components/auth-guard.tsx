@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -30,28 +31,34 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return
     }
 
-    const checkSecuritySession = async () => {
+    const checkPersistence = async () => {
+      // 1. Check Local Storage first for immediate access
+      const auth = localStorage.getItem("somikoron_auth")
+      if (auth === "true") {
+        setIsAuthenticated(true)
+        return
+      }
+
+      // 2. Check for security session only if not authenticated
       try {
         const secSnap = await getDoc(doc(db, "configs", "securityConfig"));
         const isEnhanced = secSnap.exists() ? secSnap.data().enhancedSecurity : false;
 
         if (isEnhanced) {
           const sessionActive = sessionStorage.getItem("somikoron_session_active");
-          if (!sessionActive) {
-            localStorage.removeItem("somikoron_auth");
+          if (!sessionActive && auth !== "true") {
             setIsAuthenticated(false);
             return;
           }
         }
       } catch (e) {
-        console.warn("Security config fetch failed, falling back to local storage.");
+        console.warn("Security config fetch failed, defaulting to local state.");
       }
 
-      const auth = localStorage.getItem("somikoron_auth")
       setIsAuthenticated(auth === "true")
     }
 
-    checkSecuritySession()
+    checkPersistence()
   }, [db, isPublicPage])
 
   const handleLogin = async (e: React.FormEvent) => {

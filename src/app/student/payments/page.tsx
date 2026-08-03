@@ -72,7 +72,7 @@ export default function PaymentRequestPage() {
   const { data: recentRequests } = useCollection(requestsQuery)
 
   const duesSummary = useMemo(() => {
-    if (!student) return { rent: 0, totalDue: 0 }
+    if (!student) return { monthlyRent: 0, outstandingDue: 0 }
     const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0)
     const foodVal = Number(student.foodDueAmount || 0)
     const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0
