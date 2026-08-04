@@ -28,7 +28,8 @@ import {
   UserCheck,
   Lock,
   Eye,
-  ShieldAlert
+  ShieldAlert,
+  Settings2
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -84,6 +85,7 @@ export default function StudentDetailsPage() {
   const [isExitDialogOpen, setIsExitDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [isMealAdjustOpen, setIsMealAdjustOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   
   const [userRole, setUserRole] = useState("")
@@ -91,6 +93,12 @@ export default function StudentDetailsPage() {
   const [settlementInput, setSettlementInput] = useState("")
   const [exitMethod, setExitMethod] = useState("cash")
   const [exitStaff, setExitStaff] = useState("")
+
+  const [mealAdjustment, setMealAdjustData] = useState({
+    breakfast: "0",
+    lunch: "0",
+    dinner: "0"
+  })
 
   useEffect(() => {
     const role = localStorage.getItem("user_role") || "Manager"
@@ -147,6 +155,16 @@ export default function StudentDetailsPage() {
       setPaymentData(prev => ({ ...prev, receiver: userName }))
     }
   }, [isPaymentDialogOpen, userName])
+
+  useEffect(() => {
+    if (isMealAdjustOpen && student) {
+      setMealAdjustData({
+        breakfast: (student.currentMonthBreakfast || 0).toString(),
+        lunch: (student.currentMonthLunch || 0).toString(),
+        dinner: (student.currentMonthDinner || 0).toString()
+      })
+    }
+  }, [isMealAdjustOpen, student])
 
   const [editForm, setEditForm] = useState<any>(null)
 
@@ -469,6 +487,25 @@ export default function StudentDetailsPage() {
     finally { setIsUpdating(false) }
   }
 
+  const handleMealAdjust = async () => {
+    if (!studentRef) return
+    setIsUpdating(true)
+    try {
+      await updateDoc(studentRef, {
+        currentMonthBreakfast: Number(mealAdjustment.breakfast),
+        currentMonthLunch: Number(mealAdjustment.lunch),
+        currentMonthDinner: Number(mealAdjustment.dinner),
+        updatedAt: serverTimestamp()
+      })
+      toast({ title: "Counters Adjusted", description: "This month's meal totals updated manually." })
+      setIsMealAdjustOpen(false)
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleConfirmExit = async () => {
     if (!studentRef || !student || !settlementCalculation || !exitStaff) {
       toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "অনুগ্রহ করে স্টাফ মেম্বার সিলেক্ট করুন।" })
@@ -638,6 +675,24 @@ export default function StudentDetailsPage() {
               <div><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{card.label}</p><p className={cn("text-xl font-black", card.color === 'success' ? "text-success" : (card.color === 'destructive' ? "text-destructive" : "text-slate-800"))}>৳{card.val?.toLocaleString()}</p></div>
             </Card>
           ))}
+          
+          {/* Meal Counter Adjustment Card for Managers */}
+          <Card className="p-4 rounded-2xl border-2 border-primary/10 shadow-md flex items-center justify-between bg-white md:col-span-2">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-primary/5 text-primary"><Calculator size={24}/></div>
+              <div>
+                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Month Consumption Adjustment</p>
+                <div className="flex gap-4 mt-1">
+                  <div className="text-center"><p className="text-[8px] font-bold text-muted-foreground uppercase">B</p><p className="text-sm font-black">{student.currentMonthBreakfast || 0}</p></div>
+                  <div className="text-center"><p className="text-[8px] font-bold text-muted-foreground uppercase">L</p><p className="text-sm font-black">{student.currentMonthLunch || 0}</p></div>
+                  <div className="text-center"><p className="text-[8px] font-bold text-muted-foreground uppercase">D</p><p className="text-sm font-black">{student.currentMonthDinner || 0}</p></div>
+                </div>
+              </div>
+            </div>
+            <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl" onClick={() => setIsMealAdjustOpen(true)}>
+              <Settings2 size={20}/>
+            </Button>
+          </Card>
         </div>
       </div>
 
@@ -752,6 +807,24 @@ export default function StudentDetailsPage() {
             </div>
           </div>
           <DialogFooter><Button className="w-full h-14 rounded-2xl text-lg font-black" onClick={handlePaymentSubmit} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isMealAdjustOpen} onOpenChange={setIsMealAdjustOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Calculator className="text-primary"/> Adjust Monthly Totals</DialogTitle>
+            <DialogDescription>Manually update consumption for {student.currentMonthLabel}.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-3 gap-4">
+               <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-orange-500">Breakfast</Label><Input type="number" value={mealAdjustment.breakfast} onChange={e => setMealAdjustData({...mealAdjustment, breakfast: e.target.value})} className="h-12 font-black text-lg text-center bg-slate-50 border-none" /></div>
+               <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-success">Lunch</Label><Input type="number" value={mealAdjustment.lunch} onChange={e => setMealAdjustData({...mealAdjustment, lunch: e.target.value})} className="h-12 font-black text-lg text-center bg-slate-50 border-none" /></div>
+               <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-blue-500">Dinner</Label><Input type="number" value={mealAdjustment.dinner} onChange={e => setMealAdjustData({...mealAdjustment, dinner: e.target.value})} className="h-12 font-black text-lg text-center bg-slate-50 border-none" /></div>
+            </div>
+            <p className="text-[10px] text-muted-foreground italic bg-primary/5 p-3 rounded-xl border border-dashed">বি.দ্র: এখানে সরাসরি এই মাসের মোট মিলের সংখ্যা বসিয়ে দিন। এটি ১ তারিখ থেকে আজকের দিন পর্যন্ত খাবারের সংখ্যা আপডেট করতে সাহায্য করবে।</p>
+          </div>
+          <DialogFooter><Button onClick={handleMealAdjust} disabled={isUpdating} className="w-full h-12 rounded-xl font-bold uppercase text-xs tracking-widest">{isUpdating ? <Loader2 className="animate-spin" /> : "Save Adjusted Counts"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
