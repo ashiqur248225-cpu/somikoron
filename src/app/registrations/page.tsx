@@ -12,7 +12,8 @@ import {
   MapPin, GraduationCap, Calendar, Clock, Filter, Trash2, UserCircle, Briefcase,
   AlertCircle, Calculator, Info, Utensils, Plus, Minus, History, Wallet, CheckCircle2,
   Receipt, HandCoins, ShieldCheck, DollarSign, ChevronLeft, ListOrdered, Hash,
-  User, ChevronRight, LayoutGrid, CircleDollarSign, Send, FileText
+  User, ChevronRight, LayoutGrid, CircleDollarSign, Send, FileText,
+  RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -39,9 +40,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -295,7 +294,7 @@ export default function RegistrationsPage() {
 
       batch.set(doc(db, "students", studentId), {
         id: studentId, name: selectedReq.name, phone: selectedReq.phone, branch: userBranch,
-        password: autoPassword, role: "Student", // Student role default
+        password: autoPassword, role: "Student",
         buildingId: approvalForm.buildingId, buildingName: selectedBuilding?.name,
         roomNumber: approvalForm.roomNumber, seatNumber: approvalForm.seatNumber, apartmentName: aptName,
         monthlyRent: Number(approvalForm.monthlyRent), advanceAmount: Number(approvalForm.advanceAmount),
@@ -360,7 +359,7 @@ export default function RegistrationsPage() {
         (async () => {
           try {
             const template = templatesData?.templates?.find((t: any) => t.id === 'admission')?.text || 
-                             "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আমাদের সাথে থাকার জন্য ধন্যবাদ।";
+                             "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আপনার লগইন আইডি: [phone] এবং পাসওয়ার্ড: [password]। ধন্যবাদ।";
             
             const mealRate = Number(mealConfig?.rate || 0);
             const foodVal = foodDueAmount;
@@ -379,7 +378,9 @@ export default function RegistrationsPage() {
               .replaceAll('[রুম]', approvalForm.roomNumber)
               .replaceAll('[সিট]', approvalForm.seatNumber)
               .replaceAll('[building]', selectedBuilding?.name || '')
-              .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
+              .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch)
+              .replaceAll('[phone]', selectedReq.phone)
+              .replaceAll('[password]', autoPassword);
 
             const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedReq.phone, msg);
             const logId = doc(collection(db, "smsLogs")).id;
@@ -543,7 +544,7 @@ export default function RegistrationsPage() {
               <Send className="text-primary" size={20}/> Confirm Admission & SMS?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will enroll <b>{selectedReq?.name}</b> as an active resident and send an automated admission confirmation SMS. 1 SMS credit will be used.
+              This will enroll <b>{selectedReq?.name}</b> as an active resident and send an automated admission confirmation SMS with login credentials.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

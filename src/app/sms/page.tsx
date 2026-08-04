@@ -82,7 +82,7 @@ import { cn } from "@/lib/utils"
 import { sendSMS, getSMSBalance } from "@/app/actions/sms"
 
 const DEFAULT_TEMPLATES = [
-  { id: "admission", label: "Admission Success", text: "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আমাদের সাথে থাকার জন্য ধন্যবাদ।" },
+  { id: "admission", label: "Admission Success", text: "প্রিয় [নাম], [Hostel Name]-এ আপনার admission সফল হয়েছে। রুম: [রুম], বিল্ডিং: [building]। আপনার লগইন আইডি: [phone] এবং পাসওয়ার্ড: [password]। ধন্যবাদ।" },
   { id: "payment", label: "Payment Receipt", text: "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[paid] টাকা। বর্তমান মোট বকেয়া: ৳[total_payable]। ধন্যবাদ। [Hostel Name]" },
   { id: "due_reminder", label: "Due Reminder", text: "প্রিয় [নাম], [মাস] মাসের ভাড়া/খাবার বাবদ আপনার ৳[total_payable] বকেয়া রয়েছে। অনুগ্রহ করে দ্রুত পরিশোধ করুন। [Hostel Name]" },
   { id: "low_food", label: "Low Food Balance", text: "প্রিয় [নাম], আপনার খাবার ব্যালেন্স কমে ৳[food_balance] হয়েছে। অনুগ্রহ করে দ্রুত রিচার্জ করুন। [Hostel Name]" },
@@ -94,7 +94,8 @@ const DEFAULT_TEMPLATES = [
 const SMART_TAGS = [
   '[নাম]', '[মাস]', '[meal_count]', '[meal_rate]', '[meal_bill]', 
   '[rent]', '[previous_due]', '[total_payable]', '[paid]', 
-  '[food_balance]', '[food_due]', '[রুম]', '[সিট]', '[building]', '[Hostel Name]'
+  '[food_balance]', '[food_due]', '[রুম]', '[সিট]', '[building]', '[Hostel Name]',
+  '[phone]', '[password]'
 ];
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -280,7 +281,24 @@ export default function SMSPanelPage() {
     if (!message || !student) return message;
     const now = new Date(); const mealRate = Number(mealConfig?.rate || 0); const rentDue = Number(student.totalDue || 0); const foodVal = Number(student.foodDueAmount || 0);
     const foodBalance = foodVal > 0 ? foodVal : 0; const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0; const totalPayable = rentDue + foodDue;
-    return message.replaceAll('[নাম]', student.name || '').replaceAll('[মাস]', MONTHS[now.getMonth()]).replaceAll('[meal_rate]', mealRate.toString()).replaceAll('[rent]', (student.monthlyRent || 0).toString()).replaceAll('[total_payable]', totalPayable.toString()).replaceAll('[food_balance]', foodBalance.toString()).replaceAll('[food_due]', foodDue.toString()).replaceAll('[রুম]', student.roomNumber || '').replaceAll('[সিট]', student.seatNumber || '').replaceAll('[building]', student.buildingName || '').replaceAll('[Hostel Name]', hostelNameForSms || userBranch).replaceAll('[meal_count]', '0').replaceAll('[meal_bill]', '0').replaceAll('[previous_due]', rentDue.toString()).replaceAll('[paid]', '0');
+    return message
+      .replaceAll('[নাম]', student.name || '')
+      .replaceAll('[মাস]', MONTHS[now.getMonth()])
+      .replaceAll('[meal_rate]', mealRate.toString())
+      .replaceAll('[rent]', (student.monthlyRent || 0).toString())
+      .replaceAll('[total_payable]', totalPayable.toString())
+      .replaceAll('[food_balance]', foodBalance.toString())
+      .replaceAll('[food_due]', foodDue.toString())
+      .replaceAll('[রুম]', student.roomNumber || '')
+      .replaceAll('[সিট]', student.seatNumber || '')
+      .replaceAll('[building]', student.buildingName || '')
+      .replaceAll('[Hostel Name]', hostelNameForSms || userBranch)
+      .replaceAll('[meal_count]', '0')
+      .replaceAll('[meal_bill]', '0')
+      .replaceAll('[previous_due]', rentDue.toString())
+      .replaceAll('[paid]', '0')
+      .replaceAll('[phone]', student.phone || '')
+      .replaceAll('[password]', student.password || '');
   };
 
   const handleTemplateSelect = (val: string) => {
@@ -418,7 +436,6 @@ export default function SMSPanelPage() {
   }
 
   const handleWhatsAppSendManual = (to: string, message: string) => {
-    // If multiple numbers, take the first one
     const phone = to.split(',')[0].trim();
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
@@ -492,9 +509,13 @@ export default function SMSPanelPage() {
                     </SelectContent>
                   </Select>
                   <Textarea value={customMessage} onChange={e => setCustomMessage(e.target.value)} placeholder="Type your message here..." className="min-h-[150px] rounded-2xl bg-slate-50" />
-                  <div className="p-3 bg-secondary/30 rounded-xl">
-                    <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Message Preview Tag Summary</p>
-                    <p className="text-[10px] leading-relaxed text-slate-600">SMART tags will be auto-replaced for each student during sending.</p>
+                  <div className="p-3 bg-secondary/30 rounded-xl overflow-hidden">
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Available Tags</p>
+                    <div className="flex flex-wrap gap-1">
+                      {SMART_TAGS.map(tag => (
+                        <span key={tag} className="text-[8px] bg-white px-1 py-0.5 rounded border border-slate-200 text-slate-600 font-mono">{tag}</span>
+                      ))}
+                    </div>
                   </div>
                   <Button onClick={handleBroadcast} disabled={isSubmitting || selectedStudents.length === 0} className="w-full h-14 rounded-2xl font-bold shadow-xl">
                     {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Send className="mr-2" size={18}/>}
