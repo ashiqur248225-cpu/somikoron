@@ -110,6 +110,14 @@ export default function StudentDashboardPage() {
                 <p className="text-lg font-black text-green-200">৳{student.historicalTotalReceived || 0}</p>
              </div>
           </div>
+
+          <div className="pt-4 border-t border-white/10 flex justify-center">
+            <Link href="/student/history" className="w-full">
+               <Button className="w-full bg-white text-primary hover:bg-slate-50 h-12 rounded-2xl font-black text-sm uppercase gap-2 shadow-xl shadow-primary/20">
+                  View Payment History <History size={16}/>
+               </Button>
+            </Link>
+          </div>
         </CardContent>
       </Card>
 

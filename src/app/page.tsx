@@ -85,6 +85,7 @@ export default function DashboardPage() {
   const [authId, setAuthId] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [timeRange, setTimeRange] = useState("this_month")
+  const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
     const role = localStorage.getItem("user_role") || "Manager"
@@ -99,12 +100,15 @@ export default function DashboardPage() {
     setAuthId(id)
     setAssignedBuildingId(bId)
 
-    // Redirect Building Manager, Staff or Workers to relevant pages
-    // We check for "General Staff" as well
-    if (role === 'Building Manager') {
-      router.push('/students')
+    // Redirect non-admin roles immediately
+    if (role === 'Student') {
+      router.push('/student/dashboard')
     } else if (role === 'Staff' || role === 'Worker' || role === 'General Staff') {
       router.push('/meals-dashboard')
+    } else if (role === 'Building Manager') {
+      router.push('/students')
+    } else {
+      setIsReady(true)
     }
   }, [router])
 
@@ -118,44 +122,45 @@ export default function DashboardPage() {
 
   // Queries
   const buildingsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
+    if (!userBranch || !isReady) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
       return query(collection(db, "buildings"), where("id", "==", assignedBuildingId))
     }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userRole, userBranch, assignedBuildingId])
+  }, [db, userRole, userBranch, assignedBuildingId, isReady])
   const { data: buildings } = useCollection(buildingsQuery)
 
   const studentsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
+    if (!userBranch || !isReady) return null
     let q = query(collection(db, "students"), where("branch", "==", userBranch))
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
       q = query(collection(db, "students"), where("buildingId", "==", assignedBuildingId))
     }
     return q
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userBranch, userRole, assignedBuildingId, isReady])
   const { data: students } = useCollection(studentsQuery)
 
   const paymentsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
+    if (!userBranch || !isReady) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
       return query(collection(db, "payments"), where("buildingId", "==", assignedBuildingId))
     }
     return query(collection(db, "payments"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userBranch, userRole, assignedBuildingId, isReady])
   const { data: allPayments } = useCollection(paymentsQuery)
 
   const expensesQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
+    if (!userBranch || !isReady) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
       return query(collection(db, "expenses"), where("buildingId", "==", assignedBuildingId))
     }
     return query(collection(db, "expenses"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, assignedBuildingId])
+  }, [db, userBranch, userRole, assignedBuildingId, isReady])
   const { data: allExpenses } = useCollection(expensesQuery)
 
   // Statistics Calculation
   const stats = useMemo(() => {
+    if (!isReady) return { income: 0, expense: 0, activeResidents: 0, totalDue: 0 }
     const now = new Date()
     const isWithinRange = (date: Date, range: string) => {
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -171,16 +176,14 @@ export default function DashboardPage() {
       if (range === 'this_month') return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
       if (range === 'this_year') return date.getFullYear() === now.getFullYear()
       
-      // Handle specific month selection (month_0, month_1, etc.)
       if (range.startsWith('month_')) {
         const monthIdx = parseInt(range.split('_')[1])
         return date.getMonth() === monthIdx && date.getFullYear() === now.getFullYear()
       }
 
-      return true // all_time
+      return true 
     }
 
-    // CRITICAL: Filter out adjustments from global income stats
     const filteredPayments = (allPayments || []).filter(p => {
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
       return isWithinRange(pDate, timeRange) && p.method !== 'adjustment'
@@ -205,14 +208,14 @@ export default function DashboardPage() {
       activeResidents: (students || []).filter(s => s.isActive).length,
       totalDue
     }
-  }, [allPayments, allExpenses, students, timeRange])
+  }, [allPayments, allExpenses, students, timeRange, isReady])
 
-  // Prevent UI rendering for non-management roles before redirect
-  if (['Staff', 'Worker', 'General Staff'].includes(userRole)) {
+  // Prevent UI rendering for non-management roles
+  if (!isReady || ['Staff', 'Worker', 'General Staff', 'Student'].includes(userRole)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="animate-spin h-10 w-10 text-primary" />
-        <p className="text-sm font-bold text-muted-foreground uppercase">Loading Staff Portal...</p>
+        <p className="text-sm font-bold text-muted-foreground uppercase animate-pulse">Loading Portal...</p>
       </div>
     )
   }
