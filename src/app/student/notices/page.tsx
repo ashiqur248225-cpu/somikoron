@@ -6,23 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { 
   BellRing, 
-  Trash2, 
-  CheckCircle2, 
-  Clock, 
-  Info, 
-  AlertCircle,
   MailOpen,
   Mail,
-  Loader2
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, doc, deleteDoc, updateDoc, query, where, orderBy, serverTimestamp } from "firebase/firestore"
-import { useToast } from "@/hooks/use-toast"
-import { Button } from "@/components/ui/button"
+import { collection, doc, updateDoc, query, where } from "firebase/firestore"
 import { cn } from "@/lib/utils"
 
 export default function StudentNoticePage() {
-  const { toast } = useToast()
   const db = useFirestore()
   const [studentId, setStudentId] = useState("")
   const [isMounted, setIsMounted] = useState(false)
@@ -61,15 +52,6 @@ export default function StudentNoticePage() {
       await updateDoc(doc(db, "notices", id), { isRead: true })
     } catch (e) {
       console.error(e)
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, "notices", id))
-      toast({ title: "Notice Deleted" })
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error", description: "Failed to delete." })
     }
   }
 
@@ -122,16 +104,6 @@ export default function StudentNoticePage() {
                 ) : (
                   <span className="text-[8px] font-bold text-slate-300 uppercase">Seen</span>
                 )}
-                <div className="flex items-center gap-2">
-                   <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 text-destructive/40 hover:text-destructive hover:bg-destructive/5 rounded-xl"
-                    onClick={(e) => { e.stopPropagation(); handleDelete(notice.id); }}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                </div>
               </div>
             </CardContent>
           </Card>
