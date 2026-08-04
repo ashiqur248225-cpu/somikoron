@@ -45,7 +45,8 @@ import {
   Mail,
   Users2,
   ArrowRight,
-  Save
+  Save,
+  DoorOpen
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -222,7 +223,7 @@ export default function SMSPanelPage() {
     }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole, branchFilter])
-  const { data: buildings } = useCollection(buildingsQuery)
+  const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
 
   const filteredStudents = useMemo(() => {
     if (!students) return []
@@ -239,6 +240,25 @@ export default function SMSPanelPage() {
       return matchesSearch && matchesBuilding && matchesStatus && matchesResidentActive
     })
   }, [students, searchTerm, buildingFilter, statusFilter, residentActiveFilter])
+
+  const roomTargets = useMemo(() => {
+    if (!students || !buildings) return []
+    const targets: { label: string, value: string }[] = []
+    buildings.forEach(b => {
+      const buildingStudents = students.filter(s => s.buildingId === b.id && s.isActive)
+      const roomsInBuilding = Array.from(new Set(
+        buildingStudents.map(s => String(s.roomNumber)).filter(r => r && r !== "undefined" && r !== "null")
+      )).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      
+      roomsInBuilding.forEach(r => {
+        targets.push({
+          label: `${b.name} - R-${r}`,
+          value: `room_${b.id}_${r}`
+        })
+      })
+    })
+    return targets
+  }, [students, buildings])
 
   const replaceTags = (message: string, student: any) => {
     if (!message || !student) return message;
@@ -303,6 +323,15 @@ export default function SMSPanelPage() {
           const nId = doc(collection(db, "notices")).id
           batch.set(doc(db, "notices", nId), { id: nId, studentId: s.id, title: noticeTitle, message: noticeBody, type: "general", isRead: false, createdAt: serverTimestamp(), branch: userBranch })
         })
+      } else if (noticeTarget.startsWith('room_')) {
+        const parts = noticeTarget.split('_')
+        const bId = parts[1]
+        const rNo = parts[2]
+        const targetStudents = students?.filter(s => s.buildingId === bId && String(s.roomNumber) === rNo && s.isActive) || []
+        targetStudents.forEach(s => {
+          const nId = doc(collection(db, "notices")).id
+          batch.set(doc(db, "notices", nId), { id: nId, studentId: s.id, title: noticeTitle, message: noticeBody, type: "general", isRead: false, createdAt: serverTimestamp(), branch: userBranch })
+        })
       } else {
         const nId = doc(collection(db, "notices")).id
         batch.set(doc(db, "notices", nId), { id: nId, studentId: noticeTarget, title: noticeTitle, message: noticeBody, type: "general", isRead: false, createdAt: serverTimestamp(), branch: userBranch })
@@ -310,7 +339,7 @@ export default function SMSPanelPage() {
       await batch.commit()
       toast({ title: "Notices Sent Successfully" })
       setNoticeTitle(""); setNoticeBody("");
-    } catch (e: any) { toast({ variant: "destructive", description: e.message }) } finally { setIsSubmitting(false) }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }) } finally { setIsSubmitting(false) }
   }
 
   const handleScanBirthdays = () => { if (!students) return; setIsScanning(true); setTimeout(() => { const today = new Date(); const tStr = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`; setBirthdayStudents(students.filter(s => s.dob?.endsWith(tStr))); setIsScanning(false); }, 1000); }
@@ -342,7 +371,7 @@ export default function SMSPanelPage() {
 
         <TabsContent value="inapp" className="animate-in fade-in zoom-in-95 duration-300">
            <div className="max-w-2xl mx-auto space-y-6">
-              <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white"><div className="h-2 bg-primary w-full" /><CardHeader className="p-8"><div className="flex items-center gap-4 mb-2"><div className="bg-primary/10 p-3 rounded-2xl text-primary"><BellRing size={28}/></div><div><CardTitle className="text-2xl font-black">In-App Notice Center</CardTitle><CardDescription>Send direct push-style alerts to resident portals.</CardDescription></div></div></CardHeader><CardContent className="px-8 pb-8 space-y-8"><div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Select Audience Target</Label><Select value={noticeTarget} onValueChange={setNoticeTarget}><SelectTrigger className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-lg"><Users2 className="mr-2 h-5 w-5 text-primary" /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="everyone">📢 Send to Everyone (Broadcast)</SelectItem><Separator className="my-1"/><SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Buildings</SelectLabel>{buildings?.map(b => <SelectItem key={b.id} value={`building_${b.id}`}>🏢 {b.name} Residents</SelectItem>)}</SelectGroup><Separator className="my-1"/><SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Top Active Residents</SelectLabel>{students?.slice(0,10).map(s => <SelectItem key={s.id} value={s.id}>👤 {s.name} (R-{s.roomNumber})</SelectItem>)}</SelectGroup></SelectContent></Select></div><div className="space-y-6 p-6 bg-slate-50 rounded-[2rem] border border-slate-100 shadow-inner"><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Notice Headline</Label><Input value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} placeholder="e.g. Water Tank Cleaning" className="h-12 bg-white rounded-xl border-none shadow-sm font-bold" /></div><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Detailed Message</Label><Textarea value={noticeBody} onChange={e => setNoticeBody(e.target.value)} placeholder="Type the information here..." className="min-h-[150px] bg-white rounded-2xl border-none shadow-sm" /></div></div><div className="p-4 bg-primary/5 rounded-2xl border border-dashed border-primary/20 flex gap-3 items-center"><Info size={20} className="text-primary shrink-0" /><p className="text-[10px] font-medium leading-tight text-slate-600">This notice will appear instantly in the student's **Notice Center** tab with a "New" badge. Recipients can delete it from their view only.</p></div></CardContent><CardFooter className="p-8 bg-slate-50 border-t"><Button onClick={handleSendInAppNotice} disabled={isSubmitting || !noticeTitle} className="w-full h-16 rounded-3xl text-xl font-black shadow-2xl shadow-primary/20 transition-all hover:scale-[1.01] gap-3">{isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={24}/>} Dispatch In-App Notice</Button></CardFooter></Card>
+              <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white"><div className="h-2 bg-primary w-full" /><CardHeader className="p-8"><div className="flex items-center gap-4 mb-2"><div className="bg-primary/10 p-3 rounded-2xl text-primary"><BellRing size={28}/></div><div><CardTitle className="text-2xl font-black">In-App Notice Center</CardTitle><CardDescription>Send direct push-style alerts to resident portals.</CardDescription></div></div></CardHeader><CardContent className="px-8 pb-8 space-y-8"><div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Select Audience Target</Label><Select value={noticeTarget} onValueChange={setNoticeTarget}><SelectTrigger className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-lg"><Users2 className="mr-2 h-5 w-5 text-primary" /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="everyone">📢 Send to Everyone (Broadcast)</SelectItem><Separator className="my-1"/><SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Buildings</SelectLabel>{buildings?.map(b => <SelectItem key={b.id} value={`building_${b.id}`}>🏢 {b.name} Residents</SelectItem>)}</SelectGroup><Separator className="my-1"/><SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Rooms</SelectLabel>{roomTargets.map(rt => <SelectItem key={rt.value} value={rt.value}>🚪 {rt.label}</SelectItem>)}</SelectGroup><Separator className="my-1"/><SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Individual Residents</SelectLabel>{students?.filter(s => s.isActive).slice(0, 50).map(s => <SelectItem key={s.id} value={s.id}>👤 {s.name} (R-{s.roomNumber})</SelectItem>)}</SelectGroup></SelectContent></Select></div><div className="space-y-6 p-6 bg-slate-50 rounded-[2rem] border border-slate-100 shadow-inner"><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Notice Headline</Label><Input value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} placeholder="e.g. Water Tank Cleaning" className="h-12 bg-white rounded-xl border-none shadow-sm font-bold" /></div><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Detailed Message</Label><Textarea value={noticeBody} onChange={e => setNoticeBody(e.target.value)} placeholder="Type the information here..." className="min-h-[150px] bg-white rounded-2xl border-none shadow-sm" /></div></div><div className="p-4 bg-primary/5 rounded-2xl border border-dashed border-primary/20 flex gap-3 items-center"><Info size={20} className="text-primary shrink-0" /><p className="text-[10px] font-medium leading-tight text-slate-600">This notice will appear instantly in the student's **Notice Center** tab with a "New" badge. Recipients can delete it from their view only.</p></div></CardContent><CardFooter className="p-8 bg-slate-50 border-t"><Button onClick={handleSendInAppNotice} disabled={isSubmitting || !noticeTitle} className="w-full h-16 rounded-3xl text-xl font-black shadow-2xl shadow-primary/20 transition-all hover:scale-[1.01] gap-3">{isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={24}/>} Dispatch In-App Notice</Button></CardFooter></Card>
            </div>
         </TabsContent>
 

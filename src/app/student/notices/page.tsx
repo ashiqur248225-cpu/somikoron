@@ -12,9 +12,10 @@ import {
   Info, 
   AlertCircle,
   MailOpen,
-  Mail
+  Mail,
+  Loader2
 } from "lucide-react"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, doc, deleteDoc, updateDoc, query, where, orderBy, serverTimestamp } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -31,16 +32,29 @@ export default function StudentNoticePage() {
     setIsMounted(true)
   }, [])
 
+  const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
+  const { data: student } = useDoc(studentRef)
+
   const noticesQuery = useMemoFirebase(() => {
-    if (!studentId) return null
+    if (!studentId || !student?.branch) return null
+    // Fetching targeted notices and global branch notices
     return query(
       collection(db, "notices"), 
       where("studentId", "in", [studentId, "everyone"]),
-      orderBy("createdAt", "desc")
+      where("branch", "==", student.branch)
     )
-  }, [db, studentId])
+  }, [db, studentId, student?.branch])
   
-  const { data: notices, isLoading } = useCollection(noticesQuery)
+  const { data: rawNotices, isLoading } = useCollection(noticesQuery)
+
+  const notices = useMemo(() => {
+    if (!rawNotices) return []
+    return [...rawNotices].sort((a, b) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0
+      return dateB - dateA
+    })
+  }, [rawNotices])
 
   const handleMarkAsRead = async (id: string) => {
     try {
@@ -108,14 +122,16 @@ export default function StudentNoticePage() {
                 ) : (
                   <span className="text-[8px] font-bold text-slate-300 uppercase">Seen</span>
                 )}
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-8 w-8 text-destructive/40 hover:text-destructive hover:bg-destructive/5 rounded-xl"
-                  onClick={(e) => { e.stopPropagation(); handleDelete(notice.id); }}
-                >
-                  <Trash2 size={14} />
-                </Button>
+                <div className="flex items-center gap-2">
+                   <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 text-destructive/40 hover:text-destructive hover:bg-destructive/5 rounded-xl"
+                    onClick={(e) => { e.stopPropagation(); handleDelete(notice.id); }}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
