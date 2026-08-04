@@ -24,13 +24,15 @@ import {
   History,
   Info,
   CircleDollarSign,
-  User
+  User,
+  Utensils
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, serverTimestamp, doc, addDoc, query, where, limit } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 
 export default function PaymentRequestPage() {
@@ -60,9 +62,13 @@ export default function PaymentRequestPage() {
     account: "",
     amount: "",
     transactionId: "",
-    senderInfo: "", // New field for sender mobile/bank info
+    senderInfo: "", 
     purpose: "Monthly Rent & Food",
-    description: ""
+    description: "",
+    payRent: true,
+    payFood: false,
+    payAdvance: false,
+    payUtilities: false
   })
 
   const requestsQuery = useMemoFirebase(() => {
@@ -72,13 +78,13 @@ export default function PaymentRequestPage() {
   const { data: recentRequests } = useCollection(requestsQuery)
 
   const duesSummary = useMemo(() => {
-    if (!student) return { monthlyRent: 0, outstandingDue: 0 }
+    if (!student) return { monthlyRent: 0, outstandingDue: 0, foodBalance: 0 }
     const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0)
     const foodVal = Number(student.foodDueAmount || 0)
-    const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0
     return {
       monthlyRent: Number(student.monthlyRent || 0),
-      outstandingDue: rentDue + foodDue
+      outstandingDue: rentDue,
+      foodBalance: foodVal
     }
   }, [student])
 
@@ -86,6 +92,11 @@ export default function PaymentRequestPage() {
     e.preventDefault()
     if (!formData.amount || !formData.transactionId || !formData.account || !formData.senderInfo) {
       toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "অনুগ্রহ করে সব তথ্য সঠিকভাবে পূরণ করুন।" })
+      return
+    }
+
+    if (!formData.payRent && !formData.payFood && !formData.payAdvance && !formData.payUtilities) {
+      toast({ variant: "destructive", title: "উদ্দেশ্য সিলেক্ট করুন", description: "পেমেন্টের উদ্দেশ্য (ভাড়া/খাবার/অন্যান্য) অন্তত একটি সিলেক্ট করুন।" })
       return
     }
 
@@ -101,7 +112,19 @@ export default function PaymentRequestPage() {
         createdAt: serverTimestamp()
       })
       toast({ title: "আবেদন জমা হয়েছে", description: "ম্যানেজার আপনার ট্রানজেকশনটি ভেরিফাই করবেন।" })
-      setFormData({ method: "", account: "", amount: "", transactionId: "", senderInfo: "", purpose: "Monthly Rent & Food", description: "" })
+      setFormData({ 
+        method: "", 
+        account: "", 
+        amount: "", 
+        transactionId: "", 
+        senderInfo: "", 
+        purpose: "Monthly Rent & Food", 
+        description: "",
+        payRent: true,
+        payFood: false,
+        payAdvance: false,
+        payUtilities: false
+      })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -117,19 +140,28 @@ export default function PaymentRequestPage() {
       </header>
 
       {/* Dues Awareness Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="border-none shadow-sm bg-primary/5 rounded-2xl p-4 flex items-center gap-4">
-          <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary"><CircleDollarSign size={20}/></div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="border-none shadow-sm bg-blue-50/50 rounded-2xl p-4 flex items-center gap-4">
+          <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600"><CircleDollarSign size={20}/></div>
           <div>
             <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Monthly Rent</p>
-            <p className="text-lg font-black text-primary">৳{duesSummary.monthlyRent}</p>
+            <p className="text-lg font-black text-blue-600">৳{duesSummary.monthlyRent}</p>
           </div>
         </Card>
         <Card className="border-none shadow-sm bg-destructive/5 rounded-2xl p-4 flex items-center gap-4 border-l-4 border-l-destructive">
           <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center text-destructive"><AlertCircle size={20}/></div>
           <div>
-            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Outstanding Dues</p>
+            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Rent Dues</p>
             <p className="text-lg font-black text-destructive">৳{duesSummary.outstandingDue}</p>
+          </div>
+        </Card>
+        <Card className="border-none shadow-sm bg-success/5 rounded-2xl p-4 flex items-center gap-4 border-l-4 border-l-success">
+          <div className="h-10 w-10 rounded-xl bg-success/10 flex items-center justify-center text-success"><Utensils size={20}/></div>
+          <div>
+            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Food Balance</p>
+            <p className={cn("text-lg font-black", (duesSummary.foodBalance || 0) < 0 ? "text-destructive" : "text-success")}>
+              ৳{duesSummary.foodBalance}
+            </p>
           </div>
         </Card>
       </div>
@@ -138,9 +170,32 @@ export default function PaymentRequestPage() {
         <div className="h-2 bg-primary w-full" />
         <CardContent className="p-8 space-y-6">
            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-4">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest ml-1">১. পেমেন্টের উদ্দেশ্য (Select Purposes)</Label>
+                <div className="grid grid-cols-2 gap-3 p-5 bg-slate-50 rounded-3xl border border-slate-100">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="payRent" checked={formData.payRent} onCheckedChange={(v) => setFormData({...formData, payRent: !!v})} />
+                    <Label htmlFor="payRent" className="text-xs font-bold cursor-pointer">ভাড়া (Rent Due)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="payFood" checked={formData.payFood} onCheckedChange={(v) => setFormData({...formData, payFood: !!v})} />
+                    <Label htmlFor="payFood" className="text-xs font-bold cursor-pointer">খাবার (Food Bill)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="payAdvance" checked={formData.payAdvance} onCheckedChange={(v) => setFormData({...formData, payAdvance: !!v})} />
+                    <Label htmlFor="payAdvance" className="text-xs font-bold cursor-pointer">সিকিউরিটি অগ্রিম</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="payUtilities" checked={formData.payUtilities} onCheckedChange={(v) => setFormData({...formData, payUtilities: !!v})} />
+                    <Label htmlFor="payUtilities" className="text-xs font-bold cursor-pointer">ওয়াইফাই/কুকিং</Label>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-4 p-5 bg-slate-50 rounded-3xl border border-slate-100">
+                <Label className="text-[10px] font-black uppercase text-primary tracking-widest">২. ট্রানজেকশন তথ্য (TX Details)</Label>
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Official Account (যেখানে টাকা পাঠিয়েছেন)</Label>
+                  <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Receiver Account (যেখানে টাকা পাঠিয়েছেন)</Label>
                   <Select value={formData.account} onValueChange={v => setFormData({...formData, account: v})}>
                     <SelectTrigger className="bg-white h-12 rounded-xl shadow-sm border-none font-bold">
                       <SelectValue placeholder="রিসিভার নাম্বার সিলেক্ট করুন" />
@@ -158,7 +213,7 @@ export default function PaymentRequestPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Amount (৳)</Label>
+                    <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Total Amount (৳)</Label>
                     <Input 
                       type="number" 
                       value={formData.amount} 
@@ -168,7 +223,7 @@ export default function PaymentRequestPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Method</Label>
+                    <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Method</Label>
                     <Select value={formData.method} onValueChange={v => setFormData({...formData, method: v})}>
                        <SelectTrigger className="bg-white h-12 rounded-xl border-none shadow-sm font-bold"><SelectValue placeholder="Mode"/></SelectTrigger>
                        <SelectContent>
@@ -181,7 +236,7 @@ export default function PaymentRequestPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Sender Info (আপনার নাম্বার/ব্যাংক অ্যাকাউন্ট)</Label>
+                  <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Sender Info (আপনার নাম্বার/ব্যাংক অ্যাকাউন্ট)</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                     <Input 
@@ -194,7 +249,7 @@ export default function PaymentRequestPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Transaction ID / Reference</Label>
+                  <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Transaction ID / Reference</Label>
                   <div className="relative">
                     <Smartphone className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                     <Input 
@@ -233,7 +288,10 @@ export default function PaymentRequestPage() {
                 <p className="text-[8px] font-bold text-muted-foreground uppercase">
                   {isMounted && req.createdAt?.toDate ? new Date(req.createdAt.toDate()).toLocaleDateString() : 'Just now'}
                 </p>
-                <h4 className="font-black text-slate-800 text-sm">৳{req.amount}</h4>
+                <div className="flex items-center gap-2">
+                   <h4 className="font-black text-slate-800 text-sm">৳{req.amount}</h4>
+                   {req.payRent && <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 text-primary">Rent</Badge>}
+                </div>
                 <p className="text-[9px] font-mono text-slate-400">Sender: {req.senderInfo}</p>
               </div>
               <Badge className={cn(

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { 
   CheckCircle2, XCircle, Loader2, Eye, Wallet, Smartphone, 
-  UserCircle, Building2, Calendar, Trash2, ArrowUpRight, Info, AlertCircle, Clock, History, Receipt, ChevronRight
+  UserCircle, Building2, Calendar, Trash2, ArrowUpRight, Info, AlertCircle, Clock, History, Receipt, ChevronRight,
+  Utensils, ShieldCheck, Wifi, Soup
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -19,6 +20,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function StudentPaymentsPage() {
   const { toast } = useToast()
@@ -52,23 +55,28 @@ export default function StudentPaymentsPage() {
     })
   }, [rawRequests])
 
-  // Fetch Student data for verification when selecting a request
+  // Fetch Student and Configs for verification
   const [studentData, setStudentData] = useState<any>(null)
+  const [billingConfig, setBillingConfig] = useState<any>(null)
   const [isStudentLoading, setIsStudentLoading] = useState(false)
 
   useEffect(() => {
     if (selectedReq?.studentId) {
       setIsStudentLoading(true)
-      const fetchStudent = async () => {
+      const fetchData = async () => {
         const sSnap = await getDoc(doc(db, "students", selectedReq.studentId))
         if (sSnap.exists()) setStudentData(sSnap.data())
+        
+        const bSnap = await getDoc(doc(db, "configs", `billingConfig_${userBranch}`))
+        if (bSnap.exists()) setBillingConfig(bSnap.data())
+        
         setIsStudentLoading(false)
       }
-      fetchStudent()
+      fetchData()
     } else {
       setStudentData(null)
     }
-  }, [selectedReq, db])
+  }, [selectedReq, db, userBranch])
 
   const handleApprove = async () => {
     if (!selectedReq || !studentData) return
@@ -76,48 +84,111 @@ export default function StudentPaymentsPage() {
     const batch = writeBatch(db)
     try {
       const pId = doc(collection(db, "payments")).id
-      const amount = Number(selectedReq.amount)
+      const totalAmt = Number(selectedReq.amount)
       
+      let remaining = totalAmt;
+      let seatPaid = 0;
+      let foodPaid = 0;
+      let advancePaid = 0;
+      let cookingBill = 0;
+      let wifiBill = 0;
+
+      const currentDues = { ...(studentData.duesBreakdown || {}) };
+      const now = new Date();
+      const currentMonth = MONTHS[now.getMonth()];
+      const currentYear = now.getFullYear().toString();
+      const targetLabel = `${currentMonth} ${currentYear}`;
+
+      // 1. DISTRIBUTE TO RENT (If selected or by default)
+      if (selectedReq.payRent && remaining > 0) {
+        // Priority: Current month, then others
+        if (currentDues[targetLabel]) {
+          const dueAmt = Number(currentDues[targetLabel].amount);
+          const pay = Math.min(remaining, dueAmt);
+          seatPaid += pay;
+          remaining -= pay;
+          if (pay >= dueAmt) delete currentDues[targetLabel];
+          else currentDues[targetLabel].amount = dueAmt - pay;
+        }
+
+        if (remaining > 0) {
+          const sortedDues = Object.keys(currentDues).sort((a, b) => {
+            const [mA, yA] = a.split(' '); const [mB, yB] = b.split(' ');
+            if (yA !== yB) return Number(yA) - Number(yB);
+            return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
+          });
+          for (const m of sortedDues) {
+            if (remaining <= 0) break;
+            const dueAmt = Number(currentDues[m].amount);
+            const pay = Math.min(remaining, dueAmt);
+            seatPaid += pay;
+            remaining -= pay;
+            if (pay >= dueAmt) delete currentDues[m];
+            else currentDues[m].amount = dueAmt - pay;
+          }
+        }
+      }
+
+      // 2. DISTRIBUTE TO UTILITIES (If selected)
+      if (selectedReq.payUtilities && remaining > 0 && billingConfig) {
+        const cCost = Number(billingConfig.cookingBill || 0);
+        const wCost = Number(billingConfig.wifiBill || 0);
+        if (remaining >= cCost && cCost > 0) { cookingBill = cCost; remaining -= cCost; }
+        if (remaining >= wCost && wCost > 0) { wifiBill = wCost; remaining -= wCost; }
+      }
+
+      // 3. DISTRIBUTE TO FOOD (If selected)
+      if (selectedReq.payFood && remaining > 0) {
+        foodPaid = remaining;
+        remaining = 0;
+      }
+
+      // 4. DISTRIBUTE TO ADVANCE (If selected or leftover)
+      if (selectedReq.payAdvance && remaining > 0) {
+        advancePaid = remaining;
+        remaining = 0;
+      }
+
+      // Final leftover fallback (if nothing specific satisfied everything)
+      if (remaining > 0) {
+        if (selectedReq.payRent) seatPaid += remaining;
+        else if (selectedReq.payFood) foodPaid += remaining;
+        else advancePaid += remaining;
+        remaining = 0;
+      }
+
+      const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
+
       const pRecord = {
-        id: pId,
-        amount,
-        studentId: selectedReq.studentId,
-        studentName: selectedReq.studentName,
-        buildingId: studentData.buildingId,
-        buildingName: studentData.buildingName,
-        roomNumber: studentData.roomNumber,
-        branch: userBranch,
-        method: selectedReq.method,
-        transactionId: selectedReq.transactionId,
-        receiver: userName,
-        date: new Date().toISOString(),
-        description: `Student App Payment: ${selectedReq.purpose}. TXID: ${selectedReq.transactionId}`,
-        createdAt: new Date().toISOString() // Fixed: serverTimestamp() cannot be used inside arrayUnion
+        id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: advancePaid,
+        cookingBill, wifiBill, studentId: selectedReq.studentId, studentName: selectedReq.studentName,
+        buildingId: studentData.buildingId, buildingName: studentData.buildingName, roomNumber: studentData.roomNumber,
+        branch: userBranch, method: selectedReq.method, transactionId: selectedReq.transactionId, receiver: userName,
+        date: new Date().toISOString(), createdAt: new Date().toISOString(),
+        description: `Approved Student Request. Purpose: ${selectedReq.payRent ? 'Rent ' : ''}${selectedReq.payFood ? 'Food ' : ''}${selectedReq.payAdvance ? 'Adv ' : ''}. TXID: ${selectedReq.transactionId}`
       }
 
       batch.set(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() })
       
-      // Update Student History and Balances
-      const rentPaid = Math.min(amount, studentData.totalDue || 0)
-
       batch.update(doc(db, "students", selectedReq.studentId), {
         paymentsHistory: arrayUnion(pRecord),
-        historicalTotalReceived: increment(amount),
-        totalDue: increment(-rentPaid),
+        historicalTotalReceived: increment(totalAmt),
+        totalDue: finalTotalDue,
+        duesBreakdown: currentDues,
+        advanceAmount: increment(advancePaid),
+        foodDueAmount: increment(foodPaid),
         updatedAt: serverTimestamp()
       })
 
-      // Update Net Balance
       const balanceRef = doc(db, "netBalance", userBranch)
       const methodKeyMap: Record<string, string> = { 'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank' }
       const methodKey = methodKeyMap[selectedReq.method] || 'totalCash'
-      batch.set(balanceRef, { [methodKey]: increment(amount), totalHandCash: increment(amount), lastUpdated: serverTimestamp() }, { merge: true })
+      batch.set(balanceRef, { [methodKey]: increment(totalAmt), totalHandCash: increment(totalAmt), lastUpdated: serverTimestamp() }, { merge: true })
 
-      // Mark request as approved
       batch.update(doc(db, "paymentRequests", selectedReq.id), { status: "approved", approvedBy: userName, updatedAt: serverTimestamp() })
 
       await batch.commit()
-      toast({ title: "Payment Accepted", description: "Records updated successfully." })
+      toast({ title: "Payment Accepted", description: `distributed: Rent ${seatPaid}, Food ${foodPaid}, Adv ${advancePaid}` })
       setIsDetailOpen(false)
       setSelectedReq(null)
     } catch (e: any) {
@@ -148,8 +219,8 @@ export default function StudentPaymentsPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Payment Requests</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Review student submissions.</p>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Student Payments</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Verify student digital submissions.</p>
           </div>
         </div>
       </div>
@@ -164,6 +235,7 @@ export default function StudentPaymentsPage() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Student</TableHead>
+                  <TableHead>Purpose (Student Sel.)</TableHead>
                   <TableHead>Method</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead className="text-right">Action</TableHead>
@@ -179,13 +251,21 @@ export default function StudentPaymentsPage() {
                       <div className="font-bold text-slate-800">{req.studentName}</div>
                       <div className="text-[10px] text-muted-foreground">Room {req.roomNumber}</div>
                     </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {req.payRent && <Badge variant="secondary" className="text-[7px] h-4 bg-blue-50 text-blue-600">Rent</Badge>}
+                        {req.payFood && <Badge variant="secondary" className="text-[7px] h-4 bg-green-50 text-success">Food</Badge>}
+                        {req.payAdvance && <Badge variant="secondary" className="text-[7px] h-4 bg-purple-50 text-purple-600">Adv</Badge>}
+                        {req.payUtilities && <Badge variant="secondary" className="text-[7px] h-4 bg-orange-50 text-orange-600">Util</Badge>}
+                      </div>
+                    </TableCell>
                     <TableCell><Badge variant="outline" className="uppercase text-[9px] font-black">{req.method}</Badge></TableCell>
                     <TableCell className="text-right font-black text-lg text-primary">৳{req.amount}</TableCell>
                     <TableCell className="text-right"><Button variant="ghost" size="sm" className="font-bold gap-2">Review <ChevronRight size={14}/></Button></TableCell>
                   </TableRow>
                 ))}
                 {requests.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No pending requests.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground italic">No pending requests.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -194,50 +274,97 @@ export default function StudentPaymentsPage() {
       )}
 
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-2xl rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Receipt className="text-primary"/> Verify Student Payment</DialogTitle>
-            <DialogDescription>Cross-check transaction ID and current dues.</DialogDescription>
+        <DialogContent className="max-w-3xl rounded-3xl p-0 overflow-hidden">
+          <div className="h-2 bg-primary w-full" />
+          <DialogHeader className="p-8 pb-4">
+            <DialogTitle className="text-2xl font-black flex items-center gap-2">
+              <Receipt className="text-primary"/> Smart Verify & Distribute
+            </DialogTitle>
+            <DialogDescription>System will automatically assign funds based on student selection.</DialogDescription>
           </DialogHeader>
 
           {selectedReq && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-              <div className="space-y-4">
-                <h3 className="text-[10px] font-black uppercase text-primary tracking-widest ml-1">Submission Details</h3>
-                <div className="p-5 bg-slate-50 rounded-2xl border space-y-3">
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Amount:</span><span className="font-black text-lg">৳{selectedReq.amount}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Method:</span><span className="font-bold uppercase text-primary">{selectedReq.method}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">TXID:</span><span className="font-mono font-bold text-orange-600">{selectedReq.transactionId}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Account:</span><span>{selectedReq.account}</span></div>
-                  <Separator />
-                  <p className="text-[10px] text-slate-500 italic">"{selectedReq.purpose}"</p>
+            <div className="p-8 pt-0 grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-black uppercase text-primary tracking-widest ml-1">Submission Details</h3>
+                  <div className="p-6 bg-slate-50 rounded-3xl border space-y-4 shadow-inner">
+                    <div className="flex justify-between items-center"><span className="text-xs font-bold text-muted-foreground uppercase">Amount:</span><span className="font-black text-2xl text-primary">৳{selectedReq.amount}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-xs font-bold text-muted-foreground uppercase">Method:</span><Badge className="font-black uppercase">{selectedReq.method}</Badge></div>
+                    <Separator className="bg-slate-200" />
+                    <div className="space-y-1">
+                      <p className="text-[8px] font-black uppercase text-muted-foreground">Reference Info</p>
+                      <p className="text-xs font-bold font-mono text-slate-700">TXID: {selectedReq.transactionId}</p>
+                      <p className="text-xs font-bold text-slate-600">Sender: {selectedReq.senderInfo}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                   <h3 className="text-[10px] font-black uppercase text-primary tracking-widest ml-1">Student Purpose Selection</h3>
+                   <div className="flex flex-wrap gap-2">
+                      <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payRent ? "bg-blue-50 border-blue-200 text-blue-700" : "opacity-30")}>
+                        <Home size={14}/> <span className="text-xs font-bold">Rent</span>
+                      </div>
+                      <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payFood ? "bg-green-50 border-green-200 text-green-700" : "opacity-30")}>
+                        <Utensils size={14}/> <span className="text-xs font-bold">Food</span>
+                      </div>
+                      <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payAdvance ? "bg-purple-50 border-purple-200 text-purple-700" : "opacity-30")}>
+                        <ShieldCheck size={14}/> <span className="text-xs font-bold">Advance</span>
+                      </div>
+                      <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payUtilities ? "bg-orange-50 border-orange-200 text-orange-700" : "opacity-30")}>
+                        <Wifi size={14}/> <span className="text-xs font-bold">Util</span>
+                      </div>
+                   </div>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h3 className="text-[10px] font-black uppercase text-primary tracking-widest ml-1">Student Snapshot</h3>
-                <div className="p-5 bg-slate-900 rounded-2xl text-white space-y-3 shadow-xl">
-                  {isStudentLoading ? <Loader2 className="animate-spin mx-auto"/> : studentData ? (
-                    <>
-                      <div className="flex justify-between text-[10px] opacity-70"><span>Total Due</span><span className="text-destructive font-black">৳{studentData.totalDue || 0}</span></div>
-                      <div className="flex justify-between text-[10px] opacity-70"><span>Food Balance</span><span className="text-success font-black">৳{studentData.foodDueAmount || 0}</span></div>
-                      <div className="flex justify-between text-[10px] opacity-70"><span>Security Adv.</span><span className="text-primary font-black">৳{studentData.advanceAmount || 0}</span></div>
-                      <Separator className="bg-white/10" />
-                      <div className="flex justify-between items-end">
-                         <span className="text-[8px] uppercase font-bold text-white/40">Status</span>
-                         <Badge variant="outline" className="bg-success/20 text-success border-success/30 text-[8px] font-black">ACTIVE</Badge>
-                      </div>
-                    </>
-                  ) : <p className="text-xs italic text-center">Student not found</p>}
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <h3 className="text-[10px] font-black uppercase text-primary tracking-widest ml-1">Current Ledger Snapshot</h3>
+                  <div className="p-6 bg-slate-900 rounded-[2rem] text-white space-y-4 shadow-xl">
+                    {isStudentLoading ? <Loader2 className="animate-spin mx-auto text-primary"/> : studentData ? (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-bold text-white/40 uppercase">Total Rent Due</span>
+                          <span className="text-lg font-black text-red-400">৳{studentData.totalDue || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-bold text-white/40 uppercase">Food Balance</span>
+                          <span className={cn("text-lg font-black", (studentData.foodDueAmount || 0) < 0 ? "text-red-400" : "text-green-400")}>
+                            ৳{studentData.foodDueAmount || 0}
+                          </span>
+                        </div>
+                        <Separator className="bg-white/10" />
+                        <div className="grid grid-cols-2 gap-4">
+                           <div className="space-y-1">
+                              <p className="text-[8px] font-bold text-white/30 uppercase">Monthly Rent</p>
+                              <p className="font-bold">৳{studentData.monthlyRent}</p>
+                           </div>
+                           <div className="space-y-1 text-right">
+                              <p className="text-[8px] font-bold text-white/30 uppercase">Advance</p>
+                              <p className="font-bold">৳{studentData.advanceAmount}</p>
+                           </div>
+                        </div>
+                      </>
+                    ) : <p className="text-xs italic text-center py-4">Resident record missing</p>}
+                  </div>
+                </div>
+                
+                <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex gap-3">
+                   <Info className="text-primary h-5 w-5 shrink-0" />
+                   <p className="text-[9px] text-slate-600 leading-relaxed font-medium">
+                     <b>Smart Split:</b> এপ্রুভ করলে সিস্টেম প্রথমে বকেয়া ভাড়া শোধ করবে, এরপর স্টুডেন্টের পছন্দ অনুযায়ী বাকি টাকা ভাগ করে দেবে।
+                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          <DialogFooter className="grid grid-cols-2 gap-4">
-            <Button variant="outline" onClick={handleReject} disabled={isProcessing} className="rounded-xl border-destructive text-destructive h-12">Reject</Button>
-            <Button onClick={handleApprove} disabled={isProcessing || !studentData} className="rounded-xl bg-success hover:bg-success/90 h-12 gap-2">
-              {isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18}/>} Accept & Credit
+          <DialogFooter className="p-8 bg-slate-50 border-t grid grid-cols-2 gap-4">
+            <Button variant="outline" onClick={handleReject} disabled={isProcessing} className="rounded-2xl border-destructive text-destructive h-14 font-bold text-lg hover:bg-red-50">Reject Entry</Button>
+            <Button onClick={handleApprove} disabled={isProcessing || !studentData} className="rounded-2xl bg-success hover:bg-success/90 h-14 gap-3 text-white font-black text-xl shadow-xl shadow-success/20">
+              {isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={24}/>} Confirm & Approve
             </Button>
           </DialogFooter>
         </DialogContent>
