@@ -48,7 +48,8 @@ import {
   Save,
   DoorOpen,
   FileClock,
-  TableProperties
+  TableProperties,
+  MessageCircle
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -125,6 +126,10 @@ export default function SMSPanelPage() {
   const [customMessage, setCustomMessage] = useState("")
   const [selectedTemplateId, setSelectedTemplateId] = useState("manual")
 
+  // Multi-select Delete States
+  const [selectedLogIds, setSelectedLogIds] = useState<string[]>([])
+  const [selectedNoticeIds, setSelectedNoticeIds] = useState<string[]>([])
+
   // In-App Notice State
   const [noticeTarget, setNoticeTarget] = useState("everyone")
   const [noticeTitle, setNoticeTitle] = useState("")
@@ -198,7 +203,7 @@ export default function SMSPanelPage() {
   // LOGS & HISTORY
   const logsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "smsLogs"), where("branch", "==", userBranch), limit(200))
+    return query(collection(db, "smsLogs"), where("branch", "==", userBranch), limit(500))
   }, [db, userBranch])
   const { data: rawSmsLogs } = useCollection(logsQuery)
 
@@ -213,7 +218,7 @@ export default function SMSPanelPage() {
 
   const noticeLogsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
-    return query(collection(db, "notices"), where("branch", "==", userBranch), limit(200))
+    return query(collection(db, "notices"), where("branch", "==", userBranch), limit(500))
   }, [db, userBranch])
   const { data: rawNoticeLogs } = useCollection(noticeLogsQuery)
 
@@ -391,6 +396,35 @@ export default function SMSPanelPage() {
     }
   }
 
+  const handleDeleteSelected = async (collName: string, ids: string[]) => {
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} selected records?`)) return;
+    
+    setIsSubmitting(true);
+    const batch = writeBatch(db);
+    try {
+      ids.forEach(id => {
+        batch.delete(doc(db, collName, id));
+      });
+      await batch.commit();
+      toast({ title: "Deleted", description: `${ids.length} records removed.` });
+      if (collName === 'smsLogs') setSelectedLogIds([]);
+      if (collName === 'notices') setSelectedNoticeIds([]);
+    } catch (e: any) {
+      toast({ variant: "destructive", description: e.message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const handleWhatsAppSendManual = (to: string, message: string) => {
+    // If multiple numbers, take the first one
+    const phone = to.split(',')[0].trim();
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  }
+
   return (
     <div className="space-y-8 pb-20 w-full overflow-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
@@ -514,7 +548,14 @@ export default function SMSPanelPage() {
         <TabsContent value="notice_history" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
             <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2"><TableProperties className="text-primary"/> Sent Notices History</CardTitle>
+              <div className="flex items-center gap-4">
+                <CardTitle className="text-lg flex items-center gap-2"><TableProperties className="text-primary"/> Sent Notices History</CardTitle>
+                {selectedNoticeIds.length > 0 && (
+                  <Button variant="destructive" size="sm" onClick={() => handleDeleteSelected('notices', selectedNoticeIds)} className="gap-2 font-bold h-8 rounded-lg animate-in zoom-in">
+                    <Trash2 size={14}/> Delete Selected ({selectedNoticeIds.length})
+                  </Button>
+                )}
+              </div>
               <Button variant="destructive" size="sm" className="gap-2 font-bold rounded-xl" onClick={() => handleDeleteHistory("notices")} disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={14}/>} 
                 Delete All
@@ -524,6 +565,12 @@ export default function SMSPanelPage() {
               <Table>
                 <TableHeader className="bg-slate-50">
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox 
+                        checked={selectedNoticeIds.length === noticeLogs.length && noticeLogs.length > 0}
+                        onCheckedChange={(checked) => setSelectedNoticeIds(checked ? noticeLogs.map(l => l.id) : [])}
+                      />
+                    </TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Target Student</TableHead>
                     <TableHead>Title</TableHead>
@@ -534,6 +581,12 @@ export default function SMSPanelPage() {
                 <TableBody>
                   {noticeLogs.map(log => (
                     <TableRow key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedNoticeIds.includes(log.id)} 
+                          onCheckedChange={() => setSelectedNoticeIds(prev => prev.includes(log.id) ? prev.filter(id => id !== log.id) : [...prev, log.id])} 
+                        />
+                      </TableCell>
                       <TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString() || 'N/A'}</TableCell>
                       <TableCell className="font-bold text-[10px] text-slate-600">
                         {log.studentId === 'everyone' ? <Badge className="bg-primary text-[8px]">BROADCAST</Badge> : (log.studentId || 'N/A')}
@@ -547,7 +600,7 @@ export default function SMSPanelPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {noticeLogs.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No notice history found.</TableCell></TableRow>}
+                  {noticeLogs.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground italic">No notice history found.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>
@@ -557,7 +610,14 @@ export default function SMSPanelPage() {
         <TabsContent value="logs">
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
             <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between">
-              <CardTitle className="text-lg">SMS Delivery Logs</CardTitle>
+              <div className="flex items-center gap-4">
+                <CardTitle className="text-lg">SMS Delivery Logs</CardTitle>
+                {selectedLogIds.length > 0 && (
+                  <Button variant="destructive" size="sm" onClick={() => handleDeleteSelected('smsLogs', selectedLogIds)} className="gap-2 font-bold h-8 rounded-lg animate-in zoom-in">
+                    <Trash2 size={14}/> Delete Selected ({selectedLogIds.length})
+                  </Button>
+                )}
+              </div>
               <Button variant="destructive" size="sm" className="gap-2 font-bold rounded-xl" onClick={() => handleDeleteHistory("smsLogs")} disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={14}/>} 
                 Delete All
@@ -565,17 +625,48 @@ export default function SMSPanelPage() {
             </CardHeader>
             <CardContent className="p-0">
               <Table>
-                <TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Recipient</TableHead><TableHead>Message</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox 
+                        checked={selectedLogIds.length === smsLogs.length && smsLogs.length > 0}
+                        onCheckedChange={(checked) => setSelectedLogIds(checked ? smsLogs.map(l => l.id) : [])}
+                      />
+                    </TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Recipient</TableHead>
+                    <TableHead>Message</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {smsLogs.map(log => (
                     <TableRow key={log.id}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedLogIds.includes(log.id)} 
+                          onCheckedChange={() => setSelectedLogIds(prev => prev.includes(log.id) ? prev.filter(id => id !== log.id) : [...prev, log.id])} 
+                        />
+                      </TableCell>
                       <TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString()}</TableCell>
                       <TableCell className="font-mono text-[10px]">{log.to}</TableCell>
                       <TableCell className="max-w-[200px] text-[10px] line-clamp-1">{log.message}</TableCell>
                       <TableCell><Badge variant="outline" className={cn("text-[8px] uppercase", log.status === 'Success' ? 'text-success' : 'text-destructive')}>{log.status}</Badge></TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-success hover:bg-success/10" 
+                          title="Send via WhatsApp"
+                          onClick={() => handleWhatsAppSendManual(log.to, log.message)}
+                        >
+                          <MessageCircle size={16}/>
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
-                  {smsLogs.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic">No SMS logs found.</TableCell></TableRow>}
+                  {smsLogs.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground italic">No SMS logs found.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>
