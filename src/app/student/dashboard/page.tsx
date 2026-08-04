@@ -163,21 +163,11 @@ export default function StudentDashboardPage() {
       )}
 
       {/* Quick Status Grid */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3">
          <Card className="border-none shadow-sm bg-white rounded-2xl p-4 text-center space-y-1">
             <div className="h-8 w-8 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center mx-auto mb-2"><Home size={16}/></div>
             <p className="text-[8px] font-bold text-muted-foreground uppercase">Rent</p>
             <p className="text-xs font-black">৳{student.monthlyRent}</p>
-         </Card>
-         <Card className="border-none shadow-sm bg-white rounded-2xl p-4 text-center space-y-1">
-            <div className="h-8 w-8 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-2"><Wifi size={16}/></div>
-            <p className="text-[8px] font-bold text-muted-foreground uppercase">WiFi</p>
-            <p className="text-xs font-black">Active</p>
-         </Card>
-         <Card className="border-none shadow-sm bg-white rounded-2xl p-4 text-center space-y-1">
-            <div className="h-8 w-8 rounded-xl bg-purple-50 text-purple-500 flex items-center justify-center mx-auto mb-2"><ChefHat size={16}/></div>
-            <p className="text-[8px] font-bold text-muted-foreground uppercase">Cooking</p>
-            <p className="text-xs font-black">Standard</p>
          </Card>
       </div>
 
