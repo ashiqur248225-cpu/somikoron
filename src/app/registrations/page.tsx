@@ -316,6 +316,19 @@ export default function RegistrationsPage() {
         mealsHistory: []
       })
 
+      // Send In-App Notice to Student
+      const noticeId = doc(collection(db, "notices")).id
+      batch.set(doc(db, "notices", noticeId), {
+        id: noticeId,
+        studentId,
+        title: "Admission Successful",
+        message: `Welcome to ${userBranch}! Your admission has been approved. Room: ${approvalForm.roomNumber}, Seat: ${approvalForm.seatNumber}. Your portal password is: ${autoPassword}`,
+        type: "admission",
+        isRead: false,
+        createdAt: serverTimestamp(),
+        branch: userBranch
+      })
+
       if (selectedBuilding) {
         const updatedApts = selectedBuilding.apartmentsDetail.map((apt: any) => {
           if (apt.name === aptName) {

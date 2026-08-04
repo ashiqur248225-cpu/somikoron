@@ -156,6 +156,19 @@ export default function BulkMealEntryPage() {
           updatedAt: serverTimestamp()
         });
 
+        // Send In-App Notice to Student
+        const noticeId = doc(collection(db, "notices")).id;
+        batch.set(doc(db, "notices", noticeId), {
+          id: noticeId,
+          studentId: s.id,
+          title: "Monthly Meal Bill Generated",
+          message: `Your meal bill for ${monthLabel} has been generated. Total Meals: ${count}, Total Bill: ${totalCost} Tk.`,
+          type: "meal",
+          isRead: false,
+          createdAt: serverTimestamp(),
+          branch: userBranch
+        });
+
         updatedRecords.push({ student: s, count, bill: totalCost });
       });
 

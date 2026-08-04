@@ -172,6 +172,19 @@ export default function StudentPaymentsPage() {
         updatedAt: serverTimestamp()
       })
 
+      // Send In-App Notice to Student
+      const noticeId = doc(collection(db, "notices")).id
+      batch.set(doc(db, "notices", noticeId), {
+        id: noticeId,
+        studentId: selectedReq.studentId,
+        title: "Payment Request Approved",
+        message: `Your payment request of ${totalAmt} Tk has been verified and approved. Thank you.`,
+        type: "payment",
+        isRead: false,
+        createdAt: serverTimestamp(),
+        branch: userBranch
+      })
+
       const balanceRef = doc(db, "netBalance", userBranch)
       const methodKeyMap: Record<string, string> = { 'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank' }
       const methodKey = methodKeyMap[selectedReq.method] || 'totalCash'
