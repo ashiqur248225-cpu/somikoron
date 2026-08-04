@@ -147,7 +147,7 @@ export default function PaymentRequestPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {accountsData?.accounts?.map((acc: any, i: number) => (
-                        <SelectItem key={`account-${acc.number}-${i}`} value={acc.number}>
+                        <SelectItem key={`account-request-${acc.number}-${i}`} value={acc.number}>
                           {acc.label}: {acc.number}
                         </SelectItem>
                       ))}
@@ -231,7 +231,7 @@ export default function PaymentRequestPage() {
             <div key={req.id} className="p-4 bg-white rounded-3xl shadow-sm border border-slate-100 flex justify-between items-center">
               <div>
                 <p className="text-[8px] font-bold text-muted-foreground uppercase">
-                  {isMounted && req.createdAt?.toDate ? new Date(req.createdAt.toDate()).toLocaleDateString() : 'Loading...'}
+                  {isMounted && req.createdAt?.toDate ? new Date(req.createdAt.toDate()).toLocaleDateString() : 'Just now'}
                 </p>
                 <h4 className="font-black text-slate-800 text-sm">৳{req.amount}</h4>
                 <p className="text-[9px] font-mono text-slate-400">Sender: {req.senderInfo}</p>
