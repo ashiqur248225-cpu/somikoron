@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Loader2, Lock, Smartphone, ShieldCheck, UserCircle } from "lucide-react"
+import { Loader2, Lock, Smartphone, ShieldCheck, UserCircle, Eye, EyeOff } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Image from 'next/image';
 import logoIcon from '../../public/icon.png';
@@ -21,6 +21,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({ number: "", password: "" })
   const db = useFirestore()
   const { toast } = useToast()
@@ -193,7 +194,22 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
                   <Label htmlFor="password" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input id="password" type="password" placeholder="••••••••" className="pl-10 h-12 bg-slate-50 border-none rounded-xl" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
+                    <Input 
+                      id="password" 
+                      type={showPassword ? "text" : "password"} 
+                      placeholder="••••••••" 
+                      className="pl-10 pr-10 h-12 bg-slate-50 border-none rounded-xl" 
+                      value={formData.password} 
+                      onChange={e => setFormData({ ...formData, password: e.target.value })} 
+                      required 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-3 h-6 w-6 flex items-center justify-center text-muted-foreground hover:text-primary transition-all active:scale-90"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
                 </div>
                 <Button type="submit" className="w-full h-14 text-lg font-bold rounded-2xl shadow-xl shadow-primary/20" disabled={isLoading}>
