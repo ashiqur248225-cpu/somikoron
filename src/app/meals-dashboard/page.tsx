@@ -132,6 +132,20 @@ export default function AdminMealDashboardPage() {
     return { totals, choices, buildingData }
   }, [students])
 
+  // MANAGER TAB SPECIFIC ANALYTICS
+  const managerStats = useMemo(() => {
+    if (!students || buildingFilter === "all") return null;
+    let b = 0, l = 0, d = 0;
+    students.forEach(s => {
+      if (s.buildingId === buildingFilter && s.isActive) {
+        if (s.mealStatus?.breakfast) b++;
+        if (s.mealStatus?.lunch) l++;
+        if (s.mealStatus?.dinner) d++;
+      }
+    });
+    return { b, l, d };
+  }, [students, buildingFilter]);
+
   const handleToggleMeal = async (studentId: string, mealId: string, currentVal: boolean) => {
     try {
       const sRef = doc(db, "students", studentId)
@@ -394,7 +408,7 @@ export default function AdminMealDashboardPage() {
                  </div>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="p-4 border-b">
+                <div className="p-4 border-b space-y-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input 
@@ -404,7 +418,26 @@ export default function AdminMealDashboardPage() {
                       onChange={e => setSearchTerm(e.target.value)}
                     />
                   </div>
+                  
+                  {/* BUILDING STATS SUMMARY CARD */}
+                  {buildingFilter !== "all" && managerStats && (
+                    <div className="grid grid-cols-3 gap-3 animate-in slide-in-from-top-2 duration-300">
+                      <div className="p-3 bg-orange-50 rounded-2xl border border-orange-100 flex flex-col items-center justify-center text-center">
+                        <p className="text-[8px] font-black uppercase text-orange-400 tracking-widest leading-none mb-1">Breakfast</p>
+                        <p className="text-lg font-black text-orange-600">{managerStats.b}</p>
+                      </div>
+                      <div className="p-3 bg-success/5 rounded-2xl border border-success/10 flex flex-col items-center justify-center text-center">
+                        <p className="text-[8px] font-black uppercase text-success tracking-widest leading-none mb-1">Lunch</p>
+                        <p className="text-lg font-black text-success">{managerStats.l}</p>
+                      </div>
+                      <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100 flex flex-col items-center justify-center text-center">
+                        <p className="text-[8px] font-black uppercase text-blue-400 tracking-widest leading-none mb-1">Dinner</p>
+                        <p className="text-lg font-black text-blue-600">{managerStats.d}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
+                
                 <ScrollArea className="h-[500px]">
                    <Table>
                      <TableHeader className="bg-slate-50/50 sticky top-0 z-10">
