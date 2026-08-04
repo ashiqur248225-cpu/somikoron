@@ -109,6 +109,18 @@ export default function BulkMealEntryPage() {
     )
   }, [students, mealLogFilter.buildingId])
 
+  // POPULATE MEAL INPUTS AUTOMATICALLY FROM STUDENT COUNTERS
+  useEffect(() => {
+    if (filteredStudents.length > 0) {
+      const initialInputs: Record<string, string> = {};
+      filteredStudents.forEach(s => {
+        const total = (Number(s.currentMonthBreakfast) || 0) + (Number(s.currentMonthLunch) || 0) + (Number(s.currentMonthDinner) || 0);
+        initialInputs[s.id] = total.toString();
+      });
+      setMealInputs(prev => ({...prev, ...initialInputs}));
+    }
+  }, [filteredStudents]);
+
   const handleBulkMealSubmit = async () => {
     if (!students || !mealConfig?.rate) {
       toast({ variant: "destructive", title: "Error", description: "Meal rate not configured for this branch." });
@@ -134,9 +146,13 @@ export default function BulkMealEntryPage() {
           date: new Date().toISOString()
         };
 
+        // Reset month counters upon successful submission to start fresh for next month
         batch.update(doc(db, "students", s.id), {
           mealsHistory: arrayUnion(mealRecord),
           foodDueAmount: increment(-totalCost),
+          currentMonthBreakfast: 0,
+          currentMonthLunch: 0,
+          currentMonthDinner: 0,
           updatedAt: serverTimestamp()
         });
 
@@ -184,7 +200,7 @@ export default function BulkMealEntryPage() {
         })();
       }
 
-      toast({ title: "Bulk Entries Submitted", description: "Student balances updated and SMS will be sent in background." });
+      toast({ title: "Bulk Entries Submitted", description: "Student balances updated and counters reset." });
       router.push('/food-history');
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message });
@@ -217,7 +233,7 @@ export default function BulkMealEntryPage() {
         <div className="h-2 bg-primary w-full" />
         <CardHeader className="px-8 pt-8 pb-4">
           <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
-            <div><CardTitle className="text-2xl font-black flex items-center gap-2 text-primary"><Utensils size={24}/> Spreadsheet Entry</CardTitle><CardDescription>Update balances by entering total monthly meals.</CardDescription></div>
+            <div><CardTitle className="text-2xl font-black flex items-center gap-2 text-primary"><Utensils size={24}/> Spreadsheet Entry</CardTitle><CardDescription>Update balances based on auto-calculated monthly meals.</CardDescription></div>
             <div className="flex items-center gap-3 px-6 py-3 bg-primary/5 rounded-2xl border border-primary/10 shadow-sm"><Calculator size={20} className="text-primary" /><div className="flex flex-col"><span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Global Meal Rate</span><span className="text-lg font-black text-primary">৳{mealConfig?.rate || 0} / Meal</span></div></div>
           </div>
         </CardHeader>
@@ -231,7 +247,7 @@ export default function BulkMealEntryPage() {
 
         <div className="px-8">
           <Table>
-            <TableHeader className="bg-white sticky top-0 z-10"><TableRow className="border-none hover:bg-transparent h-16"><TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Resident Details</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-center text-slate-500">Current Balance</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Total Meals</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Meal Bill</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">New Balance</TableHead></TableRow></TableHeader>
+            <TableHeader className="bg-white sticky top-0 z-10"><TableRow className="border-none hover:bg-transparent h-16"><TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Resident Details</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-center text-slate-500">Current Balance</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Total Meals (Auto)</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Meal Bill</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">New Balance</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredStudents.map(s => {
                 const count = Number(mealInputs[s.id] || 0); const rate = Number(mealConfig?.rate || 0); const bill = count * rate; const currentBal = Number(s.foodDueAmount || 0); const newBal = currentBal - bill;
