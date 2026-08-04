@@ -34,7 +34,8 @@ import {
   Tags,
   Layers,
   PlusCircle,
-  Settings
+  Settings,
+  Receipt
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
@@ -751,7 +752,6 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* DEV & SECURITY DIALOGS */}
       <Dialog open={isDevDialogOpen} onOpenChange={setIsDevDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Dev Access</DialogTitle></DialogHeader>
