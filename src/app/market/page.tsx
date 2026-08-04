@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, doc, setDoc, query, where, serverTimestamp, deleteDoc, orderBy, limit, writeBatch } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -39,7 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-const MARKET_CATEGORIES: Record<string, string[]> = {
+const DEFAULT_MARKET_CATEGORIES: Record<string, string[]> = {
   "Groceries": ["Oil", "Rice", "Lentils (Dal)", "Salt/Sugar", "Spices", "Other"],
   "Vegetables": ["Potato", "Onion", "Green Chili", "Seasonal Veg", "Other"],
   "Fish/Meat": ["Chicken", "Beef", "Fish", "Egg", "Other"],
@@ -64,6 +64,11 @@ export default function MarketTrackingPage() {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const marketCatsRef = useMemoFirebase(() => doc(db, "configs", "marketCategories"), [db])
+  const { data: marketCatsStore } = useDoc(marketCatsRef)
+  
+  const categories = useMemo(() => marketCatsStore?.categories || DEFAULT_MARKET_CATEGORIES, [marketCatsStore])
+
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0])
   const [items, setItems] = useState<MarketItem[]>([
     { id: Math.random().toString(36).substr(2, 9), itemName: "", category: "Groceries", subCategory: "", quantity: "", unitPrice: "" }
@@ -87,7 +92,8 @@ export default function MarketTrackingPage() {
   }, [expenses])
 
   const handleAddItem = () => {
-    setItems([...items, { id: Math.random().toString(36).substr(2, 9), itemName: "", category: "Groceries", subCategory: "", quantity: "", unitPrice: "" }])
+    const firstCat = Object.keys(categories)[0] || ""
+    setItems([...items, { id: Math.random().toString(36).substr(2, 9), itemName: "", category: firstCat, subCategory: "", quantity: "", unitPrice: "" }])
   }
 
   const handleRemoveItem = (id: string) => {
@@ -146,7 +152,7 @@ export default function MarketTrackingPage() {
       await batch.commit()
       toast({ title: "Purchase Recorded", description: `${items.length} items added to inventory.` })
       setIsAddOpen(false)
-      setItems([{ id: Math.random().toString(36).substr(2, 9), itemName: "", category: "Groceries", subCategory: "", quantity: "", unitPrice: "" }])
+      setItems([{ id: Math.random().toString(36).substr(2, 9), itemName: "", category: Object.keys(categories)[0] || "", subCategory: "", quantity: "", unitPrice: "" }])
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -227,7 +233,7 @@ export default function MarketTrackingPage() {
                                <Select value={item.category} onValueChange={v => updateItem(item.id, 'category', v)}>
                                   <SelectTrigger className="h-9 text-[10px] rounded-lg bg-white"><SelectValue /></SelectTrigger>
                                   <SelectContent>
-                                     {Object.keys(MARKET_CATEGORIES).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                     {Object.keys(categories).map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                                   </SelectContent>
                                </Select>
                             </div>
@@ -236,7 +242,7 @@ export default function MarketTrackingPage() {
                                <Select value={item.subCategory} onValueChange={v => updateItem(item.id, 'subCategory', v)}>
                                   <SelectTrigger className="h-9 text-[10px] rounded-lg bg-white"><SelectValue placeholder="Pick One" /></SelectTrigger>
                                   <SelectContent>
-                                     {MARKET_CATEGORIES[item.category]?.map(sub => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
+                                     {categories[item.category]?.map((sub: string) => <SelectItem key={sub} value={sub}>{sub}</SelectItem>)}
                                   </SelectContent>
                                </Select>
                             </div>

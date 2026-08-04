@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -32,7 +33,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028", "2029", "2030", "2031", "2032", "2033" ,"2034", "2035", "2036", "2037", "2038"];
 
-const EXPENSE_CATEGORIES = [
+const DEFAULT_EXPENSE_CATEGORIES = [
   { id: "rent", label: "Building Rent" },
   { id: "electricity", label: "Electricity Bill" },
   { id: "water", label: "Water & Gas Bill" },
@@ -54,6 +55,11 @@ export default function ExpenseEntryPage() {
   const [userRole, setUserRole] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const expenseCatsRef = useMemoFirebase(() => doc(db, "configs", "expenseCategories"), [db])
+  const { data: expenseCatsStore } = useDoc(expenseCatsRef)
+  
+  const categories = useMemo(() => expenseCatsStore?.categories || DEFAULT_EXPENSE_CATEGORIES, [expenseCatsStore])
 
   const getLocalYMD = () => {
     const d = new Date();
@@ -296,7 +302,15 @@ export default function ExpenseEntryPage() {
                 <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><LayoutGrid size={14}/> Core Details</Label>
                 <div className="space-y-4 p-6 bg-slate-50 rounded-3xl border border-slate-100">
                   <div className="space-y-1.5"><Label className="text-xs">Expense Date</Label><Input type="date" value={formData.expenseDate} onChange={e => setFormData({...formData, expenseDate: e.target.value})} className="bg-white h-12 rounded-xl shadow-sm" /></div>
-                  <div className="space-y-1.5"><Label className="text-xs">Category</Label><Select value={formData.category} onValueChange={v => setFormData({...formData, category: v, buildingId: userRole === 'Building Manager' ? assignedBuildingId : "none", apartmentName: "", roomNumber: "", meterNo: "", receiver: "", totalMeals: ""})}><SelectTrigger className="bg-white h-12 rounded-xl font-bold shadow-sm"><SelectValue /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Category</Label>
+                    <Select value={formData.category} onValueChange={v => setFormData({...formData, category: v, buildingId: userRole === 'Building Manager' ? assignedBuildingId : "none", apartmentName: "", roomNumber: "", meterNo: "", receiver: "", totalMeals: ""})}>
+                      <SelectTrigger className="bg-white h-12 rounded-xl font-bold shadow-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {categories.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-1.5"><Label className="text-xs">Amount (৳)</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="bg-white h-14 rounded-xl text-2xl font-black text-destructive shadow-sm" placeholder="0.00" /></div>
                 </div>
               </div>
@@ -312,7 +326,7 @@ export default function ExpenseEntryPage() {
               <div className="space-y-4">
                 <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2"><Zap size={14}/> Context Fields</Label>
                 <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 space-y-5 min-h-[400px] shadow-inner">
-                  {['rent', 'electricity', 'water', 'maintenance', 'others', 'internet'].includes(formData.category) && (
+                  {!['salary', 'food'].includes(formData.category) && (
                     <div className="space-y-4">
                       <div className="space-y-1.5"><Label className="text-xs">Target Building</Label><Select value={formData.buildingId} onValueChange={v => setFormData({...formData, buildingId: v, apartmentName: "", roomNumber: "", meterNo: ""})}><SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Building" /></SelectTrigger><SelectContent><SelectItem value="none">General / No Building</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
                       {formData.category === 'electricity' && (
@@ -339,7 +353,7 @@ export default function ExpenseEntryPage() {
                           </Select>
                         </div>
                       )}
-                      {formData.category === 'internet' && (
+                      {(formData.category === 'internet' || formData.category === 'maintenance') && (
                         <div className="space-y-1.5">
                           <Label className="text-xs">Apartment (Optional)</Label>
                           <Select 

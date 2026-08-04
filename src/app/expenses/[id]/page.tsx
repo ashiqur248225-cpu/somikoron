@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 
-const EXPENSE_CATEGORIES = [
+const DEFAULT_EXPENSE_CATEGORIES = [
   { id: "rent", label: "Building Rent" },
   { id: "electricity", label: "Electricity Bill" },
   { id: "water", label: "Water & Gas Bill" },
@@ -69,6 +69,10 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [userRole, setUserRole] = useState("")
+
+  const expenseCatsRef = useMemoFirebase(() => doc(db, "configs", "expenseCategories"), [db])
+  const { data: expenseCatsStore } = useDoc(expenseCatsRef)
+  const categories = useMemo(() => expenseCatsStore?.categories || DEFAULT_EXPENSE_CATEGORIES, [expenseCatsStore])
 
   useEffect(() => {
     setUserRole(localStorage.getItem("user_role") || "Manager")
@@ -181,7 +185,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
               <Edit size={16} /> Edit
             </Button>
           )}
-          {userRole !== 'Admin' && userRole !== 'Branch Manager' && (
+          {(userRole === 'Admin' || userRole === 'Branch Manager') && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="icon"><Trash2 size={16}/></Button>
@@ -273,7 +277,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                   <Label className="text-xs font-bold uppercase">Expense Category</Label>
                   <Select value={editForm.category} onValueChange={val => setEditForm({...editForm, category: val, buildingId: 'none', apartmentName: '', roomNumber: '', meterNo: '', receiver: ''})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{EXPENSE_CATEGORIES.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent>
+                    <SelectContent>{categories.map((cat: any) => <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
 
@@ -290,7 +294,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
 
               {/* Dynamic Fields Section */}
               <div className="space-y-4">
-                {['rent', 'electricity', 'water', 'maintenance', 'internet', 'others'].includes(editForm.category) && (
+                {!['salary', 'food'].includes(editForm.category) && (
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-bold uppercase">Target Building</Label>
@@ -303,7 +307,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                       </Select>
                     </div>
 
-                    {(editForm.category === 'rent' || editForm.category === 'electricity' || editForm.category === 'internet' || editForm.category === 'others') && editForm.buildingId !== 'none' && (
+                    {(editForm.category === 'electricity' || editForm.category === 'internet' || editForm.category === 'maintenance') && editForm.buildingId !== 'none' && (
                       <div className="space-y-2">
                         <Label className="text-xs font-bold uppercase">Apartment (Optional)</Label>
                         <Select value={editForm.apartmentName} onValueChange={val => {
@@ -318,7 +322,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                       </div>
                     )}
 
-                    {(editForm.category === 'maintenance' || editForm.category === 'internet' || editForm.category === 'others') && editForm.buildingId !== 'none' && (
+                    {(editForm.category === 'maintenance' || editForm.category === 'others' || editForm.category === 'internet') && editForm.buildingId !== 'none' && (
                       <div className="space-y-2">
                         <Label className="text-xs font-bold uppercase">Room Number (Optional)</Label>
                         <Select 
@@ -386,7 +390,7 @@ export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: s
                       </Select>
                       <Select value={editForm.year} onValueChange={val => setEditForm({...editForm, year: val})}>
                         <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                        <SelectContent>{["2024", "2025", "2026"].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                        <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                   </div>

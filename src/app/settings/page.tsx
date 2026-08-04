@@ -30,7 +30,10 @@ import {
   CheckCircle2,
   Wifi,
   ChefHat,
-  Hash
+  Hash,
+  Tags,
+  Layers,
+  PlusCircle
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
@@ -80,6 +83,26 @@ interface RoomGroup {
   npRent: string;
 }
 
+const DEFAULT_MARKET_CATEGORIES = {
+  "Groceries": ["Oil", "Rice", "Lentils (Dal)", "Salt/Sugar", "Spices", "Other"],
+  "Vegetables": ["Potato", "Onion", "Green Chili", "Seasonal Veg", "Other"],
+  "Fish/Meat": ["Chicken", "Beef", "Fish", "Egg", "Other"],
+  "Kitchen Tools": ["Cleaning", "Utensils", "Gas Refill", "Other"],
+  "Others": ["General"]
+}
+
+const DEFAULT_EXPENSE_CATEGORIES = [
+  { id: "rent", label: "Building Rent" },
+  { id: "electricity", label: "Electricity Bill" },
+  { id: "water", label: "Water & Gas Bill" },
+  { id: "maintenance", label: "Maintenance/Repair" },
+  { id: "food", label: "Food / Meal Cost" },
+  { id: "market", label: "General Market" },
+  { id: "internet", label: "Internet Bill" },
+  { id: "salary", label: "Staff Salary" },
+  { id: "others", label: "Others" },
+]
+
 export default function SettingsPage() {
   const { toast } = useToast()
   const db = useFirestore()
@@ -91,10 +114,8 @@ export default function SettingsPage() {
   const [userRole, setUserRole] = useState("")
   const [selectedLinkBranch, setSelectedLinkBranch] = useState("")
   const [selectedMealBranch, setSelectedMealBranch] = useState("")
-  const [selectedBalanceBranch, setSelectedBalanceBranch] = useState("")
-  const [selectedEstimatesBranch, setSelectedEstimatesBranch] = useState("")
   
-  // Admin/Dev States (CLEANED UP - NO DUPLICATES)
+  // Admin/Dev States
   const [isDevDialogOpen, setIsDevDialogOpen] = useState(false)
   const [isSecurityDialogOpen, setIsSecurityDialogOpen] = useState(false)
   const [isPlannerOpen, setIsPlannerOpen] = useState(false)
@@ -102,6 +123,10 @@ export default function SettingsPage() {
   const [isDevMode, setIsDevMode] = useState(false)
   const [enhancedSecurity, setEnhancedSecurity] = useState(false)
   
+  // Categories Management States
+  const [marketCats, setMarketCats] = useState<Record<string, string[]>>(DEFAULT_MARKET_CATEGORIES)
+  const [expenseCats, setExpenseCats] = useState<any[]>(DEFAULT_EXPENSE_CATEGORIES)
+
   // Project Planner State
   const [plannerGroups, setPlannerGroups] = useState<RoomGroup[]>([
     { id: "1", rooms: "5", spr: "4", pRent: "9500", npRent: "5000" }
@@ -111,12 +136,6 @@ export default function SettingsPage() {
     utilityCost: "600",
     foodCost: "4500",
     distribution: "50"
-  })
-
-  // Financial Estimates State
-  const [financialEstimates, setFinancialEstimates] = useState({
-    packageFoodCost: "4500",
-    utilityEstimateCost: "500"
   })
 
   // Advanced Meal State
@@ -147,14 +166,23 @@ export default function SettingsPage() {
     setUserBranch(branch)
     setSelectedLinkBranch(branch)
     setSelectedMealBranch(branch)
-    setSelectedBalanceBranch(branch)
-    setSelectedEstimatesBranch(branch)
     setUserRole(role)
     setUserName(name)
     setIsDevMode(localStorage.getItem("isDeveloperMode") === "true")
   }, [])
 
   // Firebase Refs
+  const marketCatsRef = useMemoFirebase(() => doc(db, "configs", "marketCategories"), [db])
+  const { data: marketCatsStore } = useDoc(marketCatsRef)
+
+  const expenseCatsRef = useMemoFirebase(() => doc(db, "configs", "expenseCategories"), [db])
+  const { data: expenseCatsStore } = useDoc(expenseCatsRef)
+
+  useEffect(() => {
+    if (marketCatsStore?.categories) setMarketCats(marketCatsStore.categories)
+    if (expenseCatsStore?.categories) setExpenseCats(expenseCatsStore.categories)
+  }, [marketCatsStore, expenseCatsStore])
+
   const mealConfigRef = useMemoFirebase(() => 
     selectedMealBranch ? doc(db, "configs", `mealConfig_${selectedMealBranch}`) : null, 
     [db, selectedMealBranch]
@@ -371,6 +399,55 @@ export default function SettingsPage() {
     }
   }, [activeFlyer]);
 
+  // CATEGORY MANAGEMENT LOGIC
+  const handleAddMarketCat = () => {
+    const name = prompt("Enter New Market Category Name:")
+    if (name && !marketCats[name]) {
+      setMarketCats({ ...marketCats, [name]: ["General"] })
+    }
+  }
+
+  const handleAddMarketSubCat = (catName: string) => {
+    const sub = prompt(`Enter new sub-category for ${catName}:`)
+    if (sub && !marketCats[catName].includes(sub)) {
+      setMarketCats({ ...marketCats, [catName]: [...marketCats[catName], sub] })
+    }
+  }
+
+  const handleRemoveMarketCat = (name: string) => {
+    const { [name]: removed, ...rest } = marketCats
+    setMarketCats(rest)
+  }
+
+  const handleRemoveMarketSubCat = (catName: string, subName: string) => {
+    setMarketCats({ ...marketCats, [catName]: marketCats[catName].filter(s => s !== subName) })
+  }
+
+  const handleAddExpenseCat = () => {
+    const label = prompt("Enter Expense Category Label:")
+    if (label) {
+      const id = label.toLowerCase().replace(/\s+/g, '_')
+      setExpenseCats([...expenseCats, { id, label }])
+    }
+  }
+
+  const handleRemoveExpenseCat = (id: string) => {
+    setExpenseCats(expenseCats.filter(c => c.id !== id))
+  }
+
+  const handleSaveCategories = async () => {
+    setIsUpdating(true)
+    try {
+      await setDoc(marketCatsRef, { categories: marketCats, updatedAt: serverTimestamp() })
+      await setDoc(expenseCatsRef, { categories: expenseCats, updatedAt: serverTimestamp() })
+      toast({ title: "Categories Saved" })
+    } catch (e: any) {
+      toast({ variant: "destructive", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-20">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
@@ -389,162 +466,233 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* MEAL ADVANCED CONFIG */}
-      <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-primary print:hidden">
-        <CardHeader>
-           <div className="flex items-center gap-2 text-primary"><Clock size={20}/><CardTitle>Meal Management Control</CardTitle></div>
-           <CardDescription>Set daily deadlines and toggle meal availability for residents.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                 <Label className="text-xs font-bold uppercase">Meal Update Window (Time)</Label>
-                 <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-1.5">
-                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">Start Time</Label>
-                     <Input type="time" value={mealConfigData.startTime} onChange={e => setMealConfigData({...mealConfigData, startTime: e.target.value})} className="h-10 font-bold" />
+      <Tabs defaultValue="general" className="w-full print:hidden">
+        <TabsList className="bg-secondary/50 p-1 mb-8 w-full grid grid-cols-3">
+          <TabsTrigger value="general" className="gap-2 font-bold"><Settings size={14}/> General</TabsTrigger>
+          <TabsTrigger value="categories" className="gap-2 font-bold"><Tags size={14}/> Categories</TabsTrigger>
+          <TabsTrigger value="legal" className="gap-2 font-bold"><ScrollText size={14}/> Rules</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="general" className="space-y-8 animate-in fade-in duration-300">
+          {/* MEAL ADVANCED CONFIG */}
+          <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-primary">
+            <CardHeader>
+               <div className="flex items-center gap-2 text-primary"><Clock size={20}/><CardTitle>Meal Management Control</CardTitle></div>
+               <CardDescription>Set daily deadlines and toggle meal availability for residents.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                     <Label className="text-xs font-bold uppercase">Meal Update Window (Time)</Label>
+                     <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-1.5">
+                         <Label className="text-[10px] uppercase font-bold text-muted-foreground">Start Time</Label>
+                         <Input type="time" value={mealConfigData.startTime} onChange={e => setMealConfigData({...mealConfigData, startTime: e.target.value})} className="h-10 font-bold" />
+                       </div>
+                       <div className="space-y-1.5">
+                         <Label className="text-[10px] uppercase font-bold text-muted-foreground">End Time</Label>
+                         <Input type="time" value={mealConfigData.endTime} onChange={e => setMealConfigData({...mealConfigData, endTime: e.target.value})} className="h-10 font-bold" />
+                       </div>
+                     </div>
+                  </div>
+                  <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border">
+                     <Label className="text-[10px] font-black uppercase text-primary mb-2 block">Meal Availability</Label>
+                     <div className="space-y-2">
+                        {[
+                          { id: 'breakfastAvailable', label: 'Breakfast' },
+                          { id: 'lunchAvailable', label: 'Lunch' },
+                          { id: 'dinnerAvailable', label: 'Dinner' }
+                        ].map(m => (
+                          <div key={m.id} className="flex items-center justify-between">
+                             <span className="text-xs font-medium">{m.label}</span>
+                             <Switch checked={mealConfigData[m.id as keyof typeof mealConfigData] as boolean} onCheckedChange={v => setMealConfigData({...mealConfigData, [m.id]: v})} />
+                          </div>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+               <Button onClick={handleSaveMealConfig} disabled={isUpdating} className="w-full h-11 gap-2 rounded-xl">
+                  {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18}/>} Save Meal Rules
+               </Button>
+            </CardContent>
+          </Card>
+
+          {/* UTILITY BILLING CONFIG */}
+          <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-orange-500">
+             <CardHeader>
+                <div className="flex items-center gap-2 text-orange-600"><Zap size={20}/><CardTitle>Utility Billing Config</CardTitle></div>
+                <CardDescription>Set fixed monthly charges for optional utilities.</CardDescription>
+             </CardHeader>
+             <CardContent className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase flex items-center gap-1"><ChefHat size={12}/> Cooking Bill (৳)</Label>
+                      <Input type="number" value={utilityBilling.cookingBill} onChange={e => setUtilityBilling({...utilityBilling, cookingBill: e.target.value})} />
                    </div>
-                   <div className="space-y-1.5">
-                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">End Time</Label>
-                     <Input type="time" value={mealConfigData.endTime} onChange={e => setMealConfigData({...mealConfigData, endTime: e.target.value})} className="h-10 font-bold" />
+                   <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase flex items-center gap-1"><Wifi size={12}/> WiFi Bill (৳)</Label>
+                      <Input type="number" value={utilityBilling.wifiBill} onChange={e => setUtilityBilling({...utilityBilling, wifiBill: e.target.value})} />
                    </div>
-                 </div>
-                 <p className="text-[10px] text-muted-foreground italic">Students can only change meals between these times.</p>
+                </div>
+                <Button onClick={handleSaveBilling} variant="outline" disabled={isUpdating} className="w-full h-11 gap-2 border-orange-200 text-orange-600 font-bold rounded-xl">
+                  {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18}/>} Update Utility Charges
+                </Button>
+             </CardContent>
+          </Card>
+
+          {/* OFFICIAL PAYMENT ACCOUNTS */}
+          <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-success">
+             <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1"><div className="flex items-center gap-2 text-success"><Landmark size={20}/><CardTitle>Official Payment Accounts</CardTitle></div><CardDescription>Manage accounts for resident payment requests.</CardDescription></div>
+                <Button variant="outline" size="sm" onClick={handleAddAccount} className="h-8 gap-1 rounded-lg text-success border-success/30"><Plus size={14}/> Add Account</Button>
+             </CardHeader>
+             <CardContent className="space-y-4">
+                <div className="space-y-3">
+                   {paymentAccounts.map((acc, idx) => (
+                     <div key={idx} className="flex gap-3 items-end p-4 bg-slate-50 rounded-2xl border group animate-in slide-in-from-top-2">
+                        <div className="flex-1 space-y-1">
+                           <Label className="text-[10px] uppercase">Account Label</Label>
+                           <Input value={acc.label} onChange={e => handleUpdateAccount(idx, 'label', e.target.value)} placeholder="e.g. bKash Personal" className="h-9 text-xs" />
+                        </div>
+                        <div className="flex-[1.5] space-y-1">
+                           <Label className="text-[10px] uppercase">Number</Label>
+                           <div className="relative">
+                              <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <Input value={acc.number} onChange={e => handleUpdateAccount(idx, 'number', e.target.value)} placeholder="01XXXXXXXXX" className="h-9 pl-8 text-xs font-mono font-bold" />
+                           </div>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive opacity-40 group-hover:opacity-100" onClick={() => handleRemoveAccount(idx)}><Trash2 size={16}/></Button>
+                     </div>
+                   ))}
+                </div>
+                <Button onClick={handleSaveAccounts} disabled={isUpdating} className="w-full bg-success hover:bg-success/90 h-11 gap-2 rounded-xl">
+                   {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18}/>} Save Public Accounts
+                </Button>
+             </CardContent>
+          </Card>
+
+          {/* MEAL RATE SETUP */}
+          <Card className="border-none shadow-sm overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-primary"><Utensils size={20} /><CardTitle>Meal Rate Setup</CardTitle></div>
+                <CardDescription>Set the monthly standard meal rate.</CardDescription>
               </div>
-              <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border">
-                 <Label className="text-[10px] font-black uppercase text-primary mb-2 block">Meal Availability</Label>
-                 <div className="space-y-2">
-                    {[
-                      { id: 'breakfastAvailable', label: 'Breakfast' },
-                      { id: 'lunchAvailable', label: 'Lunch' },
-                      { id: 'dinnerAvailable', label: 'Dinner' }
-                    ].map(m => (
-                      <div key={m.id} className="flex items-center justify-between">
-                         <span className="text-xs font-medium">{m.label}</span>
-                         <Switch checked={mealConfigData[m.id as keyof typeof mealConfigData] as boolean} onCheckedChange={v => setMealConfigData({...mealConfigData, [m.id]: v})} />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Standard Meal Rate (৳)</Label>
+                <div className="flex gap-4">
+                  <Input type="number" value={rate} onChange={e => setRate(e.target.value)} className="max-w-[200px]" />
+                  <Button onClick={handleSaveRate} disabled={isUpdating} className="gap-2">
+                    {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Rate
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          {/* REGISTRATION LINKS */}
+          <Card className="border-none shadow-sm border-l-4 border-l-primary bg-primary/5">
+            <CardHeader><div className="flex items-center gap-2 text-primary"><LinkIcon size={20} /><CardTitle>Registration Links</CardTitle></div></CardHeader>
+            <CardContent className="space-y-4">
+              {[{ label: "New Admission", type: "new" }, { label: "Existing Resident", type: "old" }].map((link) => { 
+                const path = `/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`; 
+                return (
+                  <div key={link.type} className="flex flex-col gap-3 p-4 bg-white rounded-2xl border shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold">{link.label}</p>
+                        <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{PRODUCTION_DOMAIN}{path}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => copyToClipboard(path)}><Copy size={14} /> Copy</Button>
+                        <Button size="sm" className="h-8" onClick={() => handlePrintFlyer(link.label, `${PRODUCTION_DOMAIN}${path}`, link.label === 'New Admission' ? 'নতুন ভর্তি ফরম' : 'পুরাতন স্টুডেন্ট ফরম')}>
+                          <Printer size={14} />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ); 
+              })}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="categories" className="space-y-8 animate-in fade-in duration-300">
+           {/* MARKET CATEGORIES MANAGEMENT */}
+           <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-indigo-500">
+              <CardHeader className="flex flex-row items-center justify-between">
+                 <div>
+                   <div className="flex items-center gap-2 text-indigo-600"><Layers size={20}/><CardTitle>Market Category Dictionary</CardTitle></div>
+                   <CardDescription>Setup sub-categories for kitchen inventory items.</CardDescription>
+                 </div>
+                 <Button variant="outline" size="sm" onClick={handleAddMarketCat} className="h-8 gap-1 border-indigo-200 text-indigo-600"><Plus size={14}/> Add Category</Button>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {Object.entries(marketCats).map(([cat, subs]) => (
+                      <div key={cat} className="p-4 bg-slate-50 rounded-2xl border space-y-3 relative group">
+                         <div className="flex justify-between items-center pr-8">
+                            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                               <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"/> {cat}
+                            </h3>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive absolute top-2 right-2 opacity-20 group-hover:opacity-100" onClick={() => handleRemoveMarketCat(cat)}>
+                               <X size={12}/>
+                            </Button>
+                         </div>
+                         <div className="flex flex-wrap gap-2">
+                            {subs.map(sub => (
+                              <Badge key={sub} variant="secondary" className="gap-1 h-6 pl-2 pr-1 rounded-lg text-[9px] font-bold bg-white border">
+                                {sub}
+                                <X size={10} className="text-destructive cursor-pointer hover:scale-125" onClick={() => handleRemoveMarketSubCat(cat, sub)} />
+                              </Badge>
+                            ))}
+                            <Button variant="ghost" size="sm" onClick={() => handleAddMarketSubCat(cat)} className="h-6 px-2 text-[9px] font-black uppercase text-indigo-600 border border-dashed border-indigo-200 hover:bg-indigo-50">
+                               + Sub
+                            </Button>
+                         </div>
                       </div>
                     ))}
                  </div>
-              </div>
-           </div>
-           <Button onClick={handleSaveMealConfig} disabled={isUpdating} className="w-full h-11 gap-2 rounded-xl">
-              {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18}/>} Save Meal Rules
-           </Button>
-        </CardContent>
-      </Card>
+              </CardContent>
+           </Card>
 
-      {/* UTILITY BILLING CONFIG */}
-      <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-orange-500 print:hidden">
-         <CardHeader>
-            <div className="flex items-center gap-2 text-orange-600"><Zap size={20}/><CardTitle>Utility Billing Config</CardTitle></div>
-            <CardDescription>Set fixed monthly charges for optional utilities.</CardDescription>
-         </CardHeader>
-         <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase flex items-center gap-1"><ChefHat size={12}/> Cooking Bill (৳)</Label>
-                  <Input type="number" value={utilityBilling.cookingBill} onChange={e => setUtilityBilling({...utilityBilling, cookingBill: e.target.value})} />
-               </div>
-               <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase flex items-center gap-1"><Wifi size={12}/> WiFi Bill (৳)</Label>
-                  <Input type="number" value={utilityBilling.wifiBill} onChange={e => setUtilityBilling({...utilityBilling, wifiBill: e.target.value})} />
-               </div>
-            </div>
-            <Button onClick={handleSaveBilling} variant="outline" disabled={isUpdating} className="w-full h-11 gap-2 border-orange-200 text-orange-600 font-bold rounded-xl">
-              {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18}/>} Update Utility Charges
-            </Button>
-         </CardContent>
-      </Card>
-
-      {/* OFFICIAL PAYMENT ACCOUNTS */}
-      <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-success print:hidden">
-         <CardHeader className="flex flex-row items-center justify-between">
-            <div className="space-y-1"><div className="flex items-center gap-2 text-success"><Landmark size={20}/><CardTitle>Official Payment Accounts</CardTitle></div><CardDescription>Manage accounts for resident payment requests.</CardDescription></div>
-            <Button variant="outline" size="sm" onClick={handleAddAccount} className="h-8 gap-1 rounded-lg text-success border-success/30"><Plus size={14}/> Add Account</Button>
-         </CardHeader>
-         <CardContent className="space-y-4">
-            <div className="space-y-3">
-               {paymentAccounts.map((acc, idx) => (
-                 <div key={idx} className="flex gap-3 items-end p-4 bg-slate-50 rounded-2xl border group animate-in slide-in-from-top-2">
-                    <div className="flex-1 space-y-1">
-                       <Label className="text-[10px] uppercase">Account Label</Label>
-                       <Input value={acc.label} onChange={e => handleUpdateAccount(idx, 'label', e.target.value)} placeholder="e.g. bKash Personal" className="h-9 text-xs" />
-                    </div>
-                    <div className="flex-[1.5] space-y-1">
-                       <Label className="text-[10px] uppercase">Number</Label>
-                       <div className="relative">
-                          <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input value={acc.number} onChange={e => handleUpdateAccount(idx, 'number', e.target.value)} placeholder="01XXXXXXXXX" className="h-9 pl-8 text-xs font-mono font-bold" />
-                       </div>
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive opacity-40 group-hover:opacity-100" onClick={() => handleRemoveAccount(idx)}><Trash2 size={16}/></Button>
+           {/* EXPENSE CATEGORIES MANAGEMENT */}
+           <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-destructive">
+              <CardHeader className="flex flex-row items-center justify-between">
+                 <div>
+                   <div className="flex items-center gap-2 text-destructive"><Receipt size={20}/><CardTitle>Accounting Categories</CardTitle></div>
+                   <CardDescription>Define types of expenses for the general ledger.</CardDescription>
                  </div>
-               ))}
-               {paymentAccounts.length === 0 && <div className="text-center py-8 text-muted-foreground italic text-xs">No official accounts added.</div>}
-            </div>
-            <Button onClick={handleSaveAccounts} disabled={isUpdating} className="w-full bg-success hover:bg-success/90 h-11 gap-2 rounded-xl">
-               {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18}/>} Save Public Accounts
-            </Button>
-         </CardContent>
-      </Card>
+                 <Button variant="outline" size="sm" onClick={handleAddExpenseCat} className="h-8 gap-1 border-destructive/20 text-destructive"><Plus size={14}/> New Account</Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {expenseCats.map(cat => (
+                      <div key={cat.id} className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center group">
+                         <span className="text-xs font-bold text-slate-700">{cat.label}</span>
+                         {!['salary', 'others', 'rent', 'food'].includes(cat.id) && (
+                           <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive opacity-20 group-hover:opacity-100" onClick={() => handleRemoveExpenseCat(cat.id)}>
+                              <Trash2 size={12}/>
+                           </Button>
+                         )}
+                      </div>
+                    ))}
+                 </div>
+              </CardContent>
+           </Card>
 
-      {/* MEAL RATE SETUP */}
-      <Card className="border-none shadow-sm overflow-hidden print:hidden">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-primary"><Utensils size={20} /><CardTitle>Meal Rate Setup</CardTitle></div>
-            <CardDescription>Set the monthly standard meal rate.</CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Standard Meal Rate (৳)</Label>
-            <div className="flex gap-4">
-              <Input type="number" value={rate} onChange={e => setRate(e.target.value)} className="max-w-[200px]" />
-              <Button onClick={handleSaveRate} disabled={isUpdating} className="gap-2">
-                {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Rate
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      
-      {/* REGISTRATION LINKS */}
-      <Card className="border-none shadow-sm border-l-4 border-l-primary bg-primary/5 print:hidden">
-        <CardHeader><div className="flex items-center gap-2 text-primary"><LinkIcon size={20} /><CardTitle>Registration Links</CardTitle></div></CardHeader>
-        <CardContent className="space-y-4">
-          {[{ label: "New Admission", type: "new" }, { label: "Existing Resident", type: "old" }].map((link) => { 
-            const path = `/register?branch=${encodeURIComponent(userBranch)}&type=${link.type}`; 
-            return (
-              <div key={link.type} className="flex flex-col gap-3 p-4 bg-white rounded-2xl border shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold">{link.label}</p>
-                    <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{PRODUCTION_DOMAIN}{path}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => copyToClipboard(path)}><Copy size={14} /> Copy</Button>
-                    <Button size="sm" className="h-8" onClick={() => handlePrintFlyer(link.label, `${PRODUCTION_DOMAIN}${path}`, link.label === 'New Admission' ? 'নতুন ভর্তি ফরম' : 'পুরাতন স্টুডেন্ট ফরম')}>
-                      <Printer size={14} />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ); 
-          })}
-        </CardContent>
-      </Card>
+           <Button onClick={handleSaveCategories} disabled={isUpdating} className="w-full h-14 rounded-2xl text-lg font-black shadow-xl">
+              {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <Save size={20} className="mr-2"/>}
+              Finalize & Save All Categories
+           </Button>
+        </TabsContent>
 
-      {/* RULES & REGULATIONS */}
-      <Card className="border-none shadow-sm overflow-hidden print:hidden">
-        <CardHeader><div className="flex items-center gap-2 text-primary"><ScrollText size={20} /><CardTitle>Rules & Regulations</CardTitle></div></CardHeader>
-        <CardContent className="space-y-4">
-          <Tabs defaultValue="edit" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="edit">Editor</TabsTrigger>
-              <TabsTrigger value="preview">Preview</TabsTrigger>
-            </TabsList>
-            <TabsContent value="edit">
+        <TabsContent value="legal" className="space-y-8 animate-in fade-in duration-300">
+          <Card className="border-none shadow-sm overflow-hidden">
+            <CardHeader><div className="flex items-center gap-2 text-primary"><ScrollText size={20} /><CardTitle>Rules & Regulations</CardTitle></div></CardHeader>
+            <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-1 p-2 bg-secondary/30 rounded-t-lg border-x border-t">
                 <Button variant="ghost" size="sm" onClick={() => execCommand('bold')}><Bold size={14} /></Button>
                 <Button variant="ghost" size="sm" onClick={() => execCommand('formatBlock', 'H1')}><Heading1 size={14} /></Button>
@@ -554,21 +702,16 @@ export default function SettingsPage() {
                 ref={editorRef} 
                 contentEditable 
                 onInput={(e) => setRules(e.currentTarget.innerHTML)} 
-                className="rich-text min-h-[300px] p-6 border rounded-b-lg focus:outline-none bg-white shadow-inner overflow-y-auto" 
+                className="rich-text min-h-[400px] p-6 border rounded-b-lg focus:outline-none bg-white shadow-inner overflow-y-auto" 
                 dangerouslySetInnerHTML={{ __html: rules }} 
               />
-            </TabsContent>
-            <TabsContent value="preview" className="border rounded-lg p-8 bg-slate-50 min-h-[300px]">
-              <div className="bg-white p-8 rounded-2xl shadow-sm border max-w-2xl mx-auto">
-                <div className="rich-text text-sm text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: rules || "<i>No rules yet.</i>" }} />
-              </div>
-            </TabsContent>
-          </Tabs>
-          <Button onClick={handleSaveRules} disabled={isUpdating} className="w-full gap-2 h-14 text-lg font-bold shadow-lg mt-4">
-            {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={20} />} Save Rules
-          </Button>
-        </CardContent>
-      </Card>
+              <Button onClick={handleSaveRules} disabled={isUpdating} className="w-full gap-2 h-14 text-lg font-bold shadow-lg mt-4">
+                {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={20} />} Save Rules
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* PLANNER DIALOG */}
       <Dialog open={isPlannerOpen} onOpenChange={setIsPlannerOpen}>
