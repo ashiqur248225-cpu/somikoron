@@ -99,9 +99,8 @@ export default function StudentPaymentsPage() {
       const currentYear = now.getFullYear().toString();
       const targetLabel = `${currentMonth} ${currentYear}`;
 
-      // 1. DISTRIBUTE TO RENT (If selected or by default)
+      // 1. DISTRIBUTE TO RENT (Specific Current Month)
       if (selectedReq.payRent && remaining > 0) {
-        // Priority: Current month, then others
         if (currentDues[targetLabel]) {
           const dueAmt = Number(currentDues[targetLabel].amount);
           const pay = Math.min(remaining, dueAmt);
@@ -110,50 +109,44 @@ export default function StudentPaymentsPage() {
           if (pay >= dueAmt) delete currentDues[targetLabel];
           else currentDues[targetLabel].amount = dueAmt - pay;
         }
+      }
 
-        if (remaining > 0) {
-          const sortedDues = Object.keys(currentDues).sort((a, b) => {
-            const [mA, yA] = a.split(' '); const [mB, yB] = b.split(' ');
-            if (yA !== yB) return Number(yA) - Number(yB);
-            return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
-          });
-          for (const m of sortedDues) {
-            if (remaining <= 0) break;
-            const dueAmt = Number(currentDues[m].amount);
-            const pay = Math.min(remaining, dueAmt);
-            seatPaid += pay;
-            remaining -= pay;
-            if (pay >= dueAmt) delete currentDues[m];
-            else currentDues[m].amount = dueAmt - pay;
-          }
+      // 2. DISTRIBUTE TO DUE (Arrears/Historical)
+      if (selectedReq.payDue && remaining > 0) {
+        const sortedArrears = Object.keys(currentDues).sort((a, b) => {
+          const [mA, yA] = a.split(' '); const [mB, yB] = b.split(' ');
+          if (yA !== yB) return Number(yA) - Number(yB);
+          return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
+        }).filter(label => label !== targetLabel); // Already handled targetLabel if payRent was true
+
+        for (const m of sortedArrears) {
+          if (remaining <= 0) break;
+          const dueAmt = Number(currentDues[m].amount);
+          const pay = Math.min(remaining, dueAmt);
+          seatPaid += pay;
+          remaining -= pay;
+          if (pay >= dueAmt) delete currentDues[m];
+          else currentDues[m].amount = dueAmt - pay;
         }
       }
 
-      // 2. DISTRIBUTE TO UTILITIES (If selected)
+      // 3. DISTRIBUTE TO UTILITIES (Cooking Bill)
       if (selectedReq.payUtilities && remaining > 0 && billingConfig) {
         const cCost = Number(billingConfig.cookingBill || 0);
         const wCost = Number(billingConfig.wifiBill || 0);
+        // Only Cooking Bill as per requested options rename
         if (remaining >= cCost && cCost > 0) { cookingBill = cCost; remaining -= cCost; }
-        if (remaining >= wCost && wCost > 0) { wifiBill = wCost; remaining -= wCost; }
       }
 
-      // 3. DISTRIBUTE TO FOOD (If selected)
+      // 4. DISTRIBUTE TO FOOD (Food Advance)
       if (selectedReq.payFood && remaining > 0) {
         foodPaid = remaining;
         remaining = 0;
       }
 
-      // 4. DISTRIBUTE TO ADVANCE (If selected or leftover)
-      if (selectedReq.payAdvance && remaining > 0) {
-        advancePaid = remaining;
-        remaining = 0;
-      }
-
-      // Final leftover fallback (if nothing specific satisfied everything)
+      // Final leftover fallback (if nothing specific satisfied everything, send to Advance)
       if (remaining > 0) {
-        if (selectedReq.payRent) seatPaid += remaining;
-        else if (selectedReq.payFood) foodPaid += remaining;
-        else advancePaid += remaining;
+        advancePaid = remaining;
         remaining = 0;
       }
 
@@ -165,7 +158,7 @@ export default function StudentPaymentsPage() {
         buildingId: studentData.buildingId, buildingName: studentData.buildingName, roomNumber: studentData.roomNumber,
         branch: userBranch, method: selectedReq.method, transactionId: selectedReq.transactionId, receiver: userName,
         date: new Date().toISOString(), createdAt: new Date().toISOString(),
-        description: `Approved Student Request. Purpose: ${selectedReq.payRent ? 'Rent ' : ''}${selectedReq.payFood ? 'Food ' : ''}${selectedReq.payAdvance ? 'Adv ' : ''}. TXID: ${selectedReq.transactionId}`
+        description: `Approved Student Request. Purpose: ${selectedReq.payRent ? 'Rent ' : ''}${selectedReq.payDue ? 'Due ' : ''}${selectedReq.payFood ? 'FoodAdv ' : ''}. TXID: ${selectedReq.transactionId}`
       }
 
       batch.set(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp() })
@@ -188,7 +181,7 @@ export default function StudentPaymentsPage() {
       batch.update(doc(db, "paymentRequests", selectedReq.id), { status: "approved", approvedBy: userName, updatedAt: serverTimestamp() })
 
       await batch.commit()
-      toast({ title: "Payment Accepted", description: `distributed: Rent ${seatPaid}, Food ${foodPaid}, Adv ${advancePaid}` })
+      toast({ title: "Payment Accepted", description: `Rent ${seatPaid}, Food ${foodPaid}, Cooking ${cookingBill}` })
       setIsDetailOpen(false)
       setSelectedReq(null)
     } catch (e: any) {
@@ -254,9 +247,9 @@ export default function StudentPaymentsPage() {
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {req.payRent && <Badge variant="secondary" className="text-[7px] h-4 bg-blue-50 text-blue-600">Rent</Badge>}
-                        {req.payFood && <Badge variant="secondary" className="text-[7px] h-4 bg-green-50 text-success">Food</Badge>}
-                        {req.payAdvance && <Badge variant="secondary" className="text-[7px] h-4 bg-purple-50 text-purple-600">Adv</Badge>}
-                        {req.payUtilities && <Badge variant="secondary" className="text-[7px] h-4 bg-orange-50 text-orange-600">Util</Badge>}
+                        {req.payDue && <Badge variant="secondary" className="text-[7px] h-4 bg-destructive/10 text-destructive">Due</Badge>}
+                        {req.payFood && <Badge variant="secondary" className="text-[7px] h-4 bg-green-50 text-success">FoodAdv</Badge>}
+                        {req.payUtilities && <Badge variant="secondary" className="text-[7px] h-4 bg-orange-50 text-orange-600">Cooking</Badge>}
                       </div>
                     </TableCell>
                     <TableCell><Badge variant="outline" className="uppercase text-[9px] font-black">{req.method}</Badge></TableCell>
@@ -306,14 +299,14 @@ export default function StudentPaymentsPage() {
                       <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payRent ? "bg-blue-50 border-blue-200 text-blue-700" : "opacity-30")}>
                         <Home size={14}/> <span className="text-xs font-bold">Rent</span>
                       </div>
-                      <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payFood ? "bg-green-50 border-green-200 text-green-700" : "opacity-30")}>
-                        <Utensils size={14}/> <span className="text-xs font-bold">Food</span>
+                      <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payDue ? "bg-red-50 border-red-200 text-red-700" : "opacity-30")}>
+                        <History size={14}/> <span className="text-xs font-bold">Due</span>
                       </div>
-                      <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payAdvance ? "bg-purple-50 border-purple-200 text-purple-700" : "opacity-30")}>
-                        <ShieldCheck size={14}/> <span className="text-xs font-bold">Advance</span>
+                      <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payFood ? "bg-green-50 border-green-200 text-green-700" : "opacity-30")}>
+                        <Utensils size={14}/> <span className="text-xs font-bold">Food Advance</span>
                       </div>
                       <div className={cn("px-4 py-2 rounded-2xl border flex items-center gap-2", selectedReq.payUtilities ? "bg-orange-50 border-orange-200 text-orange-700" : "opacity-30")}>
-                        <Wifi size={14}/> <span className="text-xs font-bold">Util</span>
+                        <Wifi size={14}/> <span className="text-xs font-bold">Cooking Bill</span>
                       </div>
                    </div>
                 </div>
@@ -354,7 +347,7 @@ export default function StudentPaymentsPage() {
                 <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex gap-3">
                    <Info className="text-primary h-5 w-5 shrink-0" />
                    <p className="text-[9px] text-slate-600 leading-relaxed font-medium">
-                     <b>Smart Split:</b> এপ্রুভ করলে সিস্টেম প্রথমে বকেয়া ভাড়া শোধ করবে, এরপর স্টুডেন্টের পছন্দ অনুযায়ী বাকি টাকা ভাগ করে দেবে।
+                     <b>Smart Split:</b> এপ্রুভ করলে সিস্টেম স্টুডেন্টের পছন্দ অনুযায়ী প্রথমে বর্তমান ভাড়া বা পুরনো বকেয়া সমন্বয় করবে।
                    </p>
                 </div>
               </div>

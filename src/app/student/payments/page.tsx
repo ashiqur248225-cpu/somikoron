@@ -66,8 +66,8 @@ export default function PaymentRequestPage() {
     purpose: "Monthly Rent & Food",
     description: "",
     payRent: true,
+    payDue: false,
     payFood: false,
-    payAdvance: false,
     payUtilities: false
   })
 
@@ -95,8 +95,8 @@ export default function PaymentRequestPage() {
       return
     }
 
-    if (!formData.payRent && !formData.payFood && !formData.payAdvance && !formData.payUtilities) {
-      toast({ variant: "destructive", title: "উদ্দেশ্য সিলেক্ট করুন", description: "পেমেন্টের উদ্দেশ্য (ভাড়া/খাবার/অন্যান্য) অন্তত একটি সিলেক্ট করুন।" })
+    if (!formData.payRent && !formData.payDue && !formData.payFood && !formData.payUtilities) {
+      toast({ variant: "destructive", title: "উদ্দেশ্য সিলেক্ট করুন", description: "পেমেন্টের উদ্দেশ্য (ভাড়া/বকেয়া/খাবার/কুকিং) অন্তত একটি সিলেক্ট করুন।" })
       return
     }
 
@@ -121,8 +121,8 @@ export default function PaymentRequestPage() {
         purpose: "Monthly Rent & Food", 
         description: "",
         payRent: true,
+        payDue: false,
         payFood: false,
-        payAdvance: false,
         payUtilities: false
       })
     } catch (e: any) {
@@ -151,7 +151,7 @@ export default function PaymentRequestPage() {
         <Card className="border-none shadow-sm bg-destructive/5 rounded-2xl p-4 flex items-center gap-4 border-l-4 border-l-destructive">
           <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center text-destructive"><AlertCircle size={20}/></div>
           <div>
-            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Rent Dues</p>
+            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Rent Arrears</p>
             <p className="text-lg font-black text-destructive">৳{duesSummary.outstandingDue}</p>
           </div>
         </Card>
@@ -175,19 +175,19 @@ export default function PaymentRequestPage() {
                 <div className="grid grid-cols-2 gap-3 p-5 bg-slate-50 rounded-3xl border border-slate-100">
                   <div className="flex items-center space-x-2">
                     <Checkbox id="payRent" checked={formData.payRent} onCheckedChange={(v) => setFormData({...formData, payRent: !!v})} />
-                    <Label htmlFor="payRent" className="text-xs font-bold cursor-pointer">ভাড়া (Rent Due)</Label>
+                    <Label htmlFor="payRent" className="text-xs font-bold cursor-pointer">Rent</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="payDue" checked={formData.payDue} onCheckedChange={(v) => setFormData({...formData, payDue: !!v})} />
+                    <Label htmlFor="payDue" className="text-xs font-bold cursor-pointer">Due</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Checkbox id="payFood" checked={formData.payFood} onCheckedChange={(v) => setFormData({...formData, payFood: !!v})} />
-                    <Label htmlFor="payFood" className="text-xs font-bold cursor-pointer">খাবার (Food Bill)</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="payAdvance" checked={formData.payAdvance} onCheckedChange={(v) => setFormData({...formData, payAdvance: !!v})} />
-                    <Label htmlFor="payAdvance" className="text-xs font-bold cursor-pointer">সিকিউরিটি অগ্রিম</Label>
+                    <Label htmlFor="payFood" className="text-xs font-bold cursor-pointer">Food Advance</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Checkbox id="payUtilities" checked={formData.payUtilities} onCheckedChange={(v) => setFormData({...formData, payUtilities: !!v})} />
-                    <Label htmlFor="payUtilities" className="text-xs font-bold cursor-pointer">ওয়াইফাই/কুকিং</Label>
+                    <Label htmlFor="payUtilities" className="text-xs font-bold cursor-pointer">Cooking Bill</Label>
                   </div>
                 </div>
               </div>
@@ -291,6 +291,7 @@ export default function PaymentRequestPage() {
                 <div className="flex items-center gap-2">
                    <h4 className="font-black text-slate-800 text-sm">৳{req.amount}</h4>
                    {req.payRent && <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 text-primary">Rent</Badge>}
+                   {req.payDue && <Badge variant="outline" className="text-[7px] h-3 px-1 border-destructive/20 text-destructive">Due</Badge>}
                 </div>
                 <p className="text-[9px] font-mono text-slate-400">Sender: {req.senderInfo}</p>
               </div>
