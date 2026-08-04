@@ -68,7 +68,7 @@ const MEAL_TYPES = [
   { id: "dinner", label: "Dinner", icon: "🍛" },
 ]
 
-const WEEKDAYS = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function StudentMealPage() {
@@ -79,10 +79,13 @@ export default function StudentMealPage() {
   const [isMounted, setIsMounted] = useState(false)
   const [selectedBill, setSelectedBill] = useState<any>(null)
   const [isBillDialogOpen, setIsBillDialogOpen] = useState(false)
+  const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
     setIsMounted(true)
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000)
+    return () => clearInterval(timer)
   }, [])
 
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
@@ -121,7 +124,25 @@ export default function StudentMealPage() {
     }
   }, [student])
 
-  const isLocked = useMemo(() => {
+  // WINDOW LOGIC: 9:00 PM (21:00) to 11:30 PM (23:30)
+  const timeWindow = useMemo(() => {
+    const hours = currentTime.getHours()
+    const minutes = currentTime.getMinutes()
+    const totalMinutes = hours * 60 + minutes
+    
+    const startMinutes = 21 * 60 // 9:00 PM
+    const endMinutes = 23 * 60 + 30 // 11:30 PM
+    
+    const isActive = totalMinutes >= startMinutes && totalMinutes <= endMinutes
+    
+    return {
+      isActive,
+      startStr: "9:00 PM",
+      endStr: "11:30 PM"
+    }
+  }, [currentTime])
+
+  const isLockedForToday = useMemo(() => {
     if (!student?.lastMealUpdate) return false;
     const lastUpdate = student.lastMealUpdate.toDate ? student.lastMealUpdate.toDate() : new Date(student.lastMealUpdate);
     const today = new Date();
@@ -129,15 +150,13 @@ export default function StudentMealPage() {
   }, [student?.lastMealUpdate]);
 
   const canChange = useMemo(() => {
-    if (!isMounted || !mealConfig?.cutoffTime || isLocked) return false
-    try {
-      const now = new Date(); const [h, m] = mealConfig.cutoffTime.split(':')
-      const deadline = new Date(); deadline.setHours(parseInt(h), parseInt(m), 0, 0)
-      return now < deadline
-    } catch (e) { return true }
-  }, [mealConfig, isMounted, isLocked])
+    return isMounted && timeWindow.isActive && !isLockedForToday
+  }, [isMounted, timeWindow.isActive, isLockedForToday])
 
+  const todayDay = isMounted ? WEEKDAYS[new Date().getDay()] : "Saturday"
   const tomorrowDay = isMounted ? WEEKDAYS[(new Date().getDay() + 1) % 7] : "Saturday"
+  
+  const todayMenu = weeklyMenu.find(r => r.day === todayDay)
   const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
 
   const handleUpdateMeals = useCallback(async () => {
@@ -191,13 +210,6 @@ export default function StudentMealPage() {
     }
   }, [student, studentRef, canChange, isUpdating, localMeals, mealChoices, weeklySchedule, tomorrowDay, toast]);
 
-  // AUTO SAVE FOR AUTO MODE USERS ON VISIT
-  useEffect(() => {
-    if (student && student.mealStatus?.autoMode && !isLocked && canChange && !isUpdating) {
-      handleUpdateMeals();
-    }
-  }, [student, isLocked, canChange, isUpdating, handleUpdateMeals]);
-
   const toggleScheduleMeal = (day: string, meal: string) => {
     setWeeklySchedule(prev => ({
       ...prev,
@@ -230,11 +242,6 @@ export default function StudentMealPage() {
     return [...student.mealsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [student?.mealsHistory])
 
-  const previousMonthSummary = useMemo(() => {
-    if (!mealHistory.length) return null;
-    return mealHistory[0];
-  }, [mealHistory])
-
   const currentMonthConsumption = useMemo(() => {
     const now = new Date();
     const currentLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
@@ -250,11 +257,11 @@ export default function StudentMealPage() {
   if (isLoading) return <div className="flex justify-center p-20 animate-pulse">Syncing Kitchen...</div>
 
   return (
-    <div className="space-y-6 pb-20 animate-in fade-in duration-500">
+    <div className="space-y-6 pb-20 animate-in fade-in duration-500 max-w-4xl mx-auto w-full">
       <header className="flex justify-between items-end mb-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-black text-slate-800">Catering Panel</h1>
-          <p className="text-muted-foreground text-sm font-medium">Manage tomorrow's meal choices.</p>
+          <p className="text-muted-foreground text-sm font-medium">Manage your daily meals.</p>
         </div>
         <Link href="/meal-routine">
           <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl bg-primary/10 text-primary shadow-inner">
@@ -263,39 +270,62 @@ export default function StudentMealPage() {
         </Link>
       </header>
 
-      {/* Routine Preview */}
-      <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
+      {/* TODAY'S MENU (Top Card as requested) */}
+      <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden border-l-4 border-l-primary">
         <CardHeader className="bg-slate-50/50 border-b py-4">
-           <CardTitle className="text-xs font-black uppercase text-primary flex items-center gap-2"><Utensils size={14}/> Tomorrow's Menu ({tomorrowDay})</CardTitle>
+           <CardTitle className="text-xs font-black uppercase text-primary flex items-center gap-2">
+             <CheckCircle2 size={14}/> Today's Menu ({todayDay})
+           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 grid grid-cols-3 gap-3 text-center">
-           <div className="space-y-1"><p className="text-[8px] font-bold text-muted-foreground uppercase">Breakfast</p><p className="text-[10px] font-bold text-slate-700">{tomorrowMenu?.breakfast || 'Normal'}</p></div>
-           <div className="space-y-1"><p className="text-[8px] font-bold text-muted-foreground uppercase">Lunch</p><p className="text-[10px] font-bold text-slate-700">{tomorrowMenu?.lunch || 'Normal'}</p></div>
-           <div className="space-y-1"><p className="text-[8px] font-bold text-muted-foreground uppercase">Dinner</p><p className="text-[10px] font-bold text-slate-700">{tomorrowMenu?.dinner || 'Normal'}</p></div>
+           <div className="space-y-1"><p className="text-[8px] font-bold text-muted-foreground uppercase">Breakfast</p><p className="text-[10px] font-bold text-slate-700">{todayMenu?.breakfast || 'Normal'}</p></div>
+           <div className="space-y-1"><p className="text-[8px] font-bold text-muted-foreground uppercase">Lunch</p><p className="text-[10px] font-bold text-slate-700">{todayMenu?.lunch || 'Normal'}</p></div>
+           <div className="space-y-1"><p className="text-[8px] font-bold text-muted-foreground uppercase">Dinner</p><p className="text-[10px] font-bold text-slate-700">{todayMenu?.dinner || 'Normal'}</p></div>
         </CardContent>
       </Card>
 
-      {/* Main Controls */}
+      {/* Main Controls with Timing Window */}
       <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden">
-        <CardContent className="p-8 space-y-8">
-           {isLocked && (
-             <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100 flex gap-3 items-center mb-2">
-                <Lock size={18} className="text-orange-600 shrink-0" />
-                <p className="text-[10px] text-orange-800 font-black uppercase leading-tight">
-                  Selections are LOCKED for today. You cannot change preferences until tomorrow.
+        <CardContent className="p-6 md:p-8 space-y-8">
+           {!timeWindow.isActive ? (
+             <div className="p-6 bg-amber-50 rounded-3xl border border-amber-200 flex flex-col items-center gap-3 text-center animate-in zoom-in-95">
+                <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shadow-sm"><Clock size={24} className="animate-pulse" /></div>
+                <div className="space-y-1">
+                   <p className="text-sm font-black text-amber-900 uppercase tracking-tight">Updates Closed</p>
+                   <p className="text-[10px] text-amber-700 font-bold uppercase leading-relaxed">
+                     You can turn meals ON/OFF only between <span className="text-amber-900 font-black">{timeWindow.startStr}</span> and <span className="text-amber-900 font-black">{timeWindow.endStr}</span>.
+                   </p>
+                </div>
+             </div>
+           ) : isLockedForToday ? (
+             <div className="p-4 bg-success/5 rounded-2xl border border-success/20 flex gap-3 items-center mb-2">
+                <CheckCircle2 size={18} className="text-success shrink-0" />
+                <p className="text-[10px] text-success font-black uppercase leading-tight">
+                  Meals for tomorrow are already saved and locked.
+                </p>
+             </div>
+           ) : (
+             <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 flex gap-3 items-center mb-2">
+                <Zap size={18} className="text-primary shrink-0 animate-bounce" />
+                <p className="text-[10px] text-primary font-black uppercase leading-tight">
+                  Interaction window open! Update your meals for <span className="underline">{tomorrowDay}</span> now.
                 </p>
              </div>
            )}
            
-           <div className="space-y-6">
+           <div className={cn("space-y-6", !canChange && "opacity-50 pointer-events-none")}>
               <div className="flex items-center justify-between p-4 bg-slate-900 rounded-3xl text-white">
-                <div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest">Auto Mode</p><p className="text-[8px] text-white/40 uppercase">Sync meals with weekly schedule</p></div>
-                <Switch disabled={isLocked} checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
+                <div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest">Auto Mode</p><p className="text-[8px] text-white/40 uppercase">Sync with weekly schedule</p></div>
+                <Switch disabled={!canChange} checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
               </div>
 
-              {!localMeals.autoMode ? (
-                <div className="space-y-6 animate-in slide-in-from-top-2">
-                  <p className="text-[10px] font-black uppercase text-primary tracking-widest ml-1">Manual Override (Tomorrow)</p>
+              {!localMeals.autoMode && (
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center px-1">
+                    <p className="text-[10px] font-black uppercase text-primary tracking-widest">Tomorrow's Selection ({tomorrowDay})</p>
+                    <Badge variant="outline" className="text-[8px] font-bold text-muted-foreground uppercase">{tomorrowDay} Menu</Badge>
+                  </div>
+                  
                   {MEAL_TYPES.map((type) => {
                     const isAvailable = mealConfig?.[`${type.id}Available`] !== false
                     const isChecked = localMeals[type.id as keyof typeof localMeals]
@@ -303,14 +333,14 @@ export default function StudentMealPage() {
                     const { common, options } = getMealDetails(menuText)
                     
                     return (
-                      <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable || isLocked) ? "opacity-40" : (isChecked ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
+                      <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable) ? "opacity-30" : (isChecked ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                             <span className="text-2xl">{type.icon}</span>
                             <div>
                               <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">{type.label}</h3>
                               <p className="text-[9px] font-bold text-primary uppercase">
-                                {common || (options ? 'Mixed Options' : 'Regular Diet')}
+                                {common || (options ? 'Choice Available' : 'Regular')}
                               </p>
                             </div>
                           </div>
@@ -318,8 +348,7 @@ export default function StudentMealPage() {
                         </div>
 
                         {isChecked && options && (
-                          <div className="pt-3 border-t border-success/10 animate-in slide-in-from-top-2">
-                            <p className="text-[8px] font-black uppercase text-success/60 mb-2">Pick Your Selection</p>
+                          <div className="pt-3 border-t border-success/10">
                             <RadioGroup disabled={!canChange} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
                                {options.map(opt => (
                                  <div key={opt} className="flex items-center gap-2">
@@ -334,193 +363,52 @@ export default function StudentMealPage() {
                     )
                   })}
                 </div>
-              ) : (
-                <div className="p-6 bg-primary/5 rounded-3xl border border-dashed border-primary/20 flex flex-col items-center gap-3 text-center">
-                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary"><RefreshCw className="animate-spin-slow" /></div>
-                   <p className="text-xs font-bold text-slate-600">Auto Mode is active. Your meals will be automatically populated from your <b>Weekly Schedule</b> below.</p>
-                </div>
               )}
            </div>
 
-           <Button onClick={handleUpdateMeals} disabled={isUpdating || !canChange} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95">
-              {isUpdating ? <Loader2 className="animate-spin" /> : (isLocked ? <Lock size={20}/> : <CheckCircle2 />)} 
-              {isLocked ? "Preferences Locked" : "Confirm & Save Preferences"}
-           </Button>
-        </CardContent>
-      </Card>
+           {canChange && (
+             <Button onClick={handleUpdateMeals} disabled={isUpdating} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95">
+                {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
+                Confirm & Save for {tomorrowDay}
+             </Button>
+           )}
 
-      {/* WEEKLY SCHEDULE SETUP - Only visible when Auto Mode is ON */}
-      {localMeals.autoMode && (
-        <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden animate-in slide-in-from-top-4 duration-500">
-          <CardHeader className="bg-slate-900 text-white p-8">
-             <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/10 rounded-xl"><CalendarDays size={20}/></div>
-                <div>
-                  <CardTitle className="text-lg">Weekly Meal Schedule</CardTitle>
-                  <CardDescription className="text-white/40">Setup your recurring weekly plan.</CardDescription>
+           {/* Tomorrow's Menu Info displayed below if not clickable */}
+           {!canChange && tomorrowMenu && (
+             <div className="p-5 bg-slate-50 rounded-3xl border space-y-3">
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest text-center">Menu for {tomorrowDay}</p>
+                <div className="grid grid-cols-1 gap-2">
+                   <div className="flex justify-between text-xs font-bold px-2"><span className="text-slate-400">Breakfast:</span><span className="text-slate-700">{tomorrowMenu.breakfast}</span></div>
+                   <div className="flex justify-between text-xs font-bold px-2"><span className="text-slate-400">Lunch:</span><span className="text-slate-700">{tomorrowMenu.lunch}</span></div>
+                   <div className="flex justify-between text-xs font-bold px-2"><span className="text-slate-400">Dinner:</span><span className="text-slate-700">{tomorrowMenu.dinner}</span></div>
                 </div>
              </div>
-          </CardHeader>
-          <CardContent className="p-0 overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="w-28 font-black uppercase text-[10px]">Day</TableHead>
-                  <TableHead className="text-center font-black uppercase text-[10px]">B</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Lunch Preference</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Dinner Preference</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {WEEKDAYS.map((day) => {
-                  const dayMenu = weeklyMenu.find(m => m.day === day)
-                  const lunchOptions = getMealDetails(dayMenu?.lunch || "").options
-                  const dinnerOptions = getMealDetails(dayMenu?.dinner || "").options
-
-                  return (
-                    <TableRow key={day} className="hover:bg-slate-50 transition-colors">
-                      <TableCell className="font-bold text-xs text-slate-700">{day}</TableCell>
-                      <TableCell className="text-center">
-                        <Checkbox 
-                          checked={weeklySchedule[day]?.breakfast || false} 
-                          onCheckedChange={() => toggleScheduleMeal(day, 'breakfast')}
-                          className="mx-auto"
-                        />
-                      </TableCell>
-                      <TableCell>
-                         <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                               <Checkbox 
-                                 checked={weeklySchedule[day]?.lunch || false} 
-                                 onCheckedChange={() => toggleScheduleMeal(day, 'lunch')}
-                               />
-                               <span className="text-[10px] font-bold text-slate-500">ON</span>
-                            </div>
-                            {weeklySchedule[day]?.lunch && lunchOptions && (
-                              <Select 
-                                value={weeklySchedule[day]?.lunchChoice || lunchOptions[0]} 
-                                onValueChange={v => updateScheduleChoice(day, 'lunch', v)}
-                              >
-                                <SelectTrigger className="h-7 text-[9px] w-[100px] bg-slate-50 rounded-lg">
-                                   <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                   {lunchOptions.map(opt => <SelectItem key={opt} value={opt} className="text-[9px]">{opt}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            )}
-                         </div>
-                      </TableCell>
-                      <TableCell>
-                         <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                               <Checkbox 
-                                 checked={weeklySchedule[day]?.dinner || false} 
-                                 onCheckedChange={() => toggleScheduleMeal(day, 'dinner')}
-                               />
-                               <span className="text-[10px] font-bold text-slate-500">ON</span>
-                            </div>
-                            {weeklySchedule[day]?.dinner && dinnerOptions && (
-                              <Select 
-                                value={weeklySchedule[day]?.dinnerChoice || dinnerOptions[0]} 
-                                onValueChange={v => updateScheduleChoice(day, 'dinner', v)}
-                              >
-                                <SelectTrigger className="h-7 text-[9px] w-[100px] bg-slate-50 rounded-lg">
-                                   <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                   {dinnerOptions.map(opt => <SelectItem key={opt} value={opt} className="text-[9px]">{opt}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            )}
-                         </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-          <CardFooter className="p-6 bg-slate-50 border-t flex justify-center">
-             <p className="text-[9px] text-muted-foreground font-medium italic text-center">
-               Choices made here will apply automatically when Auto Mode is enabled.
-             </p>
-          </CardFooter>
-        </Card>
-      )}
-
-      {/* Consumption Progress Card */}
-      <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-        <CardHeader className="bg-slate-50/50 border-b py-4">
-           <CardTitle className="text-xs font-black uppercase text-primary flex items-center gap-2"><Calculator size={14}/> Current Month Progress</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
-           <div className="grid grid-cols-4 gap-2 text-center">
-              <div className="bg-orange-50 p-2 rounded-xl"><p className="text-[8px] font-bold text-orange-600 uppercase">Breakfast</p><p className="text-sm font-black">{currentMonthConsumption.breakfast}</p></div>
-              <div className="bg-success/5 p-2 rounded-xl"><p className="text-[8px] font-bold text-success uppercase">Lunch</p><p className="text-sm font-black">{currentMonthConsumption.lunch}</p></div>
-              <div className="bg-blue-50 p-2 rounded-xl"><p className="text-[8px] font-bold text-blue-600 uppercase">Dinner</p><p className="text-sm font-black">{currentMonthConsumption.dinner}</p></div>
-              <div className="bg-slate-900 text-white p-2 rounded-xl"><p className="text-[8px] font-bold text-white/50 uppercase">Total</p><p className="text-sm font-black">{currentMonthConsumption.total}</p></div>
-           </div>
+           )}
         </CardContent>
       </Card>
 
-      {/* Previous Month Report */}
-      <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-         <CardHeader className="bg-slate-50/50 border-b">
-            <CardTitle className="text-xs font-black uppercase text-muted-foreground flex items-center gap-2"><History size={14}/> Previous Month Final Report</CardTitle>
-         </CardHeader>
-         <CardContent className="p-6">
-            {previousMonthSummary ? (
-               <div className="space-y-4">
-                  <div className="flex justify-between items-center p-5 bg-primary/5 rounded-[2rem] border-2 border-primary/10">
-                     <div className="space-y-1">
-                        <p className="text-10px font-black uppercase text-primary tracking-widest">{previousMonthSummary.month}</p>
-                        <h3 className="text-2xl font-black text-slate-800">{previousMonthSummary.totalMeals} Meals</h3>
-                     </div>
-                     <Button variant="outline" size="sm" className="rounded-xl font-bold h-9 gap-2 border-primary/20 text-primary" onClick={() => { setSelectedBill(previousMonthSummary); setIsBillDialogOpen(true); }}>
-                        <Receipt size={14}/> Details
-                     </Button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <div className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center"><span className="text-[10px] font-bold text-muted-foreground uppercase">Meal Rate</span><span className="font-black text-primary">৳{previousMonthSummary.perMealCost}</span></div>
-                     <div className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center"><span className="text-[10px] font-bold text-muted-foreground uppercase">Total Bill</span><span className="font-black text-destructive">৳{previousMonthSummary.totalCost}</span></div>
-                  </div>
-               </div>
-            ) : (
-               <div className="text-center py-8 opacity-30 flex flex-col items-center gap-2">
-                  <History size={32} />
-                  <p className="text-[10px] font-bold uppercase">No previous records found</p>
-               </div>
-            )}
-         </CardContent>
-         <CardFooter className="bg-slate-50/50 border-t p-4 text-center">
-             <p className="text-[9px] w-full text-muted-foreground font-medium italic">Data is updated daily in database based on your preferences.</p>
-         </CardFooter>
-      </Card>
-
-      {/* Bill Details Dialog */}
-      <Dialog open={isBillDialogOpen} onOpenChange={setIsBillDialogOpen}>
-        <DialogContent className="max-w-md rounded-3xl p-0 overflow-hidden">
-          <div className="h-2 bg-primary w-full" />
-          <DialogHeader className="p-8 pb-4">
-            <DialogTitle className="text-2xl font-black flex items-center gap-2">
-               <Receipt className="text-primary"/> Monthly Billing Report
-            </DialogTitle>
-            <DialogDescription className="font-bold uppercase text-[10px] text-muted-foreground tracking-widest">Summary for {selectedBill?.month}</DialogDescription>
-          </DialogHeader>
-          <div className="px-8 pb-8 space-y-6">
-             <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex justify-between items-center">
-                <div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground">Total Consumption</p><p className="text-2xl font-black text-slate-800">{selectedBill?.totalMeals} <span className="text-xs font-bold text-slate-400">Meals</span></p></div>
-                <div className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-primary"><Utensils size={24}/></div>
-             </div>
-             <div className="grid grid-cols-2 gap-4">
-                <div className="p-5 bg-primary/5 rounded-3xl border border-primary/10 space-y-1"><p className="text-[8px] font-black uppercase text-primary/60">Per Meal Rate</p><p className="text-lg font-black text-primary">৳{selectedBill?.perMealCost}</p></div>
-                <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-1 shadow-xl"><p className="text-[8px] font-black uppercase text-white/40">Total Charged</p><p className="text-lg font-black text-success">৳{selectedBill?.totalCost}</p></div>
-             </div>
-          </div>
-          <DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-12 rounded-2xl font-black text-xs uppercase" onClick={() => setIsBillDialogOpen(false)}>Close Report</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Weekly Schedule & Monthly Stats Footer */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-primary">Monthly Counter</CardTitle></CardHeader>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="bg-orange-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">B</p><p className="text-sm font-black">{currentMonthConsumption.breakfast}</p></div>
+                <div className="bg-success/5 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">L</p><p className="text-sm font-black">{currentMonthConsumption.lunch}</p></div>
+                <div className="bg-blue-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">D</p><p className="text-sm font-black">{currentMonthConsumption.dinner}</p></div>
+                <div className="bg-slate-900 text-white p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Total</p><p className="text-sm font-black">{currentMonthConsumption.total}</p></div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-muted-foreground">Quick Info</CardTitle></CardHeader>
+          <CardContent className="p-6 flex flex-col justify-center items-center text-center">
+             <Info size={24} className="text-primary mb-2 opacity-20" />
+             <p className="text-[9px] font-medium italic text-slate-400">Data is synced with the kitchen management system. Update daily for accurate billing.</p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

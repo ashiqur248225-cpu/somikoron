@@ -19,7 +19,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
 
   const isPublicPage = pathname.startsWith('/register') || pathname.startsWith('/hostel-registration')
   
-  // Roles that use a limited/simplified UI without the main Admin sidebar
+  // Roles that use a limited/simplified UI without the main Admin sidebar on MOBILE
   const isLimitedUI = ['Staff', 'Worker', 'General Staff', 'Student'].includes(userRole)
 
   if (isPublicPage) {
@@ -44,16 +44,30 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen={!isLimitedUI}>
-      {!isLimitedUI && <AppSidebar />}
+      {/* On Desktop, we show the sidebar for everyone for better UX. On Mobile, we hide it for limited roles. */}
+      <div className={cn(
+        "hidden md:block",
+        !isLimitedUI && "block"
+      )}>
+        <AppSidebar />
+      </div>
+      
+      {/* Mobile Sidebar (Only for Admins/Managers) */}
+      {!isLimitedUI && (
+        <div className="md:hidden">
+          <AppSidebar />
+        </div>
+      )}
+
       <SidebarInset>
         <main className={cn(
-          "flex-1 p-4 md:p-8",
+          "flex-1 p-3 md:p-8 w-full max-w-full overflow-x-hidden",
           isLimitedUI && "pb-24 md:pb-8"
         )}>
           {children}
         </main>
 
-        {/* Bottom Nav for Limited UI Roles (Students, Workers) */}
+        {/* Bottom Nav for Limited UI Roles (Students, Workers) - ONLY ON MOBILE */}
         {isLimitedUI && (
           <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-100 flex items-center justify-around px-2 z-50 md:hidden shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
             {bottomNavItems.map((item) => {
@@ -67,9 +81,9 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
                     isActive ? "text-primary scale-110" : "text-slate-400"
                   )}
                 >
-                  <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className="text-[10px] font-bold uppercase tracking-tighter">{item.title}</span>
-                  {isActive && <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1" />}
+                  <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+                  <span className="text-[8px] font-bold uppercase tracking-tighter">{item.title}</span>
+                  {isActive && <div className="w-1 h-1 bg-primary rounded-full mt-0.5" />}
                 </Link>
               )
             })}
