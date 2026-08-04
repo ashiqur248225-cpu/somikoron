@@ -25,7 +25,9 @@ import {
   Info,
   CircleDollarSign,
   User,
-  Utensils
+  Utensils,
+  Home,
+  Wifi
 } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, serverTimestamp, doc, addDoc, query, where, limit } from "firebase/firestore"
@@ -206,7 +208,6 @@ export default function PaymentRequestPage() {
                           {acc.label}: {acc.number}
                         </SelectItem>
                       ))}
-                      {!accountsData?.accounts && <SelectItem disabled value="none">No accounts configured</SelectItem>}
                     </SelectContent>
                   </Select>
                 </div>

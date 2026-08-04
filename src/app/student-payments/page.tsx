@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   CheckCircle2, XCircle, Loader2, Eye, Wallet, Smartphone, 
   UserCircle, Building2, Calendar, Trash2, ArrowUpRight, Info, AlertCircle, Clock, History, Receipt, ChevronRight,
-  Utensils, ShieldCheck, Wifi, Soup
+  Utensils, ShieldCheck, Wifi, Soup, Home
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
@@ -117,7 +117,7 @@ export default function StudentPaymentsPage() {
           const [mA, yA] = a.split(' '); const [mB, yB] = b.split(' ');
           if (yA !== yB) return Number(yA) - Number(yB);
           return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
-        }).filter(label => label !== targetLabel); // Already handled targetLabel if payRent was true
+        }).filter(label => label !== targetLabel);
 
         for (const m of sortedArrears) {
           if (remaining <= 0) break;
@@ -134,7 +134,6 @@ export default function StudentPaymentsPage() {
       if (selectedReq.payUtilities && remaining > 0 && billingConfig) {
         const cCost = Number(billingConfig.cookingBill || 0);
         const wCost = Number(billingConfig.wifiBill || 0);
-        // Only Cooking Bill as per requested options rename
         if (remaining >= cCost && cCost > 0) { cookingBill = cCost; remaining -= cCost; }
       }
 
@@ -144,7 +143,7 @@ export default function StudentPaymentsPage() {
         remaining = 0;
       }
 
-      // Final leftover fallback (if nothing specific satisfied everything, send to Advance)
+      // Final leftover fallback
       if (remaining > 0) {
         advancePaid = remaining;
         remaining = 0;
