@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, Suspense } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -202,7 +202,7 @@ export default function PaymentRequestPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {accountsData?.accounts?.map((acc: any, i: number) => (
-                        <SelectItem key={`account-request-${acc.number}-${i}`} value={acc.number}>
+                        <SelectItem key={`account-req-${i}-${acc.number}`} value={`${acc.label}: ${acc.number}`}>
                           {acc.label}: {acc.number}
                         </SelectItem>
                       ))}
