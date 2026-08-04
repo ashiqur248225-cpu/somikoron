@@ -362,15 +362,28 @@ export default function SMSPanelPage() {
   }
 
   const handleDeleteHistory = async (collName: string) => {
-    if (!window.confirm(`Are you sure you want to permanently delete ALL ${collName} history for this branch?`)) return
+    if (!userBranch) {
+      toast({ variant: "destructive", title: "Error", description: "Branch context missing. Please refresh." });
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to permanently delete ALL ${collName === 'notices' ? 'In-App Notice' : 'SMS'} history for this branch (${userBranch})?`)) return
     setIsSubmitting(true)
     try {
       const q = query(collection(db, collName), where("branch", "==", userBranch))
       const snap = await getDocs(q)
-      const batch = writeBatch(db)
-      snap.docs.forEach(d => batch.delete(d.ref))
-      await batch.commit()
-      toast({ title: "History Cleared", description: `All ${collName} records have been removed.` })
+      if (snap.empty) {
+        toast({ title: "No records", description: "There is nothing to delete." })
+        return
+      }
+      
+      const docs = snap.docs;
+      for (let i = 0; i < docs.length; i += 500) {
+        const batch = writeBatch(db)
+        const chunk = docs.slice(i, i + 500)
+        chunk.forEach(d => batch.delete(d.ref))
+        await batch.commit()
+      }
+      toast({ title: "History Cleared", description: `All ${collName} records for ${userBranch} have been removed.` })
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message })
     } finally {
@@ -502,8 +515,9 @@ export default function SMSPanelPage() {
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
             <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between">
               <CardTitle className="text-lg flex items-center gap-2"><TableProperties className="text-primary"/> Sent Notices History</CardTitle>
-              <Button variant="destructive" size="sm" className="gap-2 font-bold rounded-xl" onClick={() => handleDeleteHistory("notices")}>
-                <Trash2 size={14}/> Delete All
+              <Button variant="destructive" size="sm" className="gap-2 font-bold rounded-xl" onClick={() => handleDeleteHistory("notices")} disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={14}/>} 
+                Delete All
               </Button>
             </CardHeader>
             <CardContent className="p-0">
@@ -544,8 +558,9 @@ export default function SMSPanelPage() {
           <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
             <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between">
               <CardTitle className="text-lg">SMS Delivery Logs</CardTitle>
-              <Button variant="destructive" size="sm" className="gap-2 font-bold rounded-xl" onClick={() => handleDeleteHistory("smsLogs")}>
-                <Trash2 size={14}/> Delete All
+              <Button variant="destructive" size="sm" className="gap-2 font-bold rounded-xl" onClick={() => handleDeleteHistory("smsLogs")} disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={14}/>} 
+                Delete All
               </Button>
             </CardHeader>
             <CardContent className="p-0">
