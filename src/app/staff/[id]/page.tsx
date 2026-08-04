@@ -13,7 +13,7 @@ import {
   Phone, MapPin, 
   History, Loader2, 
   ChevronLeft, Calendar, Shield, Briefcase,
-  Lock, Edit, Save, CheckCircle2, Building2, ShieldCheck, RefreshCw, Utensils
+  Lock, Edit, Save, CheckCircle2, Building2, ShieldCheck, RefreshCw, Utensils, AlertCircle
 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Separator } from "@/components/ui/separator"
@@ -59,6 +59,7 @@ export default function StaffProfilePage() {
       setEditForm({
         ...staff,
         monthlySalary: staff.monthlySalary?.toString() || "0",
+        isActive: staff.isActive !== false
       })
     }
   }, [staff])
@@ -123,13 +124,18 @@ export default function StaffProfilePage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <Card className="md:col-span-1 border-none shadow-xl rounded-3xl overflow-hidden bg-white">
-          <div className="h-24 bg-primary w-full relative">
+        <Card className={cn("md:col-span-1 border-none shadow-xl rounded-3xl overflow-hidden bg-white", staff.isActive === false && "border-t-8 border-t-destructive")}>
+          <div className={cn("h-24 w-full relative", staff.isActive === false ? "bg-destructive/10" : "bg-primary")}>
             <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
               <div className="h-20 w-20 rounded-full border-4 border-white bg-secondary flex items-center justify-center text-primary shadow-lg">
                 {staff.staffType === 'management' ? <Shield size={32}/> : <Briefcase size={32}/>}
               </div>
             </div>
+            {staff.isActive === false && (
+              <div className="absolute top-2 right-2">
+                 <Badge variant="destructive" className="uppercase font-black text-[8px]">Inactive / Exited</Badge>
+              </div>
+            )}
           </div>
           <CardContent className="pt-14 pb-8 text-center space-y-4">
             <div>
@@ -167,7 +173,6 @@ export default function StaffProfilePage() {
                   <div className="p-2 bg-slate-50 rounded border border-dashed border-primary/20 text-center">
                     <span className="font-mono text-sm font-bold text-primary select-all">{staff.password}</span>
                   </div>
-                  <p className="text-[8px] text-muted-foreground italic text-center">Visible only to Administrators.</p>
                 </div>
               )}
             </div>
@@ -181,9 +186,6 @@ export default function StaffProfilePage() {
                   </Badge>
                   <Badge variant="outline" className={cn("text-[8px] justify-center py-1", staff.canDirectEntryExpense ? "bg-success/5 text-success border-success/20" : "bg-orange-50 text-orange-600 border-orange-200")}>
                     Expense: {staff.canDirectEntryExpense ? 'Direct' : 'Request'}
-                  </Badge>
-                  <Badge variant="outline" className={cn("text-[8px] justify-center py-1", staff.canDirectEntryBulkMeal ? "bg-success/5 text-success border-success/20" : "bg-orange-50 text-orange-600 border-orange-200")}>
-                    Bulk Meal: {staff.canDirectEntryBulkMeal ? 'Direct' : 'No Access'}
                   </Badge>
                 </div>
               </div>
@@ -205,6 +207,23 @@ export default function StaffProfilePage() {
                     
                     {editForm && (
                       <div className="space-y-6 py-4">
+                        {/* Account Status Toggle */}
+                        <div className="p-4 bg-destructive/5 rounded-2xl border border-destructive/20 flex items-center justify-between">
+                           <div className="space-y-0.5">
+                              <Label className="text-sm font-black flex items-center gap-2 text-destructive">
+                                <AlertCircle size={16}/> Account Status
+                              </Label>
+                              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                                {editForm.isActive ? 'Active - Can Login' : 'Inactive - Login Disabled'}
+                              </p>
+                           </div>
+                           <Switch 
+                             checked={editForm.isActive} 
+                             onCheckedChange={v => setEditForm({...editForm, isActive: v})} 
+                             className="data-[state=checked]:bg-success"
+                           />
+                        </div>
+
                         <div className="space-y-4">
                           <h3 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">Basic Info</h3>
                           <div className="space-y-2">
@@ -260,10 +279,6 @@ export default function StaffProfilePage() {
                               <div className="flex items-center justify-between">
                                 <Label className="text-sm">Direct Expense Entry</Label>
                                 <Switch checked={editForm.canDirectEntryExpense} onCheckedChange={v => setEditForm({...editForm, canDirectEntryExpense: v, canRequestExpense: !v})} />
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <Label className="text-sm flex items-center gap-1">Direct Bulk Meal Entry <Utensils size={12}/></Label>
-                                <Switch checked={editForm.canDirectEntryBulkMeal} onCheckedChange={v => setEditForm({...editForm, canDirectEntryBulkMeal: v})} />
                               </div>
                             </div>
                           </div>

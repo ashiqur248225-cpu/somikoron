@@ -81,6 +81,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
       if (!staffSnap.empty) {
         const userData = staffSnap.docs[0].data()
+        
+        // SECURITY CHECK: IF STAFF IS INACTIVE
+        if (userData.isActive === false) {
+          toast({ variant: "destructive", title: "Access Denied", description: "আপনার স্টাফ অ্যাকাউন্টটি নিষ্ক্রিয় করা হয়েছে। এডমিনের সাথে যোগাযোগ করুন।" })
+          setIsLoading(false)
+          return
+        }
+
         localStorage.setItem("somikoron_auth", "true")
         localStorage.setItem("somikoron_auth_id", staffSnap.docs[0].id)
         localStorage.setItem("user_role", userData.role || "Manager")
@@ -104,10 +112,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
       if (!studentSnap.empty) {
         const userData = studentSnap.docs[0].data()
+        
+        // SECURITY CHECK: IF STUDENT IS INACTIVE (EXITED)
         if (!userData.isActive) {
-          toast({ variant: "destructive", title: "Access Denied", description: "This account is inactive." })
+          toast({ variant: "destructive", title: "Access Denied", description: "এই অ্যাকাউন্টটি বর্তমানে সচল নেই।" })
+          setIsLoading(false)
           return
         }
+
         localStorage.setItem("somikoron_auth", "true")
         localStorage.setItem("somikoron_auth_id", studentSnap.docs[0].id)
         localStorage.setItem("user_role", "Student")

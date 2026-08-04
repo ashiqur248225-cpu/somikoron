@@ -74,7 +74,8 @@ function StaffPageContent() {
     canRequestExpense: false,
     canDirectEntryIncome: false,
     canDirectEntryExpense: false,
-    canDirectEntryBulkMeal: false
+    canDirectEntryBulkMeal: false,
+    isActive: true
   })
 
   // Queries
@@ -134,7 +135,8 @@ function StaffPageContent() {
       canRequestExpense: false,
       canDirectEntryIncome: false,
       canDirectEntryExpense: false,
-      canDirectEntryBulkMeal: false
+      canDirectEntryBulkMeal: false,
+      isActive: true
     })
     setIsAddOpen(true)
   }
@@ -231,11 +233,11 @@ function StaffPageContent() {
                   </TableHeader>
                   <TableBody>
                     {filteredStaff.map((s) => (
-                      <TableRow key={s.id} className="cursor-pointer hover:bg-slate-50/50" onClick={() => router.push(`/staff/${s.id}`)}>
+                      <TableRow key={s.id} className={cn("cursor-pointer hover:bg-slate-50/50", s.isActive === false && "bg-destructive/[0.03] opacity-60")} onClick={() => router.push(`/staff/${s.id}`)}>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">{s.name.substring(0, 2).toUpperCase()}</div>
-                            <span className="font-bold text-slate-800">{s.name}</span>
+                            <span className="font-bold text-slate-800">{s.name} {s.isActive === false && <Badge variant="destructive" className="ml-2 text-[8px] h-4">Inactive</Badge>}</span>
                           </div>
                         </TableCell>
                         <TableCell><Badge variant="secondary" className="uppercase text-[9px]">{s.role || (s.staffType === 'working' ? 'General Worker' : 'N/A')}</Badge></TableCell>
@@ -257,7 +259,7 @@ function StaffPageContent() {
             {/* Mobile View */}
             <div className="md:hidden space-y-4">
               {filteredStaff.map((s) => (
-                <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white" onClick={() => router.push(`/staff/${s.id}`)}>
+                <Card key={s.id} className={cn("border-none shadow-sm rounded-2xl overflow-hidden bg-white", s.isActive === false && "opacity-60 border-l-4 border-l-destructive")} onClick={() => router.push(`/staff/${s.id}`)}>
                   <CardContent className="p-4 space-y-4">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-3">
@@ -267,7 +269,10 @@ function StaffPageContent() {
                           <p className="text-xs font-bold text-slate-400 mt-0.5">{s.phone}</p>
                         </div>
                       </div>
-                      <Badge className="text-[8px] font-bold uppercase bg-primary">{s.role || 'Worker'}</Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge className="text-[8px] font-bold uppercase bg-primary">{s.role || 'Worker'}</Badge>
+                        {s.isActive === false && <Badge variant="destructive" className="text-[7px] font-black h-4 px-1.5 uppercase">Inactive</Badge>}
+                      </div>
                     </div>
                     
                     <div className="flex justify-between items-center pt-1">
