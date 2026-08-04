@@ -124,23 +124,36 @@ export default function StudentMealPage() {
     }
   }, [student])
 
-  // WINDOW LOGIC: 9:00 PM (21:00) to 11:30 PM (23:30)
+  // DYNAMIC WINDOW LOGIC from Firestore
   const timeWindow = useMemo(() => {
     const hours = currentTime.getHours()
     const minutes = currentTime.getMinutes()
     const totalMinutes = hours * 60 + minutes
     
-    const startMinutes = 21 * 60 // 9:00 PM
-    const endMinutes = 23 * 60 + 30 // 11:30 PM
+    const startTimeStr = mealConfig?.startTime || "21:00"
+    const endTimeStr = mealConfig?.endTime || "23:30"
+    
+    const [startH, startM] = startTimeStr.split(':').map(Number)
+    const [endH, endM] = endTimeStr.split(':').map(Number)
+    
+    const startMinutes = startH * 60 + startM
+    const endMinutes = endH * 60 + endM
     
     const isActive = totalMinutes >= startMinutes && totalMinutes <= endMinutes
     
+    const format12h = (time24: string) => {
+      const [h, m] = time24.split(':').map(Number)
+      const period = h >= 12 ? 'PM' : 'AM'
+      const h12 = h % 12 || 12
+      return `${h12}:${m.toString().padStart(2, '0')} ${period}`
+    }
+
     return {
       isActive,
-      startStr: "9:00 PM",
-      endStr: "11:30 PM"
+      startStr: format12h(startTimeStr),
+      endStr: format12h(endTimeStr)
     }
-  }, [currentTime])
+  }, [currentTime, mealConfig])
 
   const isLockedForToday = useMemo(() => {
     if (!student?.lastMealUpdate) return false;
@@ -270,7 +283,7 @@ export default function StudentMealPage() {
         </Link>
       </header>
 
-      {/* TODAY'S MENU (Top Card as requested) */}
+      {/* TODAY'S MENU */}
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden border-l-4 border-l-primary">
         <CardHeader className="bg-slate-50/50 border-b py-4">
            <CardTitle className="text-xs font-black uppercase text-primary flex items-center gap-2">
@@ -373,7 +386,6 @@ export default function StudentMealPage() {
              </Button>
            )}
 
-           {/* Tomorrow's Menu Info displayed below if not clickable */}
            {!canChange && tomorrowMenu && (
              <div className="p-5 bg-slate-50 rounded-3xl border space-y-3">
                 <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest text-center">Menu for {tomorrowDay}</p>

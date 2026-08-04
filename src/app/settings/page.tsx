@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
@@ -120,7 +121,8 @@ export default function SettingsPage() {
 
   // Advanced Meal State
   const [mealConfigData, setMealConfigData] = useState({
-    cutoffTime: "10:00",
+    startTime: "21:00",
+    endTime: "23:30",
     breakfastAvailable: true,
     lunchAvailable: true,
     dinnerAvailable: true
@@ -183,7 +185,8 @@ export default function SettingsPage() {
   useEffect(() => {
     if (mealConfigStore) {
       setMealConfigData({
-        cutoffTime: mealConfigStore.cutoffTime || "10:00",
+        startTime: mealConfigStore.startTime || "21:00",
+        endTime: mealConfigStore.endTime || "23:30",
         breakfastAvailable: mealConfigStore.breakfastAvailable !== false,
         lunchAvailable: mealConfigStore.lunchAvailable !== false,
         dinnerAvailable: mealConfigStore.dinnerAvailable !== false
@@ -394,13 +397,19 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-6">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                 <Label className="text-xs font-bold uppercase">Daily Cutoff Time (24h)</Label>
-                 <div className="flex gap-2">
-                    <Input type="time" value={mealConfigData.cutoffTime} onChange={e => setMealConfigData({...mealConfigData, cutoffTime: e.target.value})} className="h-11 font-bold" />
-                    <Button variant="outline" size="icon" className="h-11 w-11"><Clock size={16}/></Button>
+              <div className="space-y-4">
+                 <Label className="text-xs font-bold uppercase">Meal Update Window (Time)</Label>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1.5">
+                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">Start Time</Label>
+                     <Input type="time" value={mealConfigData.startTime} onChange={e => setMealConfigData({...mealConfigData, startTime: e.target.value})} className="h-10 font-bold" />
+                   </div>
+                   <div className="space-y-1.5">
+                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">End Time</Label>
+                     <Input type="time" value={mealConfigData.endTime} onChange={e => setMealConfigData({...mealConfigData, endTime: e.target.value})} className="h-10 font-bold" />
+                   </div>
                  </div>
-                 <p className="text-[10px] text-muted-foreground italic">Students cannot change meals after this time.</p>
+                 <p className="text-[10px] text-muted-foreground italic">Students can only change meals between these times.</p>
               </div>
               <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border">
                  <Label className="text-[10px] font-black uppercase text-primary mb-2 block">Meal Availability</Label>
