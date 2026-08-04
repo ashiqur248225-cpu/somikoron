@@ -1,8 +1,7 @@
-
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -33,7 +32,8 @@ import {
   Hash,
   Tags,
   Layers,
-  PlusCircle
+  PlusCircle,
+  Settings
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
@@ -83,7 +83,7 @@ interface RoomGroup {
   npRent: string;
 }
 
-const DEFAULT_MARKET_CATEGORIES = {
+const DEFAULT_MARKET_CATEGORIES: Record<string, string[]> = {
   "Groceries": ["Oil", "Rice", "Lentils (Dal)", "Salt/Sugar", "Spices", "Other"],
   "Vegetables": ["Potato", "Onion", "Green Chili", "Seasonal Veg", "Other"],
   "Fish/Meat": ["Chicken", "Beef", "Fish", "Egg", "Other"],
@@ -761,7 +761,7 @@ export default function SettingsPage() {
             <Button onClick={handleToggleDeveloperMode} className="w-full">{isDevMode ? "Disable Dev Mode" : "Enable Dev Mode"}</Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </div>
 
       <Dialog open={isSecurityDialogOpen} onOpenChange={setIsSecurityDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
