@@ -21,7 +21,8 @@ import {
   ChefHat,
   Loader2,
   Receipt,
-  Calculator
+  Calculator,
+  CheckCircle2
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
@@ -137,6 +138,34 @@ export default function StudentDashboardPage() {
         </CardContent>
       </Card>
 
+      {/* Recent Payment Card */}
+      {stats?.lastPayment && (
+        <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
+          <CardHeader className="bg-success/5 border-b py-3 px-6 flex flex-row justify-between items-center">
+             <CardTitle className="text-[10px] font-black uppercase text-success flex items-center gap-2">
+                <CheckCircle2 size={14}/> Recent Payment Received
+             </CardTitle>
+             <span className="text-[8px] font-bold text-muted-foreground">
+               {stats.lastPayment.date ? new Date(stats.lastPayment.date).toLocaleDateString() : ''}
+             </span>
+          </CardHeader>
+          <CardContent className="p-4 flex justify-between items-center">
+             <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-success/10 text-success flex items-center justify-center shadow-inner">
+                   <Receipt size={20}/>
+                </div>
+                <div>
+                   <p className="text-sm font-black text-slate-800">৳{stats.lastPayment.amount}</p>
+                   <p className="text-[9px] text-muted-foreground font-bold uppercase">{stats.lastPayment.method} • {stats.lastPayment.month}</p>
+                </div>
+             </div>
+             <Link href="/student/history">
+                <Button variant="ghost" size="sm" className="h-8 text-primary font-bold text-[10px] uppercase gap-1">Receipt <ChevronRight size={14}/></Button>
+             </Link>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Last Month Food Summary Card */}
       {stats?.lastMonthFood && (
         <Card className="border-none shadow-md bg-white rounded-[2rem] overflow-hidden">
@@ -148,17 +177,29 @@ export default function StudentDashboardPage() {
                 <Badge variant="outline" className="text-[8px] font-black uppercase">{stats.lastMonthFood.month}</Badge>
              </div>
           </CardHeader>
-          <CardContent className="p-5 flex justify-between items-center">
-             <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-600">Total Bill: <span className="text-destructive font-black">৳{stats.lastMonthFood.totalCost}</span></p>
-                <p className="text-[10px] text-muted-foreground font-medium uppercase">{stats.lastMonthFood.totalMeals} Meals Consumed</p>
+          <CardContent className="p-6">
+             <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="space-y-0.5">
+                   <p className="text-[8px] font-bold text-muted-foreground uppercase">Total Meals</p>
+                   <p className="text-sm font-black text-slate-800">{stats.lastMonthFood.totalMeals}</p>
+                </div>
+                <div className="space-y-0.5">
+                   <p className="text-[8px] font-bold text-muted-foreground uppercase">Rate</p>
+                   <p className="text-sm font-black text-slate-800">৳{stats.lastMonthFood.perMealCost}</p>
+                </div>
+                <div className="space-y-0.5">
+                   <p className="text-[8px] font-bold text-muted-foreground uppercase">Total Bill</p>
+                   <p className="text-sm font-black text-destructive">৳{stats.lastMonthFood.totalCost}</p>
+                </div>
              </div>
+          </CardContent>
+          <CardFooter className="bg-slate-50/30 border-t p-3 flex justify-center">
              <Link href="/student/meals">
-                <Button variant="ghost" size="sm" className="h-8 text-primary font-bold text-[10px] uppercase gap-1">
-                   Details <ChevronRight size={14}/>
+                <Button variant="ghost" size="sm" className="h-6 text-primary font-bold text-[8px] uppercase gap-1">
+                   View Full Breakdown <ChevronRight size={10}/>
                 </Button>
              </Link>
-          </CardContent>
+          </CardFooter>
         </Card>
       )}
 
