@@ -126,6 +126,8 @@ export default function StudentMealPage() {
 
   // DYNAMIC WINDOW LOGIC from Firestore
   const timeWindow = useMemo(() => {
+    if (!isMounted) return { isActive: false, startStr: "", endStr: "" }
+    
     const hours = currentTime.getHours()
     const minutes = currentTime.getMinutes()
     const totalMinutes = hours * 60 + minutes
@@ -153,18 +155,17 @@ export default function StudentMealPage() {
       startStr: format12h(startTimeStr),
       endStr: format12h(endTimeStr)
     }
-  }, [currentTime, mealConfig])
+  }, [currentTime, mealConfig, isMounted])
 
-  const isLockedForToday = useMemo(() => {
-    if (!student?.lastMealUpdate) return false;
-    const lastUpdate = student.lastMealUpdate.toDate ? student.lastMealUpdate.toDate() : new Date(student.lastMealUpdate);
-    const today = new Date();
-    return lastUpdate.toDateString() === today.toDateString();
-  }, [student?.lastMealUpdate]);
+  const hasAlreadyUpdatedToday = useMemo(() => {
+    if (!student?.lastMealUpdateDate) return false;
+    const todayStr = new Date().toISOString().split('T')[0];
+    return student.lastMealUpdateDate === todayStr;
+  }, [student?.lastMealUpdateDate]);
 
   const canChange = useMemo(() => {
-    return isMounted && timeWindow.isActive && !isLockedForToday
-  }, [isMounted, timeWindow.isActive, isLockedForToday])
+    return isMounted && timeWindow.isActive
+  }, [isMounted, timeWindow.isActive])
 
   const todayDay = isMounted ? WEEKDAYS[new Date().getDay()] : "Saturday"
   const tomorrowDay = isMounted ? WEEKDAYS[(new Date().getDay() + 1) % 7] : "Saturday"
@@ -192,6 +193,7 @@ export default function StudentMealPage() {
       }
 
       const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
       const currentLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
       const isNewMonth = student?.currentMonthLabel !== currentLabel;
 
@@ -200,28 +202,48 @@ export default function StudentMealPage() {
         mealChoices: finalChoices, 
         weeklySchedule, 
         lastMealUpdate: serverTimestamp(),
+        lastMealUpdateDate: todayStr,
         updatedAt: serverTimestamp(),
         currentMonthLabel: currentLabel
       }
 
-      if (isNewMonth) {
-        updates.currentMonthBreakfast = finalMeals.breakfast ? 1 : 0;
-        updates.currentMonthLunch = finalMeals.lunch ? 1 : 0;
-        updates.currentMonthDinner = finalMeals.dinner ? 1 : 0;
+      // Logic: If they have already updated today, we don't increment the counters again.
+      // We just update their preferences for tomorrow.
+      if (!hasAlreadyUpdatedToday || isNewMonth) {
+        if (isNewMonth) {
+          updates.currentMonthBreakfast = finalMeals.breakfast ? 1 : 0;
+          updates.currentMonthLunch = finalMeals.lunch ? 1 : 0;
+          updates.currentMonthDinner = finalMeals.dinner ? 1 : 0;
+        } else {
+          if (finalMeals.breakfast) updates.currentMonthBreakfast = increment(1);
+          if (finalMeals.lunch) updates.currentMonthLunch = increment(1);
+          if (finalMeals.dinner) updates.currentMonthDinner = increment(1);
+        }
       } else {
-        if (finalMeals.breakfast) updates.currentMonthBreakfast = increment(1);
-        if (finalMeals.lunch) updates.currentMonthLunch = increment(1);
-        if (finalMeals.dinner) updates.currentMonthDinner = increment(1);
+        // If they change from ON to OFF or vice versa within the same window,
+        // we should ideally adjust the counter.
+        // For simplicity in this MVP, we assume the first "Save" increments and
+        // subsequent saves only change the choices/delivery state.
+        // Better: Compare with student.mealStatus and adjust
+        if (student.mealStatus.breakfast !== finalMeals.breakfast) {
+          updates.currentMonthBreakfast = increment(finalMeals.breakfast ? 1 : -1);
+        }
+        if (student.mealStatus.lunch !== finalMeals.lunch) {
+          updates.currentMonthLunch = increment(finalMeals.lunch ? 1 : -1);
+        }
+        if (student.mealStatus.dinner !== finalMeals.dinner) {
+          updates.currentMonthDinner = increment(finalMeals.dinner ? 1 : -1);
+        }
       }
 
       await updateDoc(studentRef, updates)
-      toast({ title: "Preferences Locked", description: "Meals for tomorrow have been added to your monthly total." })
+      toast({ title: "Preferences Saved", description: "Meals for tomorrow have been updated." })
     } catch (e: any) { 
       toast({ variant: "destructive", title: "Error", description: e.message }) 
     } finally { 
       setIsUpdating(false) 
     }
-  }, [student, studentRef, canChange, isUpdating, localMeals, mealChoices, weeklySchedule, tomorrowDay, toast]);
+  }, [student, studentRef, canChange, isUpdating, localMeals, mealChoices, weeklySchedule, tomorrowDay, toast, hasAlreadyUpdatedToday]);
 
   const toggleScheduleMeal = (day: string, meal: string) => {
     setWeeklySchedule(prev => ({
@@ -249,11 +271,6 @@ export default function StudentMealPage() {
     }
     return { common: text, options: null };
   }
-
-  const mealHistory = useMemo(() => {
-    if (!student?.mealsHistory) return []
-    return [...student.mealsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [student?.mealsHistory])
 
   const currentMonthConsumption = useMemo(() => {
     const now = new Date();
@@ -310,19 +327,18 @@ export default function StudentMealPage() {
                    </p>
                 </div>
              </div>
-           ) : isLockedForToday ? (
-             <div className="p-4 bg-success/5 rounded-2xl border border-success/20 flex gap-3 items-center mb-2">
-                <CheckCircle2 size={18} className="text-success shrink-0" />
-                <p className="text-[10px] text-success font-black uppercase leading-tight">
-                  Meals for tomorrow are already saved and locked.
-                </p>
-             </div>
            ) : (
              <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 flex gap-3 items-center mb-2">
                 <Zap size={18} className="text-primary shrink-0 animate-bounce" />
-                <p className="text-[10px] text-primary font-black uppercase leading-tight">
-                  Interaction window open! Update your meals for <span className="underline">{tomorrowDay}</span> now.
-                </p>
+                <div className="flex-1">
+                  <p className="text-[10px] text-primary font-black uppercase leading-tight">
+                    Interaction window open until {timeWindow.endStr}.
+                  </p>
+                  <p className="text-[8px] text-primary/70 uppercase font-bold mt-1">Updating meals for Tomorrow ({tomorrowDay}).</p>
+                </div>
+                {hasAlreadyUpdatedToday && (
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20 text-[8px] font-black">LOCKED FOR TODAY</Badge>
+                )}
              </div>
            )}
            
@@ -382,7 +398,7 @@ export default function StudentMealPage() {
            {canChange && (
              <Button onClick={handleUpdateMeals} disabled={isUpdating} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95">
                 {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
-                Confirm & Save for {tomorrowDay}
+                {hasAlreadyUpdatedToday ? "Update Preference" : `Confirm & Save for ${tomorrowDay}`}
              </Button>
            )}
 
@@ -399,7 +415,7 @@ export default function StudentMealPage() {
         </CardContent>
       </Card>
 
-      {/* Weekly Schedule & Monthly Stats Footer */}
+      {/* Monthly Stats Footer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-primary">Monthly Counter</CardTitle></CardHeader>
