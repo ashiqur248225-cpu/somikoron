@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
@@ -761,7 +762,7 @@ export default function SettingsPage() {
             <Button onClick={handleToggleDeveloperMode} className="w-full">{isDevMode ? "Disable Dev Mode" : "Enable Dev Mode"}</Button>
           </DialogFooter>
         </DialogContent>
-      </div>
+      </Dialog>
 
       <Dialog open={isSecurityDialogOpen} onOpenChange={setIsSecurityDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
