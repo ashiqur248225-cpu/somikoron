@@ -46,11 +46,13 @@ import {
   Users2,
   ArrowRight,
   Save,
-  DoorOpen
+  DoorOpen,
+  FileClock,
+  TableProperties
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, doc, setDoc, query, where, serverTimestamp, deleteDoc, limit, orderBy, writeBatch } from "firebase/firestore"
+import { collection, doc, setDoc, query, where, serverTimestamp, deleteDoc, limit, orderBy, writeBatch, getDocs } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
@@ -106,13 +108,6 @@ export default function SMSPanelPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [smsBalance, setSmsBalance] = useState<string | null>(null)
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false)
-
-  // Selection States for Logs
-  const [selectedLogs, setSelectedLogs] = useState<string[]>([])
-
-  // New Template Dialog State
-  const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false)
-  const [newTemplate, setNewTemplate] = useState({ label: "", text: "" })
 
   // API Config States
   const [apiConfig, setApiConfig] = useState({
@@ -200,11 +195,12 @@ export default function SMSPanelPage() {
   }, [db, userBranch, userRole, branchFilter])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
+  // LOGS & HISTORY
   const logsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     return query(collection(db, "smsLogs"), where("branch", "==", userBranch), limit(200))
   }, [db, userBranch])
-  const { data: rawSmsLogs, isLoading: logsLoading } = useCollection(logsQuery)
+  const { data: rawSmsLogs } = useCollection(logsQuery)
 
   const smsLogs = useMemo(() => {
     if (!rawSmsLogs) return []
@@ -215,6 +211,21 @@ export default function SMSPanelPage() {
     })
   }, [rawSmsLogs])
 
+  const noticeLogsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "notices"), where("branch", "==", userBranch), limit(200))
+  }, [db, userBranch])
+  const { data: rawNoticeLogs } = useCollection(noticeLogsQuery)
+
+  const noticeLogs = useMemo(() => {
+    if (!rawNoticeLogs) return []
+    return [...rawNoticeLogs].sort((a, b) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0
+      return dateB - dateA
+    })
+  }, [rawNoticeLogs])
+
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Admin') {
@@ -223,7 +234,7 @@ export default function SMSPanelPage() {
     }
     return query(collection(db, "buildings"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole, branchFilter])
-  const { data: buildings, isLoading: buildingsLoading } = useCollection(buildingsQuery)
+  const { data: buildings } = useCollection(buildingsQuery)
 
   const filteredStudents = useMemo(() => {
     if (!students) return []
@@ -343,42 +354,255 @@ export default function SMSPanelPage() {
   }
 
   const handleScanBirthdays = () => { if (!students) return; setIsScanning(true); setTimeout(() => { const today = new Date(); const tStr = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`; setBirthdayStudents(students.filter(s => s.dob?.endsWith(tStr))); setIsScanning(false); }, 1000); }
+  
   const handleSendBirthdayWishes = async () => {
     if (birthdayStudents.length === 0 || !apiConfig.apikey) return; setIsSubmitting(true)
     try { const bTpl = localTemplates.find(t => t.id === 'birthday')?.text || ""; for (const s of birthdayStudents) { const msg = replaceTags(bTpl, s); const res = await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg); const logId = doc(collection(db, "smsLogs")).id; await setDoc(doc(db, "smsLogs", logId), { id: logId, to: s.phone, message: msg, status: res.error === 0 ? 'Success' : 'Failed', branch: userBranch, sentBy: userName, createdAt: serverTimestamp() }); } toast({ title: "Wishes Sent!" }); setBirthdayStudents([]); fetchBalance(); }
     catch (e: any) { toast({ variant: "destructive", description: e.message }) } finally { setIsSubmitting(false) }
   }
 
+  const handleDeleteHistory = async (collName: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete ALL ${collName} history for this branch?`)) return
+    setIsSubmitting(true)
+    try {
+      const q = query(collection(db, collName), where("branch", "==", userBranch))
+      const snap = await getDocs(q)
+      const batch = writeBatch(db)
+      snap.docs.forEach(d => batch.delete(d.ref))
+      await batch.commit()
+      toast({ title: "History Cleared", description: `All ${collName} records have been removed.` })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <div className="space-y-8 pb-20 w-full overflow-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2"><SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mr-2 h-4 md:hidden" /><div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Notifications</h1></div></div>
-        <div className="ml-auto flex items-center gap-3"><div className="flex items-center gap-2 px-4 py-2 bg-primary/5 rounded-xl border border-primary/10"><Wallet size={14} className="text-primary" /><div className="flex flex-col"><span className="text-[8px] font-bold uppercase text-muted-foreground">Balance</span><span className="text-xs font-black text-primary">{smsBalance !== null ? `৳${Number(smsBalance).toFixed(2)}` : 'N/A'}</span></div><Button variant="ghost" size="icon" className="h-6 w-6 ml-1" onClick={() => fetchBalance()} disabled={isRefreshingBalance}><RefreshCw size={12} className={cn(isRefreshingBalance && "animate-spin")} /></Button></div></div>
+        <div className="ml-auto flex items-center gap-3">
+          <div className="flex items-center gap-2 px-4 py-2 bg-primary/5 rounded-xl border border-primary/10">
+            <Wallet size={14} className="text-primary" />
+            <div className="flex flex-col">
+              <span className="text-[8px] font-bold uppercase text-muted-foreground">Balance</span>
+              <span className="text-xs font-black text-primary">{smsBalance !== null ? `৳${Number(smsBalance).toFixed(2)}` : 'N/A'}</span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6 ml-1" onClick={() => fetchBalance()} disabled={isRefreshingBalance}>
+              <RefreshCw size={12} className={cn(isRefreshingBalance && "animate-spin")} />
+            </Button>
+          </div>
+        </div>
       </div>
 
       <Tabs defaultValue="broadcast" className="w-full">
-        <TabsList className="bg-secondary/50 p-1 flex overflow-x-auto h-auto scrollbar-hide"><TabsTrigger value="broadcast" className="gap-2 flex-1 h-10"><Send size={14} /> SMS Broadcast</TabsTrigger><TabsTrigger value="inapp" className="gap-2 flex-1 h-10"><BellRing size={14} /> In-App Notice</TabsTrigger><TabsTrigger value="birthdays" className="gap-2 flex-1 h-10"><Cake size={14} /> Birthdays</TabsTrigger><TabsTrigger value="templates" className="gap-2 flex-1 h-10"><Settings2 size={14} /> Templates</TabsTrigger><TabsTrigger value="api" className="gap-2 flex-1 h-10"><Globe size={14} /> API</TabsTrigger><TabsTrigger value="logs" className="gap-2 flex-1 h-10"><History size={14} /> History</TabsTrigger></TabsList>
+        <TabsList className="bg-secondary/50 p-1 flex overflow-x-auto h-auto scrollbar-hide">
+          <TabsTrigger value="broadcast" className="gap-2 flex-1 h-10 min-w-[120px]"><Send size={14} /> SMS Broadcast</TabsTrigger>
+          <TabsTrigger value="inapp" className="gap-2 flex-1 h-10 min-w-[120px]"><BellRing size={14} /> In-App Notice</TabsTrigger>
+          <TabsTrigger value="notice_history" className="gap-2 flex-1 h-10 min-w-[120px]"><FileClock size={14} /> Notice History</TabsTrigger>
+          <TabsTrigger value="birthdays" className="gap-2 flex-1 h-10 min-w-[120px]"><Cake size={14} /> Birthdays</TabsTrigger>
+          <TabsTrigger value="templates" className="gap-2 flex-1 h-10 min-w-[120px]"><Settings2 size={14} /> Templates</TabsTrigger>
+          <TabsTrigger value="api" className="gap-2 flex-1 h-10 min-w-[120px]"><Globe size={14} /> API</TabsTrigger>
+          <TabsTrigger value="logs" className="gap-2 flex-1 h-10 min-w-[120px]"><History size={14} /> SMS History</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="broadcast" className="space-y-6">
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-white rounded-3xl">
-                 <CardHeader className="bg-slate-50/50 border-b"><div className="flex justify-between items-center"><CardTitle className="text-lg">Recipient Selector</CardTitle><Button variant="outline" size="sm" onClick={() => setSelectedStudents(selectedStudents.length === filteredStudents.length ? [] : filteredStudents.map(s => s.id))} className="text-[10px] font-bold uppercase">{selectedStudents.length === filteredStudents.length ? 'Unselect' : 'Select All'}</Button></div><div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">{userRole === 'Admin' && <Select value={branchFilter} onValueChange={setBranchFilter}><SelectTrigger className="bg-white h-9 text-xs"><MapPin size={12} className="mr-2 text-primary"/><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Branches</SelectItem>{branches?.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}</SelectContent></Select>}<Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white h-9 text-xs"><Building2 size={12} className="mr-2"/><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/><Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search..." className="pl-8 h-9 border-none bg-white text-xs"/></div></div></CardHeader>
-                 <CardContent className="p-0 max-h-[500px] overflow-y-auto"><Table><TableHeader className="bg-slate-50 sticky top-0"><TableRow><TableHead className="w-12"></TableHead><TableHead>Name</TableHead><TableHead>Location</TableHead><TableHead>Balance</TableHead></TableRow></TableHeader><TableBody>{filteredStudents.map(s => (<TableRow key={s.id} className={cn(selectedStudents.includes(s.id) && "bg-primary/5")}><TableCell><Checkbox checked={selectedStudents.includes(s.id)} onCheckedChange={() => setSelectedStudents(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} /></TableCell><TableCell className="font-bold text-xs">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone}</span></TableCell><TableCell className="text-[10px]">{s.buildingName} R-{s.roomNumber}</TableCell><TableCell className="text-right font-bold text-xs">৳{s.totalDue}</TableCell></TableRow>))}</TableBody></Table></CardContent>
+                 <CardHeader className="bg-slate-50/50 border-b">
+                   <div className="flex justify-between items-center"><CardTitle className="text-lg">Recipient Selector</CardTitle><Button variant="outline" size="sm" onClick={() => setSelectedStudents(selectedStudents.length === filteredStudents.length ? [] : filteredStudents.map(s => s.id))} className="text-[10px] font-bold uppercase">{selectedStudents.length === filteredStudents.length ? 'Unselect All' : 'Select All'}</Button></div>
+                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+                     {userRole === 'Admin' && <Select value={branchFilter} onValueChange={setBranchFilter}><SelectTrigger className="bg-white h-9 text-xs"><MapPin size={12} className="mr-2 text-primary"/><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Branches</SelectItem>{branches?.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}</SelectContent></Select>}
+                     <Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white h-9 text-xs"><Building2 size={12} className="mr-2"/><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select>
+                     <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/><Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search..." className="pl-8 h-9 border-none bg-white text-xs"/></div>
+                   </div>
+                 </CardHeader>
+                 <CardContent className="p-0 max-h-[500px] overflow-y-auto">
+                   <Table>
+                     <TableHeader className="bg-slate-50 sticky top-0"><TableRow><TableHead className="w-12"></TableHead><TableHead>Name</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Balance</TableHead></TableRow></TableHeader>
+                     <TableBody>
+                       {filteredStudents.map(s => (
+                         <TableRow key={s.id} className={cn(selectedStudents.includes(s.id) && "bg-primary/5")}>
+                           <TableCell><Checkbox checked={selectedStudents.includes(s.id)} onCheckedChange={() => setSelectedStudents(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} /></TableCell>
+                           <TableCell className="font-bold text-xs">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone}</span></TableCell>
+                           <TableCell className="text-[10px]">{s.buildingName} R-{s.roomNumber}</TableCell>
+                           <TableCell className="text-right font-bold text-xs">৳{s.totalDue}</TableCell>
+                         </TableRow>
+                       ))}
+                     </TableBody>
+                   </Table>
+                 </CardContent>
               </Card>
-              <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden"><CardHeader className="bg-slate-900 text-white"><CardTitle className="text-lg">SMS Composer</CardTitle></CardHeader><CardContent className="p-6 space-y-4"><Select value={selectedTemplateId} onValueChange={handleTemplateSelect}><SelectTrigger className="h-11 rounded-xl bg-slate-50"><SelectValue placeholder="Template"/></SelectTrigger><SelectContent><SelectItem value="manual">Manual Message</SelectItem>{localTemplates.map(t => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}</SelectContent></Select><Textarea value={customMessage} onChange={e => setCustomMessage(e.target.value)} placeholder="Message..." className="min-h-[150px] rounded-2xl bg-slate-50" /><Button onClick={handleBroadcast} disabled={isSubmitting || selectedStudents.length === 0} className="w-full h-14 rounded-2xl font-bold shadow-xl">Send to {selectedStudents.length} Students</Button></CardContent></Card>
+              <Card className="border-none shadow-lg bg-white rounded-3xl overflow-hidden">
+                <CardHeader className="bg-slate-900 text-white"><CardTitle className="text-lg">SMS Composer</CardTitle></CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <Select value={selectedTemplateId} onValueChange={handleTemplateSelect}>
+                    <SelectTrigger className="h-11 rounded-xl bg-slate-50"><SelectValue placeholder="Select Template"/></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual Message</SelectItem>
+                      {localTemplates.map(t => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Textarea value={customMessage} onChange={e => setCustomMessage(e.target.value)} placeholder="Type your message here..." className="min-h-[150px] rounded-2xl bg-slate-50" />
+                  <div className="p-3 bg-secondary/30 rounded-xl">
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Message Preview Tag Summary</p>
+                    <p className="text-[10px] leading-relaxed text-slate-600">SMART tags will be auto-replaced for each student during sending.</p>
+                  </div>
+                  <Button onClick={handleBroadcast} disabled={isSubmitting || selectedStudents.length === 0} className="w-full h-14 rounded-2xl font-bold shadow-xl">
+                    {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Send className="mr-2" size={18}/>}
+                    Send to {selectedStudents.length} Students
+                  </Button>
+                </CardContent>
+              </Card>
            </div>
         </TabsContent>
 
         <TabsContent value="inapp" className="animate-in fade-in zoom-in-95 duration-300">
            <div className="max-w-2xl mx-auto space-y-6">
-              <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white"><div className="h-2 bg-primary w-full" /><CardHeader className="p-8"><div className="flex items-center gap-4 mb-2"><div className="bg-primary/10 p-3 rounded-2xl text-primary"><BellRing size={28}/></div><div><CardTitle className="text-2xl font-black">In-App Notice Center</CardTitle><CardDescription>Send direct push-style alerts to resident portals.</CardDescription></div></div></CardHeader><CardContent className="px-8 pb-8 space-y-8"><div className="space-y-2"><Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Select Audience Target</Label><Select value={noticeTarget} onValueChange={setNoticeTarget}><SelectTrigger className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-lg"><Users2 className="mr-2 h-5 w-5 text-primary" /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="everyone">📢 Send to Everyone (Broadcast)</SelectItem><Separator className="my-1"/><SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Buildings</SelectLabel>{buildings?.map(b => <SelectItem key={b.id} value={`building_${b.id}`}>🏢 {b.name} Residents</SelectItem>)}</SelectGroup><Separator className="my-1"/><SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Rooms</SelectLabel>{roomTargets.map(rt => <SelectItem key={rt.value} value={rt.value}>🚪 {rt.label}</SelectItem>)}</SelectGroup><Separator className="my-1"/><SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Individual Residents</SelectLabel>{students?.filter(s => s.isActive).slice(0, 50).map(s => <SelectItem key={s.id} value={s.id}>👤 {s.name} (R-{s.roomNumber})</SelectItem>)}</SelectGroup></SelectContent></Select></div><div className="space-y-6 p-6 bg-slate-50 rounded-[2rem] border border-slate-100 shadow-inner"><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Notice Headline</Label><Input value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} placeholder="e.g. Water Tank Cleaning" className="h-12 bg-white rounded-xl border-none shadow-sm font-bold" /></div><div className="space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Detailed Message</Label><Textarea value={noticeBody} onChange={e => setNoticeBody(e.target.value)} placeholder="Type the information here..." className="min-h-[150px] bg-white rounded-2xl border-none shadow-sm" /></div></div><div className="p-4 bg-primary/5 rounded-2xl border border-dashed border-primary/20 flex gap-3 items-center"><Info size={20} className="text-primary shrink-0" /><p className="text-[10px] font-medium leading-tight text-slate-600">This notice will appear instantly in the student's **Notice Center** tab with a "New" badge. Recipients can delete it from their view only.</p></div></CardContent><CardFooter className="p-8 bg-slate-50 border-t"><Button onClick={handleSendInAppNotice} disabled={isSubmitting || !noticeTitle} className="w-full h-16 rounded-3xl text-xl font-black shadow-2xl shadow-primary/20 transition-all hover:scale-[1.01] gap-3">{isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={24}/>} Dispatch In-App Notice</Button></CardFooter></Card>
+              <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
+                <div className="h-2 bg-primary w-full" />
+                <CardHeader className="p-8">
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="bg-primary/10 p-3 rounded-2xl text-primary"><BellRing size={28}/></div>
+                    <div><CardTitle className="text-2xl font-black">In-App Notice Center</CardTitle><CardDescription>Send direct alerts to resident portals.</CardDescription></div>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-8 pb-8 space-y-8">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Select Audience Target</Label>
+                    <Select value={noticeTarget} onValueChange={setNoticeTarget}>
+                      <SelectTrigger className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-lg"><Users2 className="mr-2 h-5 w-5 text-primary" /><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="everyone">📢 Send to Everyone (Broadcast)</SelectItem>
+                        <Separator className="my-1"/>
+                        <SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Buildings</SelectLabel>{buildings?.map(b => <SelectItem key={b.id} value={`building_${b.id}`}>🏢 {b.name} Residents</SelectItem>)}</SelectGroup>
+                        <Separator className="my-1"/>
+                        <SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Rooms</SelectLabel>{roomTargets.map(rt => <SelectItem key={rt.value} value={rt.value}>🚪 {rt.label}</SelectItem>)}</SelectGroup>
+                        <Separator className="my-1"/>
+                        <SelectGroup><SelectLabel className="text-[10px] uppercase font-black px-2 pt-2 opacity-40">Individual Residents</SelectLabel>{students?.filter(s => s.isActive).slice(0, 50).map(s => <SelectItem key={s.id} value={s.id}>👤 {s.name} (R-{s.roomNumber})</SelectItem>)}</SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-6 p-6 bg-slate-50 rounded-[2rem] border border-slate-100 shadow-inner">
+                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Notice Headline</Label><Input value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} placeholder="e.g. Water Tank Cleaning" className="h-12 bg-white rounded-xl border-none shadow-sm font-bold" /></div>
+                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Detailed Message</Label><Textarea value={noticeBody} onChange={e => setNoticeBody(e.target.value)} placeholder="Type the information here..." className="min-h-[150px] bg-white rounded-2xl border-none shadow-sm" /></div>
+                  </div>
+                </CardContent>
+                <CardFooter className="p-8 bg-slate-50 border-t">
+                  <Button onClick={handleSendInAppNotice} disabled={isSubmitting || !noticeTitle} className="w-full h-16 rounded-3xl text-xl font-black shadow-2xl shadow-primary/20 transition-all hover:scale-[1.01] gap-3">
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={24}/>} Dispatch In-App Notice
+                  </Button>
+                </CardFooter>
+              </Card>
            </div>
         </TabsContent>
 
-        <TabsContent value="logs"><Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]"><CardHeader className="bg-slate-50/50 border-b"><CardTitle>SMS Logs</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Recipient</TableHead><TableHead>Message</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{smsLogs.map(log => (<TableRow key={log.id}><TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString()}</TableCell><TableCell className="font-mono text-[10px]">{log.to}</TableCell><TableCell className="max-w-[200px] text-[10px] line-clamp-1">{log.message}</TableCell><TableCell><Badge variant="outline" className={cn("text-[8px] uppercase", log.status === 'Success' ? 'text-success' : 'text-destructive')}>{log.status}</Badge></TableCell></TableRow>))}</TableBody></Table></CardContent></Card></TabsContent>
-        <TabsContent value="birthdays" className="space-y-6"><Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden"><CardHeader className="flex flex-row justify-between items-center"><CardTitle>Today's Birthdays</CardTitle><Button onClick={handleScanBirthdays} className="gap-2 rounded-xl"><RefreshCw size={14}/> Scan Today</Button></CardHeader><CardContent className="p-0"><Table><TableBody>{birthdayStudents.map(s => (<TableRow key={s.id}><TableCell className="font-bold">{s.name}</TableCell><TableCell className="text-xs">{s.buildingName} R-{s.roomNumber}</TableCell><TableCell className="text-right text-primary font-black">{s.dob}</TableCell></TableRow>))}</TableBody></Table>{birthdayStudents.length > 0 && <div className="p-6 border-t"><Button onClick={handleSendBirthdayWishes} className="w-full h-12 rounded-xl bg-primary">Send Wishes</Button></div>}</CardContent></Card></TabsContent>
-        <TabsContent value="templates" className="space-y-6"><Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden"><CardHeader className="border-b"><div className="flex justify-between items-center"><CardTitle>Templates</CardTitle><Button onClick={handleSaveTemplates} className="rounded-xl h-10"><Save size={14} className="mr-2"/> Save All</Button></div></CardHeader><CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">{localTemplates.map((t, i) => (<div key={t.id} className="p-4 bg-slate-50 rounded-2xl border"><Label className="text-[10px] font-black uppercase mb-1 block">{t.label}</Label><Textarea value={t.text} onChange={e => { const n = [...localTemplates]; n[i].text = e.target.value; setLocalTemplates(n); }} className="bg-white text-xs" /></div>))}</CardContent></Card></TabsContent>
-        <TabsContent value="api"><Card className="max-w-md mx-auto rounded-3xl shadow-lg border-none bg-white overflow-hidden"><CardHeader className="bg-slate-900 text-white"><CardTitle>Alpha Net API</CardTitle></CardHeader><CardContent className="p-8 space-y-4"><div><Label>API Key</Label><Input type="password" value={apiConfig.apikey} onChange={e => setApiConfig({...apiConfig, apikey: e.target.value})} className="h-11" /></div><div><Label>Sender ID</Label><Input value={apiConfig.senderid} onChange={e => setApiConfig({...apiConfig, senderid: e.target.value})} className="h-11" /></div><Button onClick={handleSaveApiConfig} className="w-full h-12 rounded-xl font-bold">Update Gateway</Button></CardContent></Card></TabsContent>
+        <TabsContent value="notice_history" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
+            <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2"><TableProperties className="text-primary"/> Sent Notices History</CardTitle>
+              <Button variant="destructive" size="sm" className="gap-2 font-bold rounded-xl" onClick={() => handleDeleteHistory("notices")}>
+                <Trash2 size={14}/> Delete All
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Target Student</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Message</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {noticeLogs.map(log => (
+                    <TableRow key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                      <TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString() || 'N/A'}</TableCell>
+                      <TableCell className="font-bold text-[10px] text-slate-600">
+                        {log.studentId === 'everyone' ? <Badge className="bg-primary text-[8px]">BROADCAST</Badge> : (log.studentId || 'N/A')}
+                      </TableCell>
+                      <TableCell className="font-black text-xs text-slate-800">{log.title}</TableCell>
+                      <TableCell className="max-w-[300px] text-[10px] text-slate-500 line-clamp-1">{log.message}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn("text-[8px] uppercase", log.isRead ? 'text-success border-success/20' : 'text-orange-400 border-orange-200')}>
+                          {log.isRead ? 'Read' : 'Unread'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {noticeLogs.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No notice history found.</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="logs">
+          <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden min-h-[500px]">
+            <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">SMS Delivery Logs</CardTitle>
+              <Button variant="destructive" size="sm" className="gap-2 font-bold rounded-xl" onClick={() => handleDeleteHistory("smsLogs")}>
+                <Trash2 size={14}/> Delete All
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Recipient</TableHead><TableHead>Message</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {smsLogs.map(log => (
+                    <TableRow key={log.id}>
+                      <TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString()}</TableCell>
+                      <TableCell className="font-mono text-[10px]">{log.to}</TableCell>
+                      <TableCell className="max-w-[200px] text-[10px] line-clamp-1">{log.message}</TableCell>
+                      <TableCell><Badge variant="outline" className={cn("text-[8px] uppercase", log.status === 'Success' ? 'text-success' : 'text-destructive')}>{log.status}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                  {smsLogs.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic">No SMS logs found.</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="birthdays" className="space-y-6">
+          <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
+            <CardHeader className="flex flex-row justify-between items-center"><CardTitle>Today's Birthdays</CardTitle><Button onClick={handleScanBirthdays} className="gap-2 rounded-xl"><RefreshCw size={14}/> Scan Today</Button></CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableBody>
+                  {birthdayStudents.map(s => (
+                    <TableRow key={s.id}><TableCell className="font-bold">{s.name}</TableCell><TableCell className="text-xs">{s.buildingName} R-{s.roomNumber}</TableCell><TableCell className="text-right text-primary font-black">{s.dob}</TableCell></TableRow>
+                  ))}
+                  {birthdayStudents.length === 0 && !isScanning && <TableRow><TableCell className="text-center py-12 text-muted-foreground italic">No birthdays found today.</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+              {birthdayStudents.length > 0 && <div className="p-6 border-t"><Button onClick={handleSendBirthdayWishes} className="w-full h-12 rounded-xl bg-primary">Send Wishes</Button></div>}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="templates" className="space-y-6">
+          <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
+            <CardHeader className="border-b"><div className="flex justify-between items-center"><CardTitle>Message Templates</CardTitle><Button onClick={handleSaveTemplates} className="rounded-xl h-10"><Save size={14} className="mr-2"/> Save All</Button></div></CardHeader>
+            <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">{localTemplates.map((t, i) => (<div key={t.id} className="p-4 bg-slate-50 rounded-2xl border"><Label className="text-[10px] font-black uppercase mb-1 block">{t.label}</Label><Textarea value={t.text} onChange={e => { const n = [...localTemplates]; n[i].text = e.target.value; setLocalTemplates(n); }} className="bg-white text-xs" /></div>))}</CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="api">
+          <Card className="max-w-md mx-auto rounded-3xl shadow-lg border-none bg-white overflow-hidden">
+            <CardHeader className="bg-slate-900 text-white"><CardTitle>Alpha Net SMS Gateway</CardTitle></CardHeader>
+            <CardContent className="p-8 space-y-4">
+              <div><Label>API Key</Label><Input type="password" value={apiConfig.apikey} onChange={e => setApiConfig({...apiConfig, apikey: e.target.value})} className="h-11" /></div>
+              <div><Label>Sender ID (Optional)</Label><Input value={apiConfig.senderid} onChange={e => setApiConfig({...apiConfig, senderid: e.target.value})} className="h-11" placeholder="e.g. 88017..." /></div>
+              <Button onClick={handleSaveApiConfig} disabled={isSubmitting} className="w-full h-12 rounded-xl font-bold">
+                {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : "Update Configuration"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   )
