@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, where, doc, updateDoc, serverTimestamp } from "firebase/firestore"
+import { collection, query, where, doc, updateDoc, serverTimestamp, increment } from "firebase/firestore"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -37,9 +37,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useToast } from "@/hooks/use-toast"
 
 export default function AdminMealDashboardPage() {
   const db = useFirestore()
+  const { toast } = useToast()
   const [userBranch, setUserBranch] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
@@ -146,15 +148,25 @@ export default function AdminMealDashboardPage() {
     return { b, l, d };
   }, [students, buildingFilter]);
 
-  const handleToggleMeal = async (studentId: string, mealId: string, currentVal: boolean) => {
+  const handleToggleMeal = async (student: any, mealId: string) => {
     try {
-      const sRef = doc(db, "students", studentId)
+      const currentVal = !!student.mealStatus?.[mealId];
+      const sRef = doc(db, "students", student.id);
+      
+      const counterField = `currentMonth${mealId.charAt(0).toUpperCase() + mealId.slice(1)}`;
+      
       await updateDoc(sRef, {
         [`mealStatus.${mealId}`]: !currentVal,
+        [counterField]: increment(!currentVal ? 1 : -1),
         updatedAt: serverTimestamp()
-      })
-    } catch (e) {
-      console.error(e)
+      });
+      
+      toast({ 
+        title: "Status Updated", 
+        description: `${student.name}'s ${mealId} is now ${!currentVal ? 'ON' : 'OFF'}. Billing counter adjusted.` 
+      });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
     }
   }
 
@@ -390,9 +402,9 @@ export default function AdminMealDashboardPage() {
               <CardHeader className="bg-slate-50/50 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                  <div>
                    <CardTitle className="text-lg flex items-center gap-2 text-primary">
-                     <ChefHat size={20}/> Meal Manager (Delivery & Toggle)
+                     <ChefHat size={20}/> Meal Manager (Manual Override)
                    </CardTitle>
-                   <CardDescription>Order by room number. Staff can mark as delivered.</CardDescription>
+                   <CardDescription>Force toggle meals & auto-update monthly counters.</CardDescription>
                  </div>
                  <div className="flex gap-2">
                    <Select value={buildingFilter} onValueChange={setBuildingFilter}>
@@ -443,7 +455,7 @@ export default function AdminMealDashboardPage() {
                      <TableHeader className="bg-slate-50/50 sticky top-0 z-10">
                        <TableRow>
                          <TableHead>Resident (Room Wise)</TableHead>
-                         <TableHead className="text-center">Status (B/L/D)</TableHead>
+                         <TableHead className="text-center">Force Toggle (B/L/D)</TableHead>
                          <TableHead className="text-center">Delivery Track</TableHead>
                        </TableRow>
                      </TableHeader>
@@ -471,22 +483,22 @@ export default function AdminMealDashboardPage() {
                              <div className="flex gap-2 justify-center">
                                <button 
                                  title="Toggle Breakfast"
-                                 onClick={() => handleToggleMeal(s.id, 'breakfast', s.mealStatus?.breakfast)}
-                                 className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-slate-100 text-slate-300")}
+                                 onClick={() => handleToggleMeal(s, 'breakfast')}
+                                 className={cn("h-8 w-8 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-slate-100 text-slate-300")}
                                >
                                  <span className="text-[10px] font-black">B</span>
                                </button>
                                <button 
                                  title="Toggle Lunch"
-                                 onClick={() => handleToggleMeal(s.id, 'lunch', s.mealStatus?.lunch)}
-                                 className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-slate-100 text-slate-300")}
+                                 onClick={() => handleToggleMeal(s, 'lunch')}
+                                 className={cn("h-8 w-8 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-slate-100 text-slate-300")}
                                >
                                  <span className="text-[10px] font-black">L</span>
                                </button>
                                <button 
                                  title="Toggle Dinner"
-                                 onClick={() => handleToggleMeal(s.id, 'dinner', s.mealStatus?.dinner)}
-                                 className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-slate-100 text-slate-300")}
+                                 onClick={() => handleToggleMeal(s, 'dinner')}
+                                 className={cn("h-8 w-8 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-slate-100 text-slate-300")}
                                >
                                  <span className="text-[10px] font-black">D</span>
                                </button>
