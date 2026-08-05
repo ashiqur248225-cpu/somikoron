@@ -109,13 +109,18 @@ export default function BulkMealEntryPage() {
     )
   }, [students, mealLogFilter.buildingId])
 
-  // POPULATE MEAL INPUTS AUTOMATICALLY FROM STUDENT COUNTERS
+  // POPULATE MEAL INPUTS AUTOMATICALLY FROM STUDENT COUNTERS WITH BREAKFAST AS HALF MEAL
   useEffect(() => {
     if (filteredStudents.length > 0) {
       const initialInputs: Record<string, string> = {};
       filteredStudents.forEach(s => {
-        const total = (Number(s.currentMonthBreakfast) || 0) + (Number(s.currentMonthLunch) || 0) + (Number(s.currentMonthDinner) || 0);
-        initialInputs[s.id] = total.toString();
+        // BREAKFAST counts as 0.5, LUNCH and DINNER count as 1.0
+        const breakfast = (Number(s.currentMonthBreakfast) || 0) * 0.5;
+        const lunch = (Number(s.currentMonthLunch) || 0);
+        const dinner = (Number(s.currentMonthDinner) || 0);
+        
+        const effectiveTotal = breakfast + lunch + dinner;
+        initialInputs[s.id] = effectiveTotal.toString();
       });
       setMealInputs(prev => ({...prev, ...initialInputs}));
     }
@@ -162,7 +167,7 @@ export default function BulkMealEntryPage() {
           id: noticeId,
           studentId: s.id,
           title: "Monthly Meal Bill Generated",
-          message: `Your meal bill for ${monthLabel} has been generated. Total Meals: ${count}, Total Bill: ${totalCost} Tk.`,
+          message: `Your meal bill for ${monthLabel} has been generated. Total Effective Meals: ${count}, Total Bill: ${totalCost} Tk.`,
           type: "meal",
           isRead: false,
           createdAt: serverTimestamp(),
@@ -246,7 +251,7 @@ export default function BulkMealEntryPage() {
         <div className="h-2 bg-primary w-full" />
         <CardHeader className="px-8 pt-8 pb-4">
           <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
-            <div><CardTitle className="text-2xl font-black flex items-center gap-2 text-primary"><Utensils size={24}/> Spreadsheet Entry</CardTitle><CardDescription>Update balances based on auto-calculated monthly meals.</CardDescription></div>
+            <div><CardTitle className="text-2xl font-black flex items-center gap-2 text-primary"><Utensils size={24}/> Spreadsheet Entry</CardTitle><CardDescription>Update balances based on weighted monthly meals (Breakfast=0.5).</CardDescription></div>
             <div className="flex items-center gap-3 px-6 py-3 bg-primary/5 rounded-2xl border border-primary/10 shadow-sm"><Calculator size={20} className="text-primary" /><div className="flex flex-col"><span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Global Meal Rate</span><span className="text-lg font-black text-primary">৳{mealConfig?.rate || 0} / Meal</span></div></div>
           </div>
         </CardHeader>
@@ -260,7 +265,7 @@ export default function BulkMealEntryPage() {
 
         <div className="px-8">
           <Table>
-            <TableHeader className="bg-white sticky top-0 z-10"><TableRow className="border-none hover:bg-transparent h-16"><TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Resident Details</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-center text-slate-500">Current Balance</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Total Meals (Auto)</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Meal Bill</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">New Balance</TableHead></TableRow></TableHeader>
+            <TableHeader className="bg-white sticky top-0 z-10"><TableRow className="border-none hover:bg-transparent h-16"><TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Resident Details</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-center text-slate-500">Current Balance</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Effective Meals (Auto)</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Meal Bill</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">New Balance</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredStudents.map(s => {
                 const count = Number(mealInputs[s.id] || 0); const rate = Number(mealConfig?.rate || 0); const bill = count * rate; const currentBal = Number(s.foodDueAmount || 0); const newBal = currentBal - bill;
@@ -268,7 +273,7 @@ export default function BulkMealEntryPage() {
                   <TableRow key={s.id} className={cn("group transition-all hover:bg-slate-50 h-20", newBal < 0 && "bg-destructive/[0.03]")}>
                     <TableCell><div className="flex items-center gap-4"><div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.name.substring(0, 2).toUpperCase()}</div><div><p className="font-bold text-slate-800 text-sm leading-none">{s.name}</p><p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">{s.buildingName} • R-{s.roomNumber}</p></div></div></TableCell>
                     <TableCell className="text-center"><Badge variant="outline" className={cn("font-black text-[11px] px-4 py-1 rounded-full", currentBal < 0 ? "text-destructive border-destructive/20 bg-destructive/5" : "text-success border-success/20 bg-success/5")}>৳{currentBal}</Badge></TableCell>
-                    <TableCell className="text-right"><div className="relative inline-block w-full max-w-[100px]"><Input type="number" className="h-12 text-center text-lg font-black bg-slate-100 border-none shadow-inner rounded-2xl focus:ring-primary/20" value={mealInputs[s.id] || ""} onChange={e => setMealInputs({...mealInputs, [s.id]: e.target.value})} /></div></TableCell>
+                    <TableCell className="text-right"><div className="relative inline-block w-full max-w-[100px]"><Input type="number" step="0.5" className="h-12 text-center text-lg font-black bg-slate-100 border-none shadow-inner rounded-2xl focus:ring-primary/20" value={mealInputs[s.id] || ""} onChange={e => setMealInputs({...mealInputs, [s.id]: e.target.value})} /></div></TableCell>
                     <TableCell className="text-right font-black text-slate-600 text-lg">৳{bill}</TableCell>
                     <TableCell className="text-right"><span className={cn("font-black text-xl", newBal < 0 ? "text-destructive" : "text-primary")}>৳{newBal}</span>{newBal < 0 && <p className="text-[9px] font-black uppercase text-destructive tracking-widest mt-1">Due Generated</p>}</TableCell>
                   </TableRow>
