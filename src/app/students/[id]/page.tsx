@@ -29,7 +29,10 @@ import {
   Lock,
   Eye,
   ShieldAlert,
-  Settings2
+  Settings2,
+  Database,
+  ArrowUpRight,
+  Save
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -64,13 +67,24 @@ import { cn } from "@/lib/utils"
 import { sendSMS } from "@/app/actions/sms"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const YEARS = ["2024", "2025", "2026", "2027", "2028"];
+const YEARS = ["2024", "2025", "2026", "2027", "2028", "2029", "2030"];
 
 interface DueEntry {
   id: string;
   month: string;
   year: string;
   amount: string;
+}
+
+interface PastPaymentEntry {
+  id: string;
+  month: string;
+  year: string;
+  amount: string;
+  seatAmount: string;
+  foodAmount: string;
+  method: string;
+  date: string;
 }
 
 export default function StudentDetailsPage() {
@@ -86,6 +100,7 @@ export default function StudentDetailsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isMealAdjustOpen, setIsMealAdjustOpen] = useState(false)
+  const [isMigrationDialogOpen, setIsMigrationDialogOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   
   const [userRole, setUserRole] = useState("")
@@ -98,6 +113,16 @@ export default function StudentDetailsPage() {
     breakfast: "0",
     lunch: "0",
     dinner: "0"
+  })
+
+  // Migration Form State
+  const [migrationForm, setMigrationForm] = useState({
+    dues: [] as DueEntry[],
+    pastPayments: [] as PastPaymentEntry[],
+    advanceAmount: "0",
+    serviceCharge: "0",
+    foodDueAmount: "0",
+    historicalTotalReceived: "0"
   })
 
   useEffect(() => {
@@ -165,6 +190,36 @@ export default function StudentDetailsPage() {
       })
     }
   }, [isMealAdjustOpen, student])
+
+  // Initialize Migration Form when dialog opens
+  useEffect(() => {
+    if (isMigrationDialogOpen && student) {
+      const historicalDues = Object.entries(student.duesBreakdown || {}).map(([label, data]: any) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        month: data.month,
+        year: data.year,
+        amount: data.amount.toString()
+      }))
+
+      setMigrationForm({
+        dues: historicalDues,
+        pastPayments: (student.paymentsHistory || []).map((p: any) => ({
+          id: p.id || Math.random().toString(36).substr(2, 9),
+          month: p.month,
+          year: p.year,
+          amount: p.amount.toString(),
+          seatAmount: (p.seatAmount || 0).toString(),
+          foodAmount: (p.foodAmount || 0).toString(),
+          method: p.method,
+          date: p.date?.includes('T') ? p.date.split('T')[0] : p.date
+        })),
+        advanceAmount: (student.advanceAmount || 0).toString(),
+        serviceCharge: (student.serviceCharge || 0).toString(),
+        foodDueAmount: (student.foodDueAmount || 0).toString(),
+        historicalTotalReceived: (student.historicalTotalReceived || 0).toString()
+      })
+    }
+  }, [isMigrationDialogOpen, student])
 
   const [editForm, setEditForm] = useState<any>(null)
 
@@ -589,6 +644,69 @@ export default function StudentDetailsPage() {
     finally { setIsUpdating(false) }
   }
 
+  // MIGRATION ACTIONS
+  const addMigrationDue = () => {
+    setMigrationForm(prev => ({
+      ...prev,
+      dues: [...prev.dues, { id: Math.random().toString(36).substr(2, 9), month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: student?.monthlyRent?.toString() || "0" }]
+    }))
+  }
+
+  const removeMigrationDue = (id: string) => {
+    setMigrationForm(prev => ({ ...prev, dues: prev.dues.filter(d => d.id !== id) }))
+  }
+
+  const addMigrationPayment = () => {
+    setMigrationForm(prev => ({
+      ...prev,
+      pastPayments: [...prev.pastPayments, { id: Math.random().toString(36).substr(2, 9), month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: student?.monthlyRent?.toString() || "0", seatAmount: student?.monthlyRent?.toString() || "0", foodAmount: "0", method: "cash", date: new Date().toISOString().split('T')[0] }]
+    }))
+  }
+
+  const removeMigrationPayment = (id: string) => {
+    setMigrationForm(prev => ({ ...prev, pastPayments: prev.pastPayments.filter(p => p.id !== id) }))
+  }
+
+  const handleSaveMigration = async () => {
+    if (!studentRef) return
+    setIsUpdating(true)
+    try {
+      const finalDues: Record<string, any> = {}
+      let totalDue = 0
+      migrationForm.dues.forEach(d => {
+        const label = `${d.month} ${d.year}`
+        const amt = Number(d.amount)
+        finalDues[label] = { month: d.month, year: d.year, amount: amt }
+        totalDue += amt
+      })
+
+      const finalPayments = migrationForm.pastPayments.map(p => ({
+        ...p,
+        amount: Number(p.amount),
+        seatAmount: Number(p.seatAmount),
+        foodAmount: Number(p.foodAmount),
+        date: new Date(p.date).toISOString()
+      }))
+
+      await updateDoc(studentRef, {
+        duesBreakdown: finalDues,
+        totalDue: totalDue,
+        paymentsHistory: finalPayments,
+        advanceAmount: Number(migrationForm.advanceAmount),
+        serviceCharge: Number(migrationForm.serviceCharge),
+        foodDueAmount: Number(migrationForm.foodDueAmount),
+        historicalTotalReceived: Number(migrationForm.historicalTotalReceived),
+        updatedAt: serverTimestamp()
+      })
+      toast({ title: "Migration Successful", description: "Historical data and balances have been updated." })
+      setIsMigrationDialogOpen(false)
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Migration Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   if (studentLoading || buildingsLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
   if (!student) return <div className="text-center p-20">Resident not found.</div>
 
@@ -610,6 +728,9 @@ export default function StudentDetailsPage() {
           <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical size={20} /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-xl border-slate-100">
               <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer"><Edit size={16} className="text-primary" /> Edit Profile</DropdownMenuItem>
+              {userRole === 'Admin' && (
+                <DropdownMenuItem onSelect={() => setIsMigrationDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer text-indigo-600"><Database size={16} /> Migration Setup</DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => setIsExitDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer"><Scale size={16} /> Process Exit & Settlement</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -628,6 +749,9 @@ export default function StudentDetailsPage() {
           </div>
         </div>
         <div className="flex gap-3">
+          {userRole === 'Admin' && (
+            <Button variant="outline" className="rounded-xl h-11 px-6 font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50" onClick={() => setIsMigrationDialogOpen(true)}><Database size={18} className="mr-2"/> Migration Setup</Button>
+          )}
           <Button variant="outline" className="rounded-xl h-11 px-6 font-bold" onClick={() => setIsEditDialogOpen(true)}><Edit size={18} className="mr-2"/> Edit Profile</Button>
           <Button variant="destructive" className="rounded-xl h-11 px-6 font-bold gap-2 shadow-lg shadow-destructive/10" onClick={() => setIsExitDialogOpen(true)}><Scale size={18} /> Process Exit & Settlement</Button>
           <Button variant="ghost" className="rounded-xl h-11 px-6 font-bold" onClick={() => router.back()}>Back</Button>
@@ -676,7 +800,6 @@ export default function StudentDetailsPage() {
             </Card>
           ))}
           
-          {/* Meal Counter Adjustment Card for Managers */}
           <Card className="p-4 rounded-2xl border-2 border-primary/10 shadow-md flex items-center justify-between bg-white md:col-span-2">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-xl bg-primary/5 text-primary"><Calculator size={24}/></div>
@@ -743,7 +866,7 @@ export default function StudentDetailsPage() {
         </TabsContent>
         <TabsContent value="dues">
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
-            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Month</TableHead><TableHead>Due Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Month</TableHead>            <TableHead>Due Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
               <TableBody>{stats?.dueBreakdownList.map((d, i) => (
                 <TableRow key={i}><TableCell className="font-bold">{d.month}</TableCell><TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell><TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive uppercase">Unpaid</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => router.push(`/payment-entry?studentId=${student.id}`)}>Record Pay</Button></TableCell></TableRow>
               ))}</TableBody>
@@ -825,6 +948,138 @@ export default function StudentDetailsPage() {
             <p className="text-[10px] text-muted-foreground italic bg-primary/5 p-3 rounded-xl border border-dashed">বি.দ্র: এখানে সরাসরি এই মাসের মোট মিলের সংখ্যা বসিয়ে দিন। এটি ১ তারিখ থেকে আজকের দিন পর্যন্ত খাবারের সংখ্যা আপডেট করতে সাহায্য করবে।</p>
           </div>
           <DialogFooter><Button onClick={handleMealAdjust} disabled={isUpdating} className="w-full h-12 rounded-xl font-bold uppercase text-xs tracking-widest">{isUpdating ? <Loader2 className="animate-spin" /> : "Save Adjusted Counts"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ADVANCED MIGRATION DIALOG */}
+      <Dialog open={isMigrationDialogOpen} onOpenChange={setIsMigrationDialogOpen}>
+        <DialogContent className="max-w-4xl rounded-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-indigo-600"><Database /> Advanced Migration Setup (Admin Only)</DialogTitle>
+            <DialogDescription>Configure historical data, past payments and initial ledger balances.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-8 py-4">
+            {/* Initial Balances Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-3xl border">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground">Historical Recv.</Label>
+                <Input type="number" value={migrationForm.historicalTotalReceived} onChange={e => setMigrationForm({...migrationForm, historicalTotalReceived: e.target.value})} className="h-10 font-bold" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground">Security Adv.</Label>
+                <Input type="number" value={migrationForm.advanceAmount} onChange={e => setMigrationForm({...migrationForm, advanceAmount: e.target.value})} className="h-10 font-bold" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground">Svc Charge</Label>
+                <Input type="number" value={migrationForm.serviceCharge} onChange={e => setMigrationForm({...migrationForm, serviceCharge: e.target.value})} className="h-10 font-bold" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground">Food Bal (+/-)</Label>
+                <Input type="number" value={migrationForm.foodDueAmount} onChange={e => setMigrationForm({...migrationForm, foodDueAmount: e.target.value})} className="h-10 font-bold" />
+              </div>
+            </div>
+
+            {/* Dues Breakdown Management */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-black uppercase text-primary flex items-center gap-2"><Clock size={16}/> Historical Unpaid Dues</h3>
+                <Button variant="outline" size="sm" onClick={addMigrationDue} className="gap-2 text-[10px] font-bold h-8"><Plus size={14}/> Add Month Box</Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {migrationForm.dues.map(due => (
+                  <div key={due.id} className="p-3 bg-white border-2 border-slate-100 rounded-2xl flex items-end gap-2 group animate-in zoom-in-95">
+                    <div className="flex-1 space-y-1">
+                      <div className="flex gap-1">
+                        <Select value={due.month} onValueChange={v => updateDueEntry(due.id, 'month', v)}>
+                          <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Select value={due.year} onValueChange={v => updateDueEntry(due.id, 'year', v)}>
+                          <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="w-24 space-y-1">
+                      <Input type="number" value={due.amount} onChange={e => updateDueEntry(due.id, 'amount', e.target.value)} className="h-8 text-[10px] font-bold" />
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-30 group-hover:opacity-100" onClick={() => removeMigrationDue(due.id)}>
+                      <X size={14}/>
+                    </Button>
+                  </div>
+                ))}
+                {migrationForm.dues.length === 0 && <p className="text-center text-xs text-muted-foreground italic col-span-2">No historical dues assigned.</p>}
+              </div>
+            </div>
+
+            {/* Payments History Management */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-black uppercase text-success flex items-center gap-2"><History size={16}/> Payments History Records</h3>
+                <Button variant="outline" size="sm" onClick={addMigrationPayment} className="gap-2 text-[10px] font-bold h-8"><Plus size={14}/> Record Past Pay</Button>
+              </div>
+              <div className="space-y-3">
+                {migrationForm.pastPayments.map(p => (
+                  <div key={p.id} className="p-4 bg-slate-50 border rounded-2xl flex flex-wrap md:flex-nowrap gap-4 items-end animate-in slide-in-from-top-2">
+                     <div className="w-32 space-y-1">
+                        <Label className="text-[8px] uppercase">Date</Label>
+                        <Input type="date" value={p.date} onChange={e => {
+                          const updated = migrationForm.pastPayments.map(pay => pay.id === p.id ? { ...pay, date: e.target.value } : pay)
+                          setMigrationForm({ ...migrationForm, pastPayments: updated })
+                        }} className="h-8 text-[10px]" />
+                     </div>
+                     <div className="w-40 space-y-1">
+                        <Label className="text-[8px] uppercase">Month/Year</Label>
+                        <div className="flex gap-1">
+                           <Select value={p.month} onValueChange={v => {
+                             const updated = migrationForm.pastPayments.map(pay => pay.id === p.id ? { ...pay, month: v } : pay)
+                             setMigrationForm({ ...migrationForm, pastPayments: updated })
+                           }}><SelectTrigger className="h-8 text-[9px]"><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select>
+                           <Select value={p.year} onValueChange={v => {
+                             const updated = migrationForm.pastPayments.map(pay => pay.id === p.id ? { ...pay, year: v } : pay)
+                             setMigrationForm({ ...migrationForm, pastPayments: updated })
+                           }}><SelectTrigger className="h-8 text-[9px]"><SelectValue /></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select>
+                        </div>
+                     </div>
+                     <div className="flex-1 space-y-1">
+                        <Label className="text-[8px] uppercase">Seat + Food = Total</Label>
+                        <div className="flex gap-2 items-center">
+                           <Input type="number" value={p.seatAmount} onChange={e => {
+                             const seat = Number(e.target.value); const total = seat + Number(p.foodAmount)
+                             const updated = migrationForm.pastPayments.map(pay => pay.id === p.id ? { ...pay, seatAmount: e.target.value, amount: total.toString() } : pay)
+                             setMigrationForm({ ...migrationForm, pastPayments: updated })
+                           }} className="h-8 text-[10px] font-bold" />
+                           <span className="text-[10px] font-bold">+</span>
+                           <Input type="number" value={p.foodAmount} onChange={e => {
+                             const food = Number(e.target.value); const total = food + Number(p.seatAmount)
+                             const updated = migrationForm.pastPayments.map(pay => pay.id === p.id ? { ...pay, foodAmount: e.target.value, amount: total.toString() } : pay)
+                             setMigrationForm({ ...migrationForm, pastPayments: updated })
+                           }} className="h-8 text-[10px] font-bold" />
+                           <span className="text-[10px] font-bold">=</span>
+                           <Badge className="bg-success text-[10px] h-8 px-3">৳{p.amount}</Badge>
+                        </div>
+                     </div>
+                     <div className="w-24 space-y-1">
+                        <Label className="text-[8px] uppercase">Method</Label>
+                        <Select value={p.method} onValueChange={v => {
+                          const updated = migrationForm.pastPayments.map(pay => pay.id === p.id ? { ...pay, method: v } : pay)
+                          setMigrationForm({ ...migrationForm, pastPayments: updated })
+                        }}><SelectTrigger className="h-8 text-[9px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem></SelectContent></Select>
+                     </div>
+                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeMigrationPayment(p.id)}><Trash2 size={14}/></Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="p-8 bg-slate-50 border-t sticky bottom-0">
+             <Button onClick={handleSaveMigration} disabled={isUpdating} className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xl shadow-xl shadow-indigo-200 gap-3">
+                {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={24}/>}
+                Commit & Finalize Migration
+             </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
