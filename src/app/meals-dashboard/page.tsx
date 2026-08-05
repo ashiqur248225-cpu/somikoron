@@ -43,12 +43,14 @@ export default function AdminMealDashboardPage() {
   const db = useFirestore()
   const { toast } = useToast()
   const [userBranch, setUserBranch] = useState("")
+  const [userRole, setUserRole] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [expandedBuilding, setExpandedBuilding] = useState<string | null>(null)
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    setUserRole(localStorage.getItem("user_role") || "Staff")
   }, [])
 
   const studentsQuery = useMemoFirebase(() => {
@@ -148,7 +150,10 @@ export default function AdminMealDashboardPage() {
     return { b, l, d };
   }, [students, buildingFilter]);
 
+  const canOverride = userRole === 'Admin' || userRole === 'Branch Manager';
+
   const handleToggleMeal = async (student: any, mealId: string) => {
+    if (!canOverride) return;
     try {
       const currentVal = !!student.mealStatus?.[mealId];
       const sRef = doc(db, "students", student.id);
@@ -484,21 +489,36 @@ export default function AdminMealDashboardPage() {
                                <button 
                                  title="Toggle Breakfast"
                                  onClick={() => handleToggleMeal(s, 'breakfast')}
-                                 className={cn("h-8 w-8 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-slate-100 text-slate-300")}
+                                 disabled={!canOverride}
+                                 className={cn(
+                                   "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
+                                   s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-slate-100 text-slate-300",
+                                   !canOverride && "opacity-80 cursor-not-allowed"
+                                 )}
                                >
                                  <span className="text-[10px] font-black">B</span>
                                </button>
                                <button 
                                  title="Toggle Lunch"
                                  onClick={() => handleToggleMeal(s, 'lunch')}
-                                 className={cn("h-8 w-8 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-slate-100 text-slate-300")}
+                                 disabled={!canOverride}
+                                 className={cn(
+                                   "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
+                                   s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-slate-100 text-slate-300",
+                                   !canOverride && "opacity-80 cursor-not-allowed"
+                                 )}
                                >
                                  <span className="text-[10px] font-black">L</span>
                                </button>
                                <button 
                                  title="Toggle Dinner"
                                  onClick={() => handleToggleMeal(s, 'dinner')}
-                                 className={cn("h-8 w-8 rounded-lg flex items-center justify-center transition-all", s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-slate-100 text-slate-300")}
+                                 disabled={!canOverride}
+                                 className={cn(
+                                   "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
+                                   s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-slate-100 text-slate-300",
+                                   !canOverride && "opacity-80 cursor-not-allowed"
+                                 )}
                                >
                                  <span className="text-[10px] font-black">D</span>
                                </button>
