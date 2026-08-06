@@ -62,6 +62,51 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     checkPersistence()
   }, [db, isPublicPage])
 
+  // NEW: Background Identity Verification
+  useEffect(() => {
+    if (!isAuthenticated || isPublicPage) return;
+
+    const verifyUserStatus = async () => {
+      const authId = localStorage.getItem("somikoron_auth_id");
+      const role = localStorage.getItem("user_role");
+      if (!authId) return;
+
+      try {
+        const collectionName = role === 'Student' ? 'students' : 'staff';
+        const userSnap = await getDoc(doc(db, collectionName, authId));
+
+        // If user document is deleted
+        if (!userSnap.exists()) {
+          localStorage.clear();
+          sessionStorage.clear();
+          setIsAuthenticated(false);
+          router.push("/");
+          return;
+        }
+
+        const userData = userSnap.data();
+        // If user is marked inactive/exited
+        const isInactive = role === 'Student' ? !userData.isActive : userData.isActive === false;
+        
+        if (isInactive) {
+          localStorage.clear();
+          sessionStorage.clear();
+          setIsAuthenticated(false);
+          router.push("/");
+          toast({ 
+            variant: "destructive", 
+            title: "Access Terminated", 
+            description: "আপনার অ্যাকাউন্টটি আর সচল নেই। ম্যানেজারের সাথে যোগাযোগ করুন।" 
+          });
+        }
+      } catch (e) {
+        console.error("Identity verification failed:", e);
+      }
+    }
+
+    verifyUserStatus();
+  }, [isAuthenticated, isPublicPage, db, router, toast]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.number || !formData.password) {
