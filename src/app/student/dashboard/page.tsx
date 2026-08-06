@@ -51,7 +51,7 @@ export default function StudentDashboardPage() {
     const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0)
     const foodVal = Number(student.foodDueAmount || 0)
     const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0
-    const foodBalance = foodVal > 0 ? foodVal : 0
+    const foodBalanceDisplay = foodVal
     
     // Cooking Bill Logic
     const cookVal = Number(student.cookingDueAmount || 0)
@@ -65,7 +65,7 @@ export default function StudentDashboardPage() {
 
     const currentMonthMeals = (student.currentMonthBreakfast || 0) + (student.currentMonthLunch || 0) + (student.currentMonthDinner || 0)
     
-    return { rentDue, foodBalance, foodDue, cookDue, cookBalance, totalDue, lastPayment, lastMonthFood, currentMonthMeals }
+    return { rentDue, foodBalanceDisplay, foodDue, cookDue, cookBalance, totalDue, lastPayment, lastMonthFood, currentMonthMeals }
   }, [student])
 
   if (!isMounted) return null;
@@ -104,9 +104,11 @@ export default function StudentDashboardPage() {
                 <p className="text-lg font-black">৳{student.advanceAmount?.toLocaleString()}</p>
              </div>
              <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
-                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Food Balance</p>
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">
+                  {(student.foodDueAmount || 0) < 0 ? "Food Due" : "Food Balance"}
+                </p>
                 <p className={cn("text-lg font-black", (student.foodDueAmount || 0) < 0 ? "text-red-300" : "text-green-300")}>
-                  ৳{stats?.foodBalance.toLocaleString()}
+                  ৳{stats?.foodBalanceDisplay.toLocaleString()}
                 </p>
              </div>
              <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
