@@ -883,7 +883,7 @@ export default function StudentDetailsPage() {
         </TabsList>
         <TabsContent value="payments">
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
-            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead>Complete Record<TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Cooking</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
+            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Cooking</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
               <TableBody>{student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
                 <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
                   <TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
