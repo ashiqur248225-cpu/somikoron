@@ -32,7 +32,8 @@ import {
   Settings2,
   Database,
   ArrowUpRight,
-  Save
+  Save,
+  ChefHat
 } from "lucide-react"
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
@@ -122,6 +123,7 @@ export default function StudentDetailsPage() {
     advanceAmount: "0",
     serviceCharge: "0",
     foodDueAmount: "0",
+    cookingDueAmount: "0",
     historicalTotalReceived: "0"
   })
 
@@ -148,6 +150,18 @@ export default function StudentDetailsPage() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
+  const mealConfigRef = useMemoFirebase(() => 
+    student?.branch ? doc(db, "configs", `mealRate_${student.branch}`) : null, 
+    [db, student?.branch]
+  )
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
+  const billingConfigRef = useMemoFirebase(() => 
+    student?.branch ? doc(db, "configs", `billingConfig_${student.branch}`) : null, 
+    [db, student?.branch]
+  )
+  const { data: billingConfig } = useDoc(billingConfigRef)
+
   const managementStaff = useMemo(() => {
     if (!staffList) return []
     const userBranch = student?.branch || localStorage.getItem("user_branch") || "";
@@ -156,12 +170,6 @@ export default function StudentDetailsPage() {
       return s.branch === userBranch && (s.staffType === 'management' || !s.staffType);
     })
   }, [staffList, student?.branch])
-
-  const mealConfigRef = useMemoFirebase(() => 
-    student?.branch ? doc(db, "configs", `mealRate_${student.branch}`) : null, 
-    [db, student?.branch]
-  )
-  const { data: mealConfig } = useDoc(mealConfigRef)
 
   const [paymentData, setPaymentData] = useState({
     month: MONTHS[new Date().getMonth()],
@@ -216,6 +224,7 @@ export default function StudentDetailsPage() {
         advanceAmount: (student.advanceAmount || 0).toString(),
         serviceCharge: (student.serviceCharge || 0).toString(),
         foodDueAmount: (student.foodDueAmount || 0).toString(),
+        cookingDueAmount: (student.cookingDueAmount || 0).toString(),
         historicalTotalReceived: (student.historicalTotalReceived || 0).toString()
       })
     }
@@ -229,9 +238,9 @@ export default function StudentDetailsPage() {
     }
   }, [student])
 
-  // AUTO DUE GENERATION LOGIC
+  // AUTO DUE GENERATION LOGIC (RENT + COOKING BILL)
   useEffect(() => {
-    if (!student || !student.isActive || !studentRef || isUpdating) return;
+    if (!student || !student.isActive || !studentRef || isUpdating || !billingConfig) return;
 
     const syncDues = async () => {
       const now = new Date();
@@ -241,16 +250,20 @@ export default function StudentDetailsPage() {
 
       const updatedDues = { ...(student.duesBreakdown || {}) };
       let totalDueIncrement = 0;
+      let totalCookingDueDecrement = 0;
       let hasChanges = false;
 
       let checkDate = new Date(billingDate.getFullYear(), billingDate.getMonth(), 1);
       const todayLimit = new Date(now.getFullYear(), now.getMonth(), 1);
+      
+      const monthlyCookingBill = Number(billingConfig.cookingBill || 0);
 
       while (checkDate <= todayLimit) {
         const m = MONTHS[checkDate.getMonth()];
         const y = checkDate.getFullYear().toString();
         const label = `${m} ${y}`;
 
+        // Check Rent
         const inBreakdown = updatedDues[label];
         const inHistory = student.paymentsHistory?.some((p: any) => 
           p.month === m && p.year === y && (Number(p.seatAmount) > 0 || p.method === 'adjustment')
@@ -263,6 +276,12 @@ export default function StudentDetailsPage() {
             totalDueIncrement += rent;
             hasChanges = true;
           }
+          
+          // Apply monthly cooking bill debit
+          if (monthlyCookingBill > 0) {
+             totalCookingDueDecrement += monthlyCookingBill;
+             hasChanges = true;
+          }
         }
         checkDate.setMonth(checkDate.getMonth() + 1);
       }
@@ -271,13 +290,14 @@ export default function StudentDetailsPage() {
         updateDoc(studentRef, {
           duesBreakdown: updatedDues,
           totalDue: increment(totalDueIncrement),
+          cookingDueAmount: increment(-totalCookingDueDecrement),
           updatedAt: serverTimestamp()
         }).catch(() => {});
       }
     };
 
     syncDues();
-  }, [student, studentRef, isUpdating]);
+  }, [student, studentRef, isUpdating, billingConfig]);
 
   const selectedBuildingForEdit = useMemo(() => 
     buildings?.find(b => b.id === editForm?.buildingId), 
@@ -332,8 +352,14 @@ export default function StudentDetailsPage() {
     if (!student) return null
     const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
     const foodBalance = student.foodDueAmount || 0
+    const cookBalance = student.cookingDueAmount || 0
     const totalReceived = student.historicalTotalReceived || 0
-    const totalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0);
+    
+    // UI calculation: Cooking Due vs Balance
+    const cookDueDisplay = cookBalance < 0 ? Math.abs(cookBalance) : 0;
+    
+    const totalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0) + cookDueDisplay;
+    
     const dueBreakdownList = Object.entries(student.duesBreakdown || {}).map(([monthLabel, data]: any) => ({
       month: monthLabel, amount: Number(data.amount), status: 'Unpaid'
     })).sort((a, b) => {
@@ -342,7 +368,7 @@ export default function StudentDetailsPage() {
       if (yA !== yB) return Number(yB) - Number(yA);
       return MONTHS.indexOf(mB) - MONTHS.indexOf(mA);
     });
-    return { rentDue, foodBalance, totalDue, totalReceived, advanceRemaining: student.advanceAmount || 0, dueBreakdownList }
+    return { rentDue, foodBalance, cookBalance, totalDue, totalReceived, advanceRemaining: student.advanceAmount || 0, dueBreakdownList }
   }, [student])
 
   const settlementCalculation = useMemo(() => {
@@ -350,10 +376,12 @@ export default function StudentDetailsPage() {
     const securityAdvance = Number(student.advanceAmount || 0);
     const unpaidRent = stats.rentDue;
     const foodDueAmount = student.paymentSystem === 'non-package' ? Number(student.foodDueAmount || 0) : 0;
-    const netResult = securityAdvance + foodDueAmount - unpaidRent;
+    const cookingDueAmount = Number(student.cookingDueAmount || 0);
+    const netResult = securityAdvance + foodDueAmount + cookingDueAmount - unpaidRent;
     return { 
       pendingRent: unpaidRent, 
-      foodDue: foodDueAmount, 
+      foodDue: foodDueAmount,
+      cookingDue: cookingDueAmount,
       advance: securityAdvance, 
       netResult, 
       isRefund: netResult > 0, 
@@ -366,83 +394,6 @@ export default function StudentDetailsPage() {
       setSettlementInput(settlementCalculation.absResult.toString());
     }
   }, [isExitDialogOpen, settlementCalculation]);
-
-  const handlePaymentSubmit = async () => {
-    if (!student || !studentRef) return
-    setIsUpdating(true)
-    try {
-      const seatPaid = student.paymentSystem === 'package' ? Number(paymentData.amount || 0) : Number(paymentData.seatAmount || 0)
-      const foodPaid = student.paymentSystem === 'non-package' ? Number(paymentData.foodAmount || 0) : 0
-      const extraAdvance = Number(paymentData.addAdvanceAmount || 0)
-      const totalAmt = seatPaid + foodPaid + extraAdvance
-      const pId = doc(collection(db, "payments")).id
-      const pRecord = { 
-        id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
-        studentId: student.id, studentName: student.name, buildingId: student.buildingId,
-        buildingName: student.buildingName, roomNumber: student.roomNumber, branch: student.branch, 
-        method: paymentData.method, receiver: paymentData.receiver, month: paymentData.month,
-        year: paymentData.year, description: paymentData.description, date: new Date().toISOString()
-      }
-      const currentDues = { ...(student.duesBreakdown || {}) };
-      let remainingRentPaid = seatPaid;
-      const targetLabel = `${paymentData.month} ${paymentData.year}`;
-      if (currentDues[targetLabel] && remainingRentPaid > 0) {
-        const dueAmt = Number(currentDues[targetLabel].amount);
-        if (remainingRentPaid >= dueAmt) { remainingRentPaid -= dueAmt; delete currentDues[targetLabel]; } 
-        else { currentDues[targetLabel].amount = dueAmt - remainingRentPaid; remainingRentPaid = 0; }
-      }
-      if (remainingRentPaid > 0) {
-        const remainingMonths = Object.keys(currentDues).sort((a, b) => {
-          const [mA, yA] = a.split(' '); const [mB, yB] = b.split(' ');
-          if (yA !== yB) return Number(yA) - Number(yB);
-          return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
-        });
-        for (const month of remainingMonths) {
-          if (remainingRentPaid <= 0) break;
-          const dueAmt = Number(currentDues[month].amount);
-          if (remainingRentPaid >= dueAmt) { remainingRentPaid -= dueAmt; delete currentDues[month]; } 
-          else { currentDues[month].amount = dueAmt - remainingRentPaid; remainingRentPaid = 0; }
-        }
-      }
-      const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
-      await setDoc(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
-      await updateDoc(studentRef, { paymentsHistory: arrayUnion(pRecord), advanceAmount: increment(extraAdvance), totalDue: finalTotalDue, duesBreakdown: currentDues, foodDueAmount: increment(foodPaid), historicalTotalReceived: increment(totalAmt), updatedAt: serverTimestamp() })
-      
-      const balanceRef = doc(db, "netBalance", student.branch);
-      const methodKeyMap: Record<string, string> = {
-        'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
-      };
-      const methodKey = methodKeyMap[paymentData.method] || 'totalCash';
-
-      await setDoc(balanceRef, {
-        branchId: student.branch,
-        [methodKey]: increment(totalAmt),
-        totalHandCash: increment(totalAmt),
-        lastUpdated: serverTimestamp()
-      }, { merge: true });
-
-      if (apiConfig?.apikey) {
-        const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text;
-        if (template) {
-          const foodVal = Number(student.foodDueAmount || 0) + foodPaid;
-          const foodBalance = foodVal > 0 ? foodVal : 0;
-          const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
-          const totalPayable = finalTotalDue + foodDue;
-          const mealRate = Number(mealConfig?.rate || 0);
-          const msg = template.replaceAll('[নাম]', student.name).replaceAll('[মাস]', `${paymentData.month} ${paymentData.year}`).replaceAll('[total_payable]', totalPayable.toString()).replaceAll('[paid]', totalAmt.toString()).replaceAll('[food_balance]', foodBalance.toString()).replaceAll('[food_due]', foodDue.toString()).replaceAll('[রুম]', student.roomNumber).replaceAll('[সিট]', student.seatNumber).replaceAll('[building]', student.buildingName).replaceAll('[meal_rate]', mealRate.toString()).replaceAll('[Hostel Name]', templatesData?.hostelName || student.branch);
-          const res = await sendSMS(apiConfig.apikey, apiConfig.senderid, student.phone, msg);
-          const logId = doc(collection(db, "smsLogs")).id;
-          await setDoc(doc(db, "smsLogs", logId), { id: logId, to: student.phone, message: msg, status: res.error === 0 ? 'Success' : 'Failed', branch: student.branch, sentBy: userName, createdAt: serverTimestamp() });
-        }
-      }
-
-      toast({ title: "Payment Recorded" })
-      setIsPaymentDialogOpen(false)
-      router.refresh();
-      router.push(`/receipts/${pId}`)
-    } catch (e: any) { toast({ variant: "destructive", description: e.message }) }
-    finally { setIsUpdating(false) }
-  }
 
   const handleUpdateProfile = async () => {
     if (!studentRef || !editForm || !student) return
@@ -629,7 +580,7 @@ export default function StudentDetailsPage() {
         const delta = Math.abs(settlementCalculation.netResult) - processedAmt;
         if (delta > 0) finalTotalDue = delta; else if (delta < 0) finalAdvance = Math.abs(delta);
       }
-      batch.update(studentRef, { isActive: false, leftAt: serverTimestamp(), totalDue: finalTotalDue, advanceAmount: finalAdvance, foodDueAmount: 0, duesBreakdown: {}, finalSettlementAmount: processedAmt, finalSettlementMethod: exitMethod, finalSettlementProcessedBy: exitStaff, updatedAt: serverTimestamp() })
+      batch.update(studentRef, { isActive: false, leftAt: serverTimestamp(), totalDue: finalTotalDue, advanceAmount: finalAdvance, foodDueAmount: 0, cookingDueAmount: 0, duesBreakdown: {}, finalSettlementAmount: processedAmt, finalSettlementMethod: exitMethod, finalSettlementProcessedBy: exitStaff, updatedAt: serverTimestamp() })
       await batch.commit()
       if (apiConfig?.apikey) {
         const template = templatesData?.templates?.find((t: any) => t.id === 'exit')?.text || "প্রিয় [নাম], [Hostel Name]-এ থাকার জন্য আপনাকে ধন্যবাদ। আপনার আগামী দিনগুলো সুন্দর হোক। শুভকামনা।";
@@ -695,6 +646,7 @@ export default function StudentDetailsPage() {
         advanceAmount: Number(migrationForm.advanceAmount),
         serviceCharge: Number(migrationForm.serviceCharge),
         foodDueAmount: Number(migrationForm.foodDueAmount),
+        cookingDueAmount: Number(migrationForm.cookingDueAmount),
         historicalTotalReceived: Number(migrationForm.historicalTotalReceived),
         updatedAt: serverTimestamp()
       })
@@ -715,8 +667,9 @@ export default function StudentDetailsPage() {
     { label: "Service Chrg", val: student.serviceCharge, color: "purple-600", icon: Zap, bg: "bg-purple-50" },
     { label: "Monthly Rent", val: student.monthlyRent, color: "orange-600", icon: Home, bg: "bg-orange-50" },
     { label: "Total Recv.", val: stats?.totalReceived, color: "green-600", icon: HandCoins, bg: "bg-green-50" },
-    { label: "Rent Due", val: stats?.totalDue || 0, color: "destructive", icon: AlertCircle, bg: "bg-red-50" },
+    { label: "Rent Due", val: stats?.rentDue || 0, color: "destructive", icon: AlertCircle, bg: "bg-red-50" },
     { label: "Food Bal.", val: stats?.foodBalance, color: (stats?.foodBalance ?? 0) >= 0 ? "success" : "destructive", icon: Utensils, bg: (stats?.foodBalance ?? 0) >= 0 ? "bg-success/5" : "bg-red-50" },
+    { label: "Cooking Bal.", val: student.cookingDueAmount || 0, color: (student.cookingDueAmount || 0) >= 0 ? "success" : "destructive", icon: ChefHat, bg: (student.cookingDueAmount || 0) >= 0 ? "bg-success/5" : "bg-red-50" },
   ].filter(c => c.label !== 'Food Bal.' || student.paymentSystem === 'non-package');
 
   return (
@@ -827,7 +780,7 @@ export default function StudentDetailsPage() {
         </TabsList>
         <TabsContent value="payments">
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
-            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
+            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Cooking</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
               <TableBody>{student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
                 <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
                   <TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
@@ -839,6 +792,7 @@ export default function StudentDetailsPage() {
                     </div>
                   </TableCell>
                   <TableCell>৳{p.foodAmount || 0}</TableCell>
+                  <TableCell>৳{p.cookingBill || 0}</TableCell>
                   <TableCell>৳{p.advanceAmount || 0}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={cn("text-[9px] uppercase font-bold", p.method === 'adjustment' ? "border-primary text-primary bg-primary/5" : "text-muted-foreground")}>
@@ -853,7 +807,7 @@ export default function StudentDetailsPage() {
           <div className="md:hidden space-y-4">{student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
             <Card key={idx} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
               <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p><h3 className="font-black text-slate-800">{p.month} {p.year}</h3></div><Badge className="bg-success font-black">৳{p.amount.toLocaleString()}</Badge></div>
-              <div className="grid grid-cols-3 gap-2 bg-secondary/30 p-2 rounded-xl text-[9px] font-bold uppercase text-slate-500"><div className="text-center"><p className="opacity-60">Rent</p><p className="text-slate-800">৳{p.seatAmount || 0}</p></div><div className="text-center"><p className="opacity-60">Food</p><p className="text-slate-800">৳{p.foodAmount || 0}</p></div><div className="text-center"><p className="opacity-60">Adv.</p><p className="text-primary">৳{p.advanceAmount || 0}</p></div></div>
+              <div className="grid grid-cols-4 gap-2 bg-secondary/30 p-2 rounded-xl text-[8px] font-bold uppercase text-slate-500"><div className="text-center"><p className="opacity-60">Rent</p><p className="text-slate-800">৳{p.seatAmount || 0}</p></div><div className="text-center"><p className="opacity-60">Food</p><p className="text-slate-800">৳{p.foodAmount || 0}</p></div><div className="text-center"><p className="opacity-60">Cook</p><p className="text-slate-800">৳{p.cookingBill || 0}</p></div><div className="text-center"><p className="opacity-60">Adv.</p><p className="text-primary">৳{p.advanceAmount || 0}</p></div></div>
               {p.description && <p className="text-[9px] text-slate-400 italic line-clamp-1">{p.description}</p>}
               <div className="flex justify-between items-center text-[10px]">
                 <span className={cn("font-bold uppercase flex items-center gap-1", p.method === 'adjustment' ? "text-primary" : "text-muted-foreground")}>
@@ -866,7 +820,7 @@ export default function StudentDetailsPage() {
         </TabsContent>
         <TabsContent value="dues">
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
-            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Month</TableHead>            <TableHead>Due Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Month</TableHead><TableHead>Due Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
               <TableBody>{stats?.dueBreakdownList.map((d, i) => (
                 <TableRow key={i}><TableCell className="font-bold">{d.month}</TableCell><TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell><TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive uppercase">Unpaid</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => router.push(`/payment-entry?studentId=${student.id}`)}>Record Pay</Button></TableCell></TableRow>
               ))}</TableBody>
@@ -961,7 +915,7 @@ export default function StudentDetailsPage() {
 
           <div className="space-y-8 py-4">
             {/* Initial Balances Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-3xl border">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6 bg-slate-50 rounded-3xl border">
               <div className="space-y-1">
                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Historical Recv.</Label>
                 <Input type="number" value={migrationForm.historicalTotalReceived} onChange={e => setMigrationForm({...migrationForm, historicalTotalReceived: e.target.value})} className="h-10 font-bold" />
@@ -975,15 +929,20 @@ export default function StudentDetailsPage() {
                 <Input type="number" value={migrationForm.serviceCharge} onChange={e => setMigrationForm({...migrationForm, serviceCharge: e.target.value})} className="h-10 font-bold" />
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] font-black uppercase text-muted-foreground">Food Bal (+/-)</Label>
+                <Label className="text-[10px] font-black uppercase text-orange-600">Food Bal (+/-)</Label>
                 <Input type="number" value={migrationForm.foodDueAmount} onChange={e => setMigrationForm({...migrationForm, foodDueAmount: e.target.value})} className="h-10 font-bold" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-indigo-600">Cooking Bal (+/-)</Label>
+                <Input type="number" value={migrationForm.cookingDueAmount} onChange={e => setMigrationForm({...migrationForm, cookingDueAmount: e.target.value})} className="h-10 font-bold" />
+                <p className="text-[8px] text-muted-foreground italic">Use negative for Due, positive for Balance.</p>
               </div>
             </div>
 
             {/* Dues Breakdown Management */}
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="text-sm font-black uppercase text-primary flex items-center gap-2"><Clock size={16}/> Historical Unpaid Dues</h3>
+                <h3 className="text-sm font-black uppercase text-primary flex items-center gap-2"><Clock size={16}/> Historical Unpaid Rent Dues</h3>
                 <Button variant="outline" size="sm" onClick={addMigrationDue} className="gap-2 text-[10px] font-bold h-8"><Plus size={14}/> Add Month Box</Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -991,18 +950,27 @@ export default function StudentDetailsPage() {
                   <div key={due.id} className="p-3 bg-white border-2 border-slate-100 rounded-2xl flex items-end gap-2 group animate-in zoom-in-95">
                     <div className="flex-1 space-y-1">
                       <div className="flex gap-1">
-                        <Select value={due.month} onValueChange={v => updateDueEntry(due.id, 'month', v)}>
+                        <Select value={due.month} onValueChange={v => {
+                             const updated = migrationForm.dues.map(d => d.id === due.id ? { ...d, month: v } : d)
+                             setMigrationForm({ ...migrationForm, dues: updated })
+                        }}>
                           <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
                           <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                         </Select>
-                        <Select value={due.year} onValueChange={v => updateDueEntry(due.id, 'year', v)}>
+                        <Select value={due.year} onValueChange={v => {
+                             const updated = migrationForm.dues.map(d => d.id === due.id ? { ...d, year: v } : d)
+                             setMigrationForm({ ...migrationForm, dues: updated })
+                        }}>
                           <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
                           <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                     </div>
                     <div className="w-24 space-y-1">
-                      <Input type="number" value={due.amount} onChange={e => updateDueEntry(due.id, 'amount', e.target.value)} className="h-8 text-[10px] font-bold" />
+                      <Input type="number" value={due.amount} onChange={e => {
+                         const updated = migrationForm.dues.map(d => d.id === due.id ? { ...d, amount: e.target.value } : d)
+                         setMigrationForm({ ...migrationForm, dues: updated })
+                      }} className="h-8 text-[10px] font-bold" />
                     </div>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-30 group-hover:opacity-100" onClick={() => removeMigrationDue(due.id)}>
                       <X size={14}/>
@@ -1195,6 +1163,12 @@ export default function StudentDetailsPage() {
                   <span className="text-muted-foreground">{settlementCalculation.foodDue >= 0 ? "Food Balance (Credit):" : "Food Debt:"}</span>
                   <span className={cn("font-bold", settlementCalculation.foodDue >= 0 ? "text-success" : "text-destructive")}>
                     ৳{Math.abs(settlementCalculation.foodDue).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">{settlementCalculation.cookingDue >= 0 ? "Cooking Balance:" : "Cooking Debt:"}</span>
+                  <span className={cn("font-bold", settlementCalculation.cookingDue >= 0 ? "text-success" : "text-destructive")}>
+                    ৳{Math.abs(settlementCalculation.cookingDue).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm"><span className="text-muted-foreground">Security Advance:</span><span className="font-bold text-primary">৳{settlementCalculation.advance.toLocaleString()}</span></div>

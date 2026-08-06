@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -21,7 +22,8 @@ import {
   Loader2,
   Receipt,
   Calculator,
-  CheckCircle2
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
@@ -50,14 +52,20 @@ export default function StudentDashboardPage() {
     const foodVal = Number(student.foodDueAmount || 0)
     const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0
     const foodBalance = foodVal > 0 ? foodVal : 0
-    const totalDue = rentDue + foodDue
+    
+    // Cooking Bill Logic
+    const cookVal = Number(student.cookingDueAmount || 0)
+    const cookDue = cookVal < 0 ? Math.abs(cookVal) : 0
+    const cookBalance = cookVal > 0 ? cookVal : 0
+    
+    const totalDue = rentDue + foodDue + cookDue
     
     const lastPayment = student.paymentsHistory?.[student.paymentsHistory.length - 1] || null
     const lastMonthFood = student.mealsHistory?.[student.mealsHistory.length - 1] || null
 
     const currentMonthMeals = (student.currentMonthBreakfast || 0) + (student.currentMonthLunch || 0) + (student.currentMonthDinner || 0)
     
-    return { rentDue, foodBalance, foodDue, totalDue, lastPayment, lastMonthFood, currentMonthMeals }
+    return { rentDue, foodBalance, foodDue, cookDue, cookBalance, totalDue, lastPayment, lastMonthFood, currentMonthMeals }
   }, [student])
 
   if (!isMounted) return null;
@@ -120,6 +128,43 @@ export default function StudentDashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Cooking Bill Awareness Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+         <Card className={cn("border-none shadow-sm rounded-3xl overflow-hidden border-l-4", (stats?.rentDue || 0) > 0 ? "border-l-destructive bg-destructive/5" : "border-l-success bg-success/5")}>
+            <CardContent className="p-5 flex items-center justify-between">
+               <div className="flex items-center gap-3">
+                  <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shadow-inner", (stats?.rentDue || 0) > 0 ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success")}>
+                     <Home size={20}/>
+                  </div>
+                  <div>
+                     <p className="text-[8px] font-bold uppercase text-muted-foreground tracking-widest">Rent Status</p>
+                     <p className={cn("text-lg font-black", (stats?.rentDue || 0) > 0 ? "text-destructive" : "text-success")}>
+                       {(stats?.rentDue || 0) > 0 ? `Due: ৳${stats?.rentDue}` : "Rent Clear"}
+                     </p>
+                  </div>
+               </div>
+               {(stats?.rentDue || 0) > 0 ? <AlertCircle size={20} className="text-destructive animate-pulse" /> : <CheckCircle2 size={20} className="text-success" />}
+            </CardContent>
+         </Card>
+
+         <Card className={cn("border-none shadow-sm rounded-3xl overflow-hidden border-l-4", (stats?.cookDue || 0) > 0 ? "border-l-destructive bg-destructive/5" : "border-l-success bg-success/5")}>
+            <CardContent className="p-5 flex items-center justify-between">
+               <div className="flex items-center gap-3">
+                  <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shadow-inner", (stats?.cookDue || 0) > 0 ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success")}>
+                     <ChefHat size={20}/>
+                  </div>
+                  <div>
+                     <p className="text-[8px] font-bold uppercase text-muted-foreground tracking-widest">Cooking Bill</p>
+                     <p className={cn("text-lg font-black", (stats?.cookDue || 0) > 0 ? "text-destructive" : "text-success")}>
+                       {(stats?.cookDue || 0) > 0 ? `Due: ৳${stats?.cookDue}` : (stats?.cookBalance && stats.cookBalance > 0 ? `Credit: ৳${stats.cookBalance}` : "Complete")}
+                     </p>
+                  </div>
+               </div>
+               {(stats?.cookDue || 0) > 0 ? <Smartphone size={20} className="text-destructive animate-pulse" /> : <CheckCircle2 size={20} className="text-success" />}
+            </CardContent>
+         </Card>
+      </div>
 
       {/* Consumption Progress Card */}
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">

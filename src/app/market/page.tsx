@@ -71,7 +71,7 @@ export default function MarketTrackingPage() {
 
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0])
   const [items, setItems] = useState<MarketItem[]>([
-    { id: Math.random().toString(36).substr(2, 9), itemName: "", category: "Groceries", subCategory: "", quantity: "", unitPrice: "" }
+    { id: Math.random().toString(36).substr(2, 9), itemName: "", category: Object.keys(DEFAULT_MARKET_CATEGORIES)[0], subCategory: "", quantity: "", unitPrice: "" }
   ])
 
   useEffect(() => {
@@ -116,12 +116,12 @@ export default function MarketTrackingPage() {
     setIsSubmitting(true)
     try {
       const batch = writeBatch(db)
-      let totalPurchaseCost = 0
+      let totalBatchCost = 0
 
       for (const item of items) {
         const expId = doc(collection(db, "marketExpenses")).id
         const totalPrice = Number(item.quantity) * Number(item.unitPrice)
-        totalPurchaseCost += totalPrice
+        totalBatchCost += totalPrice
         
         batch.set(doc(db, "marketExpenses", expId), {
           ...item,
@@ -132,25 +132,34 @@ export default function MarketTrackingPage() {
           purchasedBy: userName,
           createdAt: serverTimestamp()
         })
-
-        // Also log each to general expenses for accounting sync
-        const generalExpId = doc(collection(db, "expenses")).id
-        batch.set(doc(db, "expenses", generalExpId), {
-          id: generalExpId,
-          category: "market",
-          amount: totalPrice,
-          expenseDate: purchaseDate,
-          description: `Market: ${item.itemName} (${item.category} > ${item.subCategory || 'General'})`,
-          method: "cash",
-          spentBy: userName,
-          branch: userBranch,
-          buildingName: "Kitchen",
-          createdAt: serverTimestamp()
-        })
       }
 
+      // Record Consolidated Batch Expense for Ledger (One entry per batch)
+      const generalExpId = doc(collection(db, "expenses")).id
+      batch.set(doc(db, "expenses", generalExpId), {
+        id: generalExpId,
+        category: "market",
+        amount: totalBatchCost,
+        expenseDate: purchaseDate,
+        description: `Market Batch: ${items.length} items. Key item: ${items[0].itemName}. Purchased by ${userName}.`,
+        method: "cash",
+        spentBy: userName,
+        branch: userBranch,
+        buildingName: "Kitchen",
+        createdAt: serverTimestamp()
+      })
+
+      // Update Net Balance
+      const balanceRef = doc(db, "netBalance", userBranch);
+      batch.set(balanceRef, {
+        branchId: userBranch,
+        totalCash: increment(-totalBatchCost),
+        totalHandCash: increment(-totalBatchCost),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+
       await batch.commit()
-      toast({ title: "Purchase Recorded", description: `${items.length} items added to inventory.` })
+      toast({ title: "Purchase Recorded", description: `৳${totalBatchCost} added to expenses.` })
       setIsAddOpen(false)
       setItems([{ id: Math.random().toString(36).substr(2, 9), itemName: "", category: Object.keys(categories)[0] || "", subCategory: "", quantity: "", unitPrice: "" }])
     } catch (e: any) {
@@ -163,7 +172,7 @@ export default function MarketTrackingPage() {
   const handleDelete = async (id: string) => {
     try {
       await deleteDoc(doc(db, "marketExpenses", id))
-      toast({ title: "Deleted", description: "Market entry removed." })
+      toast({ title: "Deleted", description: "Market item entry removed. Note: Ledger expense must be adjusted manually." })
     } catch (e) {
       toast({ variant: "destructive", description: "Failed to delete." })
     }
