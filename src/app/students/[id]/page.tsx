@@ -512,6 +512,104 @@ export default function StudentDetailsPage() {
     }
   }
 
+  const handlePaymentSubmit = async () => {
+    if (!studentRef || !student) return
+    const seatPaid = Number(paymentData.seatAmount || 0)
+    const foodPaid = Number(paymentData.foodAmount || 0)
+    const extraAdv = Number(paymentData.addAdvanceAmount || 0)
+    const totalAmt = Number(paymentData.amount) || (seatPaid + foodPaid + extraAdv)
+
+    if (totalAmt <= 0) {
+      toast({ variant: "destructive", title: "Error", description: "Invalid payment amount." })
+      return
+    }
+
+    setIsUpdating(true)
+    const batch = writeBatch(db)
+    try {
+      const pId = doc(collection(db, "payments")).id
+      const pRecord = {
+        id: pId, amount: totalAmt, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdv,
+        studentId: student.id, studentName: student.name, buildingId: student.buildingId,
+        buildingName: student.buildingName, roomNumber: student.roomNumber, branch: student.branch,
+        type: "income", month: paymentData.month, year: paymentData.year, method: paymentData.method,
+        receiver: paymentData.receiver, date: new Date().toISOString(), description: paymentData.description
+      }
+
+      batch.set(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
+
+      // Process Rent Dues
+      const currentDues = { ...(student.duesBreakdown || {}) };
+      const targetLabel = `${paymentData.month} ${paymentData.year}`;
+      let remainingRentPaid = seatPaid;
+
+      if (currentDues[targetLabel] && remainingRentPaid > 0) {
+        const dueAmt = Number(currentDues[targetLabel].amount);
+        if (remainingRentPaid >= dueAmt) {
+          remainingRentPaid -= dueAmt;
+          delete currentDues[targetLabel];
+        } else {
+          currentDues[targetLabel].amount = dueAmt - remainingRentPaid;
+          remainingRentPaid = 0;
+        }
+      }
+
+      if (remainingRentPaid > 0) {
+        const sortedMonths = Object.keys(currentDues).sort((a, b) => {
+          const [mA, yA] = a.split(' '); const [mB, yB] = b.split(' ');
+          if (yA !== yB) return Number(yA) - Number(yB);
+          return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
+        });
+        for (const m of sortedMonths) {
+          if (remainingRentPaid <= 0) break;
+          const dueAmt = Number(currentDues[m].amount);
+          if (remainingRentPaid >= dueAmt) {
+            remainingRentPaid -= dueAmt;
+            delete currentDues[m];
+          } else {
+            currentDues[m].amount = dueAmt - remainingRentPaid;
+            remainingRentPaid = 0;
+          }
+        }
+      }
+
+      const finalTotalDue = Object.values(currentDues).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
+
+      batch.update(studentRef, {
+        paymentsHistory: arrayUnion(pRecord),
+        advanceAmount: increment(extraAdv),
+        totalDue: finalTotalDue,
+        duesBreakdown: currentDues,
+        foodDueAmount: increment(foodPaid),
+        historicalTotalReceived: increment(totalAmt),
+        updatedAt: serverTimestamp()
+      })
+
+      // Update Net Balance
+      const balanceRef = doc(db, "netBalance", student.branch);
+      const methodKeyMap: Record<string, string> = { 'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank' };
+      const methodKey = methodKeyMap[paymentData.method] || 'totalCash';
+      batch.set(balanceRef, { [methodKey]: increment(totalAmt), totalHandCash: increment(totalAmt), lastUpdated: serverTimestamp() }, { merge: true });
+
+      // In-App Notice
+      const noticeId = doc(collection(db, "notices")).id
+      batch.set(doc(db, "notices", noticeId), {
+        id: noticeId, studentId: student.id, title: "Payment Received", branch: student.branch,
+        message: `৳${totalAmt} recorded successfully. Seat: ${seatPaid}, Food: ${foodPaid}, Adv: ${extraAdv}.`,
+        type: "payment", isRead: false, createdAt: serverTimestamp()
+      })
+
+      await batch.commit()
+      toast({ title: "Payment Recorded", description: "Balance and ledger updated." })
+      setIsPaymentDialogOpen(false)
+      setPaymentData({ ...paymentData, amount: "", seatAmount: "", foodAmount: "", addAdvanceAmount: "0", description: "" })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleConfirmExit = async () => {
     if (!studentRef || !student || !settlementCalculation || !exitStaff) {
       toast({ variant: "destructive", title: "তথ্য অসম্পূর্ণ", description: "অনুগ্রহ করে স্টাফ মেম্বার সিলেক্ট করুন।" })
@@ -557,7 +655,7 @@ export default function StudentDetailsPage() {
             id: expenseId, category: "Student Refund", amount: processedAmt,
             expenseDate: new Date().toISOString().split('T')[0], method: exitMethod, spentBy: exitStaff,
             branch: student.branch, buildingId: student.buildingId, buildingName: student.buildingName,
-            description: `Exit refund settlement for ${student.name} (${student.phone}). Room: ${student.buildingName} R-${student.roomNumber}.`,
+            description: `Exit refund settlement for ${student.name} (${student.phone}). Room: ${student.buildingName} R-{student.roomNumber}.`,
             createdAt: serverTimestamp(), updatedAt: serverTimestamp()
           })
           batch.set(balanceRef, { [methodKey]: increment(-processedAmt), totalHandCash: increment(-processedAmt), lastUpdated: serverTimestamp() }, { merge: true })
@@ -765,9 +863,14 @@ export default function StudentDetailsPage() {
                 </div>
               </div>
             </div>
-            <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl" onClick={() => setIsMealAdjustOpen(true)}>
-              <Settings2 size={20}/>
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="rounded-xl h-10 px-4 font-bold border-success/20 text-success" onClick={() => setIsPaymentDialogOpen(true)}>
+                <Plus size={16} className="mr-1"/> Record Payment
+              </Button>
+              <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl" onClick={() => setIsMealAdjustOpen(true)}>
+                <Settings2 size={20}/>
+              </Button>
+            </div>
           </Card>
         </div>
       </div>
@@ -780,7 +883,7 @@ export default function StudentDetailsPage() {
         </TabsList>
         <TabsContent value="payments">
           <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
-            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Cooking</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
+            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead>Complete Record<TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Cooking</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
               <TableBody>{student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
                 <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
                   <TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
@@ -868,19 +971,19 @@ export default function StudentDetailsPage() {
               <div className="space-y-1"><Label>Year</Label><Select value={paymentData.year} onValueChange={v => setPaymentData({...paymentData, year: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="space-y-4">
-              {student.paymentSystem === 'package' ? (
-                <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Package Amount (৳)</Label><Input type="number" className="rounded-xl h-12 text-lg font-black" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} /></div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Seat Rent (৳)</Label><Input type="number" className="rounded-xl h-12" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} /></div>
-                  <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Food Bill (৳)</Label><Input type="number" className="rounded-xl h-12" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} /></div>
-                </div>
-              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Seat Rent (৳)</Label><Input type="number" className="rounded-xl h-12" value={paymentData.seatAmount} onChange={e => setPaymentData({...paymentData, seatAmount: e.target.value})} /></div>
+                <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase">Food Bill (৳)</Label><Input disabled={student.paymentSystem === 'package'} type="number" className="rounded-xl h-12" value={paymentData.foodAmount} onChange={e => setPaymentData({...paymentData, foodAmount: e.target.value})} /></div>
+              </div>
               <div className="space-y-1"><Label className="text-xs font-bold text-primary uppercase">Add Security Advance (৳)</Label><Input type="number" className="rounded-xl h-12 border-primary/20" value={paymentData.addAdvanceAmount} onChange={e => setPaymentData({...paymentData, addAdvanceAmount: e.target.value})} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1"><Label>Method</Label><Select value={paymentData.method} onValueChange={v => setPaymentData({...paymentData, method: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select></div>
               <div className="space-y-1"><Label>Receiver</Label><Select value={paymentData.receiver} onValueChange={v => setPaymentData({...paymentData, receiver: v})}><SelectTrigger><SelectValue placeholder="Select Staff Member"/></SelectTrigger><SelectContent>{managementStaff?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase font-bold">Notes</Label>
+              <Textarea value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} placeholder="Internal note..." />
             </div>
           </div>
           <DialogFooter><Button className="w-full h-14 rounded-2xl text-lg font-black" onClick={handlePaymentSubmit} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin" /> : "Confirm & Save Receipt"}</Button></DialogFooter>
