@@ -771,7 +771,7 @@ export default function StudentDetailsPage() {
   ].filter(c => c.label !== 'Food Bal.' || student.paymentSystem === 'non-package');
 
   return (
-    <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 relative">
+    <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 relative overflow-x-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2"><ChevronLeft size={24} /></Button>
         <div className="flex-1 overflow-hidden"><h1 className="text-lg font-bold truncate">{student.name}</h1><p className="text-[10px] text-muted-foreground font-bold uppercase">{student.buildingName} • R-{student.roomNumber}</p></div>
@@ -847,12 +847,12 @@ export default function StudentDetailsPage() {
           {financialCards.map((card, idx) => (
             <Card key={idx} className={cn("p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 bg-white")}>
               <div className={cn("p-3 rounded-xl shrink-0", card.bg, card.color === 'success' ? 'text-success' : (card.color === 'destructive' ? 'text-destructive' : `text-${card.color}`))}><card.icon size={24}/></div>
-              <div><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{card.label}</p><p className={cn("text-xl font-black", card.color === 'success' ? "text-success" : (card.color === 'destructive' ? "text-destructive" : "text-slate-800"))}>৳{card.val?.toLocaleString()}</p></div>
+              <div className="min-w-0"><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest truncate">{card.label}</p><p className={cn("text-xl font-black", card.color === 'success' ? "text-success" : (card.color === 'destructive' ? "text-destructive" : "text-slate-800"))}>৳{card.val?.toLocaleString()}</p></div>
             </Card>
           ))}
           
-          <Card className="p-4 rounded-2xl border-2 border-primary/10 shadow-md flex items-center justify-between bg-white md:col-span-2">
-            <div className="flex items-center gap-4">
+          <Card className="p-4 rounded-2xl border-2 border-primary/10 shadow-md flex flex-col sm:flex-row items-center justify-between bg-white md:col-span-2 gap-4">
+            <div className="flex items-center gap-4 w-full sm:w-auto">
               <div className="p-3 rounded-xl bg-primary/5 text-primary"><Calculator size={24}/></div>
               <div>
                 <p className="text-[10px] font-black uppercase text-primary tracking-widest">Month Consumption Adjustment</p>
@@ -863,8 +863,8 @@ export default function StudentDetailsPage() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="rounded-xl h-10 px-4 font-bold border-success/20 text-success" onClick={() => setIsPaymentDialogOpen(true)}>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="outline" size="sm" className="rounded-xl h-10 px-4 font-bold border-success/20 text-success flex-1 sm:flex-none" onClick={() => setIsPaymentDialogOpen(true)}>
                 <Plus size={16} className="mr-1"/> Record Payment
               </Button>
               <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl" onClick={() => setIsMealAdjustOpen(true)}>
@@ -876,75 +876,169 @@ export default function StudentDetailsPage() {
       </div>
 
       <Tabs defaultValue="payments" className="w-full">
-        <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl overflow-x-auto h-auto flex">
+        <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl overflow-x-auto h-auto flex whitespace-nowrap">
           <TabsTrigger value="payments" className="rounded-xl gap-2 h-10 px-6 font-bold flex-1"><Wallet size={14}/> Finance History</TabsTrigger>
           <TabsTrigger value="dues" className="rounded-xl gap-2 h-10 px-6 font-bold flex-1"><Clock size={14}/> Dues Breakdown</TabsTrigger>
           {student.paymentSystem === 'non-package' && <TabsTrigger value="meals" className="rounded-xl gap-2 h-10 px-6 font-bold flex-1"><Utensils size={14}/> Food Log</TabsTrigger>}
         </TabsList>
-        <TabsContent value="payments">
-          <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
-            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Period</TableHead><TableHead>Rent</TableHead><TableHead>Food</TableHead><TableHead>Cooking</TableHead><TableHead>Advance</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
-              <TableBody>{student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
-                <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
-                  <TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
-                  <TableCell className="font-bold">{p.month} {p.year}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span>৳{p.seatAmount || 0}</span>
-                      {p.method === 'adjustment' && <span className="text-[8px] font-bold text-primary uppercase">From Advance</span>}
-                    </div>
-                  </TableCell>
-                  <TableCell>৳{p.foodAmount || 0}</TableCell>
-                  <TableCell>৳{p.cookingBill || 0}</TableCell>
-                  <TableCell>৳{p.advanceAmount || 0}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={cn("text-[9px] uppercase font-bold", p.method === 'adjustment' ? "border-primary text-primary bg-primary/5" : "text-muted-foreground")}>
-                      {p.method}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-black text-success">৳{p.amount.toLocaleString()}</TableCell>
+        
+        <TabsContent value="payments" className="space-y-4">
+          <div className="hidden md:block border rounded-3xl overflow-hidden bg-white">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Rent</TableHead>
+                  <TableHead>Food</TableHead>
+                  <TableHead>Cooking</TableHead>
+                  <TableHead>Advance</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                 </TableRow>
-              ))}</TableBody>
+              </TableHeader>
+              <TableBody>
+                {student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
+                  <TableRow key={idx} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/receipts/${p.id}`)}>
+                    <TableCell className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString()}</TableCell>
+                    <TableCell className="font-bold">{p.month} {p.year}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span>৳{p.seatAmount || 0}</span>
+                        {p.method === 'adjustment' && <span className="text-[8px] font-bold text-primary uppercase">From Advance</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell>৳{p.foodAmount || 0}</TableCell>
+                    <TableCell>৳{p.cookingBill || 0}</TableCell>
+                    <TableCell>৳{p.advanceAmount || 0}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={cn("text-[9px] uppercase font-bold", p.method === 'adjustment' ? "border-primary text-primary bg-primary/5" : "text-muted-foreground")}>
+                        {p.method}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-black text-success">৳{p.amount.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
             </Table>
-          </Card>
-          <div className="md:hidden space-y-4">{student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
-            <Card key={idx} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
-              <div className="flex justify-between items-start"><div><p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p><h3 className="font-black text-slate-800">{p.month} {p.year}</h3></div><Badge className="bg-success font-black">৳{p.amount.toLocaleString()}</Badge></div>
-              <div className="grid grid-cols-4 gap-2 bg-secondary/30 p-2 rounded-xl text-[8px] font-bold uppercase text-slate-500"><div className="text-center"><p className="opacity-60">Rent</p><p className="text-slate-800">৳{p.seatAmount || 0}</p></div><div className="text-center"><p className="opacity-60">Food</p><p className="text-slate-800">৳{p.foodAmount || 0}</p></div><div className="text-center"><p className="opacity-60">Cook</p><p className="text-slate-800">৳{p.cookingBill || 0}</p></div><div className="text-center"><p className="opacity-60">Adv.</p><p className="text-primary">৳{p.advanceAmount || 0}</p></div></div>
-              {p.description && <p className="text-[9px] text-slate-400 italic line-clamp-1">{p.description}</p>}
-              <div className="flex justify-between items-center text-[10px]">
-                <span className={cn("font-bold uppercase flex items-center gap-1", p.method === 'adjustment' ? "text-primary" : "text-muted-foreground")}>
-                  <Wallet size={10}/> {p.method === 'adjustment' ? 'Adjusted from Advance' : p.method}
-                </span>
-                <Button variant="ghost" size="sm" className="h-6 text-primary gap-1 font-bold">Receipt <ChevronRight size={12}/></Button>
-              </div>
-            </Card>
-          ))}</div>
+          </div>
+          
+          <div className="md:hidden space-y-4">
+            {student.paymentsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((p: any, idx: number) => (
+              <Card key={idx} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-3" onClick={() => router.push(`/receipts/${p.id}`)}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(p.date).toLocaleDateString()}</p>
+                    <h3 className="font-black text-slate-800">{p.month} {p.year}</h3>
+                  </div>
+                  <Badge className="bg-success font-black">৳{p.amount.toLocaleString()}</Badge>
+                </div>
+                <div className="grid grid-cols-4 gap-2 bg-secondary/30 p-2 rounded-xl text-[8px] font-bold uppercase text-slate-500">
+                  <div className="text-center"><p className="opacity-60">Rent</p><p className="text-slate-800">৳{p.seatAmount || 0}</p></div>
+                  <div className="text-center"><p className="opacity-60">Food</p><p className="text-slate-800">৳{p.foodAmount || 0}</p></div>
+                  <div className="text-center"><p className="opacity-60">Cook</p><p className="text-slate-800">৳{p.cookingBill || 0}</p></div>
+                  <div className="text-center"><p className="opacity-60">Adv.</p><p className="text-primary">৳{p.advanceAmount || 0}</p></div>
+                </div>
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className={cn("font-bold uppercase flex items-center gap-1", p.method === 'adjustment' ? "text-primary" : "text-muted-foreground")}>
+                    <Wallet size={10}/> {p.method}
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-6 text-primary gap-1 font-bold">Receipt <ChevronRight size={12}/></Button>
+                </div>
+              </Card>
+            ))}
+            {(!student.paymentsHistory || student.paymentsHistory.length === 0) && (
+              <p className="text-center py-10 text-xs text-muted-foreground italic">No payment records found.</p>
+            )}
+          </div>
         </TabsContent>
-        <TabsContent value="dues">
-          <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
-            <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Month</TableHead><TableHead>Due Amount</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
-              <TableBody>{stats?.dueBreakdownList.map((d, i) => (
-                <TableRow key={i}><TableCell className="font-bold">{d.month}</TableCell><TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell><TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive uppercase">Unpaid</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => router.push(`/payment-entry?studentId=${student.id}`)}>Record Pay</Button></TableCell></TableRow>
-              ))}</TableBody>
+
+        <TabsContent value="dues" className="space-y-4">
+          <div className="hidden md:block border rounded-3xl overflow-hidden bg-white">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead>Due Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stats?.dueBreakdownList.map((d, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-bold">{d.month}</TableCell>
+                    <TableCell className="font-black text-destructive">৳{d.amount.toLocaleString()}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px] text-destructive border-destructive uppercase">Unpaid</Badge></TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" className="text-primary font-bold" onClick={() => router.push(`/payment-entry?studentId=${student.id}`)}>
+                        Record Pay
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
             </Table>
-          </Card>
-          <div className="md:hidden space-y-4">{stats?.dueBreakdownList.map((d, i) => (
-            <Card key={i} className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-destructive p-4 flex justify-between items-center"><div><h3 className="font-black text-slate-800">{d.month}</h3><p className="text-xl font-black text-destructive">৳{d.amount.toLocaleString()}</p></div><Button size="sm" className="rounded-xl h-9 px-4 font-bold" onClick={() => router.push(`/payment-entry?studentId=${student.id}`)}>Record</Button></Card>
-          ))}</div>
+          </div>
+          
+          <div className="md:hidden space-y-4">
+            {stats?.dueBreakdownList.map((d, i) => (
+              <Card key={i} className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-destructive p-4 flex justify-between items-center">
+                <div>
+                  <h3 className="font-black text-slate-800">{d.month}</h3>
+                  <p className="text-xl font-black text-destructive">৳{d.amount.toLocaleString()}</p>
+                </div>
+                <Button size="sm" className="rounded-xl h-9 px-4 font-bold" onClick={() => router.push(`/payment-entry?studentId=${student.id}`)}>Record</Button>
+              </Card>
+            ))}
+            {(!stats?.dueBreakdownList || stats.dueBreakdownList.length === 0) && (
+              <p className="text-center py-10 text-xs text-muted-foreground italic">No outstanding dues for this resident.</p>
+            )}
+          </div>
         </TabsContent>
+
         {student.paymentSystem === 'non-package' && (
-          <TabsContent value="meals">
-            <Card className="hidden md:block border-none shadow-sm rounded-3xl overflow-hidden bg-white">
-              <Table><TableHeader className="bg-slate-50"><TableRow><TableHead>Date</TableHead><TableHead>Month</TableHead><TableHead>Meal Count</TableHead><TableHead className="text-right">Total Cost</TableHead></TableRow></TableHeader>
-                <TableBody>{student.mealsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((m: any, idx: number) => (
-                  <TableRow key={idx}><TableCell className="text-xs text-slate-500">{new Date(m.date).toLocaleDateString()}</TableCell><TableCell className="font-bold">{m.month}</TableCell><TableCell><Badge variant="secondary" className="font-bold">{m.totalMeals} Meals</Badge></TableCell><TableCell className="text-right font-black text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell></TableRow>
-                ))}</TableBody>
+          <TabsContent value="meals" className="space-y-4">
+            <div className="hidden md:block border rounded-3xl overflow-hidden bg-white">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Month</TableHead>
+                    <TableHead>Meal Count</TableHead>
+                    <TableHead className="text-right">Total Cost</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {student.mealsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((m: any, idx: number) => (
+                    <TableRow key={idx}>
+                      <TableCell className="text-xs text-slate-500">{new Date(m.date).toLocaleDateString()}</TableCell>
+                      <TableCell className="font-bold">{m.month}</TableCell>
+                      <TableCell><Badge variant="secondary" className="font-bold">{m.totalMeals} Meals</Badge></TableCell>
+                      <TableCell className="text-right font-black text-destructive">৳{m.totalCost?.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
               </Table>
-            </Card>
-            <div className="md:hidden space-y-4">{student.mealsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((m: any, idx: number) => (
-              <Card key={idx} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-2"><div className="flex justify-between items-center"><p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(m.date).toLocaleDateString()}</p><Badge variant="secondary" className="font-black">{m.totalMeals} MEALS</Badge></div><div className="flex justify-between items-end"><h3 className="font-black text-slate-800">{m.month}</h3><p className="text-xl font-black text-destructive">৳{m.totalCost?.toLocaleString()}</p></div></Card>
-            ))}</div>
+            </div>
+            
+            <div className="md:hidden space-y-4">
+              {student.mealsHistory?.slice().sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((m: any, idx: number) => (
+                <Card key={idx} className="border-none shadow-sm rounded-2xl bg-white p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(m.date).toLocaleDateString()}</p>
+                    <Badge variant="secondary" className="font-black">{m.totalMeals} MEALS</Badge>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <h3 className="font-black text-slate-800">{m.month}</h3>
+                    <p className="text-xl font-black text-destructive">৳{m.totalCost?.toLocaleString()}</p>
+                  </div>
+                </Card>
+              ))}
+              {(!student.mealsHistory || student.mealsHistory.length === 0) && (
+                <p className="text-center py-10 text-xs text-muted-foreground italic">No meal history found.</p>
+              )}
+            </div>
           </TabsContent>
         )}
       </Tabs>
