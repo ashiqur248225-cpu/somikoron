@@ -395,9 +395,18 @@ export default function StudentMealPage() {
            </div>
 
            {canChange && (
-             <Button onClick={handleUpdateMeals} disabled={isUpdating} className="w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95">
+             <Button 
+               onClick={handleUpdateMeals} 
+               disabled={isUpdating} 
+               className={cn(
+                 "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl gap-3 transition-transform active:scale-95",
+                 hasAlreadyUpdatedToday 
+                   ? "bg-success hover:bg-success/90 shadow-success/20" 
+                   : "bg-primary hover:bg-primary/90 shadow-primary/20"
+               )}
+             >
                 {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
-                {hasAlreadyUpdatedToday ? "Update Preference" : `Confirm & Save for ${tomorrowDay}`}
+                {hasAlreadyUpdatedToday ? "Submitted" : `Confirm & Save for ${tomorrowDay}`}
              </Button>
            )}
 
