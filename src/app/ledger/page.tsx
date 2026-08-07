@@ -37,7 +37,6 @@ export default function LedgerPage() {
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   
-  // Local date helpers
   const getLocalYMD = () => {
     const d = new Date();
     return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
@@ -47,7 +46,6 @@ export default function LedgerPage() {
     return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-01`;
   }
 
-  // Default to current month range (Local Time)
   const [startDate, setStartDate] = useState(getFirstDayOfMonthYMD())
   const [endDate, setEndDate] = useState(getLocalYMD())
   
@@ -78,7 +76,6 @@ export default function LedgerPage() {
   const { data: expenses, isLoading: eLoading } = useCollection(expensesQuery)
 
   const rawLedgerData = useMemo(() => {
-    // CRITICAL: Filter out adjustments from global ledger
     const combined = [
       ...(payments || []).filter(p => p.method !== 'adjustment').map(p => ({ ...p, txType: 'income', debit: 0, credit: p.amount })),
       ...(expenses || []).map(e => ({ ...e, txType: 'expense', debit: e.amount, credit: 0, date: e.expenseDate }))
@@ -130,17 +127,14 @@ export default function LedgerPage() {
   }
 
   return (
-    <div className="space-y-8 pb-20 w-full">
+    <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2"><SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mr-2 h-4 md:hidden" /><div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Ledger</h1></div></div>
         <div className="ml-auto flex items-center gap-3">
-          {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-3">
             <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={() => setIsFilterDialogOpen(true)}><Filter size={16} /> Filter</Button>
             <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={handlePrint}><Printer size={16} /> Print Report</Button>
           </div>
-
-          {/* Mobile Actions (3-dot menu) */}
           <div className="md:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -158,12 +152,10 @@ export default function LedgerPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-
           <Link href="/profile"><Avatar className="h-10 w-10 border-2 border-primary/20"><AvatarFallback className="bg-primary text-white font-bold">{userName.substring(0, 2)}</AvatarFallback></Avatar></Link>
         </div>
       </div>
 
-      {/* OFFICIAL A4 PRINT REPORT */}
       <div className="print-only print-report-container">
         <div className="report-header">
           <h1>সমীকরণ ছাত্রাবাস</h1>
@@ -179,7 +171,6 @@ export default function LedgerPage() {
             </div>
           </div>
         </div>
-
         <table>
           <thead>
             <tr>
@@ -212,14 +203,9 @@ export default function LedgerPage() {
             </tr>
           </tfoot>
         </table>
-
-        <div className="print-footer">
-          <div className="page-number"></div>
-          <div className="signature-box">Manager Signature</div>
-        </div>
+        <div className="print-footer"><div className="page-number"></div><div className="signature-box">Manager Signature</div></div>
       </div>
 
-      {/* PRINT:HIDDEN AREA */}
       <div className="print:hidden space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="shadow-sm border-none bg-white border-l-[6px] border-l-success rounded-2xl overflow-hidden"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-xs font-bold uppercase text-success">Total Income</CardTitle><ArrowUpCircle className="h-4 w-4 text-success" /></CardHeader><CardContent><div className="text-xl font-bold">৳{stats.income.toLocaleString()}</div></CardContent></Card>
@@ -231,7 +217,6 @@ export default function LedgerPage() {
           <div className="flex justify-center py-20"><Loader2 className="animate-spin" /></div>
         ) : (
           <>
-            {/* Desktop Table View */}
             <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
               <CardContent className="p-0 overflow-x-auto">
                 <Table>
@@ -259,7 +244,6 @@ export default function LedgerPage() {
               </CardContent>
             </Card>
 
-            {/* Mobile Card View */}
             <div className="md:hidden space-y-4">
               {filteredData.map((tx: any, idx: number) => (
                 <Card 
@@ -286,7 +270,6 @@ export default function LedgerPage() {
                         {tx.txType}
                       </Badge>
                     </div>
-
                     <div className="grid grid-cols-2 gap-3 bg-secondary/30 p-3 rounded-xl border border-secondary">
                       <div className="space-y-1">
                         <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Transaction Info</p>
@@ -301,7 +284,6 @@ export default function LedgerPage() {
                         </p>
                       </div>
                     </div>
-
                     <div className="pt-1 border-t border-dashed flex justify-between items-center">
                       <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase">
                         <History size={12}/> Running Balance
@@ -311,9 +293,7 @@ export default function LedgerPage() {
                   </CardContent>
                 </Card>
               ))}
-              {filteredData.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground italic">No transactions match filters.</div>
-              )}
+              {filteredData.length === 0 && <div className="text-center py-12 text-muted-foreground italic">No transactions match filters.</div>}
             </div>
           </>
         )}
@@ -329,16 +309,10 @@ export default function LedgerPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Date Range (From date to To date)</Label>
-              <div className="flex gap-2">
-                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
-              </div>
+              <div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div>
             </div>
           </div>
-          <DialogFooter className="flex gap-2">
-            <Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button>
-            <Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filter</Button>
-          </DialogFooter>
+          <DialogFooter className="flex gap-2"><Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply Filter</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
