@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -8,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Loader2, Eye, Printer, TrendingUp, Filter, MoreVertical, CircleDollarSign } from "lucide-react"
+import { Users, Search, Loader2, Eye, Printer, TrendingUp, Filter, MoreVertical, CircleDollarSign, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -98,7 +97,7 @@ export default function DuesPage() {
             p.month === m && p.year === y && (Number(p.seatAmount) > 0 || p.method === 'adjustment')
           );
 
-          if (!inBreakdown && !inHistory) {
+          if (!getDocData(inBreakdown) && !inHistory) {
             const rent = Number(s.monthlyRent || 0);
             if (rent > 0) {
               updatedDues[label] = { month: m, year: y, amount: rent };
@@ -119,6 +118,8 @@ export default function DuesPage() {
         }
       });
     };
+
+    const getDocData = (val: any) => val;
 
     syncMissingDues();
   }, [students, db]);
@@ -163,6 +164,13 @@ export default function DuesPage() {
     } 
   }
 
+  const handleReset = () => {
+    setSearchTerm("")
+    setBuildingFilter("all")
+    setStatusFilter("active")
+    setDueCategoryFilter("all")
+  }
+
   return (
     <div className="space-y-8 pb-20 w-full">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
@@ -172,13 +180,11 @@ export default function DuesPage() {
           <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Due</h1></div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-3">
             <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={() => setIsFilterDialogOpen(true)}><Filter size={16} /> Filter</Button>
             <Button size="sm" variant="outline" className="gap-2 h-10 px-4 rounded-xl border-primary/20 text-primary font-bold" onClick={handlePrint}><Printer size={16} /> Print Report</Button>
           </div>
 
-          {/* Mobile Actions (3-dot menu) */}
           <div className="md:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
