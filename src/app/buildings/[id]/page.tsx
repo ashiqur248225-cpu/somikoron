@@ -16,7 +16,7 @@ import {
   XCircle, Zap, LayoutGrid, Calculator, TrendingUp, TrendingDown,
   ArrowUpRight, ArrowDownRight, Banknote, Calendar, BarChart3,
   CircleDollarSign, Percent, ChevronLeft, MoreVertical, ChevronDown, ChevronUp,
-  HandCoins, Package, User
+  HandCoins, Package, User, Coins
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -162,7 +162,8 @@ export default function BuildingDetailsPage(props: {
       netProfit: 0,
       roomRevenueList: [],
       packageCount: 0,
-      nonPackageCount: 0
+      nonPackageCount: 0,
+      potentialIncome: 0
     }
 
     const foodCostPerPackage = estimates?.packageFoodCost || 4500;
@@ -242,7 +243,8 @@ export default function BuildingDetailsPage(props: {
       netProfit,
       roomRevenueList,
       packageCount: packageStudentCount,
-      nonPackageCount
+      nonPackageCount,
+      potentialIncome
     }
   }, [building, payments, activeStudents, estimates, id])
 
@@ -620,8 +622,9 @@ export default function BuildingDetailsPage(props: {
       </Dialog>
 
       <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Building Rent</p><p className="text-xl font-bold mt-1">৳{(building.buildingRentCost || 0).toLocaleString()}</p></div><div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Banknote size={20} /></div></div></CardContent></Card>
+          <Card className="border-none shadow-sm bg-white border-l-4 border-l-purple-500 rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Full Capacity Potential</p><p className="text-xl font-bold mt-1">৳{revenueStats.potentialIncome.toLocaleString()}</p></div><div className="bg-purple-50 p-2 rounded-lg text-purple-600"><Coins size={20} /></div></div></CardContent></Card>
           <Card className="border-none shadow-sm bg-white border-l-4 border-l-primary rounded-2xl"><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Gross Income (Real)</p><p className="text-xl font-bold mt-1">৳{revenueStats.expectedIncome.toLocaleString()}</p></div><div className="bg-primary/5 p-2 rounded-lg text-primary"><TrendingUp size={20} /></div></div></CardContent></Card>
           <Card className={cn("border-none shadow-sm bg-white border-l-4 rounded-2xl", revenueStats.netProfit >= 0 ? "border-l-success" : "border-l-destructive")}><CardContent className="pt-6"><div className="flex justify-between items-start"><div><p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Estimated Net Profit</p><p className={cn("text-xl font-bold mt-1", revenueStats.netProfit >= 0 ? "text-success" : "text-destructive")}>৳{revenueStats.netProfit.toLocaleString()}</p></div><div className={cn("p-2 rounded-lg", revenueStats.netProfit >= 0 ? "bg-success/5 text-success" : "bg-destructive/5 text-destructive")}>{revenueStats.netProfit >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div></div></CardContent></Card>
         </div>
