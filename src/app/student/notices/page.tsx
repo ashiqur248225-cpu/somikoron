@@ -80,16 +80,17 @@ export default function StudentNoticePage() {
   if (isLoading) return <div className="flex justify-center p-20 animate-pulse text-sm font-bold text-muted-foreground uppercase">Syncing Notices...</div>
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <header className="flex justify-between items-end mb-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-black text-slate-800">Notice Center</h1>
-          <p className="text-muted-foreground text-sm font-medium">Important updates and alerts.</p>
+    <div className="space-y-6 animate-in fade-in duration-500 w-full">
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-black text-slate-800 truncate">Notices</h1>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Alerts</p>
         </div>
-        <div className="bg-primary/10 h-10 w-10 rounded-2xl flex items-center justify-center text-primary shadow-inner">
+        <div className="h-10 w-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary">
            <BellRing size={20} />
         </div>
-      </header>
+      </div>
 
       <div className="space-y-4">
         {notices?.map((notice) => (

@@ -76,15 +76,16 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="flex justify-between items-end mb-2">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase text-primary tracking-widest">Resident Portal</p>
-          <h1 className="text-2xl font-black text-slate-800">Hello, {displayName}!</h1>
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-black text-slate-800 truncate">Hi, {displayName}</h1>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Portal</p>
         </div>
-        <Badge className="bg-primary/10 text-primary border-none font-black text-[9px] uppercase px-3 rounded-full">
+        <Badge className="bg-primary/10 text-primary border-none font-black text-[9px] uppercase px-3 rounded-full shrink-0">
           R-{student.roomNumber}
         </Badge>
-      </header>
+      </div>
 
       {/* Main Account Card */}
       <Card className="border-none shadow-2xl bg-primary rounded-[2.5rem] overflow-hidden text-white relative">

@@ -135,11 +135,17 @@ export default function PaymentRequestPage() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="space-y-1 mb-2">
-        <h1 className="text-2xl font-black text-slate-800">Payment Request</h1>
-        <p className="text-muted-foreground text-sm font-medium">Submit your digital payment for verification.</p>
-      </header>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-black text-slate-800 truncate">Pay Request</h1>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Payment</p>
+        </div>
+        <div className="h-10 w-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary">
+           <Wallet size={20} />
+        </div>
+      </div>
 
       {/* Dues Awareness Section */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

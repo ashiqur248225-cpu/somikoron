@@ -32,7 +32,6 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
   DialogTrigger,
   DialogFooter,
   DialogDescription
@@ -91,16 +90,17 @@ export default function StudentProfilePage() {
   if (!student) return <div className="text-center p-20">Access Denied.</div>
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <header className="flex items-center gap-4">
-        <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center text-white shadow-xl shadow-primary/20">
-           <User size={32} />
+    <div className="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-2 duration-500 w-full">
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center text-white shrink-0 shadow-lg shadow-primary/20">
+           <User size={20} />
         </div>
-        <div>
-          <h1 className="text-2xl font-black text-slate-800">{student.name}</h1>
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{student.branch} Resident</p>
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-black text-slate-800 truncate">{student.name}</h1>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">My Profile</p>
         </div>
-      </header>
+      </div>
 
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
         <CardContent className="p-6 space-y-6">

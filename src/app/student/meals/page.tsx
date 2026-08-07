@@ -286,17 +286,18 @@ export default function StudentMealPage() {
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500 max-w-4xl mx-auto w-full">
-      <header className="flex justify-between items-end mb-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-black text-slate-800">Catering Panel</h1>
-          <p className="text-muted-foreground text-sm font-medium">Manage your daily meals.</p>
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-black text-slate-800 truncate">Catering</h1>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Meals</p>
         </div>
         <Link href="/meal-routine">
-          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl bg-primary/10 text-primary shadow-inner">
+          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl bg-primary/5 text-primary">
              <TableIcon size={20} />
           </Button>
         </Link>
-      </header>
+      </div>
 
       {/* TODAY'S MENU */}
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden border-l-4 border-l-primary">

@@ -46,15 +46,16 @@ export default function StudentPaymentHistoryPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full">
-          <ChevronLeft />
+      {/* Sticky App Bar */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2 h-10 w-10">
+          <ChevronLeft size={24} />
         </Button>
-        <div>
-          <h1 className="text-2xl font-black text-slate-800">Payment History</h1>
-          <p className="text-muted-foreground text-sm font-medium">All verified transactions.</p>
+        <div className="flex-1 overflow-hidden">
+          <h1 className="text-lg font-black text-slate-800 truncate">History</h1>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Payments</p>
         </div>
-      </header>
+      </div>
 
       <div className="grid grid-cols-1 gap-4">
         {sortedHistory.map((payment: any, idx: number) => (
