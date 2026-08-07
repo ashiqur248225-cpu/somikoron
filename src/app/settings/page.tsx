@@ -155,6 +155,14 @@ export default function SettingsPage() {
     wifiBill: "300"
   })
 
+  // Opening Balance State
+  const [openingBalances, setOpeningBalances] = useState({
+    cash: "0",
+    bank: "0",
+    bkash: "0",
+    nagad: "0"
+  })
+
   // Payment Accounts State
   const [paymentAccounts, setPaymentAccounts] = useState<any[]>([])
 
@@ -203,6 +211,12 @@ export default function SettingsPage() {
   )
   const { data: accountsStore } = useDoc(accountsRef)
 
+  const balanceRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "netBalance", userBranch) : null, 
+    [db, userBranch]
+  )
+  const { data: branchBalance } = useDoc(balanceRef)
+
   const mealRateConfigRef = useMemoFirebase(() => 
     selectedMealBranch ? doc(db, "configs", `mealRate_${selectedMealBranch}`) : null, 
     [db, selectedMealBranch]
@@ -239,6 +253,17 @@ export default function SettingsPage() {
     }
   }, [accountsStore])
 
+  useEffect(() => {
+    if (branchBalance) {
+      setOpeningBalances({
+        cash: (branchBalance.totalCash || 0).toString(),
+        bank: (branchBalance.totalBank || 0).toString(),
+        bkash: (branchBalance.totalBkash || 0).toString(),
+        nagad: (branchBalance.totalNagad || 0).toString()
+      })
+    }
+  }, [branchBalance])
+
   useEffect(() => { if (mealRateConfig) setRate(mealRateConfig.rate?.toString() || "") }, [mealRateConfig])
   useEffect(() => { if (rulesData?.rulesText) setRules(rulesData.rulesText) }, [rulesData])
 
@@ -268,6 +293,35 @@ export default function SettingsPage() {
         updatedAt: serverTimestamp()
       })
       toast({ title: "Billing Config Saved" })
+    } catch (e: any) {
+      toast({ variant: "destructive", description: e.message })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleSaveOpeningBalances = async () => {
+    if (!userBranch) return
+    setIsUpdating(true)
+    try {
+      const cash = Number(openingBalances.cash)
+      const bank = Number(openingBalances.bank)
+      const bkash = Number(openingBalances.bkash)
+      const nagad = Number(openingBalances.nagad)
+      
+      await setDoc(doc(db, "netBalance", userBranch), {
+        branchId: userBranch,
+        totalCash: cash,
+        totalBank: bank,
+        totalBkash: bkash,
+        totalNagad: nagad,
+        totalHandCash: cash + bank + bkash + nagad,
+        lastUpdated: serverTimestamp(),
+        initializedAt: serverTimestamp(),
+        initializedBy: userName
+      }, { merge: true })
+      
+      toast({ title: "Balances Initialized", description: "Account balances have been manually updated." })
     } catch (e: any) {
       toast({ variant: "destructive", description: e.message })
     } finally {
@@ -476,6 +530,37 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-8 animate-in fade-in duration-300">
+          {/* FINANCIAL OPENING BALANCES */}
+          <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-success">
+            <CardHeader>
+               <div className="flex items-center gap-2 text-success"><CircleDollarSign size={20}/><CardTitle>Financial Opening Balances</CardTitle></div>
+               <CardDescription>Manually set or reset current branch balances.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                     <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Banknote size={10} className="text-green-600"/> Cash Opening</Label>
+                     <Input type="number" value={openingBalances.cash} onChange={e => setOpeningBalances({...openingBalances, cash: e.target.value})} className="h-10 font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                     <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Landmark size={10} className="text-blue-600"/> Bank Opening</Label>
+                     <Input type="number" value={openingBalances.bank} onChange={e => setOpeningBalances({...openingBalances, bank: e.target.value})} className="h-10 font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                     <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Smartphone size={10} className="text-pink-600"/> bKash Opening</Label>
+                     <Input type="number" value={openingBalances.bkash} onChange={e => setOpeningBalances({...openingBalances, bkash: e.target.value})} className="h-10 font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                     <Label className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1"><Smartphone size={10} className="text-orange-600"/> Nagad Opening</Label>
+                     <Input type="number" value={openingBalances.nagad} onChange={e => setOpeningBalances({...openingBalances, nagad: e.target.value})} className="h-10 font-bold" />
+                  </div>
+               </div>
+               <Button onClick={handleSaveOpeningBalances} disabled={isUpdating} className="w-full bg-success hover:bg-success/90 h-11 gap-2 rounded-xl font-bold shadow-lg shadow-success/20">
+                  {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18}/>} Initialize & Sync Balances
+               </Button>
+            </CardContent>
+          </Card>
+
           {/* MEAL ADVANCED CONFIG */}
           <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-primary">
             <CardHeader>
