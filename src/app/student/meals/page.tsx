@@ -141,7 +141,15 @@ export default function StudentMealPage() {
     const startMinutes = startH * 60 + startM
     const endMinutes = endH * 60 + endM
     
-    const isActive = totalMinutes >= startMinutes && totalMinutes <= endMinutes
+    // Support for overnight window (e.g. 9 PM to 1 AM)
+    let isActive = false
+    if (startMinutes <= endMinutes) {
+      // Normal range within same day
+      isActive = totalMinutes >= startMinutes && totalMinutes <= endMinutes
+    } else {
+      // Overnight range
+      isActive = totalMinutes >= startMinutes || totalMinutes <= endMinutes
+    }
     
     const format12h = (time24: string) => {
       const [h, m] = time24.split(':').map(Number)
