@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -61,8 +60,8 @@ const DEFAULT_EXPENSE_CATEGORIES = [
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export default function ExpenseDetailsPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = React.use(params)
+export default function ExpenseDetailsPage(props: { params: Promise<{ id: string }> }) {
+  const { id } = React.use(props.params)
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()

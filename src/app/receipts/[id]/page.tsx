@@ -1,9 +1,8 @@
-
 "use client"
 
 import * as React from "react"
 import { useState, useEffect } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
@@ -11,9 +10,8 @@ import { Printer, ChevronLeft, User, Building2, Calculator, Smartphone, CheckCir
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
-export default function ReceiptPage() {
-  const params = useParams()
-  const id = params.id as string
+export default function ReceiptPage(props: { params: Promise<{ id: string }> }) {
+  const { id } = React.use(props.params)
   const router = useRouter()
   const db = useFirestore()
   const [isMounted, setIsMounted] = useState(false)

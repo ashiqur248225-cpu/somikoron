@@ -1,9 +1,8 @@
-
 "use client"
 
 import * as React from "react"
 import { useState, useEffect, useMemo } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, collection, updateDoc, serverTimestamp, query, where } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,9 +32,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
-export default function StaffProfilePage() {
-  const params = useParams()
-  const id = params.id as string
+export default function StaffProfilePage(props: { params: Promise<{ id: string }> }) {
+  const { id } = React.use(props.params)
   const router = useRouter()
   const db = useFirestore()
   const { toast } = useToast()

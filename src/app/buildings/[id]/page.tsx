@@ -77,14 +77,11 @@ interface ApartmentDetail {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-export default function BuildingDetailsPage({ 
-  params, 
-  searchParams 
-}: { 
+export default function BuildingDetailsPage(props: { 
   params: Promise<{ id: string }>,
   searchParams: Promise<any>
 }) {
-  const { id } = React.use(params)
+  const { id } = React.use(props.params)
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()

@@ -1,9 +1,8 @@
-
 "use client"
 
 import * as React from "react"
 import { useState, useMemo, useEffect } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, setDoc, arrayUnion, increment, collection, query, where, getDoc, writeBatch } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -88,9 +87,8 @@ interface PastPaymentEntry {
   date: string;
 }
 
-export default function StudentDetailsPage() {
-  const params = useParams()
-  const id = params.id as string
+export default function StudentDetailsPage(props: { params: Promise<{ id: string }> }) {
+  const { id } = React.use(props.params)
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()
