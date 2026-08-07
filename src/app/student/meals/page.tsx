@@ -187,7 +187,7 @@ export default function StudentMealPage() {
   }, [student])
 
   const handleUpdateMeals = useCallback(async () => {
-    if (!studentRef || !canChange || isUpdating || !student) return
+    if (!studentRef || !canChange || isUpdating || !student || hasAlreadyUpdatedToday) return
     setIsUpdating(true)
     try {
       let finalMeals = { ...localMeals }
@@ -349,10 +349,10 @@ export default function StudentMealPage() {
              </div>
            )}
            
-           <div className={cn("space-y-6", !canChange && "opacity-50 pointer-events-none")}>
+           <div className={cn("space-y-6", (!canChange || hasAlreadyUpdatedToday) && "opacity-50 pointer-events-none")}>
               <div className="flex items-center justify-between p-4 bg-slate-900 rounded-3xl text-white">
                 <div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest">Auto Mode</p><p className="text-[8px] text-white/40 uppercase">Sync with weekly schedule</p></div>
-                <Switch disabled={!canChange} checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
+                <Switch disabled={!canChange || hasAlreadyUpdatedToday} checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
               </div>
 
               {!localMeals.autoMode && (
@@ -380,12 +380,12 @@ export default function StudentMealPage() {
                               </p>
                             </div>
                           </div>
-                          <Switch disabled={!canChange} checked={isChecked as boolean} onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} />
+                          <Switch disabled={!canChange || hasAlreadyUpdatedToday} checked={isChecked as boolean} onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} />
                         </div>
 
                         {isChecked && options && (
                           <div className="pt-3 border-t border-success/10">
-                            <RadioGroup disabled={!canChange} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
+                            <RadioGroup disabled={!canChange || hasAlreadyUpdatedToday} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
                                {options.map(opt => (
                                  <div key={opt} className="flex items-center gap-2">
                                     <RadioGroupItem value={opt} id={`${type.id}-${opt}`} className="border-success text-success" />
@@ -405,16 +405,16 @@ export default function StudentMealPage() {
            {canChange && (
              <Button 
                onClick={handleUpdateMeals} 
-               disabled={isUpdating} 
+               disabled={isUpdating || hasAlreadyUpdatedToday} 
                className={cn(
                  "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl gap-3 transition-transform active:scale-95",
                  hasAlreadyUpdatedToday 
-                   ? "bg-success hover:bg-success/90 shadow-success/20" 
+                   ? "bg-success hover:bg-success/90 shadow-success/20 disabled:opacity-100" 
                    : "bg-primary hover:bg-primary/90 shadow-primary/20"
                )}
              >
                 {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
-                {hasAlreadyUpdatedToday ? "Submitted" : `Confirm & Save for ${tomorrowDay}`}
+                {hasAlreadyUpdatedToday ? "Submitted" : `Confirm & Submit for ${tomorrowDay}`}
              </Button>
            )}
 
