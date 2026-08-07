@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Users, Search, Loader2, Eye, Printer, TrendingUp, Filter, MoreVertical } from "lucide-react"
+import { Users, Search, Loader2, Eye, Printer, TrendingUp, Filter, MoreVertical, CircleDollarSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
@@ -35,6 +35,7 @@ export default function DuesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("active")
+  const [dueCategoryFilter, setDueCategoryFilter] = useState("all")
   
   const [userRole, setUserRole] = useState("")
   const [userBranch, setUserBranch] = useState("")
@@ -126,18 +127,30 @@ export default function DuesPage() {
     if (!students) return []
     return students.map(s => {
       const rentDue = Object.values(s.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
-      const foodBalance = s.foodDueAmount || 0;
-      const displayTotalDue = rentDue + (foodBalance < 0 ? Math.abs(foodBalance) : 0);
-      return { ...s, foodBalance, displayTotalDue }
+      const foodVal = Number(s.foodDueAmount || 0);
+      const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
+      
+      const cookVal = Number(s.cookingDueAmount || 0);
+      const cookDue = cookVal < 0 ? Math.abs(cookVal) : 0;
+      
+      const displayTotalDue = rentDue + foodDue + cookDue;
+      
+      return { ...s, foodBalance: foodVal, cookingBalance: cookVal, rentDue, displayTotalDue, foodDue, cookDue }
     }).filter(s => {
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
+      
+      let matchesDueCategory = true;
+      if (dueCategoryFilter === 'rent') matchesDueCategory = s.rentDue > 0;
+      if (dueCategoryFilter === 'cooking') matchesDueCategory = s.cookDue > 0;
+      if (dueCategoryFilter === 'food') matchesDueCategory = s.foodDue > 0;
+
       const hasDue = s.displayTotalDue > 0
       
-      return matchesStatus && matchesSearch && matchesBuilding && hasDue
+      return matchesStatus && matchesSearch && matchesBuilding && matchesDueCategory && hasDue
     }).sort((a, b) => b.displayTotalDue - a.displayTotalDue)
-  }, [students, searchTerm, buildingFilter, statusFilter])
+  }, [students, searchTerm, buildingFilter, statusFilter, dueCategoryFilter])
 
   const stats = useMemo(() => {
     const totalDue = processedData.reduce((acc, curr) => acc + curr.displayTotalDue, 0)
@@ -195,7 +208,7 @@ export default function DuesPage() {
           <div className="flex justify-between items-end mt-4 px-2 text-[8pt] font-bold text-slate-500">
             <div>
               <p>Filter: {buildingFilter === 'all' ? 'All Buildings' : buildings?.find(b => b.id === buildingFilter)?.name}</p>
-              <p>Resident Status: {statusFilter.toUpperCase()}</p>
+              <p>Category: {dueCategoryFilter.toUpperCase()}</p>
             </div>
             <div className="text-right">
               <p>Generated: {new Date().toLocaleString()}</p>
@@ -210,26 +223,26 @@ export default function DuesPage() {
               <th>Name</th>
               <th>Location</th>
               <th className="text-right">Rent Due</th>
-              <th className="text-right">Food Balance</th>
+              <th className="text-right">Food Due</th>
+              <th className="text-right">Cook Due</th>
               <th className="text-right">Total Outstanding</th>
             </tr>
           </thead>
           <tbody>
             {processedData.map((s: any) => (
               <tr key={s.id}>
-                <td className="font-bold">{s.name}<br/><span className="text-[7pt] text-slate-500 font-normal">{s.phone}</span></td>
+                <td className="font-bold">{s.name}<br/><span className="text-[7pt] font-normal text-slate-500">{s.phone}</span></td>
                 <td>{s.buildingName} • R-{s.roomNumber}</td>
-                <td className="text-right">৳{(s.rentDue || 0).toLocaleString()}</td>
-                <td className={cn("text-right", s.foodBalance < 0 ? "text-destructive font-bold" : "text-success")}>
-                  ৳{s.foodBalance.toLocaleString()}
-                </td>
+                <td className="text-right">৳{s.rentDue.toLocaleString()}</td>
+                <td className="text-right">৳{s.foodDue.toLocaleString()}</td>
+                <td className="text-right">৳{s.cookDue.toLocaleString()}</td>
                 <td className="text-right font-black">৳{s.displayTotalDue.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="total-row">
-              <td colSpan={4} className="text-right uppercase">Grand Total Outstanding</td>
+              <td colSpan={5} className="text-right uppercase">Grand Total Outstanding</td>
               <td className="text-right">৳{stats.totalDue.toLocaleString()}</td>
             </tr>
           </tfoot>
@@ -251,7 +264,7 @@ export default function DuesPage() {
             <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-2xl">
               <CardContent className="p-0">
                 <Table>
-                  <TableHeader className="bg-secondary/30"><TableRow><TableHead>Resident</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Total Due</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+                  <TableHeader className="bg-secondary/30"><TableRow><TableHead>Resident</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Breakdown (R/F/C)</TableHead><TableHead className="text-right">Total Due</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
                   <TableBody>{processedData.map((s: any) => (
                     <TableRow 
                       key={s.id} 
@@ -260,6 +273,9 @@ export default function DuesPage() {
                     >
                       <TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone}</span></TableCell>
                       <TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell>
+                      <TableCell className="text-right text-[10px] font-bold text-slate-500">
+                        R:{s.rentDue} | F:{s.foodDue} | C:{s.cookDue}
+                      </TableCell>
                       <TableCell className="text-right font-black text-destructive text-lg">৳{s.displayTotalDue.toLocaleString()}</TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <Button variant="ghost" size="sm" onClick={() => router.push(`/students/${s.id}`)}>Profile</Button>
@@ -277,7 +293,12 @@ export default function DuesPage() {
                   onClick={() => router.push(`/students/${s.id}`)}
                 >
                   <div className="flex justify-between items-start"><div><h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3><p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p></div><Badge variant="destructive" className="text-[10px]">Due</Badge></div>
-                  <div className="bg-secondary/30 p-3 rounded-xl flex justify-between items-center"><span className="text-[10px] font-bold text-destructive uppercase">Outstanding</span><span className="text-xl font-black text-destructive">৳{s.displayTotalDue.toLocaleString()}</span></div>
+                  <div className="grid grid-cols-3 gap-2 bg-secondary/50 p-2 rounded-xl text-center">
+                    <div className="space-y-0.5"><p className="text-[7px] font-bold uppercase opacity-60">Rent</p><p className="text-[10px] font-black">৳{s.rentDue}</p></div>
+                    <div className="space-y-0.5"><p className="text-[7px] font-bold uppercase opacity-60">Food</p><p className="text-[10px] font-black">৳{s.foodDue}</p></div>
+                    <div className="space-y-0.5"><p className="text-[7px] font-bold uppercase opacity-60">Cook</p><p className="text-[10px] font-black">৳{s.cookDue}</p></div>
+                  </div>
+                  <div className="bg-destructive/10 p-3 rounded-xl flex justify-between items-center"><span className="text-[10px] font-bold text-destructive uppercase">Total Outstanding</span><span className="text-xl font-black text-destructive">৳{s.displayTotalDue.toLocaleString()}</span></div>
                   <Button variant="outline" className="w-full h-10 rounded-xl font-bold" onClick={(e) => { e.stopPropagation(); router.push(`/students/${s.id}`); }}><Eye size={14} className="mr-2"/> Profile</Button>
                 </Card>
               ))}
@@ -288,15 +309,32 @@ export default function DuesPage() {
 
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader><DialogTitle>Filter Dues</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Advanced Filter Dues</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-1.5"><Label>Search</Label><Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Search Name/Phone</Label><Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Type to search..." /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-1.5"><Label>Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="left">Left</SelectItem><SelectItem value="all">Both</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1.5"><Label>Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active Residents</SelectItem><SelectItem value="left">Ex-Residents</SelectItem><SelectItem value="all">Both</SelectItem></SelectContent></Select></div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-2"><CircleDollarSign size={14} className="text-primary" /> Due Category Filter</Label>
+              <Select value={dueCategoryFilter} onValueChange={setDueCategoryFilter}>
+                <SelectTrigger className="h-12 border-primary/20 bg-primary/5 font-bold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Combined Dues</SelectItem>
+                  <SelectItem value="rent">Rent Due Only</SelectItem>
+                  <SelectItem value="cooking">Cooking Bill Due Only</SelectItem>
+                  <SelectItem value="food">Food Balance Due Only</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-          <DialogFooter><Button onClick={() => setIsFilterDialogOpen(false)}>Apply</Button></DialogFooter>
+          <DialogFooter className="grid grid-cols-2 gap-3">
+            <Button variant="ghost" onClick={handleReset} className="gap-2 font-bold"><RotateCcw size={14}/> Reset</Button>
+            <Button onClick={() => setIsFilterDialogOpen(false)} className="rounded-xl font-bold">Apply Filter</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
