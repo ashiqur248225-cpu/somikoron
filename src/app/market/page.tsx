@@ -16,14 +16,18 @@ import {
   TrendingDown,
   Receipt,
   X,
-  PlusCircle
+  PlusCircle,
+  ChevronRight,
+  LayoutGrid,
+  Zap,
+  Package
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, doc, setDoc, query, where, serverTimestamp, deleteDoc, orderBy, limit, writeBatch } from "firebase/firestore"
+import { collection, doc, setDoc, query, where, serverTimestamp, deleteDoc, orderBy, limit, writeBatch, increment } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -38,6 +42,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 
 const DEFAULT_MARKET_CATEGORIES: Record<string, string[]> = {
   "Groceries": ["Oil", "Rice", "Lentils (Dal)", "Salt/Sugar", "Spices", "Other"],
@@ -134,7 +139,7 @@ export default function MarketTrackingPage() {
         })
       }
 
-      // Record Consolidated Batch Expense for Ledger (One entry per batch)
+      // Record Consolidated Batch Expense for Ledger
       const generalExpId = doc(collection(db, "expenses")).id
       batch.set(doc(db, "expenses", generalExpId), {
         id: generalExpId,
@@ -172,7 +177,7 @@ export default function MarketTrackingPage() {
   const handleDelete = async (id: string) => {
     try {
       await deleteDoc(doc(db, "marketExpenses", id))
-      toast({ title: "Deleted", description: "Market item entry removed. Note: Ledger expense must be adjusted manually." })
+      toast({ title: "Deleted", description: "Market item removed." })
     } catch (e) {
       toast({ variant: "destructive", description: "Failed to delete." })
     }
@@ -181,14 +186,14 @@ export default function MarketTrackingPage() {
   const grandTotalPreview = items.reduce((acc, curr) => acc + (Number(curr.quantity || 0) * Number(curr.unitPrice || 0)), 0)
 
   return (
-    <div className="space-y-8 pb-20">
+    <div className="space-y-8 pb-20 w-full overflow-x-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Market Tracking</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Grocery and kitchen inventory expenses for <span className="font-bold text-foreground">{userBranch}</span>.</p>
+            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Grocery expenses for <span className="font-bold text-foreground">{userBranch}</span>.</p>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -201,7 +206,7 @@ export default function MarketTrackingPage() {
             <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] flex flex-col rounded-3xl p-0 overflow-hidden">
               <DialogHeader className="p-6 bg-primary text-white">
                 <DialogTitle className="text-2xl font-black">Record Market Purchase</DialogTitle>
-                <DialogDescription className="text-primary-foreground/70">Add multiple grocery items to kitchen inventory in one batch.</DialogDescription>
+                <DialogDescription className="text-primary-foreground/70">Add grocery items to kitchen inventory.</DialogDescription>
               </DialogHeader>
               
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -292,48 +297,87 @@ export default function MarketTrackingPage() {
         </Card>
       </div>
 
-      <Card className="border-none shadow-sm overflow-hidden bg-white rounded-3xl">
-        <CardContent className="p-0 overflow-x-auto">
-          {isLoading ? (
-            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" /></div>
-          ) : (
-            <Table>
-              <TableHeader className="bg-slate-50/50">
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Item Details</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead className="text-right">Unit Price</TableHead>
-                  <TableHead className="text-right">Total Price</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {expenses?.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell className="text-[10px] font-bold text-slate-400">{e.date}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-800 text-sm">{e.itemName}</span>
-                        <span className="text-[9px] text-muted-foreground italic">{e.subCategory || 'General'}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell><Badge variant="secondary" className="capitalize text-[8px] h-4 px-1.5">{e.category}</Badge></TableCell>
-                    <TableCell className="text-xs font-medium text-slate-600">{e.quantity}</TableCell>
-                    <TableCell className="text-right text-xs font-bold text-slate-500">৳{Number(e.unitPrice).toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-black text-destructive text-lg">৳{Number(e.totalPrice).toLocaleString()}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(e.id)}><Trash2 size={14} /></Button>
-                    </TableCell>
+      {isLoading ? (
+        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" /></div>
+      ) : (
+        <>
+          {/* Desktop Table */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-3xl">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50/50">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Item Details</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Qty</TableHead>
+                    <TableHead className="text-right">Unit Price</TableHead>
+                    <TableHead className="text-right">Total Price</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ))}
-                {expenses?.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground italic text-lg">No bazaar entries found.</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {expenses?.map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell className="text-[10px] font-bold text-slate-400">{e.date}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-800 text-sm">{e.itemName}</span>
+                          <span className="text-[9px] text-muted-foreground italic">{e.subCategory || 'General'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell><Badge variant="secondary" className="capitalize text-[8px] h-4 px-1.5">{e.category}</Badge></TableCell>
+                      <TableCell className="text-xs font-medium text-slate-600">{e.quantity}</TableCell>
+                      <TableCell className="text-right text-xs font-bold text-slate-500">৳{Number(e.unitPrice).toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-black text-destructive text-lg">৳{Number(e.totalPrice).toLocaleString()}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(e.id)}><Trash2 size={14} /></Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Mobile Cards */}
+          <div className="md:hidden space-y-4 px-1">
+            {expenses?.map((e) => (
+              <Card key={e.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-destructive/10 p-2 rounded-lg text-destructive"><Package size={18}/></div>
+                      <div>
+                        <h3 className="font-black text-slate-800 text-lg leading-tight">{e.itemName}</h3>
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-0.5">{e.date}</p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="text-destructive -mr-2" onClick={() => handleDelete(e.id)}><Trash2 size={16}/></Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 bg-secondary/30 p-3 rounded-xl border border-secondary">
+                    <div className="space-y-1">
+                      <p className="text-[8px] font-bold text-muted-foreground uppercase">Category</p>
+                      <div className="flex items-center gap-1 text-[10px] font-black text-slate-700">
+                        <LayoutGrid size={10} className="text-primary"/> {e.category}
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-right">
+                      <p className="text-[8px] font-bold text-muted-foreground uppercase">Total Cost</p>
+                      <p className="text-xs font-black text-destructive">৳{Number(e.totalPrice).toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="pt-1 border-t border-dashed flex justify-between items-center text-[10px] font-medium text-slate-500">
+                    <span>Qty: {e.quantity} @ ৳{e.unitPrice}</span>
+                    <Badge variant="outline" className="text-[8px] h-4 uppercase">{e.subCategory || 'General'}</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {expenses?.length === 0 && <div className="text-center py-20 text-muted-foreground italic">No bazaar entries found.</div>}
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -133,7 +133,6 @@ export default function StudentPaymentsPage() {
       // 3. DISTRIBUTE TO UTILITIES (Cooking Bill)
       if (selectedReq.payUtilities && remaining > 0 && billingConfig) {
         const cCost = Number(billingConfig.cookingBill || 0);
-        const wCost = Number(billingConfig.wifiBill || 0);
         if (remaining >= cCost && cCost > 0) { cookingBill = cCost; remaining -= cCost; }
       }
 
@@ -218,7 +217,7 @@ export default function StudentPaymentsPage() {
   }
 
   return (
-    <div className="space-y-8 pb-20">
+    <div className="space-y-8 pb-20 w-full overflow-x-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -233,49 +232,95 @@ export default function StudentPaymentsPage() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
       ) : (
-        <Card className="border-none shadow-sm overflow-hidden bg-white rounded-3xl">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-slate-50/50">
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Purpose (Student Sel.)</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.map(req => (
-                  <TableRow key={req.id} className="cursor-pointer hover:bg-slate-50/50" onClick={() => { setSelectedReq(req); setIsDetailOpen(true); }}>
-                    <TableCell className="text-[10px] font-bold text-slate-400">
+        <>
+          {/* Desktop Table View */}
+          <Card className="hidden md:block border-none shadow-sm overflow-hidden bg-white rounded-3xl">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50/50">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Purpose (Student Sel.)</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {requests.map(req => (
+                    <TableRow key={req.id} className="cursor-pointer hover:bg-slate-50/50" onClick={() => { setSelectedReq(req); setIsDetailOpen(true); }}>
+                      <TableCell className="text-[10px] font-bold text-slate-400">
+                        {req.createdAt?.toDate ? req.createdAt.toDate().toLocaleDateString() : 'Just now'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-bold text-slate-800">{req.studentName}</div>
+                        <div className="text-[10px] text-muted-foreground">Room {req.roomNumber}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {req.payRent && <Badge variant="secondary" className="text-[7px] h-4 bg-blue-50 text-blue-600">Rent</Badge>}
+                          {req.payDue && <Badge variant="secondary" className="text-[7px] h-4 bg-destructive/10 text-destructive">Due</Badge>}
+                          {req.payFood && <Badge variant="secondary" className="text-[7px] h-4 bg-green-50 text-success">FoodAdv</Badge>}
+                          {req.payUtilities && <Badge variant="secondary" className="text-[7px] h-4 bg-orange-50 text-orange-600">Cooking</Badge>}
+                        </div>
+                      </TableCell>
+                      <TableCell><Badge variant="outline" className="uppercase text-[9px] font-black">{req.method}</Badge></TableCell>
+                      <TableCell className="text-right font-black text-lg text-primary">৳{req.amount}</TableCell>
+                      <TableCell className="text-right"><Button variant="ghost" size="sm" className="font-bold gap-2">Review <ChevronRight size={14}/></Button></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-4 px-1">
+            {requests.map((req) => (
+              <Card 
+                key={req.id} 
+                className="border-none shadow-sm rounded-2xl overflow-hidden bg-white cursor-pointer active:scale-[0.98] transition-transform" 
+                onClick={() => { setSelectedReq(req); setIsDetailOpen(true); }}
+              >
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       {req.createdAt?.toDate ? req.createdAt.toDate().toLocaleDateString() : 'Just now'}
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-bold text-slate-800">{req.studentName}</div>
-                      <div className="text-[10px] text-muted-foreground">Room {req.roomNumber}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
+                    </p>
+                    <Badge variant="outline" className="uppercase text-[8px] font-black">{req.method}</Badge>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <div className="space-y-1">
+                      <h3 className="font-black text-slate-800 text-lg leading-tight">{req.studentName}</h3>
+                      <p className="text-[10px] text-muted-foreground font-bold flex items-center gap-1">
+                        <Building2 size={10} /> Room {req.roomNumber}
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-2">
                         {req.payRent && <Badge variant="secondary" className="text-[7px] h-4 bg-blue-50 text-blue-600">Rent</Badge>}
                         {req.payDue && <Badge variant="secondary" className="text-[7px] h-4 bg-destructive/10 text-destructive">Due</Badge>}
                         {req.payFood && <Badge variant="secondary" className="text-[7px] h-4 bg-green-50 text-success">FoodAdv</Badge>}
                         {req.payUtilities && <Badge variant="secondary" className="text-[7px] h-4 bg-orange-50 text-orange-600">Cooking</Badge>}
                       </div>
-                    </TableCell>
-                    <TableCell><Badge variant="outline" className="uppercase text-[9px] font-black">{req.method}</Badge></TableCell>
-                    <TableCell className="text-right font-black text-lg text-primary">৳{req.amount}</TableCell>
-                    <TableCell className="text-right"><Button variant="ghost" size="sm" className="font-bold gap-2">Review <ChevronRight size={14}/></Button></TableCell>
-                  </TableRow>
-                ))}
-                {requests.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground italic">No pending requests.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Amount</p>
+                      <p className="text-2xl font-black text-primary">৳{req.amount}</p>
+                    </div>
+                  </div>
+                  <Separator className="opacity-50" />
+                  <div className="flex justify-between items-center text-[10px] font-bold text-primary uppercase">
+                    <span>Click to Verify</span>
+                    <ChevronRight size={14} />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {requests.length === 0 && (
+              <div className="text-center py-20 text-muted-foreground italic">No pending requests found.</div>
+            )}
+          </div>
+        </>
       )}
 
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
