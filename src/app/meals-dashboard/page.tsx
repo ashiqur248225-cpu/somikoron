@@ -353,47 +353,80 @@ export default function AdminMealDashboardPage() {
 
                   {expandedBuilding === b.id && (
                     <div className="border-t animate-in slide-in-from-top-2 duration-300">
-                       <Table>
-                          <TableHeader className="bg-slate-50/50">
-                             <TableRow>
-                                <TableHead className="w-24">Room</TableHead>
-                                <TableHead>Student Name</TableHead>
-                                <TableHead className="text-center">B</TableHead>
-                                <TableHead className="text-center">Lunch Choice</TableHead>
-                                <TableHead className="text-center">Dinner Choice</TableHead>
-                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                             {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
-                               room.students.map((s: any, idx: number) => (
-                                 <TableRow key={s.id} className={cn("hover:bg-slate-50/30", idx === 0 && "border-t-2 border-slate-100")}>
-                                    <TableCell className="font-black text-primary py-4">{idx === 0 ? `R-${room.roomNo}` : ""}</TableCell>
-                                    <TableCell>
-                                       <p className="font-bold text-slate-800 text-xs">{s.name}</p>
-                                       <p className="text-[10px] text-muted-foreground">{s.phone}</p>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                       {s.status?.breakfast ? <CheckCircle2 className="text-success h-4 w-4 mx-auto" /> : <XCircle className="text-slate-200 h-4 w-4 mx-auto" />}
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                       {s.status?.lunch ? (
-                                         <Badge className="bg-success/10 text-success border-success/20 text-[8px] font-black h-5 px-2">
-                                           {s.choices?.lunch || 'NORMAL'}
-                                         </Badge>
-                                       ) : <span className="text-[8px] font-black text-slate-300">OFF</span>}
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                       {s.status?.dinner ? (
-                                         <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-[8px] font-black h-5 px-2">
-                                           {s.choices?.dinner || 'NORMAL'}
-                                         </Badge>
-                                       ) : <span className="text-[8px] font-black text-slate-300">OFF</span>}
-                                    </TableCell>
-                                 </TableRow>
-                               ))
-                             ))}
-                          </TableBody>
-                       </Table>
+                       {/* Desktop View */}
+                       <div className="hidden md:block">
+                         <Table>
+                            <TableHeader className="bg-slate-50/50">
+                               <TableRow>
+                                  <TableHead className="w-24">Room</TableHead>
+                                  <TableHead>Student Name</TableHead>
+                                  <TableHead className="text-center">B</TableHead>
+                                  <TableHead className="text-center">Lunch Choice</TableHead>
+                                  <TableHead className="text-center">Dinner Choice</TableHead>
+                               </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                               {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
+                                 room.students.map((s: any, idx: number) => (
+                                   <TableRow key={s.id} className={cn("hover:bg-slate-50/30", idx === 0 && "border-t-2 border-slate-100")}>
+                                      <TableCell className="font-black text-primary py-4">{idx === 0 ? `R-${room.roomNo}` : ""}</TableCell>
+                                      <TableCell>
+                                         <p className="font-bold text-slate-800 text-xs">{s.name}</p>
+                                         <p className="text-[10px] text-muted-foreground">{s.phone}</p>
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                         {s.status?.breakfast ? <CheckCircle2 className="text-success h-4 w-4 mx-auto" /> : <XCircle className="text-slate-200 h-4 w-4 mx-auto" />}
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                         {s.status?.lunch ? (
+                                           <Badge className="bg-success/10 text-success border-success/20 text-[8px] font-black h-5 px-2">
+                                             {s.choices?.lunch || 'NORMAL'}
+                                           </Badge>
+                                         ) : <span className="text-[8px] font-black text-slate-300">OFF</span>}
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                         {s.status?.dinner ? (
+                                           <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-[8px] font-black h-5 px-2">
+                                             {s.choices?.dinner || 'NORMAL'}
+                                           </Badge>
+                                         ) : <span className="text-[8px] font-black text-slate-300">OFF</span>}
+                                      </TableCell>
+                                   </TableRow>
+                                 ))
+                               ))}
+                            </TableBody>
+                         </Table>
+                       </div>
+                       {/* Mobile View */}
+                       <div className="md:hidden divide-y">
+                          {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
+                            room.students.map((s: any) => (
+                              <div key={s.id} className="p-4 space-y-3">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                     <p className="text-[10px] font-black text-primary uppercase tracking-widest">Room {room.roomNo}</p>
+                                     <h4 className="font-bold text-slate-800 text-sm">{s.name}</h4>
+                                  </div>
+                                  <div className="flex gap-1">
+                                     {s.status?.breakfast && <Badge className="bg-orange-100 text-orange-600 border-none text-[8px] h-4">B</Badge>}
+                                     {s.status?.lunch && <Badge className="bg-success/10 text-success border-none text-[8px] h-4">L</Badge>}
+                                     {s.status?.dinner && <Badge className="bg-blue-50 text-blue-600 border-none text-[8px] h-4">D</Badge>}
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                   <div className="bg-slate-50 p-2 rounded-lg">
+                                      <p className="text-[7px] uppercase font-bold text-muted-foreground">Lunch</p>
+                                      <p className="text-[9px] font-black">{s.status?.lunch ? (s.choices?.lunch || 'NORMAL') : 'OFF'}</p>
+                                   </div>
+                                   <div className="bg-slate-50 p-2 rounded-lg">
+                                      <p className="text-[7px] uppercase font-bold text-muted-foreground">Dinner</p>
+                                      <p className="text-[9px] font-black">{s.status?.dinner ? (s.choices?.dinner || 'NORMAL') : 'OFF'}</p>
+                                   </div>
+                                </div>
+                              </div>
+                            ))
+                          ))}
+                       </div>
                     </div>
                   )}
                 </Card>
@@ -456,109 +489,181 @@ export default function AdminMealDashboardPage() {
                 </div>
                 
                 <ScrollArea className="h-[500px]">
-                   <Table>
-                     <TableHeader className="bg-slate-50/50 sticky top-0 z-10">
-                       <TableRow>
-                         <TableHead>Resident (Room Wise)</TableHead>
-                         <TableHead className="text-center">Force Toggle (B/L/D)</TableHead>
-                         <TableHead className="text-center">Delivery Track</TableHead>
-                       </TableRow>
-                     </TableHeader>
-                     <TableBody>
-                       {students?.filter(s => {
-                         const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.phone?.includes(searchTerm)
-                         const matchBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
-                         return matchSearch && matchBuilding && s.isActive
-                       })
-                       .sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, {numeric: true}))
-                       .map(s => (
-                         <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors border-b">
-                           <TableCell className="py-4">
-                             <div className="flex items-center gap-3">
-                               <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">
-                                 R-{s.roomNumber}
-                               </div>
-                               <div>
-                                 <p className="font-black text-slate-800 text-xs">{s.name}</p>
-                                 <p className="text-[9px] text-muted-foreground font-bold uppercase">{s.buildingName}</p>
-                               </div>
-                             </div>
-                           </TableCell>
-                           <TableCell className="text-center">
-                             <div className="flex gap-2 justify-center">
-                               <button 
-                                 title="Toggle Breakfast"
-                                 onClick={() => handleToggleMeal(s, 'breakfast')}
-                                 disabled={!canOverride}
-                                 className={cn(
-                                   "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
-                                   s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-slate-100 text-slate-300",
-                                   !canOverride && "opacity-80 cursor-not-allowed"
-                                 )}
-                               >
-                                 <span className="text-[10px] font-black">B</span>
-                               </button>
-                               <button 
-                                 title="Toggle Lunch"
-                                 onClick={() => handleToggleMeal(s, 'lunch')}
-                                 disabled={!canOverride}
-                                 className={cn(
-                                   "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
-                                   s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-slate-100 text-slate-300",
-                                   !canOverride && "opacity-80 cursor-not-allowed"
-                                 )}
-                               >
-                                 <span className="text-[10px] font-black">L</span>
-                               </button>
-                               <button 
-                                 title="Toggle Dinner"
-                                 onClick={() => handleToggleMeal(s, 'dinner')}
-                                 disabled={!canOverride}
-                                 className={cn(
-                                   "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
-                                   s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-slate-100 text-slate-300",
-                                   !canOverride && "opacity-80 cursor-not-allowed"
-                                 )}
-                               >
-                                 <span className="text-[10px] font-black">D</span>
-                               </button>
-                             </div>
-                           </TableCell>
-                           <TableCell className="text-center">
-                             <div className="flex gap-2 justify-center">
-                                {s.mealStatus?.breakfast && (
-                                  <button 
-                                    onClick={() => handleToggleDelivery(s.id, 'breakfast', s.mealDelivered?.breakfast)}
-                                    className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.breakfast ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
-                                  >
-                                    <Truck size={10}/> <span className="text-[8px] font-bold">B</span>
-                                  </button>
-                                )}
-                                {s.mealStatus?.lunch && (
-                                  <button 
-                                    onClick={() => handleToggleDelivery(s.id, 'lunch', s.mealDelivered?.lunch)}
-                                    className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.lunch ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
-                                  >
-                                    <Truck size={10}/> <span className="text-[8px] font-bold">L</span>
-                                  </button>
-                                )}
-                                {s.mealStatus?.dinner && (
-                                  <button 
-                                    onClick={() => handleToggleDelivery(s.id, 'dinner', s.mealDelivered?.dinner)}
-                                    className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.dinner ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
-                                  >
-                                    <Truck size={10}/> <span className="text-[8px] font-bold">D</span>
-                                  </button>
-                                )}
-                                {!s.mealStatus?.breakfast && !s.mealStatus?.lunch && !s.mealStatus?.dinner && (
-                                  <span className="text-[10px] font-bold text-slate-300 italic">No Active Meals</span>
-                                )}
-                             </div>
-                           </TableCell>
+                   {/* Desktop Table View */}
+                   <div className="hidden md:block">
+                     <Table>
+                       <TableHeader className="bg-slate-50/50 sticky top-0 z-10">
+                         <TableRow>
+                           <TableHead>Resident (Room Wise)</TableHead>
+                           <TableHead className="text-center">Force Toggle (B/L/D)</TableHead>
+                           <TableHead className="text-center">Delivery Track</TableHead>
                          </TableRow>
-                       ))}
-                     </TableBody>
-                   </Table>
+                       </TableHeader>
+                       <TableBody>
+                         {students?.filter(s => {
+                           const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.phone?.includes(searchTerm)
+                           const matchBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
+                           return matchSearch && matchBuilding && s.isActive
+                         })
+                         .sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, {numeric: true}))
+                         .map(s => (
+                           <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors border-b">
+                             <TableCell className="py-4">
+                               <div className="flex items-center gap-3">
+                                 <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">
+                                   R-{s.roomNumber}
+                                 </div>
+                                 <div>
+                                   <p className="font-black text-slate-800 text-xs">{s.name}</p>
+                                   <p className="text-[9px] text-muted-foreground font-bold uppercase">{s.buildingName}</p>
+                                 </div>
+                               </div>
+                             </TableCell>
+                             <TableCell className="text-center">
+                               <div className="flex gap-2 justify-center">
+                                 <button 
+                                   title="Toggle Breakfast"
+                                   onClick={() => handleToggleMeal(s, 'breakfast')}
+                                   disabled={!canOverride}
+                                   className={cn(
+                                     "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
+                                     s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-slate-100 text-slate-300",
+                                     !canOverride && "opacity-80 cursor-not-allowed"
+                                   )}
+                                 >
+                                   <span className="text-[10px] font-black">B</span>
+                                 </button>
+                                 <button 
+                                   title="Toggle Lunch"
+                                   onClick={() => handleToggleMeal(s, 'lunch')}
+                                   disabled={!canOverride}
+                                   className={cn(
+                                     "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
+                                     s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-slate-100 text-slate-300",
+                                     !canOverride && "opacity-80 cursor-not-allowed"
+                                   )}
+                                 >
+                                   <span className="text-[10px] font-black">L</span>
+                                 </button>
+                                 <button 
+                                   title="Toggle Dinner"
+                                   onClick={() => handleToggleMeal(s, 'dinner')}
+                                   disabled={!canOverride}
+                                   className={cn(
+                                     "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
+                                     s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-slate-100 text-slate-300",
+                                     !canOverride && "opacity-80 cursor-not-allowed"
+                                   )}
+                                 >
+                                   <span className="text-[10px] font-black">D</span>
+                                 </button>
+                               </div>
+                             </TableCell>
+                             <TableCell className="text-center">
+                               <div className="flex gap-2 justify-center">
+                                  {s.mealStatus?.breakfast && (
+                                    <button 
+                                      onClick={() => handleToggleDelivery(s.id, 'breakfast', s.mealDelivered?.breakfast)}
+                                      className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.breakfast ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
+                                    >
+                                      <Truck size={10}/> <span className="text-[8px] font-bold">B</span>
+                                    </button>
+                                  )}
+                                  {s.mealStatus?.lunch && (
+                                    <button 
+                                      onClick={() => handleToggleDelivery(s.id, 'lunch', s.mealDelivered?.lunch)}
+                                      className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.lunch ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
+                                    >
+                                      <Truck size={10}/> <span className="text-[8px] font-bold">L</span>
+                                    </button>
+                                  )}
+                                  {s.mealStatus?.dinner && (
+                                    <button 
+                                      onClick={() => handleToggleDelivery(s.id, 'dinner', s.mealDelivered?.dinner)}
+                                      className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.dinner ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
+                                    >
+                                      <Truck size={10}/> <span className="text-[8px] font-bold">D</span>
+                                    </button>
+                                  )}
+                                  {!s.mealStatus?.breakfast && !s.mealStatus?.lunch && !s.mealStatus?.dinner && (
+                                    <span className="text-[10px] font-bold text-slate-300 italic">No Active Meals</span>
+                                  )}
+                               </div>
+                             </TableCell>
+                           </TableRow>
+                         ))}
+                       </TableBody>
+                     </Table>
+                   </div>
+
+                   {/* Mobile Card View */}
+                   <div className="md:hidden divide-y">
+                      {students?.filter(s => {
+                        const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.phone?.includes(searchTerm)
+                        const matchBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
+                        return matchSearch && matchBuilding && s.isActive
+                      })
+                      .sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, {numeric: true}))
+                      .map(s => (
+                        <div key={s.id} className="p-4 space-y-4">
+                           <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-3">
+                                 <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div>
+                                 <div>
+                                    <h4 className="font-bold text-slate-800 text-sm">{s.name}</h4>
+                                    <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest">{s.buildingName}</p>
+                                 </div>
+                              </div>
+                           </div>
+                           
+                           <div className="grid grid-cols-1 gap-4">
+                              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                                 <p className="text-[8px] font-black uppercase text-muted-foreground mb-2 tracking-widest">Manual Toggle (Admin Only)</p>
+                                 <div className="flex gap-2">
+                                   <button 
+                                     onClick={() => handleToggleMeal(s, 'breakfast')}
+                                     disabled={!canOverride}
+                                     className={cn("h-10 flex-1 rounded-xl flex flex-col items-center justify-center transition-all", s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-white text-slate-300")}
+                                   >
+                                     <span className="text-[10px] font-black">BREAKFAST</span>
+                                   </button>
+                                   <button 
+                                     onClick={() => handleToggleMeal(s, 'lunch')}
+                                     disabled={!canOverride}
+                                     className={cn("h-10 flex-1 rounded-xl flex flex-col items-center justify-center transition-all", s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-white text-slate-300")}
+                                   >
+                                     <span className="text-[10px] font-black">LUNCH</span>
+                                   </button>
+                                   <button 
+                                     onClick={() => handleToggleMeal(s, 'dinner')}
+                                     disabled={!canOverride}
+                                     className={cn("h-10 flex-1 rounded-xl flex flex-col items-center justify-center transition-all", s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-white text-slate-300")}
+                                   >
+                                     <span className="text-[10px] font-black">DINNER</span>
+                                   </button>
+                                 </div>
+                              </div>
+                              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                                 <p className="text-[8px] font-black uppercase text-muted-foreground mb-2 tracking-widest">Delivery Track</p>
+                                 <div className="flex gap-2">
+                                    {['breakfast', 'lunch', 'dinner'].map(m => s.mealStatus?.[m] && (
+                                      <button 
+                                        key={m}
+                                        onClick={() => handleToggleDelivery(s.id, m, s.mealDelivered?.[m])}
+                                        className={cn("h-10 flex-1 rounded-xl flex items-center justify-center gap-2 transition-all border", s.mealDelivered?.[m] ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
+                                      >
+                                        <Truck size={14}/> <span className="text-[10px] font-bold uppercase">{m.charAt(0)}</span>
+                                      </button>
+                                    ))}
+                                    {!s.mealStatus?.breakfast && !s.mealStatus?.lunch && !s.mealStatus?.dinner && (
+                                      <span className="text-[10px] font-bold text-slate-300 italic w-full text-center py-2">No active meals today</span>
+                                    )}
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+                      ))}
+                   </div>
                 </ScrollArea>
               </CardContent>
            </Card>
