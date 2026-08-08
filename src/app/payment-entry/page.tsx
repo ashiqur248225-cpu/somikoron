@@ -26,7 +26,11 @@ import {
   RefreshCw,
   Coins,
   Wifi,
-  UtensilsCrossed
+  UtensilsCrossed,
+  ArrowRight,
+  Calculator,
+  HandCoins,
+  Soup
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -56,16 +60,11 @@ function PaymentEntryForm() {
     buildingId: "all",
     roomNumber: "all",
     studentId: "",
-    month: "",
-    year: "",
-    seatAmount: "",
-    foodAmount: "",
-    addAdvanceAmount: "0",
+    totalReceived: "",
     method: "cash",
     receiver: "",
     description: "",
-    payFromAdvance: false,
-    applyCookingBill: false,
+    applyCookingBill: true,
     applyWifiBill: false
   })
 
@@ -80,15 +79,9 @@ function PaymentEntryForm() {
     setUserRole(role)
     setAssignedBuildingId(bId)
 
-    const now = new Date()
-    const currentMonth = MONTHS[now.getMonth()]
-    const currentYear = now.getFullYear().toString()
-
     setFormData(prev => ({ 
       ...prev, 
       receiver: name,
-      month: currentMonth,
-      year: currentYear,
       buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : prev.buildingId,
       studentId: urlStudentId || prev.studentId
     }))
@@ -135,53 +128,76 @@ function PaymentEntryForm() {
   const apiConfigRef = useMemoFirebase(() => doc(db, "smsservice", "config"), [db])
   const { data: apiConfig } = useDoc(apiConfigRef)
 
-  // Advanced Billing Configs
   const billingConfigRef = useMemoFirebase(() => 
     userBranch ? doc(db, "configs", `billingConfig_${userBranch}`) : null, 
     [db, userBranch]
   )
   const { data: billingConfig } = useDoc(billingConfigRef)
 
-  const mealConfigRef = useMemoFirebase(() => 
-    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
-    [db, userBranch]
-  )
-  const { data: mealConfig } = useDoc(mealConfigRef)
-
   const selectedStudent = useMemo(() => 
     students?.find(s => s.id === formData.studentId), 
     [students, formData.studentId]
   )
 
-  useEffect(() => {
-    if (formData.payFromAdvance && selectedStudent) {
-      setFormData(prev => ({
-        ...prev,
-        seatAmount: (selectedStudent.monthlyRent || 0).toString()
-      }))
+  // SMART AUTO-DISTRIBUTION LOGIC
+  const distributionResult = useMemo(() => {
+    if (!selectedStudent) return { rentPaid: 0, cookingBill: 0, wifiBill: 0, foodPaid: 0, total: 0 };
+    
+    let remaining = Number(formData.totalReceived) || 0;
+    const total = remaining;
+    
+    let rentPaid = 0;
+    let cookingPaid = 0;
+    let wifiPaid = 0;
+    let foodPaid = 0;
+
+    // 1. Pay Rent Dues (Arrears First)
+    const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
+    const sortedDueMonths = Object.keys(currentDues).sort((a, b) => {
+      const [mA, yA] = a.split(' '); const [mB, yB] = b.split(' ');
+      if (yA !== yB) return Number(yA) - Number(yB);
+      return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
+    });
+
+    for (const label of sortedDueMonths) {
+      if (remaining <= 0) break;
+      const dueAmt = Number(currentDues[label].amount);
+      const toPay = Math.min(remaining, dueAmt);
+      rentPaid += toPay;
+      remaining -= toPay;
     }
-  }, [formData.payFromAdvance, selectedStudent])
+
+    // 2. Pay Cooking Bill (if enabled)
+    if (formData.applyCookingBill && remaining > 0) {
+      const billAmt = Number(billingConfig?.cookingBill || 500);
+      const toPay = Math.min(remaining, billAmt);
+      cookingPaid = toPay;
+      remaining -= toPay;
+    }
+
+    // 3. Pay WiFi Bill (if enabled)
+    if (formData.applyWifiBill && remaining > 0) {
+      const billAmt = Number(billingConfig?.wifiBill || 300);
+      const toPay = Math.min(remaining, billAmt);
+      wifiPaid = toPay;
+      remaining -= toPay;
+    }
+
+    // 4. Everything else goes to Food
+    foodPaid = remaining;
+
+    return { rentPaid, cookingBill: cookingPaid, wifiBill: wifiPaid, foodPaid, total };
+  }, [selectedStudent, formData.totalReceived, formData.applyCookingBill, formData.applyWifiBill, billingConfig]);
 
   const handleCreatePayment = async () => {
-    if (!formData.studentId || !formData.receiver || !selectedStudent) {
-      toast({ variant: "destructive", title: "Error", description: "Please complete all fields." })
+    if (!formData.studentId || !formData.receiver || !selectedStudent || Number(formData.totalReceived) <= 0) {
+      toast({ variant: "destructive", title: "Error", description: "Please enter a valid amount and resident." })
       return
     }
     setIsSubmitting(true)
     try {
       const batch = writeBatch(db); 
-      const seatPaid = Number(formData.seatAmount || 0)
-      const foodPaid = Number(formData.foodAmount || 0)
-      const extraAdvance = Number(formData.addAdvanceAmount || 0)
-      
-      // Calculate Utilities
-      const cookingBill = formData.applyCookingBill ? Number(billingConfig?.cookingBill || 0) : 0
-      const wifiBill = formData.applyWifiBill ? Number(billingConfig?.wifiBill || 0) : 0
-      
-      const cashReceivedFromUser = foodPaid + extraAdvance + (formData.payFromAdvance ? 0 : seatPaid)
-      const advanceBalanceChange = extraAdvance - (formData.payFromAdvance ? (seatPaid + cookingBill + wifiBill) : 0)
-      
-      const totalAmtToLog = seatPaid + foodPaid + extraAdvance + cookingBill + wifiBill
+      const { rentPaid, cookingBill, wifiBill, foodPaid, total } = distributionResult;
 
       const isBM = userRole === 'Building Manager'
       const needsApproval = isBM && (staffData?.canRequestIncome === true || !staffData?.canDirectEntryIncome)
@@ -189,13 +205,26 @@ function PaymentEntryForm() {
       if (needsApproval) {
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), {
-          id: reqId, requestType: "income", amount: totalAmtToLog, seatAmount: seatPaid, foodAmount: foodPaid,
-          advanceAmount: extraAdvance, cookingBill, wifiBill, studentId: selectedStudent.id, studentName: selectedStudent.name,
-          buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName,
-          roomNumber: selectedStudent.roomNumber, branch: userBranch, month: formData.month,
-          year: formData.year, method: formData.method, receiver: formData.receiver,
-          description: formData.description, requestedBy: staffId, requestedByName: userName,
-          payFromAdvance: formData.payFromAdvance,
+          id: reqId, 
+          requestType: "income", 
+          amount: total, 
+          seatAmount: rentPaid, 
+          foodAmount: foodPaid,
+          cookingBill, 
+          wifiBill, 
+          studentId: selectedStudent.id, 
+          studentName: selectedStudent.name,
+          buildingId: selectedStudent.buildingId, 
+          buildingName: selectedStudent.buildingName,
+          roomNumber: selectedStudent.roomNumber, 
+          branch: userBranch, 
+          month: MONTHS[new Date().getMonth()],
+          year: new Date().getFullYear().toString(), 
+          method: formData.method, 
+          receiver: formData.receiver,
+          description: `Smart Entry. ${formData.description}`, 
+          requestedBy: staffId, 
+          requestedByName: userName,
           createdAt: serverTimestamp()
         })
         toast({ title: "Request Sent", description: "Your income entry is pending for Admin approval." })
@@ -205,49 +234,47 @@ function PaymentEntryForm() {
 
       const pId = doc(collection(db, "payments")).id
       const pRecord = {
-        id: pId, amount: totalAmtToLog, seatAmount: seatPaid, foodAmount: foodPaid, advanceAmount: extraAdvance,
-        cookingBill, wifiBill,
-        studentName: selectedStudent.name, studentId: selectedStudent.id, 
-        buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName, 
-        roomNumber: selectedStudent.roomNumber, branch: userBranch,
-        type: "income", month: formData.month, year: formData.year, method: formData.payFromAdvance ? "adjustment" : formData.method, 
-        receiver: formData.receiver, description: formData.payFromAdvance ? `Adjusted from advance. ${formData.description}` : formData.description, date: new Date().toISOString()
+        id: pId, 
+        amount: total, 
+        seatAmount: rentPaid, 
+        foodAmount: foodPaid, 
+        advanceAmount: 0,
+        cookingBill, 
+        wifiBill,
+        studentName: selectedStudent.name, 
+        studentId: selectedStudent.id, 
+        buildingId: selectedStudent.buildingId, 
+        buildingName: selectedStudent.buildingName, 
+        roomNumber: selectedStudent.roomNumber, 
+        branch: userBranch,
+        type: "income", 
+        month: MONTHS[new Date().getMonth()], 
+        year: new Date().getFullYear().toString(), 
+        method: formData.method, 
+        receiver: formData.receiver, 
+        description: `Smart Auto-Split. ${formData.description}`, 
+        date: new Date().toISOString()
       }
 
       batch.set(doc(db, "payments", pId), { ...pRecord, date: serverTimestamp(), createdAt: serverTimestamp() })
       
       const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
-      const targetLabel = `${formData.month} ${formData.year}`;
-      let remainingRentPaid = seatPaid;
+      let remainingToApply = rentPaid;
+      const sortedMonths = Object.keys(currentDues).sort((a, b) => {
+        const [mA, yA] = a.split(' '); const [mB, yB] = b.split(' ');
+        if (yA !== yB) return Number(yA) - Number(yB);
+        return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
+      });
 
-      if (currentDues[targetLabel] && remainingRentPaid > 0) {
-        const dueAmt = Number(currentDues[targetLabel].amount);
-        if (remainingRentPaid >= dueAmt) {
-          remainingRentPaid -= dueAmt;
-          delete currentDues[targetLabel];
+      for (const m of sortedMonths) {
+        if (remainingToApply <= 0) break;
+        const dueAmt = Number(currentDues[m].amount);
+        if (remainingToApply >= dueAmt) {
+          remainingToApply -= dueAmt;
+          delete currentDues[m];
         } else {
-          currentDues[targetLabel].amount = dueAmt - remainingRentPaid;
-          remainingRentPaid = 0;
-        }
-      }
-
-      if (remainingRentPaid > 0) {
-        const sortedMonths = Object.keys(currentDues).sort((a, b) => {
-          const [mA, yA] = a.split(' ');
-          const [mB, yB] = b.split(' ');
-          if (yA !== yB) return Number(yA) - Number(yB);
-          return MONTHS.indexOf(mA) - MONTHS.indexOf(mB);
-        });
-        for (const m of sortedMonths) {
-          if (remainingRentPaid <= 0) break;
-          const dueAmt = Number(currentDues[m].amount);
-          if (remainingRentPaid >= dueAmt) {
-            remainingRentPaid -= dueAmt;
-            delete currentDues[m];
-          } else {
-            currentDues[m].amount = dueAmt - remainingRentPaid;
-            remainingRentPaid = 0;
-          }
+          currentDues[m].amount = dueAmt - remainingToApply;
+          remainingToApply = 0;
         }
       }
 
@@ -255,78 +282,28 @@ function PaymentEntryForm() {
 
       batch.update(doc(db, "students", selectedStudent.id), {
         paymentsHistory: arrayUnion(pRecord),
-        advanceAmount: increment(advanceBalanceChange),
         totalDue: finalTotalDue,
         duesBreakdown: currentDues,
         foodDueAmount: increment(foodPaid),
-        historicalTotalReceived: increment(totalAmtToLog),
+        cookingDueAmount: increment(cookingBill),
+        historicalTotalReceived: increment(total),
         updatedAt: serverTimestamp()
       })
 
-      // Send Notice to Student
-      const noticeId = doc(collection(db, "notices")).id
-      batch.set(doc(db, "notices", noticeId), {
-        id: noticeId,
-        studentId: selectedStudent.id,
-        title: "Payment Received",
-        message: `Amount: ${totalAmtToLog} Tk. Seat: ${seatPaid}, Food: ${foodPaid}, Cooking: ${cookingBill}, WiFi: ${wifiBill}. Thank you.`,
-        type: "payment",
-        isRead: false,
-        createdAt: serverTimestamp(),
-        branch: userBranch
-      })
+      // Update Net Balance
+      const balanceRef = doc(db, "netBalance", userBranch);
+      const methodKeyMap: Record<string, string> = { 'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank' };
+      const methodKey = methodKeyMap[formData.method] || 'totalCash';
 
-      if (cashReceivedFromUser > 0) {
-        const balanceRef = doc(db, "netBalance", userBranch);
-        const methodKeyMap: Record<string, string> = {
-          'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank'
-        };
-        const methodKey = methodKeyMap[formData.method] || 'totalCash';
-
-        batch.set(balanceRef, {
-          branchId: userBranch,
-          [methodKey]: increment(cashReceivedFromUser),
-          totalHandCash: increment(cashReceivedFromUser),
-          lastUpdated: serverTimestamp()
-        }, { merge: true });
-      }
+      batch.set(balanceRef, {
+        branchId: userBranch,
+        [methodKey]: increment(total),
+        totalHandCash: increment(total),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
 
       await batch.commit()
-
-      if (apiConfig?.apikey) {
-        (async () => {
-          try {
-            const template = templatesData?.templates?.find((t: any) => t.id === 'payment')?.text || 
-                             "প্রিয় [নাম], আপনার পেমেন্ট সফলভাবে জমা হয়েছে। পরিমাণ: ৳[paid] টাকা। বর্তমান মোট বকেয়া: ৳[total_payable]। ধন্যবাদ। [Hostel Name]";
-            
-            const foodVal = Number(selectedStudent.foodDueAmount || 0) + foodPaid;
-            const foodBalance = foodVal > 0 ? foodVal : 0;
-            const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
-            const totalPayable = finalTotalDue + foodDue;
-            const mealRate = Number(mealConfig?.rate || 0);
-
-            const msg = template
-              .replaceAll('[নাম]', selectedStudent.name)
-              .replaceAll('[মাস]', `${formData.month} ${formData.year}`)
-              .replaceAll('[total_payable]', totalPayable.toString())
-              .replaceAll('[paid]', totalAmtToLog.toString())
-              .replaceAll('[food_balance]', foodBalance.toString())
-              .replaceAll('[food_due]', foodDue.toString())
-              .replaceAll('[রুম]', selectedStudent.roomNumber)
-              .replaceAll('[building]', selectedStudent.buildingName)
-              .replaceAll('[meal_rate]', mealRate.toString())
-              .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
-
-            const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, selectedStudent.phone, msg);
-            const logId = doc(collection(db, "smsLogs")).id;
-            await setDoc(doc(db, "smsLogs", logId), { id: logId, to: selectedStudent.phone, message: msg, branch: userBranch, sentBy: userName, status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp() });
-          } catch (e) {
-            console.error("SMS processing error", e)
-          }
-        })();
-      }
-      
-      toast({ title: "Payment Successful" })
+      toast({ title: "Payment Recorded Successfully" })
       router.push(`/receipts/${pId}`)
     } catch (e: any) { 
       toast({ variant: "destructive", title: "Error", description: e.message }) 
@@ -342,19 +319,8 @@ function PaymentEntryForm() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Payment Entry</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Smart Payment</h1>
           </div>
-        </div>
-      </div>
-
-      <div className="hidden md:flex items-center gap-4">
-        {userRole !== 'Building Manager' && (
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ChevronLeft />
-          </Button>
-        )}
-        <div>
-          <h1 className="text-3xl font-bold text-primary tracking-tight">Payment Entry</h1>
         </div>
       </div>
 
@@ -362,9 +328,9 @@ function PaymentEntryForm() {
         <div className="h-2 bg-success w-full" />
         <CardHeader>
           <CardTitle className="text-xl font-bold flex items-center gap-2 text-success">
-            <Wallet size={20}/> Transaction Details
+            <Wallet size={20}/> Automatic Distribution
           </CardTitle>
-          <CardDescription>Select resident and enter amount.</CardDescription>
+          <CardDescription>Enter total amount and let system split it for you.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -394,7 +360,7 @@ function PaymentEntryForm() {
           
           <div className="space-y-1">
             <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Select Student</Label>
-            <Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val, payFromAdvance: false})}>
+            <Select value={formData.studentId} onValueChange={val => setFormData({...formData, studentId: val})}>
               <SelectTrigger className="bg-slate-50 border-none h-12 rounded-xl shadow-inner font-black text-lg"><SelectValue placeholder="Choose Resident" /></SelectTrigger>
               <SelectContent>
                 {students?.filter(s => 
@@ -405,139 +371,93 @@ function PaymentEntryForm() {
             </Select>
           </div>
 
-          {selectedStudent && (
-            <div className="p-6 bg-slate-900 rounded-3xl text-white space-y-4 shadow-xl animate-in zoom-in-95 duration-200">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-0.5">
-                  <p className="text-[8px] font-black uppercase text-success/70 tracking-widest">Monthly Rent</p>
-                  <p className="text-xl font-black">৳{selectedStudent.monthlyRent || 0}</p>
+          <div className="space-y-6">
+             <div className="space-y-1">
+                <Label className="text-[11px] font-black uppercase text-primary tracking-widest ml-1">Total Amount Received (৳)</Label>
+                <div className="relative">
+                   <HandCoins className="absolute left-4 top-4 h-6 w-6 text-primary/40" />
+                   <Input 
+                     type="number" 
+                     value={formData.totalReceived} 
+                     onChange={e => setFormData({...formData, totalReceived: e.target.value})} 
+                     className="h-16 pl-14 text-3xl font-black rounded-3xl bg-primary/5 border-primary/20 text-primary shadow-inner" 
+                     placeholder="0.00"
+                   />
                 </div>
-                <div className="space-y-0.5 text-right">
-                  <p className="text-[8px] font-black uppercase text-primary/70 tracking-widest">Security Advance</p>
-                  <p className="text-xl font-black">৳{selectedStudent.advanceAmount || 0}</p>
-                </div>
-              </div>
-              
-              <Separator className="bg-white/10" />
-              
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <p className="text-[8px] font-black uppercase text-destructive tracking-widest">Outstanding Dues</p>
-                  <Badge variant="destructive" className="text-[8px] h-4">৳{selectedStudent.totalDue || 0}</Badge>
-                </div>
-                <div className="grid grid-cols-2 gap-2 max-h-[100px] overflow-y-auto pr-1">
-                  {Object.entries(selectedStudent.duesBreakdown || {}).map(([label, data]: any) => (
-                    <div key={label} className="bg-white/5 p-2 rounded-xl flex justify-between items-center border border-white/5">
-                      <span className="text-[8px] font-medium">{label}</span>
-                      <span className="text-[9px] font-black text-destructive">৳{data.amount}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+             </div>
 
-              {selectedStudent.paymentSystem === 'non-package' && (
-                <div className="pt-2 flex justify-between items-center border-t border-white/10">
-                  <p className="text-[8px] font-black uppercase text-orange-400 tracking-widest">Food Balance</p>
-                  <span className={cn("text-xs font-black", (selectedStudent.foodDueAmount || 0) < 0 ? "text-destructive" : "text-success")}>
-                    ৳{selectedStudent.foodDueAmount || 0}
-                  </span>
-                </div>
-              )}
+             {/* PREVIEW BREAKDOWN */}
+             {selectedStudent && Number(formData.totalReceived) > 0 && (
+               <div className="p-6 bg-slate-900 rounded-[2.5rem] text-white space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Calculated Split Preview</p>
+                    <Badge className="bg-success text-white">AUTO SPLIT ON</Badge>
+                  </div>
+                  
+                  <div className="space-y-3">
+                     <div className="flex justify-between items-center group">
+                        <div className="flex items-center gap-3"><div className="h-8 w-8 rounded-xl bg-white/10 flex items-center justify-center"><Home size={14} className="text-blue-400"/></div><span className="text-xs font-bold text-white/70">Rent Adjustment</span></div>
+                        <span className="text-lg font-black text-blue-400">৳{distributionResult.rentPaid}</span>
+                     </div>
+                     {distributionResult.cookingBill > 0 && (
+                       <div className="flex justify-between items-center group">
+                          <div className="flex items-center gap-3"><div className="h-8 w-8 rounded-xl bg-white/10 flex items-center justify-center"><Soup size={14} className="text-orange-400"/></div><span className="text-xs font-bold text-white/70">Cooking Bill Payment</span></div>
+                          <span className="text-lg font-black text-orange-400">৳{distributionResult.cookingBill}</span>
+                       </div>
+                     )}
+                     {distributionResult.wifiBill > 0 && (
+                       <div className="flex justify-between items-center group">
+                          <div className="flex items-center gap-3"><div className="h-8 w-8 rounded-xl bg-white/10 flex items-center justify-center"><Wifi size={14} className="text-blue-300"/></div><span className="text-xs font-bold text-white/70">WiFi Bill Payment</span></div>
+                          <span className="text-lg font-black text-blue-300">৳{distributionResult.wifiBill}</span>
+                       </div>
+                     )}
+                     <div className="pt-3 border-t border-white/10 flex justify-between items-center">
+                        <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-success/20 flex items-center justify-center"><UtensilsCrossed size={18} className="text-success"/></div><div className="space-y-0.5"><span className="text-xs font-black text-success">Net Food Deposit</span><p className="text-[8px] text-white/30 uppercase">Added to current balance</p></div></div>
+                        <span className="text-2xl font-black text-success">৳{distributionResult.foodPaid}</span>
+                     </div>
+                  </div>
+               </div>
+             )}
 
-              {Number(selectedStudent.advanceAmount || 0) >= (Number(selectedStudent.monthlyRent || 0) * 2) && (
-                <div className="mt-4 pt-4 border-t border-white/10">
-                   <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-2xl border border-primary/20 hover:bg-primary/20 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, payFromAdvance: !formData.payFromAdvance})}>
-                      <div className={cn("h-6 w-6 rounded-lg flex items-center justify-center transition-all", formData.payFromAdvance ? "bg-primary text-white" : "bg-white/10 text-white/40")}>
-                        <Coins size={14} className={cn(formData.payFromAdvance && "animate-bounce")} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-[10px] font-black uppercase tracking-tight">Collect Rent from Advance</p>
-                        <p className="text-[8px] text-white/50">Deduct ৳{selectedStudent.monthlyRent} from surplus security.</p>
-                      </div>
-                      <Checkbox 
-                        id="payFromAdvance" 
-                        checked={formData.payFromAdvance} 
-                        onCheckedChange={(val) => setFormData({...formData, payFromAdvance: val === true})}
-                        className="border-white/20 data-[state=checked]:bg-primary"
-                      />
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-slate-100 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, applyCookingBill: !formData.applyCookingBill})}>
+                   <UtensilsCrossed size={18} className={cn("transition-all", formData.applyCookingBill ? "text-orange-500" : "text-slate-300")} />
+                   <div className="flex-1">
+                     <p className="text-[10px] font-bold uppercase leading-none">Apply Cooking Bill</p>
+                     <p className="text-[9px] text-muted-foreground mt-1">৳{billingConfig?.cookingBill || 500}</p>
                    </div>
+                   <Checkbox checked={formData.applyCookingBill} onCheckedChange={(val) => setFormData({...formData, applyCookingBill: !!val})} />
                 </div>
-              )}
-              {Number(selectedStudent.advanceAmount || 0) < (Number(selectedStudent.monthlyRent || 0) * 2) && Number(selectedStudent.advanceAmount || 0) >= Number(selectedStudent.monthlyRent || 0) && (
-                <p className="mt-2 text-[7px] text-orange-400 font-bold uppercase tracking-widest text-center">
-                  1 Month Advance (৳{selectedStudent.monthlyRent}) is Locked until Exit.
-                </p>
-              )}
-            </div>
-          )}
+                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-slate-100 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, applyWifiBill: !formData.applyWifiBill})}>
+                   <Wifi size={18} className={cn("transition-all", formData.applyWifiBill ? "text-blue-500" : "text-slate-300")} />
+                   <div className="flex-1">
+                     <p className="text-[10px] font-bold uppercase leading-none">Apply WiFi Bill</p>
+                     <p className="text-[9px] text-muted-foreground mt-1">৳{billingConfig?.wifiBill || 300}</p>
+                   </div>
+                   <Checkbox checked={formData.applyWifiBill} onCheckedChange={(val) => setFormData({...formData, applyWifiBill: !!val})} />
+                </div>
+             </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1"><Label>Month</Label><Select value={formData.month} onValueChange={v => setFormData({...formData, month: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1"><Label>Year</Label><Select value={formData.year} onValueChange={v => setFormData({...formData, year: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
-          </div>
-
-          <div className="p-6 border-2 border-success/10 bg-success/5 rounded-3xl space-y-4 shadow-sm">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-[10px] font-black uppercase text-slate-500">Rent Amount</Label>
-                <Input 
-                  type="number" 
-                  value={formData.seatAmount} 
-                  onChange={e => setFormData({...formData, seatAmount: e.target.value})} 
-                  className={cn("bg-white h-12 text-xl font-black", formData.payFromAdvance && "opacity-60 border-primary/40 text-primary")} 
-                  placeholder="0.00"
-                  readOnly={formData.payFromAdvance}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-black uppercase text-slate-500">Food Amount</Label>
-                <Input disabled={selectedStudent?.paymentSystem === 'package'} type="number" value={formData.foodAmount} onChange={e => setFormData({...formData, foodAmount: e.target.value})} className="bg-white h-12 text-xl font-black" placeholder="0.00" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] font-black uppercase text-primary">Add to Advance (Security)</Label>
-              <Input type="number" value={formData.addAdvanceAmount} onChange={e => setFormData({...formData, addAdvanceAmount: e.target.value})} className="bg-white h-12 border-primary/20" />
-            </div>
-            
-            {/* Optional Utility Billing */}
-            <div className="pt-4 border-t border-success/10 grid grid-cols-1 sm:grid-cols-2 gap-4">
-               <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, applyCookingBill: !formData.applyCookingBill})}>
-                  <UtensilsCrossed size={16} className={cn("transition-all", formData.applyCookingBill ? "text-orange-500 scale-110" : "text-slate-300")} />
-                  <div className="flex-1">
-                    <p className="text-[10px] font-bold uppercase leading-none">Cooking Bill</p>
-                    <p className="text-[9px] text-muted-foreground mt-1">৳{billingConfig?.cookingBill || 0}</p>
-                  </div>
-                  <Checkbox checked={formData.applyCookingBill} onCheckedChange={(val) => setFormData({...formData, applyCookingBill: val === true})} />
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1">
+                 <Label className="text-xs">Payment Method</Label>
+                 <Select value={formData.method} onValueChange={v => setFormData({...formData, method: v})}><SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select>
                </div>
-               <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => setFormData({...formData, applyWifiBill: !formData.applyWifiBill})}>
-                  <Wifi size={16} className={cn("transition-all", formData.applyWifiBill ? "text-blue-500 scale-110" : "text-slate-300")} />
-                  <div className="flex-1">
-                    <p className="text-[10px] font-bold uppercase leading-none">WiFi Bill</p>
-                    <p className="text-[9px] text-muted-foreground mt-1">৳{billingConfig?.wifiBill || 0}</p>
-                  </div>
-                  <Checkbox checked={formData.applyWifiBill} onCheckedChange={(val) => setFormData({...formData, applyWifiBill: val === true})} />
+               <div className="space-y-1">
+                 <Label className="text-xs">Received By</Label>
+                 <Select value={formData.receiver} onValueChange={v => setFormData({...formData, receiver: v})}>
+                   <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Staff"/></SelectTrigger>
+                   <SelectContent>{managementStaff?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                 </Select>
                </div>
-            </div>
+             </div>
+             <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Additional notes (Optional)..." className="rounded-2xl bg-slate-50 border-none shadow-inner min-h-[80px]" />
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label className="text-xs">Method</Label>
-              <Select disabled={formData.payFromAdvance && Number(formData.foodAmount || 0) === 0 && Number(formData.addAdvanceAmount || 0) === 0} value={formData.method} onValueChange={v => setFormData({...formData, method: v})}><SelectTrigger className="h-11 rounded-xl"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bkash">Bkash</SelectItem><SelectItem value="nagad">Nagad</SelectItem><SelectItem value="bank">Bank</SelectItem></SelectContent></Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Receiver</Label>
-              <Select value={formData.receiver} onValueChange={v => setFormData({...formData, receiver: v})}>
-                <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Staff"/></SelectTrigger>
-                <SelectContent>{managementStaff?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
-          <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Additional notes..." className="rounded-2xl bg-slate-50 border-none shadow-inner min-h-[100px]" />
         </CardContent>
         <CardFooter className="p-8 bg-slate-50 border-t">
-          <Button onClick={handleCreatePayment} disabled={isSubmitting || !formData.studentId} className="w-full h-16 rounded-2xl text-xl font-black bg-success hover:bg-success/90 shadow-2xl shadow-success/20 transition-all hover:scale-[1.01]">
-            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2"/>} {formData.payFromAdvance ? "Process Adjustment" : "Confirm Payment"}
+          <Button onClick={handleCreatePayment} disabled={isSubmitting || !formData.studentId || Number(formData.totalReceived) <= 0} className="w-full h-16 rounded-[2rem] text-xl font-black bg-success hover:bg-success/90 shadow-2xl shadow-success/20 transition-all hover:scale-[1.01] gap-3">
+            {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={24}/>} 
+            {isSubmitting ? "Processing Entry..." : "Confirm & Apply Payment"}
           </Button>
         </CardFooter>
       </Card>
