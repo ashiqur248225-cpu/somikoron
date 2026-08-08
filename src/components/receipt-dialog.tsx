@@ -39,6 +39,7 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
 
   // Calculate current statuses
   const currentFoodVal = Number(student?.foodDueAmount || 0);
+  const currentCookVal = Number(student?.cookingDueAmount || 0);
   const totalRentDue = Object.values(student?.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
   return (
@@ -116,8 +117,8 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
                 <thead>
                   <tr className="bg-slate-50 border-b">
                     <th className="p-3 text-left font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Description</th>
-                    <th className="p-3 text-center font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Details</th>
-                    <th className="p-3 text-right font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Amount</th>
+                    <th className="p-3 text-center font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Details / Balance</th>
+                    <th className="p-3 text-right font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Paid Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -130,15 +131,15 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
                   )}
                   {payment.foodAmount > 0 && (
                     <tr>
-                      <td className="p-3 font-bold print:p-2 print:text-xs">Food Deposit</td>
-                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">Catering Fund</td>
+                      <td className="p-3 font-bold text-primary print:p-2 print:text-xs">Food Purse Deposit</td>
+                      <td className="p-3 text-center text-xs font-black text-primary uppercase print:p-2 print:text-[8px]">Balance: ৳{currentFoodVal}</td>
                       <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.foodAmount.toLocaleString()}</td>
                     </tr>
                   )}
                   {payment.cookingBill > 0 && (
                     <tr>
                       <td className="p-3 font-bold print:p-2 print:text-xs">Cooking Bill</td>
-                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">Monthly Utility</td>
+                      <td className="p-3 text-center text-xs font-black text-orange-600 uppercase print:p-2 print:text-[8px]">Balance: ৳{currentCookVal}</td>
                       <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.cookingBill.toLocaleString()}</td>
                     </tr>
                   )}

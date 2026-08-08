@@ -41,6 +41,7 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
 
   // Resulting statuses for display
   const currentFoodVal = Number(student?.foodDueAmount || 0);
+  const currentCookVal = Number(student?.cookingDueAmount || 0);
   const totalRentDue = Object.values(student?.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
   return (
@@ -100,9 +101,9 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
             <thead>
               <tr>
                 <th>Description</th>
-                <th>Details / Period</th>
+                <th>Details / Balance</th>
                 <th>Method</th>
-                <th className="text-right">Amount</th>
+                <th className="text-right">Paid Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -116,8 +117,8 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
               )}
               {payment.foodAmount > 0 && (
                 <tr>
-                  <td className="font-bold">Food Purse Deposit</td>
-                  <td>Included Debt Clearance</td>
+                  <td className="font-bold text-primary">Food Purse Deposit</td>
+                  <td className="font-black text-primary">Final Balance: ৳{currentFoodVal}</td>
                   <td className="uppercase">{payment.method}</td>
                   <td className="text-right font-bold">৳{payment.foodAmount.toLocaleString()}</td>
                 </tr>
@@ -125,7 +126,7 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
               {payment.cookingBill > 0 && (
                 <tr>
                   <td className="font-bold">Cooking Service Bill</td>
-                  <td>Monthly Utility</td>
+                  <td>Final Bal: ৳{currentCookVal}</td>
                   <td className="uppercase">{payment.method}</td>
                   <td className="text-right font-bold">৳{payment.cookingBill.toLocaleString()}</td>
                 </tr>
@@ -146,14 +147,6 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
                   <td className="text-right font-bold">৳{payment.advanceAmount.toLocaleString()}</td>
                 </tr>
               )}
-              {payment.serviceCharge > 0 && (
-                <tr>
-                  <td className="font-bold">Service Charge</td>
-                  <td>Admission/Others</td>
-                  <td className="uppercase">{payment.method}</td>
-                  <td className="text-right font-bold">৳{payment.serviceCharge.toLocaleString()}</td>
-                </tr>
-              )}
             </tbody>
             <tfoot>
               <tr className="total-row">
@@ -165,7 +158,7 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
 
           <div className="grid grid-cols-2 gap-4 mx-2 mt-6">
              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-               <p className="text-[7pt] font-black uppercase text-slate-400 mb-2">Account Status After Payment</p>
+               <p className="text-[7pt] font-black uppercase text-slate-400 mb-2">Current Ledger Overview</p>
                <div className="space-y-2">
                  <div className="flex justify-between items-center text-[8pt]">
                    <span className="font-bold text-slate-500">Current Food Balance:</span>
@@ -224,11 +217,11 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
 
           <div className="border rounded-2xl overflow-hidden shadow-sm">
             <table className="w-full text-sm border-collapse">
-              <thead><tr className="bg-slate-50 border-b"><th className="p-4 text-left font-black text-[11px] uppercase text-slate-500">Description</th><th className="p-4 text-center font-black text-[11px] uppercase text-slate-500">Period/Details</th><th className="p-4 text-right font-black text-[11px] uppercase text-slate-500">Amount</th></tr></thead>
+              <thead><tr className="bg-slate-50 border-b"><th className="p-4 text-left font-black text-[11px] uppercase text-slate-500">Description</th><th className="p-4 text-center font-black text-[11px] uppercase text-slate-500">Period / New Balance</th><th className="p-4 text-right font-black text-[11px] uppercase text-slate-500">Paid Amount</th></tr></thead>
               <tbody className="divide-y">
                 {payment.seatAmount > 0 && (<tr><td className="p-4 font-bold text-slate-700">Rent Adjustment</td><td className="p-4 text-center text-xs text-muted-foreground">{payment.month} {payment.year}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.seatAmount.toLocaleString()}</td></tr>)}
-                {payment.foodAmount > 0 && (<tr><td className="p-4 font-bold text-slate-700">Food Purse Deposit</td><td className="p-4 text-center text-xs text-muted-foreground">Catering Fund</td><td className="p-4 text-right font-black text-slate-800">৳{payment.foodAmount.toLocaleString()}</td></tr>)}
-                {payment.cookingBill > 0 && (<tr><td className="p-4 font-bold text-orange-600">Cooking Service</td><td className="p-4 text-center text-xs text-muted-foreground">Monthly Utility</td><td className="p-4 text-right font-black text-orange-700">৳{payment.cookingBill.toLocaleString()}</td></tr>)}
+                {payment.foodAmount > 0 && (<tr><td className="p-4 font-bold text-success">Food Purse Deposit</td><td className="p-4 text-center text-xs font-black text-success uppercase">Balance: ৳{currentFoodVal}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.foodAmount.toLocaleString()}</td></tr>)}
+                {payment.cookingBill > 0 && (<tr><td className="p-4 font-bold text-orange-600">Cooking Service</td><td className="p-4 text-center text-xs font-black text-orange-600 uppercase">Balance: ৳{currentCookVal}</td><td className="p-4 text-right font-black text-orange-700">৳{payment.cookingBill.toLocaleString()}</td></tr>)}
                 {payment.wifiBill > 0 && (<tr><td className="p-4 font-bold text-blue-600">WiFi Service</td><td className="p-4 text-center text-xs text-muted-foreground">Monthly Utility</td><td className="p-4 text-right font-black text-blue-700">৳{payment.wifiBill.toLocaleString()}</td></tr>)}
                 {payment.advanceAmount > 0 && (<tr><td className="p-4 font-bold text-primary">Security Advance</td><td className="p-4 text-center text-xs text-muted-foreground">One-time</td><td className="p-4 text-right font-black text-primary">৳{payment.advanceAmount.toLocaleString()}</td></tr>)}
               </tbody>
@@ -237,7 +230,7 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
              <div className="p-6 bg-slate-900 rounded-3xl text-white space-y-4 shadow-xl">
-                <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em]">Live Account Snapshot</p>
+                <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em]">Post-Payment Account Status</p>
                 <div className="space-y-3">
                    <div className="flex justify-between items-center"><span className="text-xs font-bold opacity-60">Current Food Balance:</span><span className={cn("text-lg font-black", currentFoodVal < 0 ? "text-red-400" : "text-green-400")}>৳{currentFoodVal}</span></div>
                    <div className="flex justify-between items-center"><span className="text-xs font-bold opacity-60">Remaining Rent Due:</span><span className="text-lg font-black text-red-400">৳{totalRentDue}</span></div>
