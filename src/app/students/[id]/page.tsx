@@ -142,6 +142,11 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
   const staffListQuery = useMemoFirebase(() => collection(db, "staff"), [db])
   const { data: staffList } = useCollection(staffListQuery)
 
+  const managementStaff = useMemo(() => {
+    if (!staffList) return []
+    return staffList.filter(s => s.staffType === 'management' || !s.staffType)
+  }, [staffList])
+
   const [paymentData, setPaymentData] = useState({
     month: MONTHS[new Date().getMonth()],
     year: new Date().getFullYear().toString(),
@@ -159,8 +164,33 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
   useEffect(() => {
     if (student) {
       setEditForm({ ...student })
+      setMealAdjustData({
+        breakfast: (student.currentMonthBreakfast || 0).toString(),
+        lunch: (student.currentMonthLunch || 0).toString(),
+        dinner: (student.currentMonthDinner || 0).toString()
+      })
     }
   }, [student])
+
+  const roomsInBuildingForEdit = useMemo(() => {
+    const selectedB = buildings?.find(b => b.id === editForm?.buildingId)
+    if (!selectedB) return []
+    return selectedB.apartmentsDetail?.flatMap((apt: any) => 
+      apt.rooms?.map((r: any) => ({ ...r, aptName: apt.name }))
+    ) || []
+  }, [buildings, editForm?.buildingId])
+
+  const selectedRoomForEdit = useMemo(() => 
+    roomsInBuildingForEdit.find((r: any) => String(r.roomNo) === String(editForm?.roomNumber)), 
+    [roomsInBuildingForEdit, editForm?.roomNumber]
+  )
+
+  const emptySeatsForEdit = useMemo(() => {
+    if (!selectedRoomForEdit) return [];
+    return selectedRoomForEdit.seats?.filter((s: any) => 
+      s.status === 'empty' || (s.seatNo === student?.seatNumber && editForm?.roomNumber === student?.roomNumber && editForm?.buildingId === student?.buildingId)
+    ) || [];
+  }, [selectedRoomForEdit, student, editForm])
 
   const stats = useMemo(() => {
     if (!student) return null
@@ -212,7 +242,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     
     try {
       if (locationChanged) {
-        // Free old seat
         const oldBRef = doc(db, "buildings", student.buildingId)
         const oldBSnap = await getDoc(oldBRef)
         if (oldBSnap.exists()) {
@@ -238,7 +267,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           })
         }
 
-        // Occupy new seat
         const newBRef = doc(db, "buildings", editForm.buildingId)
         const newBSnap = await getDoc(newBRef)
         if (newBSnap.exists()) {
@@ -402,7 +430,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
       const amount = settlementCalculation.absResult;
       
       if (settlementCalculation.isRefund) {
-        // Create Expense Entry for Refund
         const expId = doc(collection(db, "expenses")).id;
         batch.set(doc(db, "expenses", expId), {
           id: expId,
@@ -418,13 +445,11 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           createdAt: serverTimestamp()
         });
 
-        // Update Net Balance
         const balanceRef = doc(db, "netBalance", branch);
         const methodKeyMap: Record<string, string> = { 'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank' };
         const methodKey = methodKeyMap[exitMethod] || 'totalCash';
         batch.set(balanceRef, { [methodKey]: increment(-amount), totalHandCash: increment(-amount), lastUpdated: serverTimestamp() }, { merge: true });
       } else if (amount > 0) {
-        // Create Income Entry for Final Dues Collection
         const pId = doc(collection(db, "payments")).id;
         batch.set(doc(db, "payments", pId), {
           id: pId,
@@ -442,21 +467,18 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           createdAt: serverTimestamp()
         });
 
-        // Update Net Balance
         const balanceRef = doc(db, "netBalance", branch);
         const methodKeyMap: Record<string, string> = { 'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank' };
         const methodKey = methodKeyMap[exitMethod] || 'totalCash';
         batch.set(balanceRef, { [methodKey]: increment(amount), totalHandCash: increment(amount), lastUpdated: serverTimestamp() }, { merge: true });
       }
 
-      // Mark Student Inactive
       batch.update(doc(db, "students", student.id), {
         isActive: false,
         exitDate: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
 
-      // Free Seat in Building
       const bRef = doc(db, "buildings", student.buildingId);
       const bSnap = await getDoc(bRef);
       if (bSnap.exists()) {
@@ -475,7 +497,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           return apt;
         });
         batch.update(bRef, {
-          apartmentsDetail: updatedNewApts,
+          apartmentsDetail: updatedApts,
           occupiedSeats: increment(-1),
           emptySeats: increment(1),
           updatedAt: serverTimestamp()
@@ -575,7 +597,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
 
   return (
     <div className="space-y-8 pb-24 max-w-full w-full px-1 md:px-4 relative overflow-x-hidden">
-      {/* MOBILE APP BAR */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2"><ChevronLeft size={24} /></Button>
         <div className="flex-1 overflow-hidden">
@@ -604,7 +625,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </div>
       </div>
 
-      {/* DESKTOP HEADER */}
       <div className="hidden md:flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-6">
           <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner"><UserCircle size={48} strokeWidth={1.5} /></div>
@@ -797,9 +817,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </TabsContent>
       </Tabs>
 
-      {/* DIALOGS SECTION */}
-
-      {/* Edit Profile Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto rounded-[2.5rem]">
           <DialogHeader>
@@ -860,7 +877,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </DialogContent>
       </Dialog>
 
-      {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
@@ -889,7 +905,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </DialogContent>
       </Dialog>
 
-      {/* Exit & Settlement Dialog */}
       <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
         <DialogContent className="max-w-2xl rounded-[2.5rem]">
           <DialogHeader>
@@ -939,7 +954,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </DialogContent>
       </Dialog>
 
-      {/* Migration Sync Dialog */}
       <Dialog open={isMigrationDialogOpen} onOpenChange={setIsMigrationDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl">
           <DialogHeader>
@@ -979,7 +993,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </DialogContent>
       </Dialog>
 
-      {/* Meal Adjust Dialog */}
       <Dialog open={isMealAdjustOpen} onOpenChange={setIsMealAdjustOpen}>
         <DialogContent className="max-w-sm rounded-3xl">
           <DialogHeader>
@@ -997,7 +1010,6 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </DialogContent>
       </Dialog>
 
-      {/* Full Details Dialog */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
         <DialogContent className="max-w-2xl rounded-3xl max-h-[85vh] overflow-y-auto">
            <DialogHeader><DialogTitle>Student Full Profile</DialogTitle></DialogHeader>
