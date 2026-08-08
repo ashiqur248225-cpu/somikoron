@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -30,7 +29,8 @@ import {
   ArrowRight,
   Calculator,
   HandCoins,
-  Soup
+  Soup,
+  Home
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
