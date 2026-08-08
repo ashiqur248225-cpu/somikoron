@@ -172,6 +172,39 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     }
   }, [student])
 
+  // Populate Migration Form when dialog opens
+  useEffect(() => {
+    if (isMigrationDialogOpen && student) {
+      const dues = Object.entries(student.duesBreakdown || {}).map(([label, data]: any) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        month: data.month || label.split(' ')[0],
+        year: data.year || label.split(' ')[1],
+        amount: String(data.amount)
+      }));
+
+      const pastPayments = (student.paymentsHistory || []).map((p: any) => ({
+        id: p.id || Math.random().toString(36).substr(2, 9),
+        month: p.month || "",
+        year: p.year || "",
+        amount: String(p.amount || 0),
+        seatAmount: String(p.seatAmount || 0),
+        foodAmount: String(p.foodAmount || 0),
+        method: p.method || "cash",
+        date: p.date || new Date().toISOString()
+      }));
+
+      setMigrationForm({
+        dues,
+        pastPayments,
+        advanceAmount: String(student.advanceAmount || 0),
+        serviceCharge: String(student.serviceCharge || 0),
+        foodDueAmount: String(student.foodDueAmount || 0),
+        cookingDueAmount: String(student.cookingDueAmount || 0),
+        historicalTotalReceived: String(student.historicalTotalReceived || 0)
+      });
+    }
+  }, [isMigrationDialogOpen, student]);
+
   const roomsInBuildingForEdit = useMemo(() => {
     const selectedB = buildings?.find(b => b.id === editForm?.buildingId)
     if (!selectedB) return []
@@ -497,7 +530,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           return apt;
         });
         batch.update(bRef, {
-          apartmentsDetail: updatedApts,
+          apartmentsDetail: updatedNewApts,
           occupiedSeats: increment(-1),
           emptySeats: increment(1),
           updatedAt: serverTimestamp()
@@ -558,7 +591,8 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         buildingName: student?.buildingName,
         roomNumber: student?.roomNumber,
         branch: student?.branch,
-        type: "income"
+        type: "income",
+        date: p.date || new Date().toISOString()
       }));
 
       await updateDoc(studentRef, {
@@ -576,7 +610,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
       toast({ title: "Migration Sync Complete" });
       setIsMigrationDialogOpen(false);
     } catch (e: any) {
-      toast({ variant: "destructive", description: e.message });
+      toast({ variant: "destructive", title: "Error", description: e.message });
     } finally {
       setIsUpdating(false);
     }
@@ -961,11 +995,12 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
             <DialogDescription>Force sync historical dues and payments for migration.</DialogDescription>
           </DialogHeader>
           <div className="space-y-8 py-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Advance (৳)</Label><Input type="number" value={migrationForm.advanceAmount} onChange={e => setMigrationForm({...migrationForm, advanceAmount: e.target.value})} /></div>
-              <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">S.Charge (৳)</Label><Input type="number" value={migrationForm.serviceCharge} onChange={e => setMigrationForm({...migrationForm, serviceCharge: e.target.value})} /></div>
               <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Food Bal (৳)</Label><Input type="number" value={migrationForm.foodDueAmount} onChange={e => setMigrationForm({...migrationForm, foodDueAmount: e.target.value})} /></div>
+              <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Cook Bal (৳)</Label><Input type="number" value={migrationForm.cookingDueAmount} onChange={e => setMigrationForm({...migrationForm, cookingDueAmount: e.target.value})} /></div>
               <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Lifetime Recv (৳)</Label><Input type="number" value={migrationForm.historicalTotalReceived} onChange={e => setMigrationForm({...migrationForm, historicalTotalReceived: e.target.value})} /></div>
+              <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">S.Charge (৳)</Label><Input type="number" value={migrationForm.serviceCharge} onChange={e => setMigrationForm({...migrationForm, serviceCharge: e.target.value})} /></div>
             </div>
 
             <Separator />
@@ -981,6 +1016,53 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                        </div>
                        <div className="w-24 space-y-1"><Label className="text-[8px]">Amount</Label><Input type="number" value={d.amount} onChange={e => setMigrationForm({...migrationForm, dues: migrationForm.dues.map(x => x.id === d.id ? {...x, amount: e.target.value} : x)})} className="h-8 text-[10px]" /></div>
                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setMigrationForm({...migrationForm, dues: migrationForm.dues.filter(x => x.id !== d.id)})}><X size={14}/></Button>
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+               <div className="flex justify-between items-center">
+                 <h3 className="font-bold text-slate-700">Payment History Breakdown</h3>
+                 <Button size="sm" variant="outline" onClick={() => setMigrationForm({...migrationForm, pastPayments: [...migrationForm.pastPayments, { id: Math.random().toString(36).substr(2,9), month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: '0', seatAmount: '0', foodAmount: '0', method: 'cash', date: new Date().toISOString() }]})}>
+                   <Plus size={14} className="mr-1"/> Add Record
+                 </Button>
+               </div>
+               <div className="space-y-3">
+                  {migrationForm.pastPayments.map((p, i) => (
+                    <div key={p.id} className="p-4 bg-slate-50 rounded-2xl border flex flex-col gap-3 relative group">
+                       <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive absolute top-2 right-2" onClick={() => setMigrationForm({...migrationForm, pastPayments: migrationForm.pastPayments.filter(x => x.id !== p.id)})}>
+                          <X size={12}/>
+                       </Button>
+                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="space-y-1">
+                             <Label className="text-[8px] uppercase">Period</Label>
+                             <div className="flex gap-1">
+                               <Select value={p.month} onValueChange={v => setMigrationForm({...migrationForm, pastPayments: migrationForm.pastPayments.map(x => x.id === p.id ? {...x, month: v} : x)})}>
+                                 <SelectTrigger className="h-8 text-[10px]"><SelectValue/></SelectTrigger>
+                                 <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                               </Select>
+                               <Select value={p.year} onValueChange={v => setMigrationForm({...migrationForm, pastPayments: migrationForm.pastPayments.map(x => x.id === p.id ? {...x, year: v} : x)})}>
+                                 <SelectTrigger className="h-8 text-[10px]"><SelectValue/></SelectTrigger>
+                                 <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                               </Select>
+                             </div>
+                          </div>
+                          <div className="space-y-1">
+                             <Label className="text-[8px] uppercase">Total (৳)</Label>
+                             <Input type="number" value={p.amount} onChange={e => setMigrationForm({...migrationForm, pastPayments: migrationForm.pastPayments.map(x => x.id === p.id ? {...x, amount: e.target.value} : x)})} className="h-8 text-[10px] font-bold" />
+                          </div>
+                          <div className="space-y-1">
+                             <Label className="text-[8px] uppercase">Rent (৳)</Label>
+                             <Input type="number" value={p.seatAmount} onChange={e => setMigrationForm({...migrationForm, pastPayments: migrationForm.pastPayments.map(x => x.id === p.id ? {...x, seatAmount: e.target.value} : x)})} className="h-8 text-[10px]" />
+                          </div>
+                          <div className="space-y-1">
+                             <Label className="text-[8px] uppercase">Food (৳)</Label>
+                             <Input type="number" value={p.foodAmount} onChange={e => setMigrationForm({...migrationForm, pastPayments: migrationForm.pastPayments.map(x => x.id === p.id ? {...x, foodAmount: e.target.value} : x)})} className="h-8 text-[10px]" />
+                          </div>
+                       </div>
                     </div>
                   ))}
                </div>
