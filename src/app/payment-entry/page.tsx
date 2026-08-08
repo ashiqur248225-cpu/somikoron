@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -36,7 +35,8 @@ import {
   History,
   CircleDollarSign,
   User,
-  ListOrdered
+  ListOrdered,
+  Info
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -234,7 +234,7 @@ function PaymentEntryForm() {
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), {
           id: reqId, requestType: "income", amount: total, seatAmount: rentPaid, foodAmount: foodPaid,
-          cookingBill, wifiBill, studentId: selectedStudent.id, studentName: selectedStudent.name,
+          cookingBill, wifiBill, studentId: selectedStudent.id, studentName: selectedReq.studentName,
           buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName,
           roomNumber: selectedStudent.roomNumber, branch: userBranch, month: MONTHS[new Date().getMonth()],
           year: new Date().getFullYear().toString(), method: formData.method, receiver: formData.receiver,
