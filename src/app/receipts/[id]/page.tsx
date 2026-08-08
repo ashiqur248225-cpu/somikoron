@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
-import { Printer, ChevronLeft, User, Building2, Calculator, Smartphone, CheckCircle2, Loader2, X } from "lucide-react"
+import { Printer, ChevronLeft, User, Building2, Calculator, Smartphone, CheckCircle2, Loader2, X, Wallet, History, Info } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 
-export default function ReceiptPage(props: { params: Promise<{ id: string }> }) {
+export default function ReceiptPage(props: { params: React.Promise<{ id: string }> }) {
   const { id } = React.use(props.params)
   const router = useRouter()
   const db = useFirestore()
@@ -37,6 +38,10 @@ export default function ReceiptPage(props: { params: Promise<{ id: string }> }) 
 
   const receiptNo = payment.id?.substring(0, 8).toUpperCase() || "N/A"
   const dateStr = isMounted ? (payment.date?.toDate ? payment.date.toDate().toLocaleString() : (payment.date ? new Date(payment.date).toLocaleString() : 'N/A')) : 'Loading date...'
+
+  // Resulting statuses for display
+  const currentFoodVal = Number(student?.foodDueAmount || 0);
+  const totalRentDue = Object.values(student?.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-20 pt-4 px-4">
@@ -95,7 +100,7 @@ export default function ReceiptPage(props: { params: Promise<{ id: string }> }) 
             <thead>
               <tr>
                 <th>Description</th>
-                <th>Period</th>
+                <th>Details / Period</th>
                 <th>Method</th>
                 <th className="text-right">Amount</th>
               </tr>
@@ -103,7 +108,7 @@ export default function ReceiptPage(props: { params: Promise<{ id: string }> }) 
             <tbody>
               {payment.seatAmount > 0 && (
                 <tr>
-                  <td className="font-bold">Rent</td>
+                  <td className="font-bold">Rent & Arrears</td>
                   <td>{payment.month} {payment.year}</td>
                   <td className="uppercase">{payment.method}</td>
                   <td className="text-right font-bold">৳{payment.seatAmount.toLocaleString()}</td>
@@ -111,16 +116,32 @@ export default function ReceiptPage(props: { params: Promise<{ id: string }> }) 
               )}
               {payment.foodAmount > 0 && (
                 <tr>
-                  <td className="font-bold">Food Deposit</td>
-                  <td>{payment.month} {payment.year}</td>
+                  <td className="font-bold">Food Purse Deposit</td>
+                  <td>Included Debt Clearance</td>
                   <td className="uppercase">{payment.method}</td>
                   <td className="text-right font-bold">৳{payment.foodAmount.toLocaleString()}</td>
+                </tr>
+              )}
+              {payment.cookingBill > 0 && (
+                <tr>
+                  <td className="font-bold">Cooking Service Bill</td>
+                  <td>Monthly Utility</td>
+                  <td className="uppercase">{payment.method}</td>
+                  <td className="text-right font-bold">৳{payment.cookingBill.toLocaleString()}</td>
+                </tr>
+              )}
+              {payment.wifiBill > 0 && (
+                <tr>
+                  <td className="font-bold">WiFi Service Bill</td>
+                  <td>Monthly Utility</td>
+                  <td className="uppercase">{payment.method}</td>
+                  <td className="text-right font-bold">৳{payment.wifiBill.toLocaleString()}</td>
                 </tr>
               )}
               {payment.advanceAmount > 0 && (
                 <tr>
                   <td className="font-bold">Security Advance</td>
-                  <td>{payment.month} {payment.year}</td>
+                  <td>One-time Deposit</td>
                   <td className="uppercase">{payment.method}</td>
                   <td className="text-right font-bold">৳{payment.advanceAmount.toLocaleString()}</td>
                 </tr>
@@ -128,7 +149,7 @@ export default function ReceiptPage(props: { params: Promise<{ id: string }> }) 
               {payment.serviceCharge > 0 && (
                 <tr>
                   <td className="font-bold">Service Charge</td>
-                  <td>One-time</td>
+                  <td>Admission/Others</td>
                   <td className="uppercase">{payment.method}</td>
                   <td className="text-right font-bold">৳{payment.serviceCharge.toLocaleString()}</td>
                 </tr>
@@ -142,14 +163,29 @@ export default function ReceiptPage(props: { params: Promise<{ id: string }> }) 
             </tfoot>
           </table>
 
-          <div className="p-4 mx-2 mt-6 bg-slate-50 border border-slate-100 rounded-2xl">
-            <div className="flex justify-between items-center text-[8pt]">
-              <span className="font-bold text-slate-500">Received By:</span>
-              <span className="font-black text-primary">{payment.receiver}</span>
-            </div>
-            {payment.description && (
-              <p className="text-[7pt] text-slate-400 italic mt-2">Note: {payment.description}</p>
-            )}
+          <div className="grid grid-cols-2 gap-4 mx-2 mt-6">
+             <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+               <p className="text-[7pt] font-black uppercase text-slate-400 mb-2">Account Status After Payment</p>
+               <div className="space-y-2">
+                 <div className="flex justify-between items-center text-[8pt]">
+                   <span className="font-bold text-slate-500">Current Food Balance:</span>
+                   <span className={cn("font-black", currentFoodVal < 0 ? "text-destructive" : "text-success")}>৳{currentFoodVal}</span>
+                 </div>
+                 <div className="flex justify-between items-center text-[8pt]">
+                   <span className="font-bold text-slate-500">Total Rent Due:</span>
+                   <span className="font-black text-destructive">৳{totalRentDue}</span>
+                 </div>
+               </div>
+             </div>
+             <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between">
+                <div className="flex justify-between items-center text-[8pt]">
+                  <span className="font-bold text-slate-500">Received By:</span>
+                  <span className="font-black text-primary">{payment.receiver}</span>
+                </div>
+                {payment.description && (
+                  <p className="text-[7pt] text-slate-400 italic mt-2">Note: {payment.description}</p>
+                )}
+             </div>
           </div>
 
           <div className="print-footer px-10">
@@ -185,24 +221,40 @@ export default function ReceiptPage(props: { params: Promise<{ id: string }> }) 
               <div className="flex items-center gap-4"><div className="h-10 w-10 rounded-xl bg-white border flex items-center justify-center text-primary shadow-sm"><Calculator size={20}/></div><div><p className="text-[10px] uppercase font-bold text-muted-foreground">Package Type</p><Badge variant="secondary" className="text-[10px] font-black uppercase bg-white border-none">{student?.paymentSystem || 'N/A'}</Badge></div></div>
             </div>
           </div>
+
           <div className="border rounded-2xl overflow-hidden shadow-sm">
             <table className="w-full text-sm border-collapse">
-              <thead><tr className="bg-slate-50 border-b"><th className="p-4 text-left font-black text-[11px] uppercase text-slate-500">Description</th><th className="p-4 text-center font-black text-[11px] uppercase text-slate-500">Period</th><th className="p-4 text-right font-black text-[11px] uppercase text-slate-500">Amount</th></tr></thead>
+              <thead><tr className="bg-slate-50 border-b"><th className="p-4 text-left font-black text-[11px] uppercase text-slate-500">Description</th><th className="p-4 text-center font-black text-[11px] uppercase text-slate-500">Period/Details</th><th className="p-4 text-right font-black text-[11px] uppercase text-slate-500">Amount</th></tr></thead>
               <tbody className="divide-y">
-                {payment.seatAmount > 0 && (<tr><td className="p-4 font-bold text-slate-700">Rent</td><td className="p-4 text-center text-xs text-muted-foreground">{payment.month} {payment.year}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.seatAmount.toLocaleString()}</td></tr>)}
-                {payment.foodAmount > 0 && (<tr><td className="p-4 font-bold text-slate-700">Food Deposit</td><td className="p-4 text-center text-xs text-muted-foreground">{payment.month} {payment.year}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.foodAmount.toLocaleString()}</td></tr>)}
-                {payment.advanceAmount > 0 && (<tr><td className="p-4 font-bold text-primary">Advance</td><td className="p-4 text-center text-xs text-muted-foreground">{payment.month} {payment.year}</td><td className="p-4 text-right font-black text-primary">৳{payment.advanceAmount.toLocaleString()}</td></tr>)}
-                {payment.serviceCharge > 0 && (<tr><td className="p-4 font-bold text-purple-600">Service Charge</td><td className="p-4 text-center text-xs text-muted-foreground">One-time</td><td className="p-4 text-right font-black text-purple-700">৳{payment.serviceCharge.toLocaleString()}</td></tr>)}
+                {payment.seatAmount > 0 && (<tr><td className="p-4 font-bold text-slate-700">Rent Adjustment</td><td className="p-4 text-center text-xs text-muted-foreground">{payment.month} {payment.year}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.seatAmount.toLocaleString()}</td></tr>)}
+                {payment.foodAmount > 0 && (<tr><td className="p-4 font-bold text-slate-700">Food Purse Deposit</td><td className="p-4 text-center text-xs text-muted-foreground">Catering Fund</td><td className="p-4 text-right font-black text-slate-800">৳{payment.foodAmount.toLocaleString()}</td></tr>)}
+                {payment.cookingBill > 0 && (<tr><td className="p-4 font-bold text-orange-600">Cooking Service</td><td className="p-4 text-center text-xs text-muted-foreground">Monthly Utility</td><td className="p-4 text-right font-black text-orange-700">৳{payment.cookingBill.toLocaleString()}</td></tr>)}
+                {payment.wifiBill > 0 && (<tr><td className="p-4 font-bold text-blue-600">WiFi Service</td><td className="p-4 text-center text-xs text-muted-foreground">Monthly Utility</td><td className="p-4 text-right font-black text-blue-700">৳{payment.wifiBill.toLocaleString()}</td></tr>)}
+                {payment.advanceAmount > 0 && (<tr><td className="p-4 font-bold text-primary">Security Advance</td><td className="p-4 text-center text-xs text-muted-foreground">One-time</td><td className="p-4 text-right font-black text-primary">৳{payment.advanceAmount.toLocaleString()}</td></tr>)}
               </tbody>
             </table>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-4">
-            <div className="p-6 bg-primary/5 rounded-2xl border border-primary/10">
-              <div className="flex justify-between items-center mb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Received By:</span><span className="text-sm font-black text-primary">{payment.receiver}</span></div>
-              <Separator className="bg-primary/10 my-3" />
-              <p className="text-[10px] text-slate-500 italic"><b>Note:</b> {payment.description || 'Verified payment record.'}</p>
-            </div>
-            <div className="space-y-3"><div className="flex justify-between items-center px-2"><span className="text-sm font-bold text-slate-500 uppercase">Total Received</span><span className="text-3xl font-black text-slate-900">৳{payment.amount.toLocaleString()}</span></div><div className="bg-slate-900 text-white p-6 rounded-2xl flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-bold text-white/60 uppercase">System Status</p><p className="text-md font-bold">Payment Verified</p></div><CheckCircle2 className="text-success h-10 w-10" /></div></div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+             <div className="p-6 bg-slate-900 rounded-3xl text-white space-y-4 shadow-xl">
+                <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em]">Live Account Snapshot</p>
+                <div className="space-y-3">
+                   <div className="flex justify-between items-center"><span className="text-xs font-bold opacity-60">Current Food Balance:</span><span className={cn("text-lg font-black", currentFoodVal < 0 ? "text-red-400" : "text-green-400")}>৳{currentFoodVal}</span></div>
+                   <div className="flex justify-between items-center"><span className="text-xs font-bold opacity-60">Remaining Rent Due:</span><span className="text-lg font-black text-red-400">৳{totalRentDue}</span></div>
+                </div>
+             </div>
+             <div className="flex flex-col justify-end space-y-4">
+                <div className="flex justify-between items-center px-4"><span className="text-sm font-bold text-slate-500 uppercase">Total Received</span><span className="text-4xl font-black text-slate-900">৳{payment.amount.toLocaleString()}</span></div>
+                <div className="bg-success text-white p-6 rounded-3xl flex justify-between items-center shadow-lg shadow-success/20">
+                   <div className="space-y-0.5"><p className="text-[10px] font-bold text-white/60 uppercase">Sync Status</p><p className="text-lg font-black">Verified & Synced</p></div>
+                   <CheckCircle2 className="h-12 w-12" />
+                </div>
+             </div>
+          </div>
+
+          <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 flex justify-between items-center">
+             <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-white border flex items-center justify-center text-primary shadow-sm"><Info size={20}/></div><div><p className="text-[11px] font-bold text-slate-500 uppercase">Received By</p><p className="text-md font-black text-primary">{payment.receiver}</p></div></div>
+             <div className="text-right hidden sm:block"><p className="text-[9px] text-slate-500 font-medium italic">"{payment.description || 'Smart auto-split entry processed.'}"</p></div>
           </div>
         </div>
       </div>

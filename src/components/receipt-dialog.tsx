@@ -1,4 +1,3 @@
-
 "use client"
 
 import React from "react"
@@ -9,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Printer, Download, Share2, X, CheckCircle2, Building2, User, Phone, Wallet, Calendar, Calculator, Smartphone } from "lucide-react"
+import { Printer, Download, Share2, X, CheckCircle2, Building2, User, Phone, Wallet, Calendar, Calculator, Smartphone, Info } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
@@ -37,6 +36,10 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
 
   const receiptNo = payment.id?.substring(0, 8).toUpperCase() || "N/A"
   const dateStr = payment.date?.toDate ? payment.date.toDate().toLocaleString() : (payment.date ? new Date(payment.date).toLocaleString() : new Date().toLocaleString())
+
+  // Calculate current statuses
+  const currentFoodVal = Number(student?.foodDueAmount || 0);
+  const totalRentDue = Object.values(student?.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -83,7 +86,7 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
               </div>
             </div>
 
-            {/* Student Info Grid - Forced 2 columns in print */}
+            {/* Student Info Grid */}
             <div className="grid grid-cols-2 gap-6 p-6 rounded-3xl border-2 border-slate-50 bg-slate-50/30 print:p-4 print:gap-4 print:rounded-2xl">
               <div className="space-y-3 print:space-y-1">
                 <div className="flex items-center gap-3">
@@ -113,62 +116,73 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
                 <thead>
                   <tr className="bg-slate-50 border-b">
                     <th className="p-3 text-left font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Description</th>
-                    <th className="p-3 text-center font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Period</th>
-                    <th className="p-3 text-right font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Method</th>
+                    <th className="p-3 text-center font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Details</th>
                     <th className="p-3 text-right font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {payment.seatAmount > 0 && (
                     <tr>
-                      <td className="p-3 font-bold print:p-2 print:text-xs">Rent</td>
+                      <td className="p-3 font-bold print:p-2 print:text-xs">Rent Adjustment</td>
                       <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">{payment.month} {payment.year}</td>
-                      <td className="p-3 text-right uppercase text-[10px] font-bold print:p-2 print:text-[8px]">{payment.method}</td>
                       <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.seatAmount.toLocaleString()}</td>
                     </tr>
                   )}
                   {payment.foodAmount > 0 && (
                     <tr>
                       <td className="p-3 font-bold print:p-2 print:text-xs">Food Deposit</td>
-                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">{payment.month} {payment.year}</td>
-                      <td className="p-3 text-right uppercase text-[10px] font-bold print:p-2 print:text-[8px]">{payment.method}</td>
+                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">Catering Fund</td>
                       <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.foodAmount.toLocaleString()}</td>
+                    </tr>
+                  )}
+                  {payment.cookingBill > 0 && (
+                    <tr>
+                      <td className="p-3 font-bold print:p-2 print:text-xs">Cooking Bill</td>
+                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">Monthly Utility</td>
+                      <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.cookingBill.toLocaleString()}</td>
+                    </tr>
+                  )}
+                  {payment.wifiBill > 0 && (
+                    <tr>
+                      <td className="p-3 font-bold print:p-2 print:text-xs">WiFi Bill</td>
+                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">Monthly Utility</td>
+                      <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.wifiBill.toLocaleString()}</td>
                     </tr>
                   )}
                   {payment.advanceAmount > 0 && (
                     <tr>
                       <td className="p-3 font-bold text-primary print:p-2 print:text-xs">Advance</td>
-                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">{payment.month} {payment.year}</td>
-                      <td className="p-3 text-right uppercase text-[10px] font-bold print:p-2 print:text-[8px]">{payment.method}</td>
+                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">Deposit</td>
                       <td className="p-3 text-right font-black text-primary print:p-2 print:text-sm">৳{payment.advanceAmount.toLocaleString()}</td>
-                    </tr>
-                  )}
-                  {payment.serviceCharge > 0 && (
-                    <tr>
-                      <td className="p-3 font-bold print:p-2 print:text-xs">Service Charge</td>
-                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">One-time</td>
-                      <td className="p-3 text-right uppercase text-[10px] font-bold print:p-2 print:text-[8px]">{payment.method}</td>
-                      <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.serviceCharge.toLocaleString()}</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* Summary & Signature */}
+            {/* Summary & Account Status */}
             <div className="grid grid-cols-2 gap-12 print:gap-6">
               <div className="space-y-4 print:space-y-2">
                 <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 print:p-2">
                   <div className="flex justify-between items-center mb-1">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase print:text-[8px]">Received By:</span>
-                    <span className="text-xs font-black text-primary print:text-[10px]">{payment.receiver}</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase print:text-[8px]">Balance Snapshot:</span>
+                  </div>
+                  <div className="space-y-1">
+                     <div className="flex justify-between text-[9px] font-bold">
+                        <span className="text-slate-500">Food Purse:</span>
+                        <span className={cn(currentFoodVal < 0 ? "text-destructive" : "text-success")}>৳{currentFoodVal}</span>
+                     </div>
+                     <div className="flex justify-between text-[9px] font-bold">
+                        <span className="text-slate-500">Rent Due:</span>
+                        <span className="text-destructive">৳{totalRentDue}</span>
+                     </div>
                   </div>
                   <Separator className="bg-primary/10 my-2 print:my-1" />
                   <p className="text-[9px] text-slate-500 leading-tight italic print:text-[7px]">
-                    <b>Note:</b> {payment.description || 'Verified payment record.'}
+                    <b>Received By:</b> {payment.receiver}
                   </p>
                 </div>
-                <div className="pt-12 print:pt-6 text-center">
+                <div className="pt-8 print:pt-4 text-center">
                   <div className="border-t border-slate-900 pt-2 w-40 mx-auto print:w-24">
                     <p className="text-[9px] font-black uppercase print:text-[7px]">Resident Signature</p>
                   </div>
@@ -181,7 +195,7 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
                     <span className="text-xs font-bold text-slate-500 uppercase print:text-[8px]">Total Received</span>
                     <span className="text-xl font-black text-slate-900 print:text-lg">৳{payment.amount.toLocaleString()}</span>
                   </div>
-                  <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl shadow-slate-200 flex justify-between items-center print:p-2 print:rounded-xl">
+                  <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl flex justify-between items-center print:p-2 print:rounded-xl">
                     <div className="space-y-0.5">
                       <p className="text-[8px] font-bold text-white/60 uppercase print:text-[6px]">Sync Status</p>
                       <p className="text-sm font-bold print:text-[10px]">Verified</p>
