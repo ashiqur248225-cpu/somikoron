@@ -117,8 +117,12 @@ export default function StudentDashboardPage() {
                 <p className="text-lg font-black text-red-200">৳{stats?.rentDue.toLocaleString()}</p>
              </div>
              <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
-                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Total Received</p>
-                <p className="text-lg font-black text-green-200">৳{student.historicalTotalReceived || 0}</p>
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">
+                  {(student.cookingDueAmount || 0) < 0 ? "Cooking Due" : "Cooking Bill"}
+                </p>
+                <p className={cn("text-lg font-black", (student.cookingDueAmount || 0) < 0 ? "text-red-300" : "text-green-300")}>
+                  ৳{student.cookingDueAmount || 0}
+                </p>
              </div>
           </div>
 
