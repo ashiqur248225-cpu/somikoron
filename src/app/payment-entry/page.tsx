@@ -38,7 +38,8 @@ import {
   User,
   ListOrdered,
   Info,
-  Scale
+  Scale,
+  ChefHat
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
