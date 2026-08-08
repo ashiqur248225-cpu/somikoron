@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -309,6 +308,26 @@ function PaymentEntryForm() {
         historicalTotalReceived: increment(total),
         updatedAt: serverTimestamp()
       })
+
+      // Send In-App Notice to Student with detailed breakdown
+      const noticeId = doc(collection(db, "notices")).id;
+      let msgParts = [`Smart Split Payment: ৳${total} recorded.`];
+      if (rentPaid > 0) msgParts.push(`Rent: ৳${rentPaid}`);
+      if (foodDebtCleared + foodAdvance > 0) msgParts.push(`Food: ৳${foodDebtCleared + foodAdvance}`);
+      if (cookDebtCleared + cookingBill > 0) msgParts.push(`Cooking: ৳${cookDebtCleared + cookingBill}`);
+      if (wifiBill > 0) msgParts.push(`WiFi: ৳${wifiBill}`);
+      msgParts.push(`Remaining Rent Due: ৳${finalTotalDue}.`);
+
+      batch.set(doc(db, "notices", noticeId), {
+        id: noticeId,
+        studentId: selectedStudent.id,
+        title: "Payment Received (Smart Split)",
+        message: msgParts.join(' '),
+        type: "payment",
+        isRead: false,
+        createdAt: serverTimestamp(),
+        branch: userBranch
+      });
 
       const balanceRef = doc(db, "netBalance", userBranch);
       const methodKeyMap: Record<string, string> = { 'cash': 'totalCash', 'bkash': 'totalBkash', 'nagad': 'totalNagad', 'bank': 'totalBank' };

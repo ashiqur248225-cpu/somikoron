@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -82,6 +81,20 @@ export default function ManagerRequestsPage() {
             updatedAt: serverTimestamp()
           })
         }
+
+        // Automated In-App Notice for Approved Income
+        const noticeId = doc(collection(db, "notices")).id
+        await setDoc(doc(db, "notices", noticeId), {
+          id: noticeId,
+          studentId: selectedReq.studentId,
+          title: "Payment Request Approved",
+          message: `Your payment of ${selectedReq.amount} Tk has been verified and recorded. Check your portal history for details.`,
+          type: "payment",
+          isRead: false,
+          createdAt: serverTimestamp(),
+          branch: userBranch
+        })
+
       } else if (selectedReq.requestType === 'expense') {
         const expenseId = doc(collection(db, "expenses")).id
         await setDoc(doc(db, "expenses", expenseId), {
@@ -312,7 +325,7 @@ export default function ManagerRequestsPage() {
 
               <div className="p-3 border rounded-lg bg-primary/5 text-[10px] flex items-center gap-2">
                 <UserCircle size={14} className="text-primary"/>
-                <span>Submitted by <b>{selectedReq.requestedByName}</b> on {new Date(selectedReq.createdAt?.toDate?.() || selectedReq.createdAt).toLocaleString()}</span>
+                <span>Submitted by <b>{selectedReq.requestedByName}</b> on {new Date(req.createdAt?.toDate?.() || req.createdAt).toLocaleString()}</span>
               </div>
             </div>
           )}
