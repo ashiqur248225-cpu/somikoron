@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
@@ -36,7 +37,8 @@ import {
   CircleDollarSign,
   User,
   ListOrdered,
-  Info
+  Info,
+  Scale
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -145,7 +147,6 @@ function PaymentEntryForm() {
     [students, formData.studentId]
   )
 
-  // ADVANCED ANALYTICS FOR SELECTED STUDENT
   const studentSnapshot = useMemo(() => {
     if (!selectedStudent) return null;
     const dues = Object.entries(selectedStudent.duesBreakdown || {}).map(([label, data]: any) => ({
@@ -165,20 +166,21 @@ function PaymentEntryForm() {
     return { dues, rentDueTotal, foodVal, cookVal };
   }, [selectedStudent]);
 
-  // SMART AUTO-DISTRIBUTION LOGIC (PRIORITY BASED)
   const distributionResult = useMemo(() => {
-    if (!selectedStudent) return { rentPaid: 0, cookingBill: 0, wifiBill: 0, foodPaid: 0, total: 0, appliedDues: [] };
+    if (!selectedStudent) return { rentPaid: 0, foodDebtCleared: 0, cookDebtCleared: 0, cookingBill: 0, wifiBill: 0, foodAdvance: 0, total: 0, appliedDues: [] };
     
     let remaining = Number(formData.totalReceived) || 0;
     const total = remaining;
     
     let rentPaid = 0;
+    let foodDebtCleared = 0;
+    let cookDebtCleared = 0;
     let cookingPaid = 0;
     let wifiPaid = 0;
-    let foodPaid = 0;
+    let foodAdvance = 0;
     const appliedDues: string[] = [];
 
-    // 1. PRIORITY: Arrears (Previous Dues) - Oldest First
+    // 1. PRIORITY: Arrears (Oldest Rent first)
     const currentDues = { ...(selectedStudent.duesBreakdown || {}) };
     const sortedDueMonths = Object.keys(currentDues).sort((a, b) => {
       const [mA, yA] = a.split(' '); const [mB, yB] = b.split(' ');
@@ -195,7 +197,25 @@ function PaymentEntryForm() {
       appliedDues.push(`${label}: ৳${toPay}`);
     }
 
-    // 2. PRIORITY: Cooking Bill (if enabled)
+    // 2. PRIORITY: Food Debt clearing (if balance < 0)
+    const currentFoodVal = Number(selectedStudent.foodDueAmount || 0);
+    if (currentFoodVal < 0 && remaining > 0) {
+      const debt = Math.abs(currentFoodVal);
+      const toPay = Math.min(remaining, debt);
+      foodDebtCleared = toPay;
+      remaining -= toPay;
+    }
+
+    // 3. PRIORITY: Cooking Debt clearing (if balance < 0)
+    const currentCookVal = Number(selectedStudent.cookingDueAmount || 0);
+    if (currentCookVal < 0 && remaining > 0) {
+      const debt = Math.abs(currentCookVal);
+      const toPay = Math.min(remaining, debt);
+      cookDebtCleared = toPay;
+      remaining -= toPay;
+    }
+
+    // 4. PRIORITY: New Cooking Bill (if enabled)
     if (formData.applyCookingBill && remaining > 0) {
       const billAmt = Number(billingConfig?.cookingBill || 500);
       const toPay = Math.min(remaining, billAmt);
@@ -203,7 +223,7 @@ function PaymentEntryForm() {
       remaining -= toPay;
     }
 
-    // 3. PRIORITY: WiFi Bill (if enabled)
+    // 5. PRIORITY: WiFi Bill (if enabled)
     if (formData.applyWifiBill && remaining > 0) {
       const billAmt = Number(billingConfig?.wifiBill || 300);
       const toPay = Math.min(remaining, billAmt);
@@ -211,10 +231,10 @@ function PaymentEntryForm() {
       remaining -= toPay;
     }
 
-    // 4. PRIORITY: Remainder goes to Food Balance
-    foodPaid = remaining;
+    // 6. PRIORITY: Final remainder -> Food Advance
+    foodAdvance = remaining;
 
-    return { rentPaid, cookingBill: cookingPaid, wifiBill: wifiPaid, foodPaid, total, appliedDues };
+    return { rentPaid, foodDebtCleared, cookDebtCleared, cookingBill: cookingPaid, wifiBill: wifiPaid, foodAdvance, total, appliedDues };
   }, [selectedStudent, formData.totalReceived, formData.applyCookingBill, formData.applyWifiBill, billingConfig]);
 
   const handleCreatePayment = async () => {
@@ -225,7 +245,7 @@ function PaymentEntryForm() {
     setIsSubmitting(true)
     try {
       const batch = writeBatch(db); 
-      const { rentPaid, cookingBill, wifiBill, foodPaid, total } = distributionResult;
+      const { rentPaid, foodDebtCleared, cookDebtCleared, cookingBill, wifiBill, foodAdvance, total } = distributionResult;
 
       const isBM = userRole === 'Building Manager'
       const needsApproval = isBM && (staffData?.canRequestIncome === true || !staffData?.canDirectEntryIncome)
@@ -233,8 +253,10 @@ function PaymentEntryForm() {
       if (needsApproval) {
         const reqId = doc(collection(db, "managerRequests")).id
         await setDoc(doc(db, "managerRequests", reqId), {
-          id: reqId, requestType: "income", amount: total, seatAmount: rentPaid, foodAmount: foodPaid,
-          cookingBill, wifiBill, studentId: selectedStudent.id, studentName: selectedReq.studentName,
+          id: reqId, requestType: "income", amount: total, seatAmount: rentPaid, 
+          foodAmount: foodDebtCleared + foodAdvance,
+          cookingBill: cookDebtCleared + cookingBill, wifiBill, 
+          studentId: selectedStudent.id, studentName: selectedStudent.name,
           buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName,
           roomNumber: selectedStudent.roomNumber, branch: userBranch, month: MONTHS[new Date().getMonth()],
           year: new Date().getFullYear().toString(), method: formData.method, receiver: formData.receiver,
@@ -248,8 +270,8 @@ function PaymentEntryForm() {
 
       const pId = doc(collection(db, "payments")).id
       const pRecord = {
-        id: pId, amount: total, seatAmount: rentPaid, foodAmount: foodPaid, advanceAmount: 0,
-        cookingBill, wifiBill, studentName: selectedStudent.name, studentId: selectedStudent.id, 
+        id: pId, amount: total, seatAmount: rentPaid, foodAmount: foodDebtCleared + foodAdvance, advanceAmount: 0,
+        cookingBill: cookDebtCleared + cookingBill, wifiBill, studentName: selectedStudent.name, studentId: selectedStudent.id, 
         buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName, 
         roomNumber: selectedStudent.roomNumber, branch: userBranch, type: "income", 
         month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), 
@@ -281,8 +303,8 @@ function PaymentEntryForm() {
         paymentsHistory: arrayUnion(pRecord),
         totalDue: finalTotalDue,
         duesBreakdown: currentDues,
-        foodDueAmount: increment(foodPaid),
-        cookingDueAmount: increment(cookingBill),
+        foodDueAmount: increment(foodDebtCleared + foodAdvance),
+        cookingDueAmount: increment(cookDebtCleared + cookingBill),
         historicalTotalReceived: increment(total),
         updatedAt: serverTimestamp()
       })
@@ -396,6 +418,20 @@ function PaymentEntryForm() {
                             </div>
                           )}
 
+                          {distributionResult.foodDebtCleared > 0 && (
+                            <div className="flex justify-between items-center">
+                               <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center"><UtensilsCrossed size={20} className="text-destructive"/></div><div className="space-y-0.5"><span className="text-xs font-black text-white/90">Food Debt Cleared</span><p className="text-[8px] text-white/30 uppercase font-bold">Adjusting negative balance</p></div></div>
+                               <span className="text-2xl font-black text-destructive">৳{distributionResult.foodDebtCleared}</span>
+                            </div>
+                          )}
+
+                          {distributionResult.cookDebtCleared > 0 && (
+                            <div className="flex justify-between items-center">
+                               <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center"><ChefHat size={20} className="text-destructive"/></div><div className="space-y-0.5"><span className="text-xs font-black text-white/90">Cooking Debt Cleared</span><p className="text-[8px] text-white/30 uppercase font-bold">Adjusting negative balance</p></div></div>
+                               <span className="text-2xl font-black text-destructive">৳{distributionResult.cookDebtCleared}</span>
+                            </div>
+                          )}
+
                           {distributionResult.cookingBill > 0 && (
                             <div className="flex justify-between items-center">
                                <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center"><Soup size={20} className="text-orange-400"/></div><div className="space-y-0.5"><span className="text-xs font-black text-white/90">Cooking Service Bill</span><p className="text-[8px] text-white/30 uppercase font-bold">Monthly Maintenance</p></div></div>
@@ -407,7 +443,7 @@ function PaymentEntryForm() {
                           
                           <div className="flex justify-between items-center bg-white/5 p-4 rounded-3xl border border-white/5">
                              <div className="flex items-center gap-3"><div className="h-12 w-12 rounded-2xl bg-success/20 flex items-center justify-center"><UtensilsCrossed size={24} className="text-success"/></div><div className="space-y-0.5"><span className="text-sm font-black text-success">Net Food Advance</span><p className="text-[8px] text-white/30 uppercase font-black">Added to resident's purse</p></div></div>
-                             <span className="text-3xl font-black text-success">৳{distributionResult.foodPaid}</span>
+                             <span className="text-3xl font-black text-success">৳{distributionResult.foodAdvance}</span>
                           </div>
                        </div>
                     </div>
@@ -487,7 +523,7 @@ function PaymentEntryForm() {
                 <div className="p-5 bg-indigo-50 rounded-3xl border border-indigo-100 space-y-2">
                    <div className="flex items-center gap-2 text-indigo-600 font-black text-[10px] uppercase"><Info size={14}/> Processing Info</div>
                    <p className="text-[10px] leading-relaxed text-indigo-800 font-medium">
-                     System will prioritize <b>Oldest Rent Dues</b>, then <b>Fixed Utility Bills</b>, and finally credit remaining to <b>Food Advance</b>.
+                     System will prioritize <b>Oldest Rent Dues</b>, then <b>Pending Debts</b>, then <b>Fixed Utility Bills</b>, and finally credit remaining to <b>Food Advance</b>.
                    </p>
                 </div>
              </div>
