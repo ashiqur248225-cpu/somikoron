@@ -15,7 +15,8 @@ import {
   CheckCircle2, 
   ChevronLeft,
   Calculator,
-  RotateCcw
+  RotateCcw,
+  Hash
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -126,6 +127,18 @@ export default function BulkMealEntryPage() {
     }
   }, [filteredStudents]);
 
+  const totalMealsCount = useMemo(() => {
+    return Object.values(mealInputs).reduce((acc, val) => acc + (Number(val) || 0), 0)
+  }, [mealInputs])
+
+  const grandBillSum = useMemo(() => {
+    return Object.keys(mealInputs).reduce((acc, id) => {
+      const s = students?.find(std => std.id === id)
+      if (!s || s.paymentSystem === 'package') return acc
+      return acc + (Number(mealInputs[id]) * Number(mealConfig?.rate || 0))
+    }, 0)
+  }, [mealInputs, students, mealConfig?.rate])
+
   const handleBulkMealSubmit = async () => {
     if (!students || !mealConfig?.rate) {
       toast({ variant: "destructive", title: "Error", description: "Meal rate not configured for this branch." });
@@ -227,12 +240,6 @@ export default function BulkMealEntryPage() {
     }
   };
 
-  const grandBillSum = Object.keys(mealInputs).reduce((acc, id) => {
-    const s = students?.find(std => std.id === id)
-    if (!s || s.paymentSystem === 'package') return acc
-    return acc + (Number(mealInputs[id]) * Number(mealConfig?.rate || 0))
-  }, 0)
-
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:hidden">
@@ -247,12 +254,27 @@ export default function BulkMealEntryPage() {
         <div><h1 className="text-3xl font-bold text-primary tracking-tight">Bulk Meal Entry</h1><p className="text-muted-foreground text-sm">Mass update meal counts for non-package residents.</p></div>
       </div>
 
-      <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden flex flex-col bg-white">
+      <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
         <div className="h-2 bg-primary w-full" />
         <CardHeader className="px-8 pt-8 pb-4">
           <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
             <div><CardTitle className="text-2xl font-black flex items-center gap-2 text-primary"><Utensils size={24}/> Spreadsheet Entry</CardTitle><CardDescription>Update balances based on weighted monthly meals (Breakfast=0.5).</CardDescription></div>
-            <div className="flex items-center gap-3 px-6 py-3 bg-primary/5 rounded-2xl border border-primary/10 shadow-sm"><Calculator size={20} className="text-primary" /><div className="flex flex-col"><span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Global Meal Rate</span><span className="text-lg font-black text-primary">৳{mealConfig?.rate || 0} / Meal</span></div></div>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-3 px-6 py-3 bg-primary/5 rounded-2xl border border-primary/10 shadow-sm">
+                <Calculator size={20} className="text-primary" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Global Meal Rate</span>
+                  <span className="text-lg font-black text-primary">৳{mealConfig?.rate || 0} / Meal</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-6 py-3 bg-primary/5 rounded-2xl border border-primary/10 shadow-sm">
+                <Hash size={20} className="text-primary" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Monthly Meals</span>
+                  <span className="text-lg font-black text-primary">{totalMealsCount}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </CardHeader>
 
