@@ -25,7 +25,8 @@ import {
   Lock,
   ListChecks,
   CalendarDays,
-  ChevronDown
+  ChevronDown,
+  ChevronUp
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, collection, query, where, increment } from "firebase/firestore"
@@ -68,7 +69,7 @@ const MEAL_TYPES = [
   { id: "dinner", label: "Dinner", icon: "🍛" },
 ]
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+const WEEKDAYS = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function StudentMealPage() {
@@ -109,6 +110,7 @@ export default function StudentMealPage() {
   const [localMeals, setLocalMeals] = useState({ breakfast: false, lunch: false, dinner: false, autoMode: false })
   const [mealChoices, setMealChoices] = useState<Record<string, string>>({})
   const [weeklySchedule, setWeeklySchedule] = useState<Record<string, any>>({})
+  const [expandedDay, setExpandedDay] = useState<string | null>(null)
 
   useEffect(() => {
     if (student?.mealStatus) setLocalMeals(student.mealStatus)
@@ -118,13 +120,12 @@ export default function StudentMealPage() {
     } else {
       const defaultSched: any = {}
       WEEKDAYS.forEach(day => {
-        defaultSched[day] = { breakfast: true, lunch: true, dinner: true, lunchChoice: "", dinnerChoice: "" }
+        defaultSched[day] = { breakfast: true, lunch: true, dinner: true, lunchChoice: "Normal", dinnerChoice: "Normal" }
       })
       setWeeklySchedule(defaultSched)
     }
   }, [student])
 
-  // DYNAMIC WINDOW LOGIC from Firestore
   const timeWindow = useMemo(() => {
     if (!isMounted) return { isActive: false, startStr: "", endStr: "" }
     
@@ -141,13 +142,10 @@ export default function StudentMealPage() {
     const startMinutes = startH * 60 + startM
     const endMinutes = endH * 60 + endM
     
-    // Support for overnight window (e.g. 9 PM to 1 AM)
     let isActive = false
     if (startMinutes <= endMinutes) {
-      // Normal range within same day
       isActive = totalMinutes >= startMinutes && totalMinutes <= endMinutes
     } else {
-      // Overnight range
       isActive = totalMinutes >= startMinutes || totalMinutes <= endMinutes
     }
     
@@ -187,7 +185,7 @@ export default function StudentMealPage() {
   }, [student])
 
   const handleUpdateMeals = useCallback(async () => {
-    if (!studentRef || !canChange || isUpdating || !student || hasAlreadyUpdatedToday) return
+    if (!studentRef || !canChange || isUpdating || !student) return
     setIsUpdating(true)
     try {
       let finalMeals = { ...localMeals }
@@ -220,6 +218,8 @@ export default function StudentMealPage() {
         currentMonthLabel: currentLabel
       }
 
+      // ADDITIVE COUNTER LOGIC
+      // If student hasn't updated today, or it's a new month, we treat the current selection as new additions
       if (!hasAlreadyUpdatedToday || isNewMonth) {
         if (isNewMonth) {
           updates.currentMonthBreakfast = finalMeals.breakfast ? 1 : 0;
@@ -231,6 +231,7 @@ export default function StudentMealPage() {
           if (finalMeals.dinner) updates.currentMonthDinner = increment(1);
         }
       } else {
+        // If they already updated today, we adjust based on the difference from their previous daily choice
         if (student.mealStatus.breakfast !== finalMeals.breakfast) {
           updates.currentMonthBreakfast = increment(finalMeals.breakfast ? 1 : -1);
         }
@@ -243,7 +244,7 @@ export default function StudentMealPage() {
       }
 
       await updateDoc(studentRef, updates)
-      toast({ title: "Preferences Saved", description: "Meals for tomorrow have been updated." })
+      toast({ title: "Preferences Saved", description: `Meals for tomorrow (${tomorrowDay}) have been recorded.` })
     } catch (e: any) { 
       toast({ variant: "destructive", title: "Error", description: e.message }) 
     } finally { 
@@ -294,7 +295,6 @@ export default function StudentMealPage() {
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500 max-w-4xl mx-auto w-full">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex-1 overflow-hidden">
           <h1 className="text-lg font-black text-slate-800 truncate">Catering</h1>
@@ -307,7 +307,6 @@ export default function StudentMealPage() {
         </Link>
       </div>
 
-      {/* TODAY'S MENU */}
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden border-l-4 border-l-primary">
         <CardHeader className="bg-slate-50/50 border-b py-4">
            <CardTitle className="text-xs font-black uppercase text-primary flex items-center gap-2">
@@ -321,7 +320,6 @@ export default function StudentMealPage() {
         </CardContent>
       </Card>
 
-      {/* Main Controls with Timing Window */}
       <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden">
         <CardContent className="p-6 md:p-8 space-y-8">
            {!timeWindow.isActive ? (
@@ -349,13 +347,86 @@ export default function StudentMealPage() {
              </div>
            )}
            
-           <div className={cn("space-y-6", (!canChange || hasAlreadyUpdatedToday) && "opacity-50 pointer-events-none")}>
+           <div className={cn("space-y-6", (!canChange) && "opacity-50 pointer-events-none")}>
               <div className="flex items-center justify-between p-4 bg-slate-900 rounded-3xl text-white">
                 <div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest">Auto Mode</p><p className="text-[8px] text-white/40 uppercase">Sync with weekly schedule</p></div>
-                <Switch disabled={!canChange || hasAlreadyUpdatedToday} checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
+                <Switch disabled={!canChange} checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
               </div>
 
-              {!localMeals.autoMode && (
+              {localMeals.autoMode ? (
+                <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
+                   <div className="flex items-center gap-2 px-1">
+                      <ListChecks className="text-primary h-4 w-4" />
+                      <h3 className="text-xs font-black uppercase text-slate-700 tracking-widest">Weekly Schedule (Auto-Sync)</h3>
+                   </div>
+                   <div className="grid grid-cols-1 gap-3">
+                      {WEEKDAYS.map((day) => {
+                        const dayData = weeklySchedule[day] || { breakfast: true, lunch: true, dinner: true, lunchChoice: "Normal", dinnerChoice: "Normal" };
+                        const isExpanded = expandedDay === day;
+                        const menuForDay = weeklyMenu.find(r => r.day === day);
+                        
+                        return (
+                          <div key={day} className="border-2 rounded-2xl bg-slate-50/50 overflow-hidden">
+                             <div 
+                               className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-100/50 transition-colors"
+                               onClick={() => setExpandedDay(isExpanded ? null : day)}
+                             >
+                                <div className="flex items-center gap-3">
+                                   <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center font-black text-[10px]", day === todayDay ? "bg-primary text-white" : "bg-white border text-slate-400")}>
+                                      {day.substring(0, 2).toUpperCase()}
+                                   </div>
+                                   <span className="text-sm font-bold text-slate-700">{day}</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                   <div className="flex gap-1.5">
+                                      {['breakfast', 'lunch', 'dinner'].map(m => (
+                                        <div key={m} className={cn("w-2 h-2 rounded-full", dayData[m] ? "bg-success" : "bg-slate-200")} />
+                                      ))}
+                                   </div>
+                                   {isExpanded ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
+                                </div>
+                             </div>
+                             
+                             {isExpanded && (
+                               <div className="p-4 pt-0 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                                  <Separator />
+                                  <div className="grid grid-cols-1 gap-4">
+                                     {MEAL_TYPES.map(type => {
+                                        const { common, options } = getMealDetails(menuForDay?.[type.id] || "");
+                                        return (
+                                          <div key={type.id} className="space-y-3">
+                                             <div className="flex items-center justify-between">
+                                                <Label className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
+                                                   {type.icon} {type.label}
+                                                </Label>
+                                                <Switch checked={dayData[type.id]} onCheckedChange={() => toggleScheduleMeal(day, type.id)} />
+                                             </div>
+                                             {dayData[type.id] && options && (
+                                               <RadioGroup 
+                                                 value={dayData[`${type.id}Choice`] || options[0]} 
+                                                 onValueChange={(v) => updateScheduleChoice(day, type.id, v)}
+                                                 className="flex gap-3 flex-wrap ml-2"
+                                               >
+                                                  {options.map(opt => (
+                                                    <div key={opt} className="flex items-center gap-1.5">
+                                                       <RadioGroupItem value={opt} id={`sched-${day}-${type.id}-${opt}`} className="h-3 w-3" />
+                                                       <Label htmlFor={`sched-${day}-${type.id}-${opt}`} className="text-[10px] font-bold text-slate-600">{opt}</Label>
+                                                    </div>
+                                                  ))}
+                                               </RadioGroup>
+                                             )}
+                                          </div>
+                                        )
+                                     })}
+                                  </div>
+                                </div>
+                             )}
+                          </div>
+                        )
+                      })}
+                   </div>
+                </div>
+              ) : (
                 <div className="space-y-6">
                   <div className="flex justify-between items-center px-1">
                     <p className="text-[10px] font-black uppercase text-primary tracking-widest">Tomorrow's Selection ({tomorrowDay})</p>
@@ -380,12 +451,12 @@ export default function StudentMealPage() {
                               </p>
                             </div>
                           </div>
-                          <Switch disabled={!canChange || hasAlreadyUpdatedToday} checked={isChecked as boolean} onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} />
+                          <Switch disabled={!canChange} checked={isChecked as boolean} onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} />
                         </div>
 
                         {isChecked && options && (
                           <div className="pt-3 border-t border-success/10">
-                            <RadioGroup disabled={!canChange || hasAlreadyUpdatedToday} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
+                            <RadioGroup disabled={!canChange} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
                                {options.map(opt => (
                                  <div key={opt} className="flex items-center gap-2">
                                     <RadioGroupItem value={opt} id={`${type.id}-${opt}`} className="border-success text-success" />
@@ -405,16 +476,16 @@ export default function StudentMealPage() {
            {canChange && (
              <Button 
                onClick={handleUpdateMeals} 
-               disabled={isUpdating || hasAlreadyUpdatedToday} 
+               disabled={isUpdating} 
                className={cn(
                  "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl gap-3 transition-transform active:scale-95",
                  hasAlreadyUpdatedToday 
-                   ? "bg-success hover:bg-success/90 shadow-success/20 disabled:opacity-100" 
+                   ? "bg-slate-900 shadow-slate-200" 
                    : "bg-primary hover:bg-primary/90 shadow-primary/20"
                )}
              >
                 {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
-                {hasAlreadyUpdatedToday ? "Submitted" : `Confirm & Submit for ${tomorrowDay}`}
+                {hasAlreadyUpdatedToday ? "Update Daily Selection" : `Confirm & Submit for ${tomorrowDay}`}
              </Button>
            )}
 
@@ -431,7 +502,6 @@ export default function StudentMealPage() {
         </CardContent>
       </Card>
 
-      {/* LAST MONTH REPORT CARD */}
       {lastMonthFood && (
         <Card className="border-none shadow-md bg-white rounded-[2rem] overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b py-4">
@@ -461,7 +531,6 @@ export default function StudentMealPage() {
         </Card>
       )}
 
-      {/* Monthly Stats Footer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-primary">Monthly Counter</CardTitle></CardHeader>
@@ -479,7 +548,7 @@ export default function StudentMealPage() {
           <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-muted-foreground">Quick Info</CardTitle></CardHeader>
           <CardContent className="p-6 flex flex-col justify-center items-center text-center">
              <Info size={24} className="text-primary mb-2 opacity-20" />
-             <p className="text-[9px] font-medium italic text-slate-400">Data is updated daily. Previous month's final bill is generated by the administrator.</p>
+             <p className="text-[9px] font-medium italic text-slate-400">Counters are cumulative for the month. Adding a meal increments your monthly total by 1.</p>
           </CardContent>
         </Card>
       </div>
