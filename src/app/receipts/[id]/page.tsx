@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase } from "@/firebase"
 import { doc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
-import { Printer, ChevronLeft, User, Building2, Calculator, Smartphone, CheckCircle2, Loader2, X, Wallet, History, Info } from "lucide-react"
+import { Printer, ChevronLeft, User, Building2, Calculator, Smartphone, CheckCircle2, Loader2, X, Wallet, History, Info, Zap, ShieldCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
@@ -115,6 +115,22 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
                   <td className="text-right font-bold">৳{payment.seatAmount.toLocaleString()}</td>
                 </tr>
               )}
+              {payment.serviceCharge > 0 && (
+                <tr>
+                  <td className="font-bold">Service Charge</td>
+                  <td>System Fee</td>
+                  <td className="uppercase">{payment.method}</td>
+                  <td className="text-right font-bold">৳{payment.serviceCharge.toLocaleString()}</td>
+                </tr>
+              )}
+              {payment.advanceAmount > 0 && (
+                <tr>
+                  <td className="font-bold">Security Advance</td>
+                  <td>One-time Deposit</td>
+                  <td className="uppercase">{payment.method}</td>
+                  <td className="text-right font-bold">৳{payment.advanceAmount.toLocaleString()}</td>
+                </tr>
+              )}
               {payment.foodAmount > 0 && (
                 <tr>
                   <td className="font-bold text-primary">Food Purse Deposit</td>
@@ -137,14 +153,6 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
                   <td>Monthly Utility</td>
                   <td className="uppercase">{payment.method}</td>
                   <td className="text-right font-bold">৳{payment.wifiBill.toLocaleString()}</td>
-                </tr>
-              )}
-              {payment.advanceAmount > 0 && (
-                <tr>
-                  <td className="font-bold">Security Advance</td>
-                  <td>One-time Deposit</td>
-                  <td className="uppercase">{payment.method}</td>
-                  <td className="text-right font-bold">৳{payment.advanceAmount.toLocaleString()}</td>
                 </tr>
               )}
             </tbody>
@@ -217,13 +225,14 @@ export default function ReceiptPage(props: { params: React.Promise<{ id: string 
 
           <div className="border rounded-2xl overflow-hidden shadow-sm">
             <table className="w-full text-sm border-collapse">
-              <thead><tr className="bg-slate-50 border-b"><th className="p-4 text-left font-black text-[11px] uppercase text-slate-500">Description</th><th className="p-4 text-center font-black text-[11px] uppercase text-slate-500">Period / New Balance</th><th className="p-4 text-right font-black text-[11px] uppercase text-slate-500">Paid Amount</th></tr></thead>
+              <thead><tr className="bg-slate-50 border-b"><th className="p-4 text-left font-black text-[11px] uppercase text-slate-500">Description</th><th className="p-4 text-center font-black text-[11px] uppercase text-slate-500">Period / Final Balance</th><th className="p-4 text-right font-black text-[11px] uppercase text-slate-500">Paid Amount</th></tr></thead>
               <tbody className="divide-y">
                 {payment.seatAmount > 0 && (<tr><td className="p-4 font-bold text-slate-700">Rent Adjustment</td><td className="p-4 text-center text-xs text-muted-foreground">{payment.month} {payment.year}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.seatAmount.toLocaleString()}</td></tr>)}
-                {payment.foodAmount > 0 && (<tr><td className="p-4 font-bold text-success">Food Purse Deposit</td><td className="p-4 text-center text-xs font-black text-success uppercase">Balance: ৳{currentFoodVal}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.foodAmount.toLocaleString()}</td></tr>)}
+                {payment.serviceCharge > 0 && (<tr><td className="p-4 font-bold text-purple-600">Service Charge</td><td className="p-4 text-center text-xs text-muted-foreground">System Fee</td><td className="p-4 text-right font-black text-slate-800">৳{payment.serviceCharge.toLocaleString()}</td></tr>)}
+                {payment.advanceAmount > 0 && (<tr><td className="p-4 font-bold text-primary">Security Advance</td><td className="p-4 text-center text-xs text-muted-foreground">Deposit</td><td className="p-4 text-right font-black text-primary">৳{payment.advanceAmount.toLocaleString()}</td></tr>)}
+                {payment.foodAmount > 0 && (<tr><td className="p-4 font-bold text-success">Food Purse Deposit</td><td className="p-4 text-center text-xs font-black text-success uppercase">Final Balance: ৳{currentFoodVal}</td><td className="p-4 text-right font-black text-slate-800">৳{payment.foodAmount.toLocaleString()}</td></tr>)}
                 {payment.cookingBill > 0 && (<tr><td className="p-4 font-bold text-orange-600">Cooking Service</td><td className="p-4 text-center text-xs font-black text-orange-600 uppercase">Balance: ৳{currentCookVal}</td><td className="p-4 text-right font-black text-orange-700">৳{payment.cookingBill.toLocaleString()}</td></tr>)}
                 {payment.wifiBill > 0 && (<tr><td className="p-4 font-bold text-blue-600">WiFi Service</td><td className="p-4 text-center text-xs text-muted-foreground">Monthly Utility</td><td className="p-4 text-right font-black text-blue-700">৳{payment.wifiBill.toLocaleString()}</td></tr>)}
-                {payment.advanceAmount > 0 && (<tr><td className="p-4 font-bold text-primary">Security Advance</td><td className="p-4 text-center text-xs text-muted-foreground">One-time</td><td className="p-4 text-right font-black text-primary">৳{payment.advanceAmount.toLocaleString()}</td></tr>)}
               </tbody>
             </table>
           </div>

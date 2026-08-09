@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Printer, Download, Share2, X, CheckCircle2, Building2, User, Phone, Wallet, Calendar, Calculator, Smartphone, Info } from "lucide-react"
+import { Printer, Download, Share2, X, CheckCircle2, Building2, User, Phone, Wallet, Calendar, Calculator, Smartphone, Info, Zap, ShieldCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
@@ -117,7 +117,7 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
                 <thead>
                   <tr className="bg-slate-50 border-b">
                     <th className="p-3 text-left font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Description</th>
-                    <th className="p-3 text-center font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Details / Balance</th>
+                    <th className="p-3 text-center font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Details / Final Balance</th>
                     <th className="p-3 text-right font-black text-[10px] uppercase text-slate-500 print:p-2 print:text-[8px]">Paid Amount</th>
                   </tr>
                 </thead>
@@ -129,10 +129,24 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
                       <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.seatAmount.toLocaleString()}</td>
                     </tr>
                   )}
+                  {payment.serviceCharge > 0 && (
+                    <tr>
+                      <td className="p-3 font-bold text-purple-600 print:p-2 print:text-xs">Service Charge</td>
+                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">System Fee</td>
+                      <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.serviceCharge.toLocaleString()}</td>
+                    </tr>
+                  )}
+                  {payment.advanceAmount > 0 && (
+                    <tr>
+                      <td className="p-3 font-bold text-primary print:p-2 print:text-xs">Advance</td>
+                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">Security Deposit</td>
+                      <td className="p-3 text-right font-black text-primary print:p-2 print:text-sm">৳{payment.advanceAmount.toLocaleString()}</td>
+                    </tr>
+                  )}
                   {payment.foodAmount > 0 && (
                     <tr>
                       <td className="p-3 font-bold text-primary print:p-2 print:text-xs">Food Purse Deposit</td>
-                      <td className="p-3 text-center text-xs font-black text-primary uppercase print:p-2 print:text-[8px]">Balance: ৳{currentFoodVal}</td>
+                      <td className="p-3 text-center text-xs font-black text-primary uppercase print:p-2 print:text-[8px]">Final Balance: ৳{currentFoodVal}</td>
                       <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.foodAmount.toLocaleString()}</td>
                     </tr>
                   )}
@@ -148,13 +162,6 @@ export function ReceiptDialog({ isOpen, onClose, payment, student, branchInfo }:
                       <td className="p-3 font-bold print:p-2 print:text-xs">WiFi Bill</td>
                       <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">Monthly Utility</td>
                       <td className="p-3 text-right font-black text-slate-800 print:p-2 print:text-sm">৳{payment.wifiBill.toLocaleString()}</td>
-                    </tr>
-                  )}
-                  {payment.advanceAmount > 0 && (
-                    <tr>
-                      <td className="p-3 font-bold text-primary print:p-2 print:text-xs">Advance</td>
-                      <td className="p-3 text-center text-xs print:p-2 print:text-[10px]">Deposit</td>
-                      <td className="p-3 text-right font-black text-primary print:p-2 print:text-sm">৳{payment.advanceAmount.toLocaleString()}</td>
                     </tr>
                   )}
                 </tbody>
