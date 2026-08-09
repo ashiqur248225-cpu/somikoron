@@ -438,7 +438,16 @@ export default function SMSPanelPage() {
 
   const handleWhatsAppSendManual = (to: string, message: string) => {
     const phone = to.split(',')[0].trim();
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    let cleanPhone = phone.replace(/[^0-9]/g, '');
+    
+    // Auto-detect and add Bangladesh country code for proper redirection
+    if (cleanPhone.length === 11 && cleanPhone.startsWith('01')) {
+      cleanPhone = `88${cleanPhone}`;
+    } else if (cleanPhone.length === 10 && cleanPhone.startsWith('1')) {
+       cleanPhone = `880${cleanPhone}`;
+    }
+    
+    // Standard WhatsApp API URL
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   }
