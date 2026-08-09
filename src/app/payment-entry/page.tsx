@@ -20,7 +20,6 @@ import {
   Wallet, 
   Loader2, 
   CheckCircle2, 
-  ChevronLeft,
   Smartphone,
   RefreshCw,
   Coins,
@@ -38,7 +37,9 @@ import {
   ListOrdered,
   Info,
   Scale,
-  ChefHat
+  ChefHat,
+  Zap,
+  ShieldCheck
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -69,6 +70,8 @@ function PaymentEntryForm() {
     roomNumber: "all",
     studentId: "",
     totalReceived: "",
+    advanceAmount: "",
+    serviceCharge: "",
     method: "cash",
     receiver: "",
     description: "",
@@ -167,10 +170,14 @@ function PaymentEntryForm() {
   }, [selectedStudent]);
 
   const distributionResult = useMemo(() => {
-    if (!selectedStudent) return { rentPaid: 0, foodDebtCleared: 0, cookDebtCleared: 0, cookingBill: 0, wifiBill: 0, foodAdvance: 0, total: 0, appliedDues: [] };
+    if (!selectedStudent) return { rentPaid: 0, foodDebtCleared: 0, cookDebtCleared: 0, cookingBill: 0, wifiBill: 0, foodAdvance: 0, total: 0, appliedDues: [], advanceAmount: 0, serviceCharge: 0 };
     
-    let remaining = Number(formData.totalReceived) || 0;
-    const total = remaining;
+    const baseAmt = Number(formData.totalReceived) || 0;
+    const advAmt = Number(formData.advanceAmount) || 0;
+    const svcAmt = Number(formData.serviceCharge) || 0;
+    
+    let remaining = baseAmt;
+    const total = baseAmt + advAmt + svcAmt;
     
     let rentPaid = 0;
     let foodDebtCleared = 0;
@@ -234,18 +241,29 @@ function PaymentEntryForm() {
     // 6. PRIORITY: Final remainder -> Food Advance
     foodAdvance = remaining;
 
-    return { rentPaid, foodDebtCleared, cookDebtCleared, cookingBill: cookingPaid, wifiBill: wifiPaid, foodAdvance, total, appliedDues };
-  }, [selectedStudent, formData.totalReceived, formData.applyCookingBill, formData.applyWifiBill, billingConfig]);
+    return { 
+      rentPaid, 
+      foodDebtCleared, 
+      cookDebtCleared, 
+      cookingBill: cookingPaid, 
+      wifiBill: wifiPaid, 
+      foodAdvance, 
+      total, 
+      appliedDues, 
+      advanceAmount: advAmt, 
+      serviceCharge: svcAmt 
+    };
+  }, [selectedStudent, formData.totalReceived, formData.advanceAmount, formData.serviceCharge, formData.applyCookingBill, formData.applyWifiBill, billingConfig]);
 
   const handleCreatePayment = async () => {
-    if (!formData.studentId || !formData.receiver || !selectedStudent || Number(formData.totalReceived) <= 0) {
+    if (!formData.studentId || !formData.receiver || !selectedStudent || distributionResult.total <= 0) {
       toast({ variant: "destructive", title: "Error", description: "Please enter a valid amount and resident." })
       return
     }
     setIsSubmitting(true)
     try {
       const batch = writeBatch(db); 
-      const { rentPaid, foodDebtCleared, cookDebtCleared, cookingBill, wifiBill, foodAdvance, total } = distributionResult;
+      const { rentPaid, foodDebtCleared, cookDebtCleared, cookingBill, wifiBill, foodAdvance, total, advanceAmount, serviceCharge } = distributionResult;
 
       const isBM = userRole === 'Building Manager'
       const needsApproval = isBM && (staffData?.canRequestIncome === true || !staffData?.canDirectEntryIncome)
@@ -256,6 +274,7 @@ function PaymentEntryForm() {
           id: reqId, requestType: "income", amount: total, seatAmount: rentPaid, 
           foodAmount: foodDebtCleared + foodAdvance,
           cookingBill: cookDebtCleared + cookingBill, wifiBill, 
+          advanceAmount: advanceAmount, serviceCharge: serviceCharge,
           studentId: selectedStudent.id, studentName: selectedStudent.name,
           buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName,
           roomNumber: selectedStudent.roomNumber, branch: userBranch, month: MONTHS[new Date().getMonth()],
@@ -270,7 +289,8 @@ function PaymentEntryForm() {
 
       const pId = doc(collection(db, "payments")).id
       const pRecord = {
-        id: pId, amount: total, seatAmount: rentPaid, foodAmount: foodDebtCleared + foodAdvance, advanceAmount: 0,
+        id: pId, amount: total, seatAmount: rentPaid, foodAmount: foodDebtCleared + foodAdvance, 
+        advanceAmount: advanceAmount, serviceCharge: serviceCharge,
         cookingBill: cookDebtCleared + cookingBill, wifiBill, studentName: selectedStudent.name, studentId: selectedStudent.id, 
         buildingId: selectedStudent.buildingId, buildingName: selectedStudent.buildingName, 
         roomNumber: selectedStudent.roomNumber, branch: userBranch, type: "income", 
@@ -305,6 +325,7 @@ function PaymentEntryForm() {
         duesBreakdown: currentDues,
         foodDueAmount: increment(foodDebtCleared + foodAdvance),
         cookingDueAmount: increment(cookDebtCleared + cookingBill),
+        advanceAmount: increment(advanceAmount),
         historicalTotalReceived: increment(total),
         updatedAt: serverTimestamp()
       })
@@ -315,6 +336,7 @@ function PaymentEntryForm() {
       if (rentPaid > 0) msgParts.push(`Rent: ৳${rentPaid}`);
       if (foodDebtCleared + foodAdvance > 0) msgParts.push(`Food: ৳${foodDebtCleared + foodAdvance}`);
       if (cookDebtCleared + cookingBill > 0) msgParts.push(`Cooking: ৳${cookDebtCleared + cookingBill}`);
+      if (advanceAmount > 0) msgParts.push(`Security: ৳${advanceAmount}`);
       if (wifiBill > 0) msgParts.push(`WiFi: ৳${wifiBill}`);
       msgParts.push(`Remaining Rent Due: ৳${finalTotalDue}.`);
 
@@ -403,8 +425,31 @@ function PaymentEntryForm() {
 
               {selectedStudent && (
                 <div className="space-y-6 animate-in slide-in-from-top-4 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 flex items-center gap-1"><ShieldCheck size={10} className="text-primary"/> Advance Amount (৳)</Label>
+                      <Input 
+                        type="number" 
+                        value={formData.advanceAmount} 
+                        onChange={e => setFormData({...formData, advanceAmount: e.target.value})} 
+                        className="h-12 rounded-xl bg-slate-50 border-none shadow-inner font-bold" 
+                        placeholder="Security Deposit"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1 flex items-center gap-1"><Zap size={10} className="text-primary"/> Service Charge (৳)</Label>
+                      <Input 
+                        type="number" 
+                        value={formData.serviceCharge} 
+                        onChange={e => setFormData({...formData, serviceCharge: e.target.value})} 
+                        className="h-12 rounded-xl bg-slate-50 border-none shadow-inner font-bold" 
+                        placeholder="One-time charge"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-1">
-                    <Label className="text-[11px] font-black uppercase text-primary tracking-widest ml-1">Total Amount Received (৳)</Label>
+                    <Label className="text-[11px] font-black uppercase text-primary tracking-widest ml-1">Core Payment Amount (৳)</Label>
                     <div className="relative">
                       <HandCoins className="absolute left-4 top-4 h-8 w-8 text-primary/40" />
                       <Input 
@@ -419,7 +464,7 @@ function PaymentEntryForm() {
                   </div>
 
                   {/* SMART SPLIT PREVIEW */}
-                  {Number(formData.totalReceived) > 0 && (
+                  {(Number(formData.totalReceived) > 0 || Number(formData.advanceAmount) > 0 || Number(formData.serviceCharge) > 0) && (
                     <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white space-y-6 shadow-2xl relative overflow-hidden">
                        <div className="absolute top-0 right-0 p-4 opacity-5 rotate-12"><Calculator size={100}/></div>
                        <div className="flex justify-between items-center relative z-10">
@@ -428,10 +473,12 @@ function PaymentEntryForm() {
                        </div>
                        
                        <div className="space-y-4 relative z-10">
-                          <div className="flex justify-between items-center">
-                             <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center"><Home size={20} className="text-blue-400"/></div><div className="space-y-0.5"><span className="text-xs font-black text-white/90">Rent Adjustment</span><p className="text-[8px] text-white/30 uppercase font-bold">Includes Arrears & Current</p></div></div>
-                             <span className="text-2xl font-black text-blue-400">৳{distributionResult.rentPaid}</span>
-                          </div>
+                          {distributionResult.rentPaid > 0 && (
+                            <div className="flex justify-between items-center">
+                               <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center"><Home size={20} className="text-blue-400"/></div><div className="space-y-0.5"><span className="text-xs font-black text-white/90">Rent Adjustment</span><p className="text-[8px] text-white/30 uppercase font-bold">Includes Arrears & Current</p></div></div>
+                               <span className="text-2xl font-black text-blue-400">৳{distributionResult.rentPaid}</span>
+                            </div>
+                          )}
                           {distributionResult.appliedDues.length > 0 && (
                             <div className="ml-14 flex flex-wrap gap-2">
                                {distributionResult.appliedDues.map((d, i) => <Badge key={i} variant="outline" className="text-[7px] border-white/10 text-white/40 h-4">{d}</Badge>)}
@@ -452,6 +499,20 @@ function PaymentEntryForm() {
                             </div>
                           )}
 
+                          {distributionResult.advanceAmount > 0 && (
+                            <div className="flex justify-between items-center">
+                               <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center"><ShieldCheck size={20} className="text-indigo-400"/></div><div className="space-y-0.5"><span className="text-xs font-black text-white/90">Security Advance</span><p className="text-[8px] text-white/30 uppercase font-bold">Added to security fund</p></div></div>
+                               <span className="text-2xl font-black text-indigo-400">৳{distributionResult.advanceAmount}</span>
+                            </div>
+                          )}
+
+                          {distributionResult.serviceCharge > 0 && (
+                            <div className="flex justify-between items-center">
+                               <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center"><Zap size={20} className="text-purple-400"/></div><div className="space-y-0.5"><span className="text-xs font-black text-white/90">Service Charge</span><p className="text-[8px] text-white/30 uppercase font-bold">Admission/System fee</p></div></div>
+                               <span className="text-2xl font-black text-purple-400">৳{distributionResult.serviceCharge}</span>
+                            </div>
+                          )}
+
                           {distributionResult.cookingBill > 0 && (
                             <div className="flex justify-between items-center">
                                <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-2xl bg-white/10 flex items-center justify-center"><Soup size={20} className="text-orange-400"/></div><div className="space-y-0.5"><span className="text-xs font-black text-white/90">Cooking Service Bill</span><p className="text-[8px] text-white/30 uppercase font-bold">Monthly Maintenance</p></div></div>
@@ -464,6 +525,10 @@ function PaymentEntryForm() {
                           <div className="flex justify-between items-center bg-white/5 p-4 rounded-3xl border border-white/5">
                              <div className="flex items-center gap-3"><div className="h-12 w-12 rounded-2xl bg-success/20 flex items-center justify-center"><UtensilsCrossed size={24} className="text-success"/></div><div className="space-y-0.5"><span className="text-sm font-black text-success">Net Food Advance</span><p className="text-[8px] text-white/30 uppercase font-black">Added to resident's purse</p></div></div>
                              <span className="text-3xl font-black text-success">৳{distributionResult.foodAdvance}</span>
+                          </div>
+
+                          <div className="pt-2 text-center">
+                             <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Grand Total Recorded: <span className="text-white">৳{distributionResult.total.toLocaleString()}</span></p>
                           </div>
                        </div>
                     </div>
@@ -497,7 +562,7 @@ function PaymentEntryForm() {
             </CardContent>
             {selectedStudent && (
               <CardFooter className="p-8 bg-slate-50 border-t">
-                <Button onClick={handleCreatePayment} disabled={isSubmitting || Number(formData.totalReceived) <= 0} className="w-full h-20 rounded-[2.5rem] text-2xl font-black bg-success hover:bg-success/90 shadow-2xl shadow-success/20 gap-4">
+                <Button onClick={handleCreatePayment} disabled={isSubmitting || distributionResult.total <= 0} className="w-full h-20 rounded-[2.5rem] text-2xl font-black bg-success hover:bg-success/90 shadow-2xl shadow-success/20 gap-4">
                   {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={32}/>} Confirm Smart Distribution
                 </Button>
               </CardFooter>
