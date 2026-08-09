@@ -85,6 +85,7 @@ export default function DashboardPage() {
   const [authId, setAuthId] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [timeRange, setTimeRange] = useState("this_month")
+  const [selectedBuildingId, setSelectedBuildingId] = useState("all")
   const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
@@ -158,7 +159,7 @@ export default function DashboardPage() {
   }, [db, userBranch, userRole, assignedBuildingId, isReady])
   const { data: allExpenses } = useCollection(expensesQuery)
 
-  // Statistics Calculation
+  // Statistics Calculation with Smart Building Filtering
   const stats = useMemo(() => {
     if (!isReady) return { income: 0, expense: 0, activeResidents: 0, totalDue: 0 }
     const now = new Date()
@@ -186,17 +187,27 @@ export default function DashboardPage() {
 
     const filteredPayments = (allPayments || []).filter(p => {
       const pDate = p.date?.toDate ? p.date.toDate() : new Date(p.date)
-      return isWithinRange(pDate, timeRange) && p.method !== 'adjustment'
+      const matchesTime = isWithinRange(pDate, timeRange) && p.method !== 'adjustment'
+      const matchesBuilding = selectedBuildingId === 'all' || p.buildingId === selectedBuildingId
+      return matchesTime && matchesBuilding
     })
+
     const filteredExpenses = (allExpenses || []).filter(e => {
       const eDate = e.expenseDate ? new Date(e.expenseDate.replace(/-/g, '/')) : null
-      return eDate && isWithinRange(eDate, timeRange)
+      const matchesTime = eDate && isWithinRange(eDate, timeRange)
+      const matchesBuilding = selectedBuildingId === 'all' || e.buildingId === selectedBuildingId
+      return matchesTime && matchesBuilding
     })
 
     const income = filteredPayments.reduce((acc, p) => acc + (p.amount || 0), 0)
     const expense = filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0)
     
-    const totalDue = (students || []).filter(s => s.isActive).reduce((acc, s) => {
+    const filteredStudents = (students || []).filter(s => {
+      const matchesBuilding = selectedBuildingId === 'all' || s.buildingId === selectedBuildingId
+      return s.isActive && matchesBuilding
+    })
+
+    const totalDue = filteredStudents.reduce((acc, s) => {
       const rentDue = Number(s.totalDue || 0);
       const foodDebt = (s.foodDueAmount || 0) < 0 ? Math.abs(s.foodDueAmount) : 0;
       return acc + rentDue + foodDebt;
@@ -205,10 +216,10 @@ export default function DashboardPage() {
     return { 
       income, 
       expense, 
-      activeResidents: (students || []).filter(s => s.isActive).length,
+      activeResidents: filteredStudents.length,
       totalDue
     }
-  }, [allPayments, allExpenses, students, timeRange, isReady])
+  }, [allPayments, allExpenses, students, timeRange, selectedBuildingId, isReady])
 
   // Prevent UI rendering for non-management roles
   if (!isReady || ['Staff', 'Worker', 'General Staff', 'Student'].includes(userRole)) {
@@ -232,6 +243,22 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {/* Building Filter */}
+          <Select value={selectedBuildingId} onValueChange={setSelectedBuildingId}>
+            <SelectTrigger className="w-[140px] h-9 bg-white border-none shadow-sm font-bold text-xs">
+              <Building2 size={14} className="mr-2 text-primary" />
+              <SelectValue placeholder="All Buildings" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Entire Branch</SelectItem>
+              <SelectSeparator />
+              {buildings?.map(b => (
+                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Time Filter */}
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-[140px] h-9 bg-white border-none shadow-sm font-bold text-xs">
               <CalendarIcon size={14} className="mr-2 text-primary" />
@@ -292,7 +319,12 @@ export default function DashboardPage() {
             {buildings?.map(b => {
               const occRate = (b.occupiedSeats / (b.totalSeats || 1)) * 100
               return (
-                <div key={b.id} className="p-4 rounded-2xl bg-secondary/20 border border-secondary group hover:bg-white hover:shadow-md transition-all cursor-pointer" onClick={() => router.push(`/buildings/${b.id}`)}>
+                <div key={b.id} className={cn(
+                  "p-4 rounded-2xl border transition-all cursor-pointer",
+                  selectedBuildingId === b.id ? "bg-white border-primary shadow-md ring-2 ring-primary/10" : "bg-secondary/20 border-secondary group hover:bg-white hover:shadow-md"
+                )} onClick={() => {
+                  setSelectedBuildingId(b.id === selectedBuildingId ? "all" : b.id)
+                }}>
                   <div className="flex justify-between items-start mb-3">
                     <div><h4 className="font-bold text-slate-800">{b.name}</h4><p className="text-[10px] font-bold text-muted-foreground uppercase">{b.address}</p></div>
                     <Badge className={cn("text-[8px] font-black", occRate > 90 ? "bg-destructive" : "bg-success")}>{occRate.toFixed(0)}% FULL</Badge>
