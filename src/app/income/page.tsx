@@ -12,7 +12,7 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Wallet, Loader2, Search, Filter, Printer, ArrowUpCircle, RotateCcw, Trash2, Calendar, Smartphone, MapPin, UserCircle, MoreVertical } from "lucide-react"
+import { Wallet, Loader2, Search, Filter, Printer, ArrowUpCircle, RotateCcw, Trash2, Calendar, Smartphone, MapPin, UserCircle, MoreVertical, ChevronRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { collection, query, limit, where, getDocs, writeBatch, Timestamp } from "firebase/firestore"
