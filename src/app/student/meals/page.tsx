@@ -27,7 +27,8 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronUp,
-  Users
+  Users,
+  Plus
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, collection, query, where, increment } from "firebase/firestore"
