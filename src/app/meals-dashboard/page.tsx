@@ -254,9 +254,14 @@ export default function AdminMealDashboardPage() {
       </div>
 
       <Tabs defaultValue="summary" className="w-full print:hidden">
-        <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl w-full max-w-md mx-auto grid grid-cols-2">
+        <TabsList className={cn(
+          "bg-secondary/50 p-1 mb-6 rounded-2xl w-full max-w-md mx-auto grid",
+          canOverride ? "grid-cols-2" : "grid-cols-1"
+        )}>
           <TabsTrigger value="summary" className="rounded-xl gap-2 font-bold h-10">Kitchen Prep</TabsTrigger>
-          <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Override</TabsTrigger>
+          {canOverride && (
+            <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Override</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="summary" className="space-y-8 animate-in fade-in duration-500">
@@ -414,59 +419,61 @@ export default function AdminMealDashboardPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300">
-           <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
-              <CardHeader className="bg-slate-50/50 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                 <div>
-                   <CardTitle className="text-lg">Meal Override (Tomorrow)</CardTitle>
-                   <CardDescription>Manually toggle meals for specific students for tomorrow.</CardDescription>
-                 </div>
-                 <div className="relative">
-                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                   <Input placeholder="Search name or room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
-                 </div>
-              </CardHeader>
-              <CardContent className="p-0 h-[600px] overflow-y-auto">
-                 <Table>
-                    <TableBody>
-                       {students?.filter(s => 
-                          s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          String(s.roomNumber).includes(searchTerm)
-                       ).map(s => (
-                         <TableRow key={s.id} className="border-b">
-                            <TableCell className="py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div>
-                                <div>
-                                  <p className="font-black text-slate-800 text-xs">{s.name}</p>
-                                  <p className="text-[8px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+        {canOverride && (
+          <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300">
+             <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="bg-slate-50/50 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                   <div>
+                     <CardTitle className="text-lg">Meal Override (Tomorrow)</CardTitle>
+                     <CardDescription>Manually toggle meals for specific students for tomorrow.</CardDescription>
+                   </div>
+                   <div className="relative">
+                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                     <Input placeholder="Search name or room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                   </div>
+                </CardHeader>
+                <CardContent className="p-0 h-[600px] overflow-y-auto">
+                   <Table>
+                      <TableBody>
+                         {students?.filter(s => 
+                            s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            String(s.roomNumber).includes(searchTerm)
+                         ).map(s => (
+                           <TableRow key={s.id} className="border-b">
+                              <TableCell className="py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div>
+                                  <div>
+                                    <p className="font-black text-slate-800 text-xs">{s.name}</p>
+                                    <p className="text-[8px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+                                  </div>
                                 </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                               <div className="flex gap-2 justify-end">
-                                  {['breakfast', 'lunch', 'dinner'].map(m => (
-                                    <button 
-                                      key={m} 
-                                      onClick={() => handleToggleMeal(s, m)} 
-                                      disabled={!canOverride} 
-                                      className={cn(
-                                        "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
-                                        s.mealStatus?.[m] ? "bg-primary text-white" : "bg-slate-100 text-slate-300"
-                                      )}
-                                    >
-                                      {m.charAt(0).toUpperCase()}
-                                    </button>
-                                  ))}
-                               </div>
-                            </TableCell>
-                         </TableRow>
-                       ))}
-                    </TableBody>
-                 </Table>
-              </CardContent>
-           </Card>
-        </TabsContent>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                 <div className="flex gap-2 justify-end">
+                                    {['breakfast', 'lunch', 'dinner'].map(m => (
+                                      <button 
+                                        key={m} 
+                                        onClick={() => handleToggleMeal(s, m)} 
+                                        disabled={!canOverride} 
+                                        className={cn(
+                                          "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
+                                          s.mealStatus?.[m] ? "bg-primary text-white" : "bg-slate-100 text-slate-300"
+                                        )}
+                                      >
+                                        {m.charAt(0).toUpperCase()}
+                                      </button>
+                                    ))}
+                                 </div>
+                              </TableCell>
+                           </TableRow>
+                         ))}
+                      </TableBody>
+                   </Table>
+                </CardContent>
+             </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* PRINT VERSION (HIDDEN ON SCREEN) */}
