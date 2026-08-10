@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -16,8 +17,8 @@ import { Button } from "@/components/ui/button"
 import { Loader2, Printer, ArrowDownCircle, Filter, Trash2, RotateCcw, Receipt, Calendar, UserCheck, Wallet, ChevronRight, MoreVertical } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
-import { collection, query, limit, where, getDocs, writeBatch } from "firebase/firestore"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
+import { collection, query, limit, where, doc } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -37,7 +38,7 @@ const formatCompactDate = (date: any) => {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
-const EXPENSE_CATEGORIES = [
+const DEFAULT_EXPENSE_CATEGORIES = [
   { id: "rent", label: "Building Rent" },
   { id: "electricity", label: "Electricity Bill" },
   { id: "water", label: "Water & Gas Bill" },
@@ -46,7 +47,6 @@ const EXPENSE_CATEGORIES = [
   { id: "market", label: "General Market" },
   { id: "internet", label: "Internet Bill" },
   { id: "salary", label: "Staff Salary" },
-  { id: "Student Refund", label: "Student Refund" },
   { id: "others", label: "Others" },
 ]
 
@@ -60,6 +60,19 @@ export default function ExpenseHistoryPage() {
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
+
+  const expenseCatsRef = useMemoFirebase(() => doc(db, "configs", "expenseCategories"), [db])
+  const { data: expenseCatsStore } = useDoc(expenseCatsRef)
+  
+  const categories = useMemo(() => {
+    const list = expenseCatsStore?.categories || DEFAULT_EXPENSE_CATEGORIES;
+    // Ensure "Student Refund" is visible in history if it exists in records, 
+    // even if not in the global dictionary
+    if (!list.find((c: any) => c.id === 'Student Refund')) {
+      return [...list, { id: "Student Refund", label: "Student Refund" }];
+    }
+    return list;
+  }, [expenseCatsStore])
 
   const getLocalYMD = () => {
     const d = new Date();
@@ -153,7 +166,7 @@ export default function ExpenseHistoryPage() {
       </div>
 
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}><DialogContent className="max-w-md rounded-3xl"><DialogHeader><DialogTitle>Filter Expenses</DialogTitle></DialogHeader>
-        <div className="grid gap-4 py-4"><div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><Label>Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{EXPENSE_CATEGORIES.map(c => (<SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>))}</SelectContent></Select></div><div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></Select></div></div><div className="space-y-1.5"><Label>Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div></div>
+        <div className="grid gap-4 py-4"><div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><Label>Category</Label><Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{categories.map((c: any) => (<SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>))}</SelectContent></Select></div><div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Entire Branch</SelectItem>{buildings?.map(b => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></Select></div></div><div className="space-y-1.5"><Label>Range</Label><div className="flex gap-2"><Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /><Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></div></div></div>
         <DialogFooter className="flex gap-2"><Button variant="ghost" className="gap-2 font-bold" onClick={handleReset}><RotateCcw size={14}/> Reset</Button><Button className="rounded-xl px-8" onClick={() => setIsFilterDialogOpen(false)}>Apply</Button></DialogFooter></DialogContent></Dialog>
     </div>
   )
