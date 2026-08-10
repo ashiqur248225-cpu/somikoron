@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, query, where, doc, updateDoc, serverTimestamp, increment } from "firebase/firestore"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
@@ -65,10 +65,16 @@ export default function AdminMealDashboardPage() {
   const routineQuery = useMemoFirebase(() => collection(db, "mealRoutines"), [db])
   const { data: routines } = useCollection(routineQuery)
 
+  // Fetch Global Meal Config for availability
+  const mealConfigRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
   // CALCULATE TOMORROW'S CONTEXT (BD TIME)
   const tomorrowContext = useMemo(() => {
     const now = new Date()
-    // Manual offset for BD time if server is different, but here we assume local evaluation
     const tomorrow = new Date(now)
     tomorrow.setDate(tomorrow.getDate() + 1)
     
@@ -98,8 +104,12 @@ export default function AdminMealDashboardPage() {
 
     const { dayName, todayYMD } = tomorrowContext
 
+    // Global flags from admin settings
+    const bAvail = mealConfig?.breakfastAvailable !== false;
+    const lAvail = mealConfig?.lunchAvailable !== false;
+    const dAvail = mealConfig?.dinnerAvailable !== false;
+
     students.forEach(s => {
-      // Evaluate if student will eat tomorrow
       let willEatB = false
       let willEatL = false
       let willEatD = false
@@ -107,26 +117,24 @@ export default function AdminMealDashboardPage() {
       let choiceD = "Normal"
 
       if (s.mealStatus?.autoMode) {
-        // AUTO MODE LOGIC: Look at the weekly schedule for tomorrow's day
         const sched = s.weeklySchedule?.[dayName] || { breakfast: false, lunch: false, dinner: false }
-        willEatB = !!sched.breakfast
-        willEatL = !!sched.lunch
-        willEatD = !!sched.dinner
+        willEatB = !!sched.breakfast && bAvail
+        willEatL = !!sched.lunch && lAvail
+        willEatD = !!sched.dinner && dAvail
         choiceL = sched.lunchChoice || "Normal"
         choiceD = sched.dinnerChoice || "Normal"
       } else if (s.lastMealUpdateDate === todayYMD) {
-        // MANUAL LOGIC: They updated today for tomorrow
-        willEatB = !!s.mealStatus?.breakfast
-        willEatL = !!s.mealStatus?.lunch
-        willEatD = !!s.mealStatus?.dinner
+        willEatB = !!s.mealStatus?.breakfast && bAvail
+        willEatL = !!s.mealStatus?.lunch && lAvail
+        willEatD = !!s.mealStatus?.dinner && dAvail
         choiceL = s.mealChoices?.lunch || "Normal"
         choiceD = s.mealChoices?.dinner || "Normal"
       }
 
       // Guest Meals are always specific to the next day update
-      const gB = Number(s.tomorrowGuestMeals?.breakfast || 0);
-      const gL = Number(s.tomorrowGuestMeals?.lunch || 0);
-      const gD = Number(s.tomorrowGuestMeals?.dinner || 0);
+      const gB = bAvail ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
+      const gL = lAvail ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
+      const gD = dAvail ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
 
       const combinedB = (willEatB ? 1 : 0) + gB;
       const combinedL = (willEatL ? 1 : 0) + gL;
@@ -165,7 +173,6 @@ export default function AdminMealDashboardPage() {
           bd.choiceCounts.dinner[choiceD] = (bd.choiceCounts.dinner[choiceD] || 0) + combinedD
         }
 
-        // Room Level Distribution for Delivery
         const roomNo = s.roomNumber || "N/A"
         if (!bd.rooms[roomNo]) {
           bd.rooms[roomNo] = { 
@@ -196,12 +203,18 @@ export default function AdminMealDashboardPage() {
     })
 
     return { totals, choices, buildingData }
-  }, [students, tomorrowContext])
+  }, [students, tomorrowContext, mealConfig])
 
   const canOverride = userRole === 'Admin' || userRole === 'Branch Manager';
 
   const handleToggleMeal = async (student: any, mealId: string) => {
     if (!canOverride) return;
+    const isAvail = mealConfig?.[`${mealId}Available`] !== false;
+    if (!isAvail) {
+      toast({ variant: "destructive", title: "Meal Locked", description: "Admin has disabled this meal type." });
+      return;
+    }
+
     try {
       const currentVal = !!student.mealStatus?.[mealId];
       const sRef = doc(db, "students", student.id);
@@ -210,7 +223,7 @@ export default function AdminMealDashboardPage() {
       await updateDoc(sRef, {
         [`mealStatus.${mealId}`]: !currentVal,
         [counterField]: increment(!currentVal ? 1 : -1),
-        lastMealUpdateDate: tomorrowContext.todayYMD, // Mark as updated today
+        lastMealUpdateDate: tomorrowContext.todayYMD,
         updatedAt: serverTimestamp()
       });
       toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled for tomorrow.` });
@@ -223,7 +236,6 @@ export default function AdminMealDashboardPage() {
 
   return (
     <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
-      {/* Header */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -242,7 +254,6 @@ export default function AdminMealDashboardPage() {
         </div>
       </div>
 
-      {/* PRINT ONLY HEADER */}
       <div className="hidden print:block text-center space-y-2 mb-8 border-b-2 border-slate-900 pb-4">
          <h1 className="text-3xl font-black uppercase">Somikoron Hostel Kitchen</h1>
          <p className="text-lg font-bold">Meal Distribution Sheet: {tomorrowContext.dayName}, {tomorrowContext.dateStr}</p>
@@ -265,7 +276,6 @@ export default function AdminMealDashboardPage() {
         </TabsList>
 
         <TabsContent value="summary" className="space-y-8 animate-in fade-in duration-500">
-          {/* Main Counters with Tomorrow's Menu */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl group hover:shadow-md transition-all">
               <CardContent className="pt-6">
@@ -313,7 +323,6 @@ export default function AdminMealDashboardPage() {
             </Card>
           </div>
 
-          {/* Choice Breakdown */}
           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
              <div className="space-y-4">
                 <div className="text-[10px] font-black uppercase text-success tracking-[0.3em] border-b border-white/10 pb-2">Lunch Prep Breakdown</div>
@@ -339,7 +348,6 @@ export default function AdminMealDashboardPage() {
              </div>
           </Card>
 
-          {/* Delivery & Distribution Sheet */}
           <div className="space-y-6">
             <div className="flex items-center justify-between">
                <h2 className="text-xl font-black text-slate-800 flex items-center gap-3 uppercase tracking-tight">
@@ -451,19 +459,23 @@ export default function AdminMealDashboardPage() {
                               </TableCell>
                               <TableCell className="text-right">
                                  <div className="flex gap-2 justify-end">
-                                    {['breakfast', 'lunch', 'dinner'].map(m => (
-                                      <button 
-                                        key={m} 
-                                        onClick={() => handleToggleMeal(s, m)} 
-                                        disabled={!canOverride} 
-                                        className={cn(
-                                          "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
-                                          s.mealStatus?.[m] ? "bg-primary text-white" : "bg-slate-100 text-slate-300"
-                                        )}
-                                      >
-                                        {m.charAt(0).toUpperCase()}
-                                      </button>
-                                    ))}
+                                    {['breakfast', 'lunch', 'dinner'].map(m => {
+                                      const isAvail = mealConfig?.[`${m}Available`] !== false;
+                                      return (
+                                        <button 
+                                          key={m} 
+                                          onClick={() => handleToggleMeal(s, m)} 
+                                          disabled={!canOverride || !isAvail} 
+                                          className={cn(
+                                            "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
+                                            (s.mealStatus?.[m] && isAvail) ? "bg-primary text-white" : "bg-slate-100 text-slate-300",
+                                            !isAvail && "opacity-20"
+                                          )}
+                                        >
+                                          {m.charAt(0).toUpperCase()}
+                                        </button>
+                                      );
+                                    })}
                                  </div>
                               </TableCell>
                            </TableRow>
@@ -476,7 +488,6 @@ export default function AdminMealDashboardPage() {
         )}
       </Tabs>
 
-      {/* PRINT VERSION (HIDDEN ON SCREEN) */}
       <div className="hidden print:block space-y-8">
         {Object.values(mealStats.buildingData).sort((a,b) => a.name.localeCompare(b.name)).map((b: any) => (
           <div key={b.id} className="space-y-4 break-after-page">
