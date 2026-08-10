@@ -128,16 +128,17 @@ export default function BulkMealEntryPage() {
   }, [filteredStudents]);
 
   const totalMealsCount = useMemo(() => {
-    return Object.values(mealInputs).reduce((acc, val) => acc + (Number(val) || 0), 0)
-  }, [mealInputs])
+    // Only sum meals for currently filtered students
+    return filteredStudents.reduce((acc, s) => acc + (Number(mealInputs[s.id]) || 0), 0)
+  }, [mealInputs, filteredStudents])
 
   const grandBillSum = useMemo(() => {
-    return Object.keys(mealInputs).reduce((acc, id) => {
-      const s = students?.find(std => std.id === id)
-      if (!s || s.paymentSystem === 'package') return acc
-      return acc + (Number(mealInputs[id]) * Number(mealConfig?.rate || 0))
+    const rate = Number(mealConfig?.rate || 0);
+    // Only sum bill for currently filtered students
+    return filteredStudents.reduce((acc, s) => {
+      return acc + (Number(mealInputs[s.id] || 0) * rate)
     }, 0)
-  }, [mealInputs, students, mealConfig?.rate])
+  }, [mealInputs, filteredStudents, mealConfig?.rate])
 
   const handleBulkMealSubmit = async () => {
     if (!students || !mealConfig?.rate) {
@@ -310,10 +311,10 @@ export default function BulkMealEntryPage() {
 
         <CardFooter className="p-10 bg-slate-50 border-t flex flex-col md:flex-row items-center justify-between gap-8 mt-4">
           <div className="flex gap-16 text-center">
-            <div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Active Recipients</p><p className="text-3xl font-black text-slate-800">{Object.keys(mealInputs).filter(id => Number(mealInputs[id]) > 0).length}</p></div>
+            <div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Active Recipients</p><p className="text-3xl font-black text-slate-800">{filteredStudents.filter(s => Number(mealInputs[s.id]) > 0).length}</p></div>
             <div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Grand Total Bill</p><p className="text-3xl font-black text-primary">৳{grandBillSum.toLocaleString()}</p></div>
           </div>
-          <Button onClick={handleBulkMealSubmit} disabled={isSubmitting || Object.keys(mealInputs).length === 0} className="w-full md:w-96 h-20 rounded-[2rem] text-2xl font-black shadow-2xl shadow-primary/20 gap-4 transition-transform active:scale-95">
+          <Button onClick={handleBulkMealSubmit} disabled={isSubmitting || filteredStudents.length === 0} className="w-full md:w-96 h-20 rounded-[2rem] text-2xl font-black shadow-2xl shadow-primary/20 gap-4 transition-transform active:scale-95">
             {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={32}/>} Confirm & Submit All
           </Button>
         </CardFooter>
