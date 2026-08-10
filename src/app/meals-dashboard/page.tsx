@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -65,14 +64,12 @@ export default function AdminMealDashboardPage() {
   const routineQuery = useMemoFirebase(() => collection(db, "mealRoutines"), [db])
   const { data: routines } = useCollection(routineQuery)
 
-  // Fetch Global Meal Config for availability
   const mealConfigRef = useMemoFirebase(() => 
     userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
     [db, userBranch]
   )
   const { data: mealConfig } = useDoc(mealConfigRef)
 
-  // CALCULATE TOMORROW'S CONTEXT (BD TIME)
   const tomorrowContext = useMemo(() => {
     const now = new Date()
     const tomorrow = new Date(now)
@@ -90,7 +87,6 @@ export default function AdminMealDashboardPage() {
     return routines.find(r => r.day === tomorrowContext.dayName && r.branch === userBranch)
   }, [routines, userBranch, tomorrowContext.dayName])
 
-  // ADVANCED ANALYTICS LOGIC (EVALUATING AUTO MODE + MANUAL FOR TOMORROW)
   const mealStats = useMemo(() => {
     if (!students) return { 
       totals: { breakfast: 0, lunch: 0, dinner: 0, totalPlates: 0 },
@@ -103,8 +99,6 @@ export default function AdminMealDashboardPage() {
     let buildingData: Record<string, any> = {}
 
     const { dayName, todayYMD } = tomorrowContext
-
-    // Global flags from admin settings
     const bAvail = mealConfig?.breakfastAvailable !== false;
     const lAvail = mealConfig?.lunchAvailable !== false;
     const dAvail = mealConfig?.dinnerAvailable !== false;
@@ -115,7 +109,9 @@ export default function AdminMealDashboardPage() {
       let willEatD = false
       let choiceL = "Normal"
       let choiceD = "Normal"
+      const updatedToday = s.lastMealUpdateDate === todayYMD;
 
+      // SELF MEALS CALCULATION
       if (s.mealStatus?.autoMode) {
         const sched = s.weeklySchedule?.[dayName] || { breakfast: false, lunch: false, dinner: false }
         willEatB = !!sched.breakfast && bAvail
@@ -123,7 +119,7 @@ export default function AdminMealDashboardPage() {
         willEatD = !!sched.dinner && dAvail
         choiceL = sched.lunchChoice || "Normal"
         choiceD = sched.dinnerChoice || "Normal"
-      } else if (s.lastMealUpdateDate === todayYMD) {
+      } else if (updatedToday) {
         willEatB = !!s.mealStatus?.breakfast && bAvail
         willEatL = !!s.mealStatus?.lunch && lAvail
         willEatD = !!s.mealStatus?.dinner && dAvail
@@ -131,15 +127,16 @@ export default function AdminMealDashboardPage() {
         choiceD = s.mealChoices?.dinner || "Normal"
       }
 
-      // Guest Meals are always specific to the next day update
-      const gB = bAvail ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
-      const gL = lAvail ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
-      const gD = dAvail ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
+      // GUEST MEALS: Only valid if updated today
+      const gB = (updatedToday && bAvail) ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
+      const gL = (updatedToday && lAvail) ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
+      const gD = (updatedToday && dAvail) ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
 
       const combinedB = (willEatB ? 1 : 0) + gB;
       const combinedL = (willEatL ? 1 : 0) + gL;
       const combinedD = (willEatD ? 1 : 0) + gD;
 
+      // CRITICAL: Only include in distribution list if they have at least one meal tomorrow
       if (combinedB > 0 || combinedL > 0 || combinedD > 0) {
         totals.breakfast += combinedB;
         totals.lunch += combinedL;
@@ -196,7 +193,7 @@ export default function AdminMealDashboardPage() {
           isSelfD: willEatD,
           choiceL,
           choiceD,
-          guests: s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 },
+          guests: updatedToday ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 },
           isAuto: !!s.mealStatus?.autoMode
         })
       }
@@ -353,7 +350,7 @@ export default function AdminMealDashboardPage() {
                <h2 className="text-xl font-black text-slate-800 flex items-center gap-3 uppercase tracking-tight">
                  <Truck size={24} className="text-primary"/> Delivery Distribution Sheet
                </h2>
-               <p className="text-[10px] font-bold text-muted-foreground uppercase">Click building to view room details</p>
+               <p className="text-[10px] font-bold text-muted-foreground uppercase">Showing active orders for tomorrow</p>
             </div>
             
             {Object.values(mealStats.buildingData).sort((a,b) => a.name.localeCompare(b.name)).map((b: any) => (
