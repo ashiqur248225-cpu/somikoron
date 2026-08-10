@@ -357,6 +357,30 @@ export default function DashboardPage() {
                 <span className="font-black text-slate-800">৳{fund.val.toLocaleString()}</span>
               </div>
             ))}
+
+            {selectedBuildingId !== 'all' && (
+              <div className="mt-4 pt-4 border-t border-dashed space-y-3">
+                <div className="flex justify-between items-center p-4 bg-primary/5 rounded-2xl border border-primary/10 shadow-inner">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white p-2 rounded-lg shadow-sm text-primary">
+                      <LayoutGrid size={18} />
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Building Net Result</p>
+                      <span className="text-xs font-black text-slate-800 truncate max-w-[120px] block">
+                        {buildings?.find(b => b.id === selectedBuildingId)?.name}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={cn("text-lg font-black", (stats.income - stats.expense) >= 0 ? "text-success" : "text-destructive")}>
+                      ৳{(stats.income - stats.expense).toLocaleString()}
+                    </p>
+                    <p className="text-[8px] font-bold text-muted-foreground uppercase">{timeRange.replace('_', ' ')}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
