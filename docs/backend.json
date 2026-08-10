@@ -96,6 +96,8 @@
         "currentMonthBreakfast": { "type": "number" },
         "currentMonthLunch": { "type": "number" },
         "currentMonthDinner": { "type": "number" },
+        "currentMonthGuestMeals": { "type": "number" },
+        "tomorrowGuestMeals": { "type": "object" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },

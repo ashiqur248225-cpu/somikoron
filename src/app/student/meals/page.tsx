@@ -26,7 +26,8 @@ import {
   ListChecks,
   CalendarDays,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Users
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, collection, query, where, increment } from "firebase/firestore"
@@ -109,10 +110,12 @@ export default function StudentMealPage() {
   const [mealChoices, setMealChoices] = useState<Record<string, string>>({})
   const [weeklySchedule, setWeeklySchedule] = useState<Record<string, any>>({})
   const [expandedDay, setExpandedDay] = useState<string | null>(null)
+  const [localGuestMeals, setLocalGuestMeals] = useState({ breakfast: 0, lunch: 0, dinner: 0 })
 
   useEffect(() => {
     if (student?.mealStatus) setLocalMeals(student.mealStatus)
     if (student?.mealChoices) setMealChoices(student.mealChoices)
+    if (student?.tomorrowGuestMeals) setLocalGuestMeals(student.tomorrowGuestMeals)
     if (student?.weeklySchedule) {
       setWeeklySchedule(student.weeklySchedule)
     } else {
@@ -186,6 +189,7 @@ export default function StudentMealPage() {
     try {
       let finalMeals = { ...localMeals }
       let finalChoices = { ...mealChoices }
+      let finalGuestMeals = { ...localGuestMeals }
       
       if (localMeals.autoMode) {
         const schedForTomorrow = weeklySchedule[tomorrowDay] || { breakfast: true, lunch: true, dinner: true }
@@ -213,32 +217,44 @@ export default function StudentMealPage() {
         mealStatus: finalMeals, 
         mealChoices: finalChoices, 
         weeklySchedule, 
+        tomorrowGuestMeals: finalGuestMeals,
         lastMealUpdate: serverTimestamp(),
         lastMealUpdateDate: todayStr,
         updatedAt: serverTimestamp(),
         currentMonthLabel: targetLabel
       }
 
-      // ACCURATE COUNTER LOGIC
-      if (isNewMonth) {
-        // Reset counters and set only current selection if month changed
-        updates.currentMonthBreakfast = finalMeals.breakfast ? 1 : 0;
-        updates.currentMonthLunch = finalMeals.lunch ? 1 : 0;
-        updates.currentMonthDinner = finalMeals.dinner ? 1 : 0;
-      } else if (isReSubmission) {
-        // Adjust counters based on difference if re-submitting today
-        const diffB = (finalMeals.breakfast ? 1 : 0) - (student.mealStatus?.breakfast ? 1 : 0);
-        const diffL = (finalMeals.lunch ? 1 : 0) - (student.mealStatus?.lunch ? 1 : 0);
-        const diffD = (finalMeals.dinner ? 1 : 0) - (student.mealStatus?.dinner ? 1 : 0);
+      // ACCURATE DIFFERENTIAL COUNTER LOGIC (GUEST + SELF)
+      const calculateDiff = (type: 'breakfast' | 'lunch' | 'dinner') => {
+        const key = type === 'breakfast' ? 'b' : (type === 'lunch' ? 'l' : 'd');
+        const nextVal = (finalMeals[type] ? 1 : 0) + Number(finalGuestMeals[key as keyof typeof finalGuestMeals] || 0);
         
+        if (isNewMonth) return nextVal;
+        
+        if (isReSubmission) {
+          const prevVal = (student.mealStatus?.[type] ? 1 : 0) + Number(student.tomorrowGuestMeals?.[key as keyof typeof student.tomorrowGuestMeals] || 0);
+          return nextVal - prevVal;
+        }
+        
+        return nextVal;
+      };
+
+      const diffB = calculateDiff('breakfast');
+      const diffL = calculateDiff('lunch');
+      const diffD = calculateDiff('dinner');
+      const diffGuest = (Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner)) - 
+                        (isReSubmission && !isNewMonth ? (Number(student.tomorrowGuestMeals?.breakfast || 0) + Number(student.tomorrowGuestMeals?.lunch || 0) + Number(student.tomorrowGuestMeals?.dinner || 0)) : 0);
+
+      if (isNewMonth) {
+        updates.currentMonthBreakfast = diffB;
+        updates.currentMonthLunch = diffL;
+        updates.currentMonthDinner = diffD;
+        updates.currentMonthGuestMeals = (Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner));
+      } else {
         if (diffB !== 0) updates.currentMonthBreakfast = increment(diffB);
         if (diffL !== 0) updates.currentMonthLunch = increment(diffL);
         if (diffD !== 0) updates.currentMonthDinner = increment(diffD);
-      } else {
-        // First submission of the day, just increment
-        if (finalMeals.breakfast) updates.currentMonthBreakfast = increment(1);
-        if (finalMeals.lunch) updates.currentMonthLunch = increment(1);
-        if (finalMeals.dinner) updates.currentMonthDinner = increment(1);
+        if (diffGuest !== 0) updates.currentMonthGuestMeals = increment(diffGuest);
       }
 
       await updateDoc(studentRef, updates)
@@ -248,7 +264,7 @@ export default function StudentMealPage() {
     } finally { 
       setIsUpdating(false) 
     }
-  }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, weeklySchedule, tomorrowDay, tomorrowDate, toast, mealConfig]);
+  }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, localGuestMeals, weeklySchedule, tomorrowDay, tomorrowDate, toast, mealConfig]);
 
   const toggleScheduleMeal = (day: string, meal: string) => {
     const isAvail = mealConfig?.[`${meal}Available`] !== false;
@@ -287,9 +303,17 @@ export default function StudentMealPage() {
       breakfast: student?.currentMonthBreakfast || 0,
       lunch: student?.currentMonthLunch || 0,
       dinner: student?.currentMonthDinner || 0,
+      guest: student?.currentMonthGuestMeals || 0,
       total: (student?.currentMonthBreakfast || 0) + (student?.currentMonthLunch || 0) + (student?.currentMonthDinner || 0)
     }
   }, [student])
+
+  const updateGuestCount = (type: 'breakfast' | 'lunch' | 'dinner', delta: number) => {
+    const key = type === 'breakfast' ? 'breakfast' : (type === 'lunch' ? 'lunch' : 'dinner');
+    const current = Number(localGuestMeals[key as keyof typeof localGuestMeals] || 0);
+    const newVal = Math.max(0, current + delta);
+    setLocalGuestMeals({ ...localGuestMeals, [key]: newVal });
+  }
 
   if (isLoading) return <div className="flex justify-center p-20 animate-pulse">Syncing Kitchen...</div>
 
@@ -449,9 +473,11 @@ export default function StudentMealPage() {
                     const isChecked = isAvailable && localMeals[type.id as keyof typeof localMeals]
                     const menuText = tomorrowMenu?.[type.id] || ""
                     const { common, options } = getMealDetails(menuText)
-                    
+                    const guestKey = type.id === 'breakfast' ? 'breakfast' : (type.id === 'lunch' ? 'lunch' : 'dinner');
+                    const guestCount = Number(localGuestMeals[guestKey as keyof typeof localGuestMeals] || 0);
+
                     return (
-                      <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable) ? "opacity-30 border-slate-100" : (isChecked ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
+                      <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable) ? "opacity-30 border-slate-100" : (isChecked || guestCount > 0 ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                             <span className="text-2xl">{type.icon}</span>
@@ -468,6 +494,37 @@ export default function StudentMealPage() {
                             onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} 
                           />
                         </div>
+
+                        {/* GUEST MEAL PICKER */}
+                        {isAvailable && (
+                          <div className="pt-2 flex items-center justify-between bg-white/40 p-3 rounded-2xl border border-dashed border-success/20">
+                             <div className="flex items-center gap-2">
+                                <Users size={14} className="text-primary" />
+                                <span className="text-[10px] font-bold uppercase text-slate-600">Guest Meals</span>
+                             </div>
+                             <div className="flex items-center gap-3">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 rounded-full bg-white border shadow-sm" 
+                                  onClick={() => updateGuestCount(type.id as any, -1)}
+                                  disabled={!canChange || guestCount <= 0}
+                                >
+                                   <Users className="h-3 w-3" />
+                                </Button>
+                                <span className="text-sm font-black text-slate-800 w-4 text-center">{guestCount}</span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 rounded-full bg-white border shadow-sm" 
+                                  onClick={() => updateGuestCount(type.id as any, 1)}
+                                  disabled={!canChange || guestCount >= 10}
+                                >
+                                   <Plus className="h-3 w-3" />
+                                </Button>
+                             </div>
+                          </div>
+                        )}
 
                         {isChecked && isAvailable && options && (
                           <div className="pt-3 border-t border-success/10">
@@ -503,22 +560,23 @@ export default function StudentMealPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-primary">Monthly Counter</CardTitle></CardHeader>
+          <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-primary">Monthly Counter ({currentMonthConsumption.month})</CardTitle></CardHeader>
           <CardContent className="p-6">
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="grid grid-cols-5 gap-2 text-center">
                 <div className="bg-orange-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">B</p><p className="text-sm font-black">{currentMonthConsumption.breakfast}</p></div>
                 <div className="bg-success/5 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">L</p><p className="text-sm font-black">{currentMonthConsumption.lunch}</p></div>
                 <div className="bg-blue-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">D</p><p className="text-sm font-black">{currentMonthConsumption.dinner}</p></div>
+                <div className="bg-purple-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Guest</p><p className="text-sm font-black">{currentMonthConsumption.guest}</p></div>
                 <div className="bg-slate-900 text-white p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Total</p><p className="text-sm font-black">{currentMonthConsumption.total}</p></div>
             </div>
           </CardContent>
         </Card>
         
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-muted-foreground">Quick Info</CardTitle></CardHeader>
+          <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-muted-foreground">Guest Policy</CardTitle></CardHeader>
           <CardContent className="p-6 flex flex-col justify-center items-center text-center">
-             <Info size={24} className="text-primary mb-2 opacity-20" />
-             <p className="text-[9px] font-medium italic text-slate-400">Counters are cumulative for the month. Submitting updates for tomorrow will accurately adjust your monthly total.</p>
+             <Users size={24} className="text-primary mb-2 opacity-20" />
+             <p className="text-[9px] font-medium italic text-slate-400">আপনি গেস্টের জন্য অতিরিক্ত মিল অন করতে পারেন। গেস্ট মিলগুলো আপনার মাসিক মূল কাউন্টারে যোগ হবে এবং আলাদাভাবেও ট্র্যাক করা হবে।</p>
           </CardContent>
         </Card>
       </div>
