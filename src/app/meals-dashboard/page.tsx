@@ -22,7 +22,9 @@ import {
   Hash,
   ShoppingBag,
   ListOrdered,
-  Truck
+  Truck,
+  Calendar,
+  Soup
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -39,13 +41,14 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
 export default function AdminMealDashboardPage() {
   const db = useFirestore()
   const { toast } = useToast()
   const [userBranch, setUserBranch] = useState("")
   const [userRole, setUserRole] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
-  const [buildingFilter, setBuildingFilter] = useState("all")
   const [expandedBuilding, setExpandedBuilding] = useState<string | null>(null)
 
   useEffect(() => {
@@ -59,92 +62,141 @@ export default function AdminMealDashboardPage() {
   }, [db, userBranch])
   const { data: students, isLoading } = useCollection(studentsQuery)
 
-  const buildingsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch])
-  const { data: buildings } = useCollection(buildingsQuery)
+  const routineQuery = useMemoFirebase(() => collection(db, "mealRoutines"), [db])
+  const { data: routines } = useCollection(routineQuery)
 
-  // ADVANCED ANALYTICS LOGIC (INC. GUESTS FOR TOMORROW)
+  // CALCULATE TOMORROW'S CONTEXT (BD TIME)
+  const tomorrowContext = useMemo(() => {
+    const now = new Date()
+    // Manual offset for BD time if server is different, but here we assume local evaluation
+    const tomorrow = new Date(now)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    
+    const dayName = WEEKDAYS[tomorrow.getDay()]
+    const dateStr = tomorrow.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    const todayYMD = now.toLocaleDateString('en-CA') // YYYY-MM-DD
+    
+    return { dayName, dateStr, todayYMD }
+  }, [])
+
+  const tomorrowMenu = useMemo(() => {
+    if (!routines || !userBranch) return null
+    return routines.find(r => r.day === tomorrowContext.dayName && r.branch === userBranch)
+  }, [routines, userBranch, tomorrowContext.dayName])
+
+  // ADVANCED ANALYTICS LOGIC (EVALUATING AUTO MODE + MANUAL FOR TOMORROW)
   const mealStats = useMemo(() => {
     if (!students) return { 
       totals: { breakfast: 0, lunch: 0, dinner: 0, totalPlates: 0 },
-      choices: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number>, breakfast: {} as Record<string, number> },
+      choices: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> },
       buildingData: {} as Record<string, any>
     }
     
     let totals = { breakfast: 0, lunch: 0, dinner: 0, totalPlates: 0 }
-    let choices = { 
-      lunch: {} as Record<string, number>, 
-      dinner: {} as Record<string, number>, 
-      breakfast: {} as Record<string, number> 
-    }
+    let choices = { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> }
     let buildingData: Record<string, any> = {}
 
+    const { dayName, todayYMD } = tomorrowContext
+
     students.forEach(s => {
-      const isB = s.mealStatus?.breakfast || false
-      const isL = s.mealStatus?.lunch || false
-      const isD = s.mealStatus?.dinner || false
-      
+      // Evaluate if student will eat tomorrow
+      let willEatB = false
+      let willEatL = false
+      let willEatD = false
+      let choiceL = "Normal"
+      let choiceD = "Normal"
+
+      if (s.mealStatus?.autoMode) {
+        // AUTO MODE LOGIC: Look at the weekly schedule for tomorrow's day
+        const sched = s.weeklySchedule?.[dayName] || { breakfast: false, lunch: false, dinner: false }
+        willEatB = !!sched.breakfast
+        willEatL = !!sched.lunch
+        willEatD = !!sched.dinner
+        choiceL = sched.lunchChoice || "Normal"
+        choiceD = sched.dinnerChoice || "Normal"
+      } else if (s.lastMealUpdateDate === todayYMD) {
+        // MANUAL LOGIC: They updated today for tomorrow
+        willEatB = !!s.mealStatus?.breakfast
+        willEatL = !!s.mealStatus?.lunch
+        willEatD = !!s.mealStatus?.dinner
+        choiceL = s.mealChoices?.lunch || "Normal"
+        choiceD = s.mealChoices?.dinner || "Normal"
+      }
+
+      // Guest Meals are always specific to the next day update
       const gB = Number(s.tomorrowGuestMeals?.breakfast || 0);
       const gL = Number(s.tomorrowGuestMeals?.lunch || 0);
       const gD = Number(s.tomorrowGuestMeals?.dinner || 0);
 
-      const combinedB = (isB ? 1 : 0) + gB;
-      const combinedL = (isL ? 1 : 0) + gL;
-      const combinedD = (isD ? 1 : 0) + gD;
+      const combinedB = (willEatB ? 1 : 0) + gB;
+      const combinedL = (willEatL ? 1 : 0) + gL;
+      const combinedD = (willEatD ? 1 : 0) + gD;
 
-      totals.breakfast += combinedB;
-      totals.lunch += combinedL;
-      totals.dinner += combinedD;
-      totals.totalPlates += (combinedB + combinedL + combinedD);
-
-      const bId = s.buildingId || "unassigned"
-      const bName = s.buildingName || "Unassigned"
-      
-      if (!buildingData[bId]) {
-        buildingData[bId] = { 
-          id: bId, 
-          name: bName, 
-          breakfast: 0, lunch: 0, dinner: 0, 
-          rooms: {} as Record<string, any>,
-          choiceCounts: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> }
-        }
-      }
-
-      const bd = buildingData[bId]
-      bd.breakfast += combinedB;
-      bd.lunch += combinedL;
-      bd.dinner += combinedD;
-
-      if (combinedL > 0) {
-        const choice = s.mealChoices?.lunch || "Normal"
-        choices.lunch[choice] = (choices.lunch[choice] || 0) + combinedL
-        bd.choiceCounts.lunch[choice] = (bd.choiceCounts.lunch[choice] || 0) + combinedL
-      }
-      if (combinedD > 0) {
-        const choice = s.mealChoices?.dinner || "Normal"
-        choices.dinner[choice] = (choices.dinner[choice] || 0) + combinedD
-        bd.choiceCounts.dinner[choice] = (bd.choiceCounts.dinner[choice] || 0) + combinedD
-      }
-
-      // Room Level
-      const roomNo = s.roomNumber || "N/A"
-      if (!bd.rooms[roomNo]) bd.rooms[roomNo] = { roomNo, students: [] }
       if (combinedB > 0 || combinedL > 0 || combinedD > 0) {
-        bd.rooms[roomNo].students.push({
+        totals.breakfast += combinedB;
+        totals.lunch += combinedL;
+        totals.dinner += combinedD;
+        totals.totalPlates += (combinedB + combinedL + combinedD);
+
+        const bId = s.buildingId || "unassigned"
+        const bName = s.buildingName || "Unassigned"
+        
+        if (!buildingData[bId]) {
+          buildingData[bId] = { 
+            id: bId, 
+            name: bName, 
+            breakfast: 0, lunch: 0, dinner: 0, 
+            rooms: {} as Record<string, any>,
+            choiceCounts: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> }
+          }
+        }
+
+        const bd = buildingData[bId]
+        bd.breakfast += combinedB;
+        bd.lunch += combinedL;
+        bd.dinner += combinedD;
+
+        if (combinedL > 0) {
+          choices.lunch[choiceL] = (choices.lunch[choiceL] || 0) + combinedL
+          bd.choiceCounts.lunch[choiceL] = (bd.choiceCounts.lunch[choiceL] || 0) + combinedL
+        }
+        if (combinedD > 0) {
+          choices.dinner[choiceD] = (choices.dinner[choiceD] || 0) + combinedD
+          bd.choiceCounts.dinner[choiceD] = (bd.choiceCounts.dinner[choiceD] || 0) + combinedD
+        }
+
+        // Room Level Distribution for Delivery
+        const roomNo = s.roomNumber || "N/A"
+        if (!bd.rooms[roomNo]) {
+          bd.rooms[roomNo] = { 
+            roomNo, 
+            residents: [], 
+            roomTotals: { b: 0, l: 0, d: 0, guests: 0 } 
+          }
+        }
+        
+        const rd = bd.rooms[roomNo]
+        rd.roomTotals.b += combinedB
+        rd.roomTotals.l += combinedL
+        rd.roomTotals.d += combinedD
+        rd.roomTotals.guests += (gB + gL + gD)
+
+        rd.residents.push({
           id: s.id,
           name: s.name,
-          phone: s.phone,
-          status: s.mealStatus,
-          choices: s.mealChoices,
-          guestMeals: s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }
+          isSelfB: willEatB,
+          isSelfL: willEatL,
+          isSelfD: willEatD,
+          choiceL,
+          choiceD,
+          guests: s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 },
+          isAuto: !!s.mealStatus?.autoMode
         })
       }
     })
 
     return { totals, choices, buildingData }
-  }, [students])
+  }, [students, tomorrowContext])
 
   const canOverride = userRole === 'Admin' || userRole === 'Branch Manager';
 
@@ -158,9 +210,10 @@ export default function AdminMealDashboardPage() {
       await updateDoc(sRef, {
         [`mealStatus.${mealId}`]: !currentVal,
         [counterField]: increment(!currentVal ? 1 : -1),
+        lastMealUpdateDate: tomorrowContext.todayYMD, // Mark as updated today
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled.` });
+      toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled for tomorrow.` });
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
   }
 
@@ -169,89 +222,189 @@ export default function AdminMealDashboardPage() {
   if (isLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase">Kitchen Syncing...</p></div>
 
   return (
-    <div className="space-y-8 pb-20 w-full">
+    <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
+      {/* Header */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
-          <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Analytics</h1></div>
+          <div>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Kitchen Dashboard</h1>
+            <p className="hidden md:block text-muted-foreground font-medium text-xs mt-1">
+              Preparing for <span className="font-bold text-foreground">Tomorrow, {tomorrowContext.dayName} ({tomorrowContext.dateStr})</span>
+            </p>
+          </div>
         </div>
         <div className="ml-auto">
            <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary" onClick={handlePrint}>
-              <Printer size={16}/> <span className="hidden sm:inline">Print Distribution</span>
+              <Printer size={16}/> <span className="hidden sm:inline">Print Distribution List</span>
            </Button>
         </div>
       </div>
 
+      {/* PRINT ONLY HEADER */}
+      <div className="hidden print:block text-center space-y-2 mb-8 border-b-2 border-slate-900 pb-4">
+         <h1 className="text-3xl font-black uppercase">Somikoron Hostel Kitchen</h1>
+         <p className="text-lg font-bold">Meal Distribution Sheet: {tomorrowContext.dayName}, {tomorrowContext.dateStr}</p>
+         <div className="flex justify-center gap-8 mt-2 text-sm font-bold">
+            <span>B: {mealStats.totals.breakfast}</span>
+            <span>L: {mealStats.totals.lunch}</span>
+            <span>D: {mealStats.totals.dinner}</span>
+         </div>
+      </div>
+
       <Tabs defaultValue="summary" className="w-full print:hidden">
         <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl w-full max-w-md mx-auto grid grid-cols-2">
-          <TabsTrigger value="summary" className="rounded-xl gap-2 font-bold h-10">Kitchen Summary</TabsTrigger>
-          <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Toggle</TabsTrigger>
+          <TabsTrigger value="summary" className="rounded-xl gap-2 font-bold h-10">Kitchen Prep</TabsTrigger>
+          <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Override</TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary" className="space-y-8 animate-in fade-in duration-500">
+          {/* Main Counters with Tomorrow's Menu */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl"><CardContent className="pt-6 flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground">Breakfast (Inc. Guests)</p><h2 className="text-3xl font-black">{mealStats.totals.breakfast}</h2></div><Utensils size={24} className="text-orange-500"/></CardContent></Card>
-            <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl"><CardContent className="pt-6 flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground">Lunch (Inc. Guests)</p><h2 className="text-3xl font-black">{mealStats.totals.lunch}</h2></div><ChefHat size={24} className="text-success"/></CardContent></Card>
-            <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl"><CardContent className="pt-6 flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground">Dinner (Inc. Guests)</p><h2 className="text-3xl font-black">{mealStats.totals.dinner}</h2></div><ShoppingBag size={24} className="text-blue-500"/></CardContent></Card>
+            <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl group hover:shadow-md transition-all">
+              <CardContent className="pt-6">
+                 <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Breakfast Tomorrow</p>
+                       <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.breakfast}</h2>
+                       <p className="text-[10px] font-bold text-orange-600 flex items-center gap-1">
+                          <Soup size={10}/> {tomorrowMenu?.breakfast || 'Menu not set'}
+                       </p>
+                    </div>
+                    <div className="bg-orange-50 p-3 rounded-2xl text-orange-500"><Utensils size={24}/></div>
+                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl group hover:shadow-md transition-all">
+              <CardContent className="pt-6">
+                 <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Lunch Tomorrow</p>
+                       <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.lunch}</h2>
+                       <p className="text-[10px] font-bold text-success flex items-center gap-1">
+                          <ChefHat size={10}/> {tomorrowMenu?.lunch || 'Menu not set'}
+                       </p>
+                    </div>
+                    <div className="bg-success/5 p-3 rounded-2xl text-success"><ChefHat size={24}/></div>
+                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl group hover:shadow-md transition-all">
+              <CardContent className="pt-6">
+                 <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Dinner Tomorrow</p>
+                       <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.dinner}</h2>
+                       <p className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
+                          <ShoppingBag size={10}/> {tomorrowMenu?.dinner || 'Menu not set'}
+                       </p>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-2xl text-blue-500"><ShoppingBag size={24}/></div>
+                 </div>
+              </CardContent>
+            </Card>
           </div>
 
+          {/* Choice Breakdown */}
           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
              <div className="space-y-4">
-                <div className="text-[10px] font-black uppercase text-success tracking-widest border-b border-white/10 pb-2">Lunch Prep Counts</div>
+                <div className="text-[10px] font-black uppercase text-success tracking-[0.3em] border-b border-white/10 pb-2">Lunch Prep Breakdown</div>
                 <div className="grid grid-cols-2 gap-4">
-                  {Object.entries(mealStats.choices.lunch).map(([choice, count]) => (
-                    <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center"><span className="text-sm font-bold text-white/80">{choice}</span><span className="text-2xl font-black text-success">{count}</span></div>
-                  ))}
+                  {Object.entries(mealStats.choices.lunch).length > 0 ? Object.entries(mealStats.choices.lunch).map(([choice, count]) => (
+                    <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center shadow-inner">
+                       <span className="text-xs font-bold text-white/80">{choice}</span>
+                       <span className="text-2xl font-black text-success">{count}</span>
+                    </div>
+                  )) : <p className="text-xs text-white/40 italic">No custom choices requested.</p>}
                 </div>
              </div>
              <div className="space-y-4">
-                <div className="text-[10px] font-black uppercase text-blue-400 tracking-widest border-b border-white/10 pb-2">Dinner Prep Counts</div>
+                <div className="text-[10px] font-black uppercase text-blue-400 tracking-[0.3em] border-b border-white/10 pb-2">Dinner Prep Breakdown</div>
                 <div className="grid grid-cols-2 gap-4">
-                  {Object.entries(mealStats.choices.dinner).map(([choice, count]) => (
-                    <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center"><span className="text-sm font-bold text-white/80">{choice}</span><span className="text-2xl font-black text-blue-400">{count}</span></div>
-                  ))}
+                  {Object.entries(mealStats.choices.dinner).length > 0 ? Object.entries(mealStats.choices.dinner).map(([choice, count]) => (
+                    <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center shadow-inner">
+                       <span className="text-xs font-bold text-white/80">{choice}</span>
+                       <span className="text-2xl font-black text-blue-400">{count}</span>
+                    </div>
+                  )) : <p className="text-xs text-white/40 italic">No custom choices requested.</p>}
                 </div>
              </div>
           </Card>
 
-          <div className="space-y-4">
-            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight"><Building2 size={24} className="text-primary"/> Distribution Sheet (Student + Guest)</h2>
-            {Object.values(mealStats.buildingData).map((b: any) => (
-              <Card key={b.id} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => setExpandedBuilding(expandedBuilding === b.id ? null : b.id)}>
-                  <div className="flex items-center gap-4"><div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black shadow-sm">{b.name.substring(0, 2).toUpperCase()}</div><h3 className="text-xl font-black text-slate-800">{b.name}</h3></div>
-                  <div className="flex gap-4">
-                     <Badge className="bg-orange-50 text-orange-600 border-none font-black">B: {b.breakfast}</Badge>
-                     <Badge className="bg-success/5 text-success border-none font-black">L: {b.lunch}</Badge>
-                     <Badge className="bg-blue-50 text-blue-600 border-none font-black">D: {b.dinner}</Badge>
+          {/* Delivery & Distribution Sheet */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+               <h2 className="text-xl font-black text-slate-800 flex items-center gap-3 uppercase tracking-tight">
+                 <Truck size={24} className="text-primary"/> Delivery Distribution Sheet
+               </h2>
+               <p className="text-[10px] font-bold text-muted-foreground uppercase">Click building to view room details</p>
+            </div>
+            
+            {Object.values(mealStats.buildingData).sort((a,b) => a.name.localeCompare(b.name)).map((b: any) => (
+              <Card key={b.id} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden border-t-4 border-t-primary/10">
+                <div 
+                  className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 cursor-pointer hover:bg-slate-50 transition-colors" 
+                  onClick={() => setExpandedBuilding(expandedBuilding === b.id ? null : b.id)}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black shadow-sm text-lg">
+                      {b.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-slate-800">{b.name}</h3>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Building Total Delivery</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                     <Badge className="bg-orange-50 text-orange-600 border-none font-black h-8 px-4 text-xs">B: {b.breakfast}</Badge>
+                     <Badge className="bg-success/5 text-success border-none font-black h-8 px-4 text-xs">L: {b.lunch}</Badge>
+                     <Badge className="bg-blue-50 text-blue-600 border-none font-black h-8 px-4 text-xs">D: {b.dinner}</Badge>
+                     <div className="bg-slate-100 h-8 w-8 rounded-xl flex items-center justify-center text-slate-400">
+                        {expandedBuilding === b.id ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
+                     </div>
                   </div>
                 </div>
+
                 {expandedBuilding === b.id && (
-                  <div className="border-t">
+                  <div className="border-t animate-in slide-in-from-top-2 duration-300">
                     <Table>
-                      <TableHeader className="bg-slate-50/50"><TableRow><TableHead>Room</TableHead><TableHead>Name</TableHead><TableHead className="text-center">B (+G)</TableHead><TableHead className="text-center">L (+G)</TableHead><TableHead className="text-center">D (+G)</TableHead></TableRow></TableHeader>
+                      <TableHeader className="bg-slate-50/50">
+                        <TableRow className="border-none">
+                          <TableHead className="font-black uppercase text-[10px] w-20">Room</TableHead>
+                          <TableHead className="font-black uppercase text-[10px]">Resident(s)</TableHead>
+                          <TableHead className="font-black uppercase text-[10px] text-center">Breakfast</TableHead>
+                          <TableHead className="font-black uppercase text-[10px] text-center">Lunch</TableHead>
+                          <TableHead className="font-black uppercase text-[10px] text-center">Dinner</TableHead>
+                          <TableHead className="font-black uppercase text-[10px] text-right">Guests</TableHead>
+                        </TableRow>
+                      </TableHeader>
                       <TableBody>
-                         {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => room.students.map((s: any, idx: number) => (
-                           <TableRow key={s.id} className="hover:bg-slate-50/30">
-                              <TableCell className="font-black text-primary">{idx === 0 ? `R-${room.roomNo}` : ""}</TableCell>
-                              <TableCell><p className="font-bold text-xs">{s.name}</p><p className="text-[9px] text-muted-foreground">{s.phone}</p></TableCell>
-                              <TableCell className="text-center">
-                                 {s.status?.breakfast ? <span className="font-black text-xs text-orange-600">1</span> : <span className="text-slate-200">0</span>}
-                                 {s.guestMeals?.breakfast > 0 && <span className="text-[10px] font-black text-primary ml-1">+{s.guestMeals.breakfast}G</span>}
+                         {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
+                           <TableRow key={room.roomNo} className="hover:bg-slate-50/30 border-b border-dashed last:border-none">
+                              <TableCell className="font-black text-primary py-4">R-{room.roomNo}</TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  {room.residents.map((r: any) => (
+                                    <div key={r.id} className="flex items-center gap-2">
+                                       <span className="text-xs font-bold text-slate-700">{r.name}</span>
+                                       {r.isAuto && <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 text-primary uppercase font-bold">Auto</Badge>}
+                                    </div>
+                                  ))}
+                                </div>
                               </TableCell>
-                              <TableCell className="text-center">
-                                 {s.status?.lunch ? <span className="font-black text-xs text-success">1</span> : <span className="text-slate-200">0</span>}
-                                 {s.guestMeals?.lunch > 0 && <span className="text-[10px] font-black text-primary ml-1">+{s.guestMeals.lunch}G</span>}
-                                 {s.status?.lunch && <p className="text-[8px] font-bold uppercase opacity-60">{s.choices?.lunch || 'Normal'}</p>}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                 {s.status?.dinner ? <span className="font-black text-xs text-blue-600">1</span> : <span className="text-slate-200">0</span>}
-                                 {s.guestMeals?.dinner > 0 && <span className="text-[10px] font-black text-primary ml-1">+{s.guestMeals.dinner}G</span>}
-                                 {s.status?.dinner && <p className="text-[8px] font-bold uppercase opacity-60">{s.choices?.dinner || 'Normal'}</p>}
+                              <TableCell className="text-center font-black text-orange-600">{room.roomTotals.b || '-'}</TableCell>
+                              <TableCell className="text-center font-black text-success">{room.roomTotals.l || '-'}</TableCell>
+                              <TableCell className="text-center font-black text-blue-600">{room.roomTotals.d || '-'}</TableCell>
+                              <TableCell className="text-right">
+                                 {room.roomTotals.guests > 0 ? (
+                                   <Badge className="bg-primary text-[10px] font-black">{room.roomTotals.guests}G</Badge>
+                                 ) : <span className="text-slate-200">-</span>}
                               </TableCell>
                            </TableRow>
-                         )))}
+                         ))}
                       </TableBody>
                     </Table>
                   </div>
@@ -264,19 +417,46 @@ export default function AdminMealDashboardPage() {
         <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300">
            <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
               <CardHeader className="bg-slate-50/50 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                 <div><CardTitle className="text-lg">Override Control</CardTitle><CardDescription>Force toggle student meals only.</CardDescription></div>
-                 <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." className="pl-10 h-10 border-none bg-white rounded-xl" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
+                 <div>
+                   <CardTitle className="text-lg">Meal Override (Tomorrow)</CardTitle>
+                   <CardDescription>Manually toggle meals for specific students for tomorrow.</CardDescription>
+                 </div>
+                 <div className="relative">
+                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                   <Input placeholder="Search name or room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                 </div>
               </CardHeader>
               <CardContent className="p-0 h-[600px] overflow-y-auto">
                  <Table>
                     <TableBody>
-                       {students?.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map(s => (
+                       {students?.filter(s => 
+                          s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          String(s.roomNumber).includes(searchTerm)
+                       ).map(s => (
                          <TableRow key={s.id} className="border-b">
-                            <TableCell className="py-4"><div className="flex items-center gap-3"><div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div><p className="font-black text-slate-800 text-xs">{s.name}</p></div></TableCell>
+                            <TableCell className="py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div>
+                                <div>
+                                  <p className="font-black text-slate-800 text-xs">{s.name}</p>
+                                  <p className="text-[8px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+                                </div>
+                              </div>
+                            </TableCell>
                             <TableCell className="text-right">
                                <div className="flex gap-2 justify-end">
                                   {['breakfast', 'lunch', 'dinner'].map(m => (
-                                    <button key={m} onClick={() => handleToggleMeal(s, m)} disabled={!canOverride} className={cn("h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all", s.mealStatus?.[m] ? "bg-primary text-white" : "bg-slate-100 text-slate-300")}>{m.charAt(0).toUpperCase()}</button>
+                                    <button 
+                                      key={m} 
+                                      onClick={() => handleToggleMeal(s, m)} 
+                                      disabled={!canOverride} 
+                                      className={cn(
+                                        "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
+                                        s.mealStatus?.[m] ? "bg-primary text-white" : "bg-slate-100 text-slate-300"
+                                      )}
+                                    >
+                                      {m.charAt(0).toUpperCase()}
+                                    </button>
                                   ))}
                                </div>
                             </TableCell>
@@ -288,6 +468,50 @@ export default function AdminMealDashboardPage() {
            </Card>
         </TabsContent>
       </Tabs>
+
+      {/* PRINT VERSION (HIDDEN ON SCREEN) */}
+      <div className="hidden print:block space-y-8">
+        {Object.values(mealStats.buildingData).sort((a,b) => a.name.localeCompare(b.name)).map((b: any) => (
+          <div key={b.id} className="space-y-4 break-after-page">
+             <div className="bg-slate-100 p-4 rounded-lg flex justify-between items-center">
+                <h3 className="text-xl font-bold">{b.name}</h3>
+                <div className="flex gap-4 font-bold text-sm">
+                   <span>B: {b.breakfast}</span>
+                   <span>L: {b.lunch}</span>
+                   <span>D: {b.dinner}</span>
+                </div>
+             </div>
+             <table className="w-full border-collapse border border-slate-300">
+                <thead>
+                   <tr className="bg-slate-50">
+                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">Room</th>
+                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">B</th>
+                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">L</th>
+                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">D</th>
+                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">G</th>
+                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">Notes</th>
+                   </tr>
+                </thead>
+                <tbody>
+                   {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
+                     <tr key={room.roomNo}>
+                        <td className="border border-slate-300 p-2 font-black text-sm">R-{room.roomNo}</td>
+                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.b || '-'}</td>
+                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.l || '-'}</td>
+                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.d || '-'}</td>
+                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.guests || '-'}</td>
+                        <td className="border border-slate-300 p-2 text-[10px]">
+                           {room.residents.filter((r:any) => r.choiceL !== 'Normal' || r.choiceD !== 'Normal').map((r:any) => 
+                             `${r.name.split(' ')[0]}: L-${r.choiceL}, D-${r.choiceD}`
+                           ).join('; ')}
+                        </td>
+                     </tr>
+                   ))}
+                </tbody>
+             </table>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
