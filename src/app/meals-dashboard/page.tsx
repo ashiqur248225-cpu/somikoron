@@ -65,15 +65,15 @@ export default function AdminMealDashboardPage() {
   }, [db, userBranch])
   const { data: buildings } = useCollection(buildingsQuery)
 
-  // ADVANCED ANALYTICS LOGIC
+  // ADVANCED ANALYTICS LOGIC (INC. GUESTS FOR TOMORROW)
   const mealStats = useMemo(() => {
     if (!students) return { 
-      totals: { breakfast: 0, lunch: 0, dinner: 0 },
+      totals: { breakfast: 0, lunch: 0, dinner: 0, totalPlates: 0 },
       choices: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number>, breakfast: {} as Record<string, number> },
       buildingData: {} as Record<string, any>
     }
     
-    let totals = { breakfast: 0, lunch: 0, dinner: 0 }
+    let totals = { breakfast: 0, lunch: 0, dinner: 0, totalPlates: 0 }
     let choices = { 
       lunch: {} as Record<string, number>, 
       dinner: {} as Record<string, number>, 
@@ -85,10 +85,19 @@ export default function AdminMealDashboardPage() {
       const isB = s.mealStatus?.breakfast || false
       const isL = s.mealStatus?.lunch || false
       const isD = s.mealStatus?.dinner || false
+      
+      const gB = Number(s.tomorrowGuestMeals?.breakfast || 0);
+      const gL = Number(s.tomorrowGuestMeals?.lunch || 0);
+      const gD = Number(s.tomorrowGuestMeals?.dinner || 0);
 
-      if (isB) totals.breakfast++
-      if (isL) totals.lunch++
-      if (isD) totals.dinner++
+      const combinedB = (isB ? 1 : 0) + gB;
+      const combinedL = (isL ? 1 : 0) + gL;
+      const combinedD = (isD ? 1 : 0) + gD;
+
+      totals.breakfast += combinedB;
+      totals.lunch += combinedL;
+      totals.dinner += combinedD;
+      totals.totalPlates += (combinedB + combinedL + combinedD);
 
       const bId = s.buildingId || "unassigned"
       const bName = s.buildingName || "Unassigned"
@@ -104,51 +113,38 @@ export default function AdminMealDashboardPage() {
       }
 
       const bd = buildingData[bId]
-      if (isB) bd.breakfast++
-      if (isL) {
-        bd.lunch++
+      bd.breakfast += combinedB;
+      bd.lunch += combinedL;
+      bd.dinner += combinedD;
+
+      if (combinedL > 0) {
         const choice = s.mealChoices?.lunch || "Normal"
-        choices.lunch[choice] = (choices.lunch[choice] || 0) + 1
-        bd.choiceCounts.lunch[choice] = (bd.choiceCounts.lunch[choice] || 0) + 1
+        choices.lunch[choice] = (choices.lunch[choice] || 0) + combinedL
+        bd.choiceCounts.lunch[choice] = (bd.choiceCounts.lunch[choice] || 0) + combinedL
       }
-      if (isD) {
-        bd.dinner++
+      if (combinedD > 0) {
         const choice = s.mealChoices?.dinner || "Normal"
-        choices.dinner[choice] = (choices.dinner[choice] || 0) + 1
-        bd.choiceCounts.dinner[choice] = (bd.choiceCounts.dinner[choice] || 0) + 1
+        choices.dinner[choice] = (choices.dinner[choice] || 0) + combinedD
+        bd.choiceCounts.dinner[choice] = (bd.choiceCounts.dinner[choice] || 0) + combinedD
       }
 
       // Room Level
       const roomNo = s.roomNumber || "N/A"
       if (!bd.rooms[roomNo]) bd.rooms[roomNo] = { roomNo, students: [] }
-      if (isB || isL || isD) {
+      if (combinedB > 0 || combinedL > 0 || combinedD > 0) {
         bd.rooms[roomNo].students.push({
           id: s.id,
           name: s.name,
           phone: s.phone,
           status: s.mealStatus,
           choices: s.mealChoices,
-          delivered: s.mealDelivered || {}
+          guestMeals: s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }
         })
       }
     })
 
     return { totals, choices, buildingData }
   }, [students])
-
-  // MANAGER TAB SPECIFIC ANALYTICS
-  const managerStats = useMemo(() => {
-    if (!students || buildingFilter === "all") return null;
-    let b = 0, l = 0, d = 0;
-    students.forEach(s => {
-      if (s.buildingId === buildingFilter && s.isActive) {
-        if (s.mealStatus?.breakfast) b++;
-        if (s.mealStatus?.lunch) l++;
-        if (s.mealStatus?.dinner) d++;
-      }
-    });
-    return { b, l, d };
-  }, [students, buildingFilter]);
 
   const canOverride = userRole === 'Admin' || userRole === 'Branch Manager';
 
@@ -157,7 +153,6 @@ export default function AdminMealDashboardPage() {
     try {
       const currentVal = !!student.mealStatus?.[mealId];
       const sRef = doc(db, "students", student.id);
-      
       const counterField = `currentMonth${mealId.charAt(0).toUpperCase() + mealId.slice(1)}`;
       
       await updateDoc(sRef, {
@@ -165,40 +160,13 @@ export default function AdminMealDashboardPage() {
         [counterField]: increment(!currentVal ? 1 : -1),
         updatedAt: serverTimestamp()
       });
-      
-      toast({ 
-        title: "Status Updated", 
-        description: `${student.name}'s ${mealId} is now ${!currentVal ? 'ON' : 'OFF'}. Billing counter adjusted.` 
-      });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message });
-    }
+      toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled.` });
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
   }
 
-  const handleToggleDelivery = async (studentId: string, mealId: string, currentVal: boolean) => {
-    try {
-      const sRef = doc(db, "students", studentId)
-      await updateDoc(sRef, {
-        [`mealDelivered.${mealId}`]: !currentVal,
-        updatedAt: serverTimestamp()
-      })
-    } catch (e) {
-      console.error(e)
-    }
-  }
+  const handlePrint = () => { if (typeof window !== "undefined") window.print(); }
 
-  const handlePrint = () => {
-    if (typeof window !== "undefined") {
-      window.print();
-    }
-  }
-
-  if (isLoading) return (
-    <div className="flex flex-col items-center justify-center p-20 gap-4">
-      <Loader2 className="animate-spin h-10 w-10 text-primary" />
-      <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Syncing Kitchen Data...</p>
-    </div>
-  )
+  if (isLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase">Kitchen Syncing...</p></div>
 
   return (
     <div className="space-y-8 pb-20 w-full">
@@ -206,515 +174,120 @@ export default function AdminMealDashboardPage() {
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
-          <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Analytics</h1>
-            <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">Catering & Delivery management for <span className="font-bold text-foreground">{userBranch}</span>.</p>
-          </div>
+          <div><h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Analytics</h1></div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-           <Button variant="outline" size="sm" className="gap-2 font-bold rounded-xl h-10 border-primary/20 text-primary" onClick={handlePrint}>
-              <Printer size={16}/> <span className="hidden sm:inline">Print Delivery Sheet</span>
+        <div className="ml-auto">
+           <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary" onClick={handlePrint}>
+              <Printer size={16}/> <span className="hidden sm:inline">Print Distribution</span>
            </Button>
         </div>
       </div>
 
-      {/* PRINT ONLY HEADER */}
-      <div className="hidden print:block text-center border-b-2 border-primary pb-4 mb-6">
-         <h1 className="text-3xl font-black text-primary uppercase">সমীকরণ ছাত্রাবাস</h1>
-         <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">{userBranch} • Daily Food Distribution Sheet</p>
-         <p className="text-xs font-medium mt-2">Date: {new Date().toLocaleDateString('en-IN', { dateStyle: 'full' })}</p>
-      </div>
-
       <Tabs defaultValue="summary" className="w-full print:hidden">
         <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl w-full max-w-md mx-auto grid grid-cols-2">
-          <TabsTrigger value="summary" className="rounded-xl gap-2 h-10 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
-            <ClipboardList size={14}/> Kitchen Overview
-          </TabsTrigger>
-          <TabsTrigger value="manager" className="rounded-xl gap-2 h-10 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
-            <Users size={14}/> Manual Override
-          </TabsTrigger>
+          <TabsTrigger value="summary" className="rounded-xl gap-2 font-bold h-10">Kitchen Summary</TabsTrigger>
+          <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Toggle</TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary" className="space-y-8 animate-in fade-in duration-500">
-          {/* Main Totals */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl">
-              <CardContent className="pt-6 flex justify-between items-center">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Breakfast Total</p>
-                  <h2 className="text-3xl font-black text-slate-800">{mealStats.totals.breakfast}</h2>
-                </div>
-                <div className="h-12 w-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center"><Utensils size={24}/></div>
-              </CardContent>
-            </Card>
-            <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl">
-              <CardContent className="pt-6 flex justify-between items-center">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Lunch Total</p>
-                  <h2 className="text-3xl font-black text-slate-800">{mealStats.totals.lunch}</h2>
-                </div>
-                <div className="h-12 w-12 rounded-2xl bg-success/5 text-success flex items-center justify-center"><ChefHat size={24}/></div>
-              </CardContent>
-            </Card>
-            <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl">
-              <CardContent className="pt-6 flex justify-between items-center">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Dinner Total</p>
-                  <h2 className="text-3xl font-black text-slate-800">{mealStats.totals.dinner}</h2>
-                </div>
-                <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center"><ShoppingBag size={24}/></div>
-              </CardContent>
-            </Card>
+            <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl"><CardContent className="pt-6 flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground">Breakfast (Inc. Guests)</p><h2 className="text-3xl font-black">{mealStats.totals.breakfast}</h2></div><Utensils size={24} className="text-orange-500"/></CardContent></Card>
+            <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl"><CardContent className="pt-6 flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground">Lunch (Inc. Guests)</p><h2 className="text-3xl font-black">{mealStats.totals.lunch}</h2></div><ChefHat size={24} className="text-success"/></CardContent></Card>
+            <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl"><CardContent className="pt-6 flex justify-between items-center"><div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground">Dinner (Inc. Guests)</p><h2 className="text-3xl font-black">{mealStats.totals.dinner}</h2></div><ShoppingBag size={24} className="text-blue-500"/></CardContent></Card>
           </div>
 
-          {/* Cooking Breakdown (Choice Counts) */}
-          <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-8 opacity-10"><Utensils size={120}/></div>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/10 rounded-xl"><ListOrdered size={20}/></div>
-                <div>
-                  <CardTitle className="text-lg">Kitchen Production Summary</CardTitle>
-                  <CardDescription className="text-white/40">Item-wise breakdown for cooking.</CardDescription>
+          <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+             <div className="space-y-4">
+                <div className="text-[10px] font-black uppercase text-success tracking-widest border-b border-white/10 pb-2">Lunch Prep Counts</div>
+                <div className="grid grid-cols-2 gap-4">
+                  {Object.entries(mealStats.choices.lunch).map(([choice, count]) => (
+                    <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center"><span className="text-sm font-bold text-white/80">{choice}</span><span className="text-2xl font-black text-success">{count}</span></div>
+                  ))}
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-               <div className="space-y-4">
-                  <div className="text-[10px] font-black uppercase text-success tracking-widest border-b border-white/10 pb-2 flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-success"/> Lunch Prep
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {Object.entries(mealStats.choices.lunch).length > 0 ? Object.entries(mealStats.choices.lunch).map(([choice, count]) => (
-                      <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center">
-                        <span className="text-sm font-bold text-white/80">{choice}</span>
-                        <span className="text-2xl font-black text-success">{count}</span>
-                      </div>
-                    )) : <p className="text-xs text-white/30 italic col-span-2">No lunch data logged today.</p>}
-                  </div>
-               </div>
-               <div className="space-y-4">
-                  <div className="text-[10px] font-black uppercase text-blue-400 tracking-widest border-b border-white/10 pb-2 flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400"/> Dinner Prep
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {Object.entries(mealStats.choices.dinner).length > 0 ? Object.entries(mealStats.choices.dinner).map(([choice, count]) => (
-                      <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center">
-                        <span className="text-sm font-bold text-white/80">{choice}</span>
-                        <span className="text-2xl font-black text-blue-400">{count}</span>
-                      </div>
-                    )) : <p className="text-xs text-white/30 italic col-span-2">No dinner data logged today.</p>}
-                  </div>
-               </div>
-            </CardContent>
+             </div>
+             <div className="space-y-4">
+                <div className="text-[10px] font-black uppercase text-blue-400 tracking-widest border-b border-white/10 pb-2">Dinner Prep Counts</div>
+                <div className="grid grid-cols-2 gap-4">
+                  {Object.entries(mealStats.choices.dinner).map(([choice, count]) => (
+                    <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center"><span className="text-sm font-bold text-white/80">{choice}</span><span className="text-2xl font-black text-blue-400">{count}</span></div>
+                  ))}
+                </div>
+             </div>
           </Card>
 
-          {/* Building Distribution List */}
           <div className="space-y-4">
-            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight">
-              <Building2 size={24} className="text-primary"/> Distribution Sheet
-            </h2>
-            <div className="grid grid-cols-1 gap-6">
-              {Object.values(mealStats.buildingData).map((b: any) => (
-                <Card key={b.id} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden group">
-                  <div 
-                    className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 cursor-pointer hover:bg-slate-50 transition-colors"
-                    onClick={() => setExpandedBuilding(expandedBuilding === b.id ? null : b.id)}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black shadow-sm">
-                        {b.name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-black text-slate-800 leading-none">{b.name}</h3>
-                        <div className="flex gap-4 mt-2">
-                           <Badge variant="outline" className="text-[9px] font-black uppercase bg-orange-50/50 border-orange-200 text-orange-600">B: {b.breakfast}</Badge>
-                           <Badge variant="outline" className="text-[9px] font-black uppercase bg-success/5 border-success/20 text-success">L: {b.lunch}</Badge>
-                           <Badge variant="outline" className="text-[9px] font-black uppercase bg-blue-50/50 border-blue-200 text-blue-600">D: {b.dinner}</Badge>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 w-full md:w-auto">
-                       <div className="flex-1 md:text-right">
-                          <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Lunch Choices</p>
-                          <div className="flex gap-2 justify-end mt-1">
-                             {Object.entries(b.choiceCounts.lunch).map(([choice, count]: any) => (
-                               <span key={choice} className="text-[10px] font-bold text-slate-500">
-                                 {choice}: <b className="text-slate-800">{count}</b>
-                               </span>
-                             ))}
-                          </div>
-                       </div>
-                       <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full group-hover:bg-white shadow-sm border border-transparent group-hover:border-slate-100 transition-all">
-                          {expandedBuilding === b.id ? <ChevronUp /> : <ChevronDown />}
-                       </Button>
-                    </div>
+            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight"><Building2 size={24} className="text-primary"/> Distribution Sheet (Student + Guest)</h2>
+            {Object.values(mealStats.buildingData).map((b: any) => (
+              <Card key={b.id} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
+                <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => setExpandedBuilding(expandedBuilding === b.id ? null : b.id)}>
+                  <div className="flex items-center gap-4"><div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black shadow-sm">{b.name.substring(0, 2).toUpperCase()}</div><h3 className="text-xl font-black text-slate-800">{b.name}</h3></div>
+                  <div className="flex gap-4">
+                     <Badge className="bg-orange-50 text-orange-600 border-none font-black">B: {b.breakfast}</Badge>
+                     <Badge className="bg-success/5 text-success border-none font-black">L: {b.lunch}</Badge>
+                     <Badge className="bg-blue-50 text-blue-600 border-none font-black">D: {b.dinner}</Badge>
                   </div>
-
-                  {expandedBuilding === b.id && (
-                    <div className="border-t animate-in slide-in-from-top-2 duration-300">
-                       {/* Desktop View */}
-                       <div className="hidden md:block">
-                         <Table>
-                            <TableHeader className="bg-slate-50/50">
-                               <TableRow>
-                                  <TableHead className="w-24">Room</TableHead>
-                                  <TableHead>Student Name</TableHead>
-                                  <TableHead className="text-center">B</TableHead>
-                                  <TableHead className="text-center">Lunch Choice</TableHead>
-                                  <TableHead className="text-center">Dinner Choice</TableHead>
-                               </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                               {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
-                                 room.students.map((s: any, idx: number) => (
-                                   <TableRow key={s.id} className={cn("hover:bg-slate-50/30", idx === 0 && "border-t-2 border-slate-100")}>
-                                      <TableCell className="font-black text-primary py-4">{idx === 0 ? `R-${room.roomNo}` : ""}</TableCell>
-                                      <TableCell>
-                                         <p className="font-bold text-slate-800 text-xs">{s.name}</p>
-                                         <p className="text-[10px] text-muted-foreground">{s.phone}</p>
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                         {s.status?.breakfast ? <CheckCircle2 className="text-success h-4 w-4 mx-auto" /> : <XCircle className="text-slate-200 h-4 w-4 mx-auto" />}
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                         {s.status?.lunch ? (
-                                           <Badge className="bg-success/10 text-success border-success/20 text-[8px] font-black h-5 px-2">
-                                             {s.choices?.lunch || 'NORMAL'}
-                                           </Badge>
-                                         ) : <span className="text-[8px] font-black text-slate-300">OFF</span>}
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                         {s.status?.dinner ? (
-                                           <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-[8px] font-black h-5 px-2">
-                                             {s.choices?.dinner || 'NORMAL'}
-                                           </Badge>
-                                         ) : <span className="text-[8px] font-black text-slate-300">OFF</span>}
-                                      </TableCell>
-                                   </TableRow>
-                                 ))
-                               ))}
-                            </TableBody>
-                         </Table>
-                       </div>
-                       {/* Mobile View */}
-                       <div className="md:hidden divide-y">
-                          {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
-                            room.students.map((s: any) => (
-                              <div key={s.id} className="p-4 space-y-3">
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                     <p className="text-[10px] font-black text-primary uppercase tracking-widest">Room {room.roomNo}</p>
-                                     <h4 className="font-bold text-slate-800 text-sm">{s.name}</h4>
-                                  </div>
-                                  <div className="flex gap-1">
-                                     {s.status?.breakfast && <Badge className="bg-orange-100 text-orange-600 border-none text-[8px] h-4">B</Badge>}
-                                     {s.status?.lunch && <Badge className="bg-success/10 text-success border-none text-[8px] h-4">L</Badge>}
-                                     {s.status?.dinner && <Badge className="bg-blue-50 text-blue-600 border-none text-[8px] h-4">D</Badge>}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                   <div className="bg-slate-50 p-2 rounded-lg">
-                                      <p className="text-[7px] uppercase font-bold text-muted-foreground">Lunch</p>
-                                      <p className="text-[9px] font-black">{s.status?.lunch ? (s.choices?.lunch || 'NORMAL') : 'OFF'}</p>
-                                   </div>
-                                   <div className="bg-slate-50 p-2 rounded-lg">
-                                      <p className="text-[7px] uppercase font-bold text-muted-foreground">Dinner</p>
-                                      <p className="text-[9px] font-black">{s.status?.dinner ? (s.choices?.dinner || 'NORMAL') : 'OFF'}</p>
-                                   </div>
-                                </div>
-                              </div>
-                            ))
-                          ))}
-                       </div>
-                    </div>
-                  )}
-                </Card>
-              ))}
-            </div>
+                </div>
+                {expandedBuilding === b.id && (
+                  <div className="border-t">
+                    <Table>
+                      <TableHeader className="bg-slate-50/50"><TableRow><TableHead>Room</TableHead><TableHead>Name</TableHead><TableHead className="text-center">B (+G)</TableHead><TableHead className="text-center">L (+G)</TableHead><TableHead className="text-center">D (+G)</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                         {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => room.students.map((s: any, idx: number) => (
+                           <TableRow key={s.id} className="hover:bg-slate-50/30">
+                              <TableCell className="font-black text-primary">{idx === 0 ? `R-${room.roomNo}` : ""}</TableCell>
+                              <TableCell><p className="font-bold text-xs">{s.name}</p><p className="text-[9px] text-muted-foreground">{s.phone}</p></TableCell>
+                              <TableCell className="text-center">
+                                 {s.status?.breakfast ? <span className="font-black text-xs text-orange-600">1</span> : <span className="text-slate-200">0</span>}
+                                 {s.guestMeals?.breakfast > 0 && <span className="text-[10px] font-black text-primary ml-1">+{s.guestMeals.breakfast}G</span>}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                 {s.status?.lunch ? <span className="font-black text-xs text-success">1</span> : <span className="text-slate-200">0</span>}
+                                 {s.guestMeals?.lunch > 0 && <span className="text-[10px] font-black text-primary ml-1">+{s.guestMeals.lunch}G</span>}
+                                 {s.status?.lunch && <p className="text-[8px] font-bold uppercase opacity-60">{s.choices?.lunch || 'Normal'}</p>}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                 {s.status?.dinner ? <span className="font-black text-xs text-blue-600">1</span> : <span className="text-slate-200">0</span>}
+                                 {s.guestMeals?.dinner > 0 && <span className="text-[10px] font-black text-primary ml-1">+{s.guestMeals.dinner}G</span>}
+                                 {s.status?.dinner && <p className="text-[8px] font-bold uppercase opacity-60">{s.choices?.dinner || 'Normal'}</p>}
+                              </TableCell>
+                           </TableRow>
+                         )))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </Card>
+            ))}
           </div>
         </TabsContent>
 
         <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300">
-           <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden flex flex-col">
+           <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
               <CardHeader className="bg-slate-50/50 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                 <div>
-                   <CardTitle className="text-lg flex items-center gap-2 text-primary">
-                     <ChefHat size={20}/> Meal Manager (Manual Override)
-                   </CardTitle>
-                   <CardDescription>Force toggle meals & auto-update monthly counters.</CardDescription>
-                 </div>
-                 <div className="flex gap-2">
-                   <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-                     <SelectTrigger className="w-[180px] h-9 bg-white text-xs font-bold">
-                       <LayoutGrid size={14} className="mr-2 text-primary"/>
-                       <SelectValue placeholder="Filter Building" />
-                     </SelectTrigger>
-                     <SelectContent>
-                       <SelectItem value="all">All Buildings</SelectItem>
-                       {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                     </SelectContent>
-                   </Select>
-                 </div>
+                 <div><CardTitle className="text-lg">Override Control</CardTitle><CardDescription>Force toggle student meals only.</CardDescription></div>
+                 <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." className="pl-10 h-10 border-none bg-white rounded-xl" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
               </CardHeader>
-              <CardContent className="p-0">
-                <div className="p-4 border-b space-y-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      placeholder="Search name or phone..." 
-                      className="pl-10 h-11 border-none bg-slate-50 shadow-inner rounded-xl"
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  
-                  {/* BUILDING STATS SUMMARY CARD */}
-                  {buildingFilter !== "all" && managerStats && (
-                    <div className="grid grid-cols-3 gap-3 animate-in slide-in-from-top-2 duration-300">
-                      <div className="p-3 bg-orange-50 rounded-2xl border border-orange-100 flex flex-col items-center justify-center text-center">
-                        <p className="text-[8px] font-black uppercase text-orange-400 tracking-widest leading-none mb-1">Breakfast</p>
-                        <p className="text-lg font-black text-orange-600">{managerStats.b}</p>
-                      </div>
-                      <div className="p-3 bg-success/5 rounded-2xl border border-success/10 flex flex-col items-center justify-center text-center">
-                        <p className="text-[8px] font-black uppercase text-success tracking-widest leading-none mb-1">Lunch</p>
-                        <p className="text-lg font-black text-success">{managerStats.l}</p>
-                      </div>
-                      <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100 flex flex-col items-center justify-center text-center">
-                        <p className="text-[8px] font-black uppercase text-blue-400 tracking-widest leading-none mb-1">Dinner</p>
-                        <p className="text-lg font-black text-blue-600">{managerStats.d}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                <ScrollArea className="h-[500px]">
-                   {/* Desktop Table View */}
-                   <div className="hidden md:block">
-                     <Table>
-                       <TableHeader className="bg-slate-50/50 sticky top-0 z-10">
-                         <TableRow>
-                           <TableHead>Resident (Room Wise)</TableHead>
-                           <TableHead className="text-center">Force Toggle (B/L/D)</TableHead>
-                           <TableHead className="text-center">Delivery Track</TableHead>
+              <CardContent className="p-0 h-[600px] overflow-y-auto">
+                 <Table>
+                    <TableBody>
+                       {students?.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map(s => (
+                         <TableRow key={s.id} className="border-b">
+                            <TableCell className="py-4"><div className="flex items-center gap-3"><div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div><p className="font-black text-slate-800 text-xs">{s.name}</p></div></TableCell>
+                            <TableCell className="text-right">
+                               <div className="flex gap-2 justify-end">
+                                  {['breakfast', 'lunch', 'dinner'].map(m => (
+                                    <button key={m} onClick={() => handleToggleMeal(s, m)} disabled={!canOverride} className={cn("h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all", s.mealStatus?.[m] ? "bg-primary text-white" : "bg-slate-100 text-slate-300")}>{m.charAt(0).toUpperCase()}</button>
+                                  ))}
+                               </div>
+                            </TableCell>
                          </TableRow>
-                       </TableHeader>
-                       <TableBody>
-                         {students?.filter(s => {
-                           const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.phone?.includes(searchTerm)
-                           const matchBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
-                           return matchSearch && matchBuilding && s.isActive
-                         })
-                         .sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, {numeric: true}))
-                         .map(s => (
-                           <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors border-b">
-                             <TableCell className="py-4">
-                               <div className="flex items-center gap-3">
-                                 <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">
-                                   R-{s.roomNumber}
-                                 </div>
-                                 <div>
-                                   <p className="font-black text-slate-800 text-xs">{s.name}</p>
-                                   <p className="text-[9px] text-muted-foreground font-bold uppercase">{s.buildingName}</p>
-                                 </div>
-                               </div>
-                             </TableCell>
-                             <TableCell className="text-center">
-                               <div className="flex gap-2 justify-center">
-                                 <button 
-                                   title="Toggle Breakfast"
-                                   onClick={() => handleToggleMeal(s, 'breakfast')}
-                                   disabled={!canOverride}
-                                   className={cn(
-                                     "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
-                                     s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-slate-100 text-slate-300",
-                                     !canOverride && "opacity-80 cursor-not-allowed"
-                                   )}
-                                 >
-                                   <span className="text-[10px] font-black">B</span>
-                                 </button>
-                                 <button 
-                                   title="Toggle Lunch"
-                                   onClick={() => handleToggleMeal(s, 'lunch')}
-                                   disabled={!canOverride}
-                                   className={cn(
-                                     "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
-                                     s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-slate-100 text-slate-300",
-                                     !canOverride && "opacity-80 cursor-not-allowed"
-                                   )}
-                                 >
-                                   <span className="text-[10px] font-black">L</span>
-                                 </button>
-                                 <button 
-                                   title="Toggle Dinner"
-                                   onClick={() => handleToggleMeal(s, 'dinner')}
-                                   disabled={!canOverride}
-                                   className={cn(
-                                     "h-8 w-8 rounded-lg flex items-center justify-center transition-all", 
-                                     s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-slate-100 text-slate-300",
-                                     !canOverride && "opacity-80 cursor-not-allowed"
-                                   )}
-                                 >
-                                   <span className="text-[10px] font-black">D</span>
-                                 </button>
-                               </div>
-                             </TableCell>
-                             <TableCell className="text-center">
-                               <div className="flex gap-2 justify-center">
-                                  {s.mealStatus?.breakfast && (
-                                    <button 
-                                      onClick={() => handleToggleDelivery(s.id, 'breakfast', s.mealDelivered?.breakfast)}
-                                      className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.breakfast ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
-                                    >
-                                      <Truck size={10}/> <span className="text-[8px] font-bold">B</span>
-                                    </button>
-                                  )}
-                                  {s.mealStatus?.lunch && (
-                                    <button 
-                                      onClick={() => handleToggleDelivery(s.id, 'lunch', s.mealDelivered?.lunch)}
-                                      className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.lunch ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
-                                    >
-                                      <Truck size={10}/> <span className="text-[8px] font-bold">L</span>
-                                    </button>
-                                  )}
-                                  {s.mealStatus?.dinner && (
-                                    <button 
-                                      onClick={() => handleToggleDelivery(s.id, 'dinner', s.mealDelivered?.dinner)}
-                                      className={cn("h-7 px-2 rounded-lg flex items-center gap-1 transition-all border", s.mealDelivered?.dinner ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
-                                    >
-                                      <Truck size={10}/> <span className="text-[8px] font-bold">D</span>
-                                    </button>
-                                  )}
-                                  {!s.mealStatus?.breakfast && !s.mealStatus?.lunch && !s.mealStatus?.dinner && (
-                                    <span className="text-[10px] font-bold text-slate-300 italic">No Active Meals</span>
-                                  )}
-                               </div>
-                             </TableCell>
-                           </TableRow>
-                         ))}
-                       </TableBody>
-                     </Table>
-                   </div>
-
-                   {/* Mobile Card View */}
-                   <div className="md:hidden divide-y">
-                      {students?.filter(s => {
-                        const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.phone?.includes(searchTerm)
-                        const matchBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
-                        return matchSearch && matchBuilding && s.isActive
-                      })
-                      .sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, {numeric: true}))
-                      .map(s => (
-                        <div key={s.id} className="p-4 space-y-4">
-                           <div className="flex justify-between items-center">
-                              <div className="flex items-center gap-3">
-                                 <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div>
-                                 <div>
-                                    <h4 className="font-bold text-slate-800 text-sm">{s.name}</h4>
-                                    <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest">{s.buildingName}</p>
-                                 </div>
-                              </div>
-                           </div>
-                           
-                           <div className="grid grid-cols-1 gap-4">
-                              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                                 <p className="text-[8px] font-black uppercase text-muted-foreground mb-2 tracking-widest">Manual Toggle (Admin Only)</p>
-                                 <div className="flex gap-2">
-                                   <button 
-                                     onClick={() => handleToggleMeal(s, 'breakfast')}
-                                     disabled={!canOverride}
-                                     className={cn("h-10 flex-1 rounded-xl flex flex-col items-center justify-center transition-all", s.mealStatus?.breakfast ? "bg-orange-100 text-orange-600 shadow-sm" : "bg-white text-slate-300")}
-                                   >
-                                     <span className="text-[10px] font-black">BREAKFAST</span>
-                                   </button>
-                                   <button 
-                                     onClick={() => handleToggleMeal(s, 'lunch')}
-                                     disabled={!canOverride}
-                                     className={cn("h-10 flex-1 rounded-xl flex flex-col items-center justify-center transition-all", s.mealStatus?.lunch ? "bg-success/10 text-success shadow-sm" : "bg-white text-slate-300")}
-                                   >
-                                     <span className="text-[10px] font-black">LUNCH</span>
-                                   </button>
-                                   <button 
-                                     onClick={() => handleToggleMeal(s, 'dinner')}
-                                     disabled={!canOverride}
-                                     className={cn("h-10 flex-1 rounded-xl flex flex-col items-center justify-center transition-all", s.mealStatus?.dinner ? "bg-blue-50 text-blue-600 shadow-sm" : "bg-white text-slate-300")}
-                                   >
-                                     <span className="text-[10px] font-black">DINNER</span>
-                                   </button>
-                                 </div>
-                              </div>
-                              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                                 <p className="text-[8px] font-black uppercase text-muted-foreground mb-2 tracking-widest">Delivery Track</p>
-                                 <div className="flex gap-2">
-                                    {['breakfast', 'lunch', 'dinner'].map(m => s.mealStatus?.[m] && (
-                                      <button 
-                                        key={m}
-                                        onClick={() => handleToggleDelivery(s.id, m, s.mealDelivered?.[m])}
-                                        className={cn("h-10 flex-1 rounded-xl flex items-center justify-center gap-2 transition-all border", s.mealDelivered?.[m] ? "bg-success text-white border-success" : "bg-white text-slate-400 border-slate-200")}
-                                      >
-                                        <Truck size={14}/> <span className="text-[10px] font-bold uppercase">{m.charAt(0)}</span>
-                                      </button>
-                                    ))}
-                                    {!s.mealStatus?.breakfast && !s.mealStatus?.lunch && !s.mealStatus?.dinner && (
-                                      <span className="text-[10px] font-bold text-slate-300 italic w-full text-center py-2">No active meals today</span>
-                                    )}
-                                 </div>
-                              </div>
-                           </div>
-                        </div>
-                      ))}
-                   </div>
-                </ScrollArea>
+                       ))}
+                    </TableBody>
+                 </Table>
               </CardContent>
            </Card>
         </TabsContent>
       </Tabs>
-
-      {/* PRINT VERSION (Simplified List) */}
-      <div className="hidden print:block space-y-8">
-         <div className="grid grid-cols-3 gap-8 mb-8 text-center bg-slate-50 p-4 border rounded-2xl">
-            <div><p className="text-[10px] font-black uppercase text-slate-400">Total Breakfast</p><p className="text-2xl font-black">{mealStats.totals.breakfast}</p></div>
-            <div><p className="text-[10px] font-black uppercase text-slate-400">Total Lunch</p><p className="text-2xl font-black">{mealStats.totals.lunch}</p></div>
-            <div><p className="text-[10px] font-black uppercase text-slate-400">Total Dinner</p><p className="text-2xl font-black">{mealStats.totals.dinner}</p></div>
-         </div>
-
-         {Object.values(mealStats.buildingData).map((b: any) => (
-           <div key={b.id} className="page-break-inside-avoid mb-8">
-             <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4">
-                <h2 className="text-xl font-black uppercase">{b.name} Distribution</h2>
-                <div className="flex gap-4 text-xs font-bold uppercase">
-                   <span>B: {b.breakfast}</span>
-                   <span>L: {b.lunch}</span>
-                   <span>D: {b.dinner}</span>
-                </div>
-             </div>
-             <table className="w-full text-xs border-collapse">
-                <thead>
-                   <tr className="bg-slate-100">
-                      <th className="border p-2 text-left">Room</th>
-                      <th className="border p-2 text-left">Student</th>
-                      <th className="border p-2 text-center">Breakfast</th>
-                      <th className="border p-2 text-center">Lunch Choice</th>
-                      <th className="border p-2 text-center">Dinner Choice</th>
-                   </tr>
-                </thead>
-                <tbody>
-                   {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
-                     room.students.map((s: any, idx: number) => (
-                       <tr key={s.id}>
-                          <td className="border p-2 font-bold">{idx === 0 ? room.roomNo : ""}</td>
-                          <td className="border p-2">{s.name}</td>
-                          <td className="border p-2 text-center">{s.status?.breakfast ? "ON" : "OFF"}</td>
-                          <td className="border p-2 text-center font-black">{s.status?.lunch ? (s.choices?.lunch || "NORMAL") : "-"}</td>
-                          <td className="border p-2 text-center font-black">{s.status?.dinner ? (s.choices?.dinner || "NORMAL") : "-"}</td>
-                       </tr>
-                     ))
-                   ))}
-                </tbody>
-             </table>
-           </div>
-         ))}
-      </div>
     </div>
   )
 }

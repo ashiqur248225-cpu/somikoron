@@ -63,9 +63,13 @@ export default function StudentDashboardPage() {
     const lastPayment = student.paymentsHistory?.[student.paymentsHistory.length - 1] || null
     const lastMonthFood = student.mealsHistory?.[student.mealsHistory.length - 1] || null
 
-    const currentMonthMeals = (student.currentMonthBreakfast || 0) + (student.currentMonthLunch || 0) + (student.currentMonthDinner || 0)
+    const b = student.currentMonthBreakfast || 0
+    const l = student.currentMonthLunch || 0
+    const d = student.currentMonthDinner || 0
+    const g = student.currentMonthGuestMeals || 0
+    const currentMonthMealsTotal = b + l + d + g
     
-    return { rentDue, foodBalanceDisplay, foodDue, cookDue, cookBalance, totalDue, lastPayment, lastMonthFood, currentMonthMeals }
+    return { rentDue, foodBalanceDisplay, foodDue, cookDue, cookBalance, totalDue, lastPayment, lastMonthFood, currentMonthMealsTotal }
   }, [student])
 
   if (!isMounted) return null;
@@ -179,8 +183,8 @@ export default function StudentDashboardPage() {
            <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shadow-inner"><Calculator size={20}/></div>
               <div>
-                <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Current Month Meals</p>
-                <p className="text-lg font-black text-slate-800">{stats?.currentMonthMeals} <span className="text-[10px] font-medium text-slate-400">Meals</span></p>
+                <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Month Consumption (Inc. Guests)</p>
+                <p className="text-lg font-black text-slate-800">{stats?.currentMonthMealsTotal} <span className="text-[10px] font-medium text-slate-400">Total Plates</span></p>
               </div>
            </div>
            <Link href="/student/meals">

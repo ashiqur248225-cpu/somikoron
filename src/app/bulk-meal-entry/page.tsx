@@ -16,17 +16,18 @@ import {
   ChevronLeft,
   Calculator,
   RotateCcw,
-  Hash
+  Hash,
+  Users
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { sendSMS } from "@/app/actions/sms"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
@@ -110,17 +111,19 @@ export default function BulkMealEntryPage() {
     )
   }, [students, mealLogFilter.buildingId])
 
-  // POPULATE MEAL INPUTS AUTOMATICALLY FROM STUDENT COUNTERS WITH BREAKFAST AS HALF MEAL
+  // POPULATE MEAL INPUTS AUTOMATICALLY FROM STUDENT COUNTERS (STUDENT + GUESTS)
   useEffect(() => {
     if (filteredStudents.length > 0) {
       const initialInputs: Record<string, string> = {};
       filteredStudents.forEach(s => {
         // BREAKFAST counts as 0.5, LUNCH and DINNER count as 1.0
+        // GUEST counts as 1.0 each
         const breakfast = (Number(s.currentMonthBreakfast) || 0) * 0.5;
         const lunch = (Number(s.currentMonthLunch) || 0);
         const dinner = (Number(s.currentMonthDinner) || 0);
+        const guest = (Number(s.currentMonthGuestMeals) || 0);
         
-        const effectiveTotal = breakfast + lunch + dinner;
+        const effectiveTotal = breakfast + lunch + dinner + guest;
         initialInputs[s.id] = effectiveTotal.toString();
       });
       setMealInputs(prev => ({...prev, ...initialInputs}));
@@ -128,13 +131,15 @@ export default function BulkMealEntryPage() {
   }, [filteredStudents]);
 
   const totalMealsCount = useMemo(() => {
-    // Only sum meals for currently filtered students
     return filteredStudents.reduce((acc, s) => acc + (Number(mealInputs[s.id]) || 0), 0)
   }, [mealInputs, filteredStudents])
 
+  const totalGuestMealsCount = useMemo(() => {
+    return filteredStudents.reduce((acc, s) => acc + (Number(s.currentMonthGuestMeals) || 0), 0)
+  }, [filteredStudents])
+
   const grandBillSum = useMemo(() => {
     const rate = Number(mealConfig?.rate || 0);
-    // Only sum bill for currently filtered students
     return filteredStudents.reduce((acc, s) => {
       return acc + (Number(mealInputs[s.id] || 0) * rate)
     }, 0)
@@ -142,7 +147,7 @@ export default function BulkMealEntryPage() {
 
   const handleBulkMealSubmit = async () => {
     if (!students || !mealConfig?.rate) {
-      toast({ variant: "destructive", title: "Error", description: "Meal rate not configured for this branch." });
+      toast({ variant: "destructive", title: "Error", description: "Meal rate not configured." });
       return;
     }
     setIsSubmitting(true);
@@ -165,23 +170,22 @@ export default function BulkMealEntryPage() {
           date: new Date().toISOString()
         };
 
-        // Reset month counters upon successful submission to start fresh for next month
         batch.update(doc(db, "students", s.id), {
           mealsHistory: arrayUnion(mealRecord),
           foodDueAmount: increment(-totalCost),
           currentMonthBreakfast: 0,
           currentMonthLunch: 0,
           currentMonthDinner: 0,
+          currentMonthGuestMeals: 0,
           updatedAt: serverTimestamp()
         });
 
-        // Send In-App Notice to Student
         const noticeId = doc(collection(db, "notices")).id;
         batch.set(doc(db, "notices", noticeId), {
           id: noticeId,
           studentId: s.id,
           title: "Monthly Meal Bill Generated",
-          message: `Your meal bill for ${monthLabel} has been generated. Total Effective Meals: ${count}, Total Bill: ${totalCost} Tk.`,
+          message: `Your meal bill for ${monthLabel} has been generated. Total Effective Meals (inc. guests): ${count}, Total Bill: ${totalCost} Tk.`,
           type: "meal",
           isRead: false,
           createdAt: serverTimestamp(),
@@ -193,46 +197,24 @@ export default function BulkMealEntryPage() {
 
       await batch.commit();
 
-      // Non-blocking Background SMS Loop
+      // Background SMS logic...
       if (apiConfig?.apikey && updatedRecords.length > 0) {
         (async () => {
           const template = templatesData?.templates?.find((t: any) => t.id === 'meal_summary')?.text || 
                            "প্রিয় [নাম], [মাস] মাসে আপনি মোট [meal_count] টি meal গ্রহণ করেছেন। মোট খাবার বিল ৳[meal_bill]। ধন্যবাদ। [Hostel Name]";
-          
           for (const item of updatedRecords) {
             try {
-              const s = item.student;
-              const count = item.count;
-              const bill = item.bill;
-              
-              const currentFoodDue = Number(s.foodDueAmount || 0);
-              const newFoodVal = currentFoodDue - bill;
-              const foodBalance = newFoodVal > 0 ? newFoodVal : 0;
-              const foodDue = newFoodVal < 0 ? Math.abs(newFoodVal) : 0;
-
-              const msg = template
-                .replaceAll('[নাম]', s.name)
-                .replaceAll('[মাস]', monthLabel)
-                .replaceAll('[meal_count]', count.toString())
-                .replaceAll('[meal_rate]', mealRate.toString())
-                .replaceAll('[meal_bill]', bill.toString())
-                .replaceAll('[food_balance]', foodBalance.toString())
-                .replaceAll('[food_due]', foodDue.toString())
-                .replaceAll('[রুম]', s.roomNumber || '')
-                .replaceAll('[building]', s.buildingName || '')
-                .replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
-
-              const smsResult = await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg);
-              const logId = doc(collection(db, "smsLogs")).id;
-              await setDoc(doc(db, "smsLogs", logId), { id: logId, to: s.phone, message: msg, branch: userBranch, sentBy: userName, status: smsResult.error === 0 ? 'Success' : 'Failed', createdAt: serverTimestamp() });
-            } catch (e) {
-              console.error("SMS error for student", item.student.id, e)
-            }
+              const s = item.student; const count = item.count; const bill = item.bill;
+              const currentFoodVal = Number(s.foodDueAmount || 0); const newFoodVal = currentFoodVal - bill;
+              const foodBalance = newFoodVal > 0 ? newFoodVal : 0; const foodDue = newFoodVal < 0 ? Math.abs(newFoodVal) : 0;
+              const msg = template.replaceAll('[নাম]', s.name).replaceAll('[মাস]', monthLabel).replaceAll('[meal_count]', count.toString()).replaceAll('[meal_bill]', bill.toString()).replaceAll('[food_balance]', foodBalance.toString()).replaceAll('[food_due]', foodDue.toString()).replaceAll('[Hostel Name]', templatesData?.hostelName || userBranch);
+              await sendSMS(apiConfig.apikey, apiConfig.senderid, s.phone, msg);
+            } catch (e) { console.error(e) }
           }
         })();
       }
 
-      toast({ title: "Bulk Entries Submitted", description: "Student balances updated and counters reset." });
+      toast({ title: "Bulk Entries Submitted", description: "Counters reset and balances updated." });
       router.push('/food-history');
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message });
@@ -252,26 +234,26 @@ export default function BulkMealEntryPage() {
         {(userRole === 'Admin' || userRole === 'Branch Manager') && (
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ChevronLeft /></Button>
         )}
-        <div><h1 className="text-3xl font-bold text-primary tracking-tight">Bulk Meal Entry</h1><p className="text-muted-foreground text-sm">Mass update meal counts for non-package residents.</p></div>
+        <div><h1 className="text-3xl font-bold text-primary tracking-tight">Bulk Meal Entry</h1><p className="text-muted-foreground text-sm">Update meal counts and guest meals for non-package residents.</p></div>
       </div>
 
       <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
         <div className="h-2 bg-primary w-full" />
         <CardHeader className="px-8 pt-8 pb-4">
           <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
-            <div><CardTitle className="text-2xl font-black flex items-center gap-2 text-primary"><Utensils size={24}/> Spreadsheet Entry</CardTitle><CardDescription>Update balances based on weighted monthly meals (Breakfast=0.5).</CardDescription></div>
+            <div><CardTitle className="text-2xl font-black flex items-center gap-2 text-primary"><Utensils size={24}/> Meal Ledger Sync</CardTitle><CardDescription>Effective meals includes Student + Guest counts.</CardDescription></div>
             <div className="flex flex-wrap gap-3">
               <div className="flex items-center gap-3 px-6 py-3 bg-primary/5 rounded-2xl border border-primary/10 shadow-sm">
-                <Calculator size={20} className="text-primary" />
+                <Users size={20} className="text-primary" />
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Global Meal Rate</span>
-                  <span className="text-lg font-black text-primary">৳{mealConfig?.rate || 0} / Meal</span>
+                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Guest Plates</span>
+                  <span className="text-lg font-black text-primary">{totalGuestMealsCount}</span>
                 </div>
               </div>
               <div className="flex items-center gap-3 px-6 py-3 bg-primary/5 rounded-2xl border border-primary/10 shadow-sm">
                 <Hash size={20} className="text-primary" />
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Monthly Meals</span>
+                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Effective Total</span>
                   <span className="text-lg font-black text-primary">{totalMealsCount}</span>
                 </div>
               </div>
@@ -288,23 +270,25 @@ export default function BulkMealEntryPage() {
 
         <div className="px-8">
           <Table>
-            <TableHeader className="bg-white sticky top-0 z-10"><TableRow className="border-none hover:bg-transparent h-16"><TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Resident Details</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-center text-slate-500">Current Balance</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Effective Meals (Auto)</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">Meal Bill</TableHead><TableHead className="font-black uppercase text-[11px] tracking-widest text-right w-40 text-slate-500">New Balance</TableHead></TableRow></TableHeader>
+            <TableHeader className="bg-white sticky top-0 z-10"><TableRow className="border-none h-16"><TableHead className="font-black uppercase text-[11px] text-slate-500">Resident Details</TableHead><TableHead className="font-black uppercase text-[11px] text-center text-slate-500">Counters (Self | Guest)</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">Effective Billable</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">Meal Bill</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">New Balance</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredStudents.map(s => {
                 const count = Number(mealInputs[s.id] || 0); const rate = Number(mealConfig?.rate || 0); const bill = count * rate; const currentBal = Number(s.foodDueAmount || 0); const newBal = currentBal - bill;
                 return (
                   <TableRow key={s.id} className={cn("group transition-all hover:bg-slate-50 h-20", newBal < 0 && "bg-destructive/[0.03]")}>
                     <TableCell><div className="flex items-center gap-4"><div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.name.substring(0, 2).toUpperCase()}</div><div><p className="font-bold text-slate-800 text-sm leading-none">{s.name}</p><p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">{s.buildingName} • R-{s.roomNumber}</p></div></div></TableCell>
-                    <TableCell className="text-center"><Badge variant="outline" className={cn("font-black text-[11px] px-4 py-1 rounded-full", currentBal < 0 ? "text-destructive border-destructive/20 bg-destructive/5" : "text-success border-success/20 bg-success/5")}>৳{currentBal}</Badge></TableCell>
-                    <TableCell className="text-right"><div className="relative inline-block w-full max-w-[100px]"><Input type="number" step="0.5" className="h-12 text-center text-lg font-black bg-slate-100 border-none shadow-inner rounded-2xl focus:ring-primary/20" value={mealInputs[s.id] || ""} onChange={e => setMealInputs({...mealInputs, [s.id]: e.target.value})} /></div></TableCell>
+                    <TableCell className="text-center">
+                       <div className="flex items-center justify-center gap-2">
+                          <Badge variant="outline" className="text-[9px] font-black">S: {(s.currentMonthBreakfast || 0) + (s.currentMonthLunch || 0) + (s.currentMonthDinner || 0)}</Badge>
+                          <Badge variant="outline" className="text-[9px] font-black text-primary border-primary/20">G: {s.currentMonthGuestMeals || 0}</Badge>
+                       </div>
+                    </TableCell>
+                    <TableCell className="text-right"><div className="relative inline-block w-full max-w-[100px]"><Input type="number" step="0.5" className="h-12 text-center text-lg font-black bg-slate-100 border-none shadow-inner rounded-2xl" value={mealInputs[s.id] || ""} onChange={e => setMealInputs({...mealInputs, [s.id]: e.target.value})} /></div></TableCell>
                     <TableCell className="text-right font-black text-slate-600 text-lg">৳{bill}</TableCell>
-                    <TableCell className="text-right"><span className={cn("font-black text-xl", newBal < 0 ? "text-destructive" : "text-primary")}>৳{newBal}</span>{newBal < 0 && <p className="text-[9px] font-black uppercase text-destructive tracking-widest mt-1">Due Generated</p>}</TableCell>
+                    <TableCell className="text-right"><span className={cn("font-black text-xl", newBal < 0 ? "text-destructive" : "text-primary")}>৳{newBal}</span></TableCell>
                   </TableRow>
                 )
               })}
-              {filteredStudents.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center py-32 text-muted-foreground italic text-lg">No non-package residents found matching filters.</TableCell></TableRow>
-              )}
             </TableBody>
           </Table>
         </div>
@@ -315,7 +299,7 @@ export default function BulkMealEntryPage() {
             <div className="space-y-1"><p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Grand Total Bill</p><p className="text-3xl font-black text-primary">৳{grandBillSum.toLocaleString()}</p></div>
           </div>
           <Button onClick={handleBulkMealSubmit} disabled={isSubmitting || filteredStudents.length === 0} className="w-full md:w-96 h-20 rounded-[2rem] text-2xl font-black shadow-2xl shadow-primary/20 gap-4 transition-transform active:scale-95">
-            {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={32}/>} Confirm & Submit All
+            {isSubmitting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={32}/>} Confirm & Submit
           </Button>
         </CardFooter>
       </Card>

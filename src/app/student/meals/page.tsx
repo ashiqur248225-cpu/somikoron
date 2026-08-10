@@ -225,32 +225,33 @@ export default function StudentMealPage() {
         currentMonthLabel: targetLabel
       }
 
-      // ACCURATE DIFFERENTIAL COUNTER LOGIC (GUEST + SELF)
-      const calculateDiff = (type: 'breakfast' | 'lunch' | 'dinner') => {
-        const key = type === 'breakfast' ? 'b' : (type === 'lunch' ? 'l' : 'd');
-        const nextVal = (finalMeals[type] ? 1 : 0) + Number(finalGuestMeals[key as keyof typeof finalGuestMeals] || 0);
-        
+      // SELF MEAL DIFFERENTIAL
+      const calculateSelfDiff = (type: 'breakfast' | 'lunch' | 'dinner') => {
+        const nextVal = finalMeals[type] ? 1 : 0;
         if (isNewMonth) return nextVal;
-        
         if (isReSubmission) {
-          const prevVal = (student.mealStatus?.[type] ? 1 : 0) + Number(student.tomorrowGuestMeals?.[key as keyof typeof student.tomorrowGuestMeals] || 0);
+          const prevVal = student.mealStatus?.[type] ? 1 : 0;
           return nextVal - prevVal;
         }
-        
         return nextVal;
       };
 
-      const diffB = calculateDiff('breakfast');
-      const diffL = calculateDiff('lunch');
-      const diffD = calculateDiff('dinner');
-      const diffGuest = (Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner)) - 
-                        (isReSubmission && !isNewMonth ? (Number(student.tomorrowGuestMeals?.breakfast || 0) + Number(student.tomorrowGuestMeals?.lunch || 0) + Number(student.tomorrowGuestMeals?.dinner || 0)) : 0);
+      // GUEST MEAL DIFFERENTIAL
+      const nextGuestTotal = Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner);
+      const prevGuestTotal = isReSubmission && !isNewMonth 
+        ? (Number(student.tomorrowGuestMeals?.breakfast || 0) + Number(student.tomorrowGuestMeals?.lunch || 0) + Number(student.tomorrowGuestMeals?.dinner || 0)) 
+        : 0;
+      const diffGuest = nextGuestTotal - prevGuestTotal;
+
+      const diffB = calculateSelfDiff('breakfast');
+      const diffL = calculateSelfDiff('lunch');
+      const diffD = calculateSelfDiff('dinner');
 
       if (isNewMonth) {
         updates.currentMonthBreakfast = diffB;
         updates.currentMonthLunch = diffL;
         updates.currentMonthDinner = diffD;
-        updates.currentMonthGuestMeals = (Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner));
+        updates.currentMonthGuestMeals = nextGuestTotal;
       } else {
         if (diffB !== 0) updates.currentMonthBreakfast = increment(diffB);
         if (diffL !== 0) updates.currentMonthLunch = increment(diffL);
@@ -299,13 +300,18 @@ export default function StudentMealPage() {
   const currentMonthConsumption = useMemo(() => {
     const now = new Date();
     const currentLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+    const b = student?.currentMonthBreakfast || 0;
+    const l = student?.currentMonthLunch || 0;
+    const d = student?.currentMonthDinner || 0;
+    const g = student?.currentMonthGuestMeals || 0;
     return {
       month: currentLabel,
-      breakfast: student?.currentMonthBreakfast || 0,
-      lunch: student?.currentMonthLunch || 0,
-      dinner: student?.currentMonthDinner || 0,
-      guest: student?.currentMonthGuestMeals || 0,
-      total: (student?.currentMonthBreakfast || 0) + (student?.currentMonthLunch || 0) + (student?.currentMonthDinner || 0)
+      breakfast: b,
+      lunch: l,
+      dinner: d,
+      guest: g,
+      studentTotal: b + l + d,
+      grandTotal: b + l + d + g
     }
   }, [student])
 
@@ -563,12 +569,13 @@ export default function StudentMealPage() {
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-primary">Monthly Counter ({currentMonthConsumption.month})</CardTitle></CardHeader>
           <CardContent className="p-6">
-            <div className="grid grid-cols-5 gap-2 text-center">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
                 <div className="bg-orange-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">B</p><p className="text-sm font-black">{currentMonthConsumption.breakfast}</p></div>
                 <div className="bg-success/5 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">L</p><p className="text-sm font-black">{currentMonthConsumption.lunch}</p></div>
                 <div className="bg-blue-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">D</p><p className="text-sm font-black">{currentMonthConsumption.dinner}</p></div>
                 <div className="bg-purple-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Guest</p><p className="text-sm font-black">{currentMonthConsumption.guest}</p></div>
-                <div className="bg-slate-900 text-white p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Total</p><p className="text-sm font-black">{currentMonthConsumption.total}</p></div>
+                <div className="bg-slate-100 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Self</p><p className="text-sm font-black">{currentMonthConsumption.studentTotal}</p></div>
+                <div className="bg-slate-900 text-white p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Total</p><p className="text-sm font-black">{currentMonthConsumption.grandTotal}</p></div>
             </div>
           </CardContent>
         </Card>
@@ -577,7 +584,7 @@ export default function StudentMealPage() {
           <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-muted-foreground">Guest Policy</CardTitle></CardHeader>
           <CardContent className="p-6 flex flex-col justify-center items-center text-center">
              <Users size={24} className="text-primary mb-2 opacity-20" />
-             <p className="text-[9px] font-medium italic text-slate-400">আপনি গেস্টের জন্য অতিরিক্ত মিল অন করতে পারেন। গেস্ট মিলগুলো আপনার মাসিক মূল কাউন্টারে যোগ হবে এবং আলাদাভাবেও ট্র্যাক করা হবে।</p>
+             <p className="text-[9px] font-medium italic text-slate-400">আপনার গেস্ট মিলগুলো মাসিক মোট কাউন্টারে যোগ হবে। প্রতিটি গেস্ট মিল ১.০ হিসেবে গণ্য করা হবে।</p>
           </CardContent>
         </Card>
       </div>
