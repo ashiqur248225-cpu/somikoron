@@ -69,7 +69,6 @@ const MEAL_TYPES = [
   { id: "dinner", label: "Dinner", icon: "🍛" },
 ]
 
-// FIXED: Weekdays starting with Sunday (0) to match JS Date.getDay()
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -79,8 +78,6 @@ export default function StudentMealPage() {
   const [studentId, setStudentId] = useState("")
   const [isUpdating, setIsUpdating] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
-  const [selectedBill, setSelectedBill] = useState<any>(null)
-  const [isBillDialogOpen, setIsBillDialogOpen] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
@@ -127,7 +124,6 @@ export default function StudentMealPage() {
     }
   }, [student])
 
-  // ROBUST TIME WINDOW LOGIC
   const timeWindow = useMemo(() => {
     if (!isMounted) return { isActive: false, startStr: "", endStr: "" }
     
@@ -148,7 +144,6 @@ export default function StudentMealPage() {
     if (startMinutes <= endMinutes) {
       isActive = totalMinutes >= startMinutes && totalMinutes <= endMinutes
     } else {
-      // Overnight window (e.g. 21:00 to 02:00)
       isActive = totalMinutes >= startMinutes || totalMinutes <= endMinutes
     }
     
@@ -169,37 +164,31 @@ export default function StudentMealPage() {
 
   const hasAlreadyUpdatedToday = useMemo(() => {
     if (!student?.lastMealUpdateDate) return false;
-    // Using local browser date (Bangladesh)
-    const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+    const todayStr = new Date().toLocaleDateString('en-CA');
     return student.lastMealUpdateDate === todayStr;
   }, [student?.lastMealUpdateDate]);
 
   const canChange = useMemo(() => {
-    return isMounted && timeWindow.isActive && !hasAlreadyUpdatedToday;
-  }, [isMounted, timeWindow.isActive, hasAlreadyUpdatedToday])
+    return isMounted && timeWindow.isActive;
+  }, [isMounted, timeWindow.isActive])
 
   const todayDay = isMounted ? WEEKDAYS[new Date().getDay()] : "Saturday"
-  const tomorrowDay = isMounted ? WEEKDAYS[(new Date().getDay() + 1) % 7] : "Sunday"
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowDay = WEEKDAYS[tomorrowDate.getDay()];
   
   const todayMenu = weeklyMenu.find(r => r.day === todayDay)
   const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
 
-  const lastMonthFood = useMemo(() => {
-    if (!student?.mealsHistory || student.mealsHistory.length === 0) return null
-    return student.mealsHistory[student.mealsHistory.length - 1]
-  }, [student])
-
   const handleUpdateMeals = useCallback(async () => {
-    if (!studentRef || !timeWindow.isActive || hasAlreadyUpdatedToday || isUpdating || !student) return
+    if (!studentRef || !timeWindow.isActive || isUpdating || !student) return
     setIsUpdating(true)
     try {
       let finalMeals = { ...localMeals }
       let finalChoices = { ...mealChoices }
       
-      // If Auto Mode is on, pull from the stored weekly schedule for tomorrow
       if (localMeals.autoMode) {
         const schedForTomorrow = weeklySchedule[tomorrowDay] || { breakfast: true, lunch: true, dinner: true }
-        // Admin Availability Overrides Auto Mode
         finalMeals = {
           ...finalMeals,
           breakfast: !!schedForTomorrow.breakfast && mealConfig?.breakfastAvailable !== false,
@@ -209,16 +198,16 @@ export default function StudentMealPage() {
         if (schedForTomorrow.lunchChoice) finalChoices.lunch = schedForTomorrow.lunchChoice
         if (schedForTomorrow.dinnerChoice) finalChoices.dinner = schedForTomorrow.dinnerChoice
       } else {
-        // Even in manual mode, enforce admin availability
         if (mealConfig?.breakfastAvailable === false) finalMeals.breakfast = false;
         if (mealConfig?.lunchAvailable === false) finalMeals.lunch = false;
         if (mealConfig?.dinnerAvailable === false) finalMeals.dinner = false;
       }
 
-      const now = new Date();
-      const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
-      const currentLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
-      const isNewMonth = student?.currentMonthLabel !== currentLabel;
+      const todayStr = new Date().toLocaleDateString('en-CA');
+      const targetLabel = `${MONTHS[tomorrowDate.getMonth()]} ${tomorrowDate.getFullYear()}`;
+      
+      const isReSubmission = student.lastMealUpdateDate === todayStr;
+      const isNewMonth = student.currentMonthLabel !== targetLabel;
 
       const updates: any = { 
         mealStatus: finalMeals, 
@@ -227,34 +216,43 @@ export default function StudentMealPage() {
         lastMealUpdate: serverTimestamp(),
         lastMealUpdateDate: todayStr,
         updatedAt: serverTimestamp(),
-        currentMonthLabel: currentLabel
+        currentMonthLabel: targetLabel
       }
 
-      // ADDITIVE COUNTER LOGIC (Cumulative)
+      // ACCURATE COUNTER LOGIC
       if (isNewMonth) {
+        // Reset counters and set only current selection if month changed
         updates.currentMonthBreakfast = finalMeals.breakfast ? 1 : 0;
         updates.currentMonthLunch = finalMeals.lunch ? 1 : 0;
         updates.currentMonthDinner = finalMeals.dinner ? 1 : 0;
+      } else if (isReSubmission) {
+        // Adjust counters based on difference if re-submitting today
+        const diffB = (finalMeals.breakfast ? 1 : 0) - (student.mealStatus?.breakfast ? 1 : 0);
+        const diffL = (finalMeals.lunch ? 1 : 0) - (student.mealStatus?.lunch ? 1 : 0);
+        const diffD = (finalMeals.dinner ? 1 : 0) - (student.mealStatus?.dinner ? 1 : 0);
+        
+        if (diffB !== 0) updates.currentMonthBreakfast = increment(diffB);
+        if (diffL !== 0) updates.currentMonthLunch = increment(diffL);
+        if (diffD !== 0) updates.currentMonthDinner = increment(diffD);
       } else {
+        // First submission of the day, just increment
         if (finalMeals.breakfast) updates.currentMonthBreakfast = increment(1);
         if (finalMeals.lunch) updates.currentMonthLunch = increment(1);
         if (finalMeals.dinner) updates.currentMonthDinner = increment(1);
       }
 
       await updateDoc(studentRef, updates)
-      toast({ title: "Preferences Saved", description: `Meals for tomorrow (${tomorrowDay}) have been recorded.` })
+      toast({ title: "Preferences Saved", description: `Meals for tomorrow (${tomorrowDay}) updated successfully.` })
     } catch (e: any) { 
       toast({ variant: "destructive", title: "Error", description: e.message }) 
     } finally { 
       setIsUpdating(false) 
     }
-  }, [student, studentRef, timeWindow.isActive, hasAlreadyUpdatedToday, isUpdating, localMeals, mealChoices, weeklySchedule, tomorrowDay, toast, mealConfig]);
+  }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, weeklySchedule, tomorrowDay, tomorrowDate, toast, mealConfig]);
 
   const toggleScheduleMeal = (day: string, meal: string) => {
-    // Check admin availability for specific meal type
     const isAvail = mealConfig?.[`${meal}Available`] !== false;
     if (!isAvail) return;
-
     setWeeklySchedule(prev => ({
       ...prev,
       [day]: { ...prev[day], [meal]: !prev[day][meal] }
@@ -330,29 +328,26 @@ export default function StudentMealPage() {
                 <div className="space-y-1">
                    <p className="text-sm font-black text-amber-900 uppercase tracking-tight">Updates Closed</p>
                    <p className="text-[10px] text-amber-700 font-bold uppercase leading-relaxed">
-                     You can turn meals ON/OFF only between <span className="text-amber-900 font-black">{timeWindow.startStr}</span> and <span className="text-amber-900 font-black">{timeWindow.endStr}</span>.
-                   </p>
-                </div>
-             </div>
-           ) : hasAlreadyUpdatedToday ? (
-             <div className="p-6 bg-success/5 rounded-3xl border border-success/20 flex flex-col items-center gap-3 text-center animate-in zoom-in-95">
-                <div className="h-12 w-12 rounded-full bg-success/10 flex items-center justify-center text-success shadow-sm"><CheckCircle2 size={24} /></div>
-                <div className="space-y-1">
-                   <p className="text-sm font-black text-success uppercase tracking-tight">Preference Recorded</p>
-                   <p className="text-[10px] text-success/70 font-bold uppercase leading-relaxed">
-                     Your meal choices for tomorrow have been successfully logged.
+                     Update window is between <span className="text-amber-900 font-black">{timeWindow.startStr}</span> and <span className="text-amber-900 font-black">{timeWindow.endStr}</span>.
                    </p>
                 </div>
              </div>
            ) : (
-             <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 flex gap-3 items-center mb-2">
-                <Zap size={18} className="text-primary shrink-0 animate-bounce" />
-                <div className="flex-1">
-                  <p className="text-[10px] text-primary font-black uppercase leading-tight">
-                    Interaction window open until {timeWindow.endStr}.
-                  </p>
-                  <p className="text-[8px] text-primary/70 uppercase font-bold mt-1">Updating meals for Tomorrow ({tomorrowDay}).</p>
+             <div className="space-y-4">
+                <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 flex gap-3 items-center">
+                   <Zap size={18} className="text-primary shrink-0 animate-bounce" />
+                   <div className="flex-1">
+                     <p className="text-[10px] text-primary font-black uppercase leading-tight">
+                       Window open from {timeWindow.startStr} to {timeWindow.endStr}.
+                     </p>
+                     <p className="text-[8px] text-primary/70 uppercase font-bold mt-1">You can turn meals ON or OFF for Tomorrow ({tomorrowDay}).</p>
+                   </div>
                 </div>
+                {hasAlreadyUpdatedToday && (
+                  <div className="px-4 py-2 bg-success/10 rounded-full border border-success/20 w-fit mx-auto">
+                    <p className="text-[9px] font-black text-success uppercase">✓ Preference recorded for tomorrow</p>
+                  </div>
+                )}
              </div>
            )}
            
@@ -410,7 +405,6 @@ export default function StudentMealPage() {
                                                   <Label className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
                                                      {type.icon} {type.label}
                                                   </Label>
-                                                  {!isAvail && <p className="text-[7px] text-destructive font-black uppercase">Temporarily Disabled by Admin</p>}
                                                 </div>
                                                 <Switch 
                                                   disabled={!isAvail} 
@@ -494,66 +488,18 @@ export default function StudentMealPage() {
               )}
            </div>
 
-           {timeWindow.isActive && !hasAlreadyUpdatedToday && (
+           {timeWindow.isActive && (
              <Button 
                onClick={handleUpdateMeals} 
                disabled={isUpdating} 
                className="w-full h-16 rounded-[2rem] text-lg font-black bg-primary hover:bg-primary/90 shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95"
              >
                 {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
-                Confirm & Submit for {tomorrowDay}
+                {hasAlreadyUpdatedToday ? `Update Selection for ${tomorrowDay}` : `Confirm & Submit for ${tomorrowDay}`}
              </Button>
-           )}
-
-           {timeWindow.isActive && hasAlreadyUpdatedToday && (
-             <div className="text-center py-4">
-                <Badge className="bg-success text-white px-6 py-2 rounded-full text-[10px] font-black uppercase">
-                  ✓ Selection Saved for Tomorrow
-                </Badge>
-             </div>
-           )}
-
-           {!timeWindow.isActive && tomorrowMenu && (
-             <div className="p-5 bg-slate-50 rounded-3xl border space-y-3">
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest text-center">Menu Preview for {tomorrowDay}</p>
-                <div className="grid grid-cols-1 gap-2">
-                   <div className="flex justify-between text-xs font-bold px-2"><span className="text-slate-400">Breakfast:</span><span className="text-slate-700">{tomorrowMenu.breakfast}</span></div>
-                   <div className="flex justify-between text-xs font-bold px-2"><span className="text-slate-400">Lunch:</span><span className="text-slate-700">{tomorrowMenu.lunch}</span></div>
-                   <div className="flex justify-between text-xs font-bold px-2"><span className="text-slate-400">Dinner:</span><span className="text-slate-700">{tomorrowMenu.dinner}</span></div>
-                </div>
-             </div>
            )}
         </CardContent>
       </Card>
-
-      {lastMonthFood && (
-        <Card className="border-none shadow-md bg-white rounded-[2rem] overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b py-4">
-             <div className="flex justify-between items-center">
-                <CardTitle className="text-[10px] font-black uppercase text-primary flex items-center gap-2">
-                  <Receipt size={14}/> Previous Month Final Bill
-                </CardTitle>
-                <Badge variant="outline" className="text-[8px] font-black uppercase">{lastMonthFood.month}</Badge>
-             </div>
-          </CardHeader>
-          <CardContent className="p-6">
-             <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="space-y-0.5">
-                   <p className="text-[8px] font-bold text-muted-foreground uppercase">Total Meals</p>
-                   <p className="text-sm font-black text-slate-800">{lastMonthFood.totalMeals}</p>
-                </div>
-                <div className="space-y-0.5">
-                   <p className="text-[8px] font-bold text-muted-foreground uppercase">Rate</p>
-                   <p className="text-sm font-black text-slate-800">৳{lastMonthFood.perMealCost}</p>
-                </div>
-                <div className="space-y-0.5">
-                   <p className="text-[8px] font-bold text-muted-foreground uppercase">Total Bill</p>
-                   <p className="text-sm font-black text-destructive">৳{lastMonthFood.totalCost}</p>
-                </div>
-             </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
@@ -572,7 +518,7 @@ export default function StudentMealPage() {
           <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-muted-foreground">Quick Info</CardTitle></CardHeader>
           <CardContent className="p-6 flex flex-col justify-center items-center text-center">
              <Info size={24} className="text-primary mb-2 opacity-20" />
-             <p className="text-[9px] font-medium italic text-slate-400">Counters are cumulative for the month. Adding a meal increments your monthly total by 1.</p>
+             <p className="text-[9px] font-medium italic text-slate-400">Counters are cumulative for the month. Submitting updates for tomorrow will accurately adjust your monthly total.</p>
           </CardContent>
         </Card>
       </div>
