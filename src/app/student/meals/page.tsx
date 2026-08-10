@@ -69,7 +69,8 @@ const MEAL_TYPES = [
   { id: "dinner", label: "Dinner", icon: "🍛" },
 ]
 
-const WEEKDAYS = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+// FIXED: Weekdays starting with Sunday (0) to match JS Date.getDay()
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function StudentMealPage() {
@@ -126,6 +127,7 @@ export default function StudentMealPage() {
     }
   }, [student])
 
+  // ROBUST TIME WINDOW LOGIC
   const timeWindow = useMemo(() => {
     if (!isMounted) return { isActive: false, startStr: "", endStr: "" }
     
@@ -146,10 +148,12 @@ export default function StudentMealPage() {
     if (startMinutes <= endMinutes) {
       isActive = totalMinutes >= startMinutes && totalMinutes <= endMinutes
     } else {
+      // Overnight window (e.g. 21:00 to 02:00)
       isActive = totalMinutes >= startMinutes || totalMinutes <= endMinutes
     }
     
     const format12h = (time24: string) => {
+      if (!time24) return "";
       const [h, m] = time24.split(':').map(Number)
       const period = h >= 12 ? 'PM' : 'AM'
       const h12 = h % 12 || 12
@@ -165,16 +169,17 @@ export default function StudentMealPage() {
 
   const hasAlreadyUpdatedToday = useMemo(() => {
     if (!student?.lastMealUpdateDate) return false;
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Using local browser date (Bangladesh)
+    const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
     return student.lastMealUpdateDate === todayStr;
   }, [student?.lastMealUpdateDate]);
 
   const canChange = useMemo(() => {
-    return isMounted && timeWindow.isActive
-  }, [isMounted, timeWindow.isActive])
+    return isMounted && timeWindow.isActive && !hasAlreadyUpdatedToday;
+  }, [isMounted, timeWindow.isActive, hasAlreadyUpdatedToday])
 
   const todayDay = isMounted ? WEEKDAYS[new Date().getDay()] : "Saturday"
-  const tomorrowDay = isMounted ? WEEKDAYS[(new Date().getDay() + 1) % 7] : "Saturday"
+  const tomorrowDay = isMounted ? WEEKDAYS[(new Date().getDay() + 1) % 7] : "Sunday"
   
   const todayMenu = weeklyMenu.find(r => r.day === todayDay)
   const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
@@ -185,26 +190,33 @@ export default function StudentMealPage() {
   }, [student])
 
   const handleUpdateMeals = useCallback(async () => {
-    if (!studentRef || !canChange || isUpdating || !student) return
+    if (!studentRef || !timeWindow.isActive || hasAlreadyUpdatedToday || isUpdating || !student) return
     setIsUpdating(true)
     try {
       let finalMeals = { ...localMeals }
       let finalChoices = { ...mealChoices }
       
+      // If Auto Mode is on, pull from the stored weekly schedule for tomorrow
       if (localMeals.autoMode) {
         const schedForTomorrow = weeklySchedule[tomorrowDay] || { breakfast: true, lunch: true, dinner: true }
+        // Admin Availability Overrides Auto Mode
         finalMeals = {
           ...finalMeals,
-          breakfast: !!schedForTomorrow.breakfast,
-          lunch: !!schedForTomorrow.lunch,
-          dinner: !!schedForTomorrow.dinner
+          breakfast: !!schedForTomorrow.breakfast && mealConfig?.breakfastAvailable !== false,
+          lunch: !!schedForTomorrow.lunch && mealConfig?.lunchAvailable !== false,
+          dinner: !!schedForTomorrow.dinner && mealConfig?.dinnerAvailable !== false
         }
         if (schedForTomorrow.lunchChoice) finalChoices.lunch = schedForTomorrow.lunchChoice
         if (schedForTomorrow.dinnerChoice) finalChoices.dinner = schedForTomorrow.dinnerChoice
+      } else {
+        // Even in manual mode, enforce admin availability
+        if (mealConfig?.breakfastAvailable === false) finalMeals.breakfast = false;
+        if (mealConfig?.lunchAvailable === false) finalMeals.lunch = false;
+        if (mealConfig?.dinnerAvailable === false) finalMeals.dinner = false;
       }
 
       const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
+      const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
       const currentLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
       const isNewMonth = student?.currentMonthLabel !== currentLabel;
 
@@ -218,29 +230,15 @@ export default function StudentMealPage() {
         currentMonthLabel: currentLabel
       }
 
-      // ADDITIVE COUNTER LOGIC
-      // If student hasn't updated today, or it's a new month, we treat the current selection as new additions
-      if (!hasAlreadyUpdatedToday || isNewMonth) {
-        if (isNewMonth) {
-          updates.currentMonthBreakfast = finalMeals.breakfast ? 1 : 0;
-          updates.currentMonthLunch = finalMeals.lunch ? 1 : 0;
-          updates.currentMonthDinner = finalMeals.dinner ? 1 : 0;
-        } else {
-          if (finalMeals.breakfast) updates.currentMonthBreakfast = increment(1);
-          if (finalMeals.lunch) updates.currentMonthLunch = increment(1);
-          if (finalMeals.dinner) updates.currentMonthDinner = increment(1);
-        }
+      // ADDITIVE COUNTER LOGIC (Cumulative)
+      if (isNewMonth) {
+        updates.currentMonthBreakfast = finalMeals.breakfast ? 1 : 0;
+        updates.currentMonthLunch = finalMeals.lunch ? 1 : 0;
+        updates.currentMonthDinner = finalMeals.dinner ? 1 : 0;
       } else {
-        // If they already updated today, we adjust based on the difference from their previous daily choice
-        if (student.mealStatus.breakfast !== finalMeals.breakfast) {
-          updates.currentMonthBreakfast = increment(finalMeals.breakfast ? 1 : -1);
-        }
-        if (student.mealStatus.lunch !== finalMeals.lunch) {
-          updates.currentMonthLunch = increment(finalMeals.lunch ? 1 : -1);
-        }
-        if (student.mealStatus.dinner !== finalMeals.dinner) {
-          updates.currentMonthDinner = increment(finalMeals.dinner ? 1 : -1);
-        }
+        if (finalMeals.breakfast) updates.currentMonthBreakfast = increment(1);
+        if (finalMeals.lunch) updates.currentMonthLunch = increment(1);
+        if (finalMeals.dinner) updates.currentMonthDinner = increment(1);
       }
 
       await updateDoc(studentRef, updates)
@@ -250,9 +248,13 @@ export default function StudentMealPage() {
     } finally { 
       setIsUpdating(false) 
     }
-  }, [student, studentRef, canChange, isUpdating, localMeals, mealChoices, weeklySchedule, tomorrowDay, toast, hasAlreadyUpdatedToday]);
+  }, [student, studentRef, timeWindow.isActive, hasAlreadyUpdatedToday, isUpdating, localMeals, mealChoices, weeklySchedule, tomorrowDay, toast, mealConfig]);
 
   const toggleScheduleMeal = (day: string, meal: string) => {
+    // Check admin availability for specific meal type
+    const isAvail = mealConfig?.[`${meal}Available`] !== false;
+    if (!isAvail) return;
+
     setWeeklySchedule(prev => ({
       ...prev,
       [day]: { ...prev[day], [meal]: !prev[day][meal] }
@@ -332,6 +334,16 @@ export default function StudentMealPage() {
                    </p>
                 </div>
              </div>
+           ) : hasAlreadyUpdatedToday ? (
+             <div className="p-6 bg-success/5 rounded-3xl border border-success/20 flex flex-col items-center gap-3 text-center animate-in zoom-in-95">
+                <div className="h-12 w-12 rounded-full bg-success/10 flex items-center justify-center text-success shadow-sm"><CheckCircle2 size={24} /></div>
+                <div className="space-y-1">
+                   <p className="text-sm font-black text-success uppercase tracking-tight">Preference Recorded</p>
+                   <p className="text-[10px] text-success/70 font-bold uppercase leading-relaxed">
+                     Your meal choices for tomorrow have been successfully logged.
+                   </p>
+                </div>
+             </div>
            ) : (
              <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 flex gap-3 items-center mb-2">
                 <Zap size={18} className="text-primary shrink-0 animate-bounce" />
@@ -341,9 +353,6 @@ export default function StudentMealPage() {
                   </p>
                   <p className="text-[8px] text-primary/70 uppercase font-bold mt-1">Updating meals for Tomorrow ({tomorrowDay}).</p>
                 </div>
-                {hasAlreadyUpdatedToday && (
-                  <Badge variant="outline" className="bg-success/10 text-success border-success/20 text-[8px] font-black">LOCKED FOR TODAY</Badge>
-                )}
              </div>
            )}
            
@@ -380,7 +389,7 @@ export default function StudentMealPage() {
                                 <div className="flex items-center gap-4">
                                    <div className="flex gap-1.5">
                                       {['breakfast', 'lunch', 'dinner'].map(m => (
-                                        <div key={m} className={cn("w-2 h-2 rounded-full", dayData[m] ? "bg-success" : "bg-slate-200")} />
+                                        <div key={m} className={cn("w-2 h-2 rounded-full", (dayData[m] && mealConfig?.[`${m}Available`] !== false) ? "bg-success" : "bg-slate-200")} />
                                       ))}
                                    </div>
                                    {isExpanded ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
@@ -392,16 +401,24 @@ export default function StudentMealPage() {
                                   <Separator />
                                   <div className="grid grid-cols-1 gap-4">
                                      {MEAL_TYPES.map(type => {
+                                        const isAvail = mealConfig?.[`${type.id}Available`] !== false;
                                         const { common, options } = getMealDetails(menuForDay?.[type.id] || "");
                                         return (
-                                          <div key={type.id} className="space-y-3">
+                                          <div key={type.id} className={cn("space-y-3", !isAvail && "opacity-40")}>
                                              <div className="flex items-center justify-between">
-                                                <Label className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
-                                                   {type.icon} {type.label}
-                                                </Label>
-                                                <Switch checked={dayData[type.id]} onCheckedChange={() => toggleScheduleMeal(day, type.id)} />
+                                                <div className="space-y-0.5">
+                                                  <Label className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
+                                                     {type.icon} {type.label}
+                                                  </Label>
+                                                  {!isAvail && <p className="text-[7px] text-destructive font-black uppercase">Temporarily Disabled by Admin</p>}
+                                                </div>
+                                                <Switch 
+                                                  disabled={!isAvail} 
+                                                  checked={isAvail ? dayData[type.id] : false} 
+                                                  onCheckedChange={() => toggleScheduleMeal(day, type.id)} 
+                                                />
                                              </div>
-                                             {dayData[type.id] && options && (
+                                             {dayData[type.id] && isAvail && options && (
                                                <RadioGroup 
                                                  value={dayData[`${type.id}Choice`] || options[0]} 
                                                  onValueChange={(v) => updateScheduleChoice(day, type.id, v)}
@@ -435,26 +452,30 @@ export default function StudentMealPage() {
                   
                   {MEAL_TYPES.map((type) => {
                     const isAvailable = mealConfig?.[`${type.id}Available`] !== false
-                    const isChecked = localMeals[type.id as keyof typeof localMeals]
+                    const isChecked = isAvailable && localMeals[type.id as keyof typeof localMeals]
                     const menuText = tomorrowMenu?.[type.id] || ""
                     const { common, options } = getMealDetails(menuText)
                     
                     return (
-                      <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable) ? "opacity-30" : (isChecked ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
+                      <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable) ? "opacity-30 border-slate-100" : (isChecked ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                             <span className="text-2xl">{type.icon}</span>
-                            <div>
+                            <div className="space-y-0.5">
                               <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">{type.label}</h3>
                               <p className="text-[9px] font-bold text-primary uppercase">
-                                {common || (options ? 'Choice Available' : 'Regular')}
+                                {isAvailable ? (common || (options ? 'Choice Available' : 'Regular')) : 'Locked by Admin'}
                               </p>
                             </div>
                           </div>
-                          <Switch disabled={!canChange} checked={isChecked as boolean} onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} />
+                          <Switch 
+                            disabled={!canChange || !isAvailable} 
+                            checked={isChecked as boolean} 
+                            onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} 
+                          />
                         </div>
 
-                        {isChecked && options && (
+                        {isChecked && isAvailable && options && (
                           <div className="pt-3 border-t border-success/10">
                             <RadioGroup disabled={!canChange} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
                                {options.map(opt => (
@@ -473,25 +494,28 @@ export default function StudentMealPage() {
               )}
            </div>
 
-           {canChange && (
+           {timeWindow.isActive && !hasAlreadyUpdatedToday && (
              <Button 
                onClick={handleUpdateMeals} 
                disabled={isUpdating} 
-               className={cn(
-                 "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl gap-3 transition-transform active:scale-95",
-                 hasAlreadyUpdatedToday 
-                   ? "bg-slate-900 shadow-slate-200" 
-                   : "bg-primary hover:bg-primary/90 shadow-primary/20"
-               )}
+               className="w-full h-16 rounded-[2rem] text-lg font-black bg-primary hover:bg-primary/90 shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95"
              >
                 {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
-                {hasAlreadyUpdatedToday ? "Update Daily Selection" : `Confirm & Submit for ${tomorrowDay}`}
+                Confirm & Submit for {tomorrowDay}
              </Button>
            )}
 
-           {!canChange && tomorrowMenu && (
+           {timeWindow.isActive && hasAlreadyUpdatedToday && (
+             <div className="text-center py-4">
+                <Badge className="bg-success text-white px-6 py-2 rounded-full text-[10px] font-black uppercase">
+                  ✓ Selection Saved for Tomorrow
+                </Badge>
+             </div>
+           )}
+
+           {!timeWindow.isActive && tomorrowMenu && (
              <div className="p-5 bg-slate-50 rounded-3xl border space-y-3">
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest text-center">Menu for {tomorrowDay}</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest text-center">Menu Preview for {tomorrowDay}</p>
                 <div className="grid grid-cols-1 gap-2">
                    <div className="flex justify-between text-xs font-bold px-2"><span className="text-slate-400">Breakfast:</span><span className="text-slate-700">{tomorrowMenu.breakfast}</span></div>
                    <div className="flex justify-between text-xs font-bold px-2"><span className="text-slate-400">Lunch:</span><span className="text-slate-700">{tomorrowMenu.lunch}</span></div>
