@@ -212,7 +212,10 @@ export default function StudentMealPage() {
       const targetLabel = `${MONTHS[tomorrowDate.getMonth()]} ${tomorrowDate.getFullYear()}`;
       
       const isReSubmission = student.lastMealUpdateDate === todayStr;
-      const isNewMonth = student.currentMonthLabel !== targetLabel;
+      
+      // CRITICAL FIX: Only treat as New Month Reset if a label already exists AND it is different.
+      // If student.currentMonthLabel is missing (initial state after admin entry), we do NOT reset.
+      const isNewMonth = !!student.currentMonthLabel && student.currentMonthLabel !== targetLabel;
 
       const updates: any = { 
         mealStatus: finalMeals, 
@@ -233,12 +236,13 @@ export default function StudentMealPage() {
           const prevVal = student.mealStatus?.[type] ? 1 : 0;
           return nextVal - prevVal;
         }
+        // First entry for this month label (or initial label setting)
         return nextVal;
       };
 
       // GUEST MEAL DIFFERENTIAL
       const nextGuestTotal = Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner);
-      const prevGuestTotal = isReSubmission && !isNewMonth 
+      const prevGuestTotal = (isReSubmission && !isNewMonth) 
         ? (Number(student.tomorrowGuestMeals?.breakfast || 0) + Number(student.tomorrowGuestMeals?.lunch || 0) + Number(student.tomorrowGuestMeals?.dinner || 0)) 
         : 0;
       const diffGuest = nextGuestTotal - prevGuestTotal;
@@ -248,11 +252,14 @@ export default function StudentMealPage() {
       const diffD = calculateSelfDiff('dinner');
 
       if (isNewMonth) {
+        // Strict overwrite for real month transition reset
         updates.currentMonthBreakfast = diffB;
         updates.currentMonthLunch = diffL;
         updates.currentMonthDinner = diffD;
         updates.currentMonthGuestMeals = nextGuestTotal;
       } else {
+        // For same month or initial entry (where label was missing), we MUST use increment
+        // to preserve whatever data was already there (from Admin or previous logic)
         if (diffB !== 0) updates.currentMonthBreakfast = increment(diffB);
         if (diffL !== 0) updates.currentMonthLunch = increment(diffL);
         if (diffD !== 0) updates.currentMonthDinner = increment(diffD);
