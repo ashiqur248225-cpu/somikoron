@@ -24,7 +24,8 @@ import {
   ListOrdered,
   Truck,
   Calendar,
-  Soup
+  Soup,
+  Lock
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -51,8 +52,10 @@ export default function AdminMealDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [expandedBuilding, setExpandedBuilding] = useState<string | null>(null)
   const [viewDay, setViewDay] = useState<"yesterday" | "today" | "tomorrow">("today")
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
+    setIsMounted(true)
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
     setUserRole(localStorage.getItem("user_role") || "Staff")
   }, [])
@@ -73,6 +76,8 @@ export default function AdminMealDashboardPage() {
   const { data: mealConfig, isLoading: configLoading } = useDoc(mealConfigRef)
 
   const viewContext = useMemo(() => {
+    if (!isMounted) return { dayName: "", dateStr: "", updateDateYMD: "", targetDate: new Date() }
+    
     const now = new Date()
     const targetDate = new Date(now)
     
@@ -88,15 +93,15 @@ export default function AdminMealDashboardPage() {
     const updateDateYMD = updateDate.toLocaleDateString('en-CA') // YYYY-MM-DD
     
     return { dayName, dateStr, updateDateYMD, targetDate }
-  }, [viewDay])
+  }, [viewDay, isMounted])
 
   const currentMenu = useMemo(() => {
-    if (!routines || !userBranch) return null
+    if (!routines || !userBranch || !viewContext.dayName) return null
     return routines.find(r => r.day === viewContext.dayName && r.branch === userBranch)
   }, [routines, userBranch, viewContext.dayName])
 
   const mealStats = useMemo(() => {
-    if (!students || configLoading) return { 
+    if (!students || configLoading || !isMounted) return { 
       totals: { breakfast: 0, lunch: 0, dinner: 0, totalPlates: 0 },
       choices: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> },
       buildingData: {} as Record<string, any>
@@ -118,10 +123,8 @@ export default function AdminMealDashboardPage() {
       let choiceL = "Normal"
       let choiceD = "Normal"
       
-      // Check if user updated their meals for THIS target date specifically on the expected update date
       const updatedOnTime = s.lastMealUpdateDate === updateDateYMD;
 
-      // PRIORITY 1: Manual Update (Happened on the update date)
       if (updatedOnTime) {
         willEatB = !!s.mealStatus?.breakfast && bAvail
         willEatL = !!s.mealStatus?.lunch && lAvail
@@ -129,7 +132,6 @@ export default function AdminMealDashboardPage() {
         choiceL = s.mealChoices?.lunch || "Normal"
         choiceD = s.mealChoices?.dinner || "Normal"
       } 
-      // PRIORITY 2: Auto Mode (Based on Schedule)
       else if (s.mealStatus?.autoMode) {
         const sched = s.weeklySchedule?.[dayName] || { breakfast: false, lunch: false, dinner: false }
         willEatB = !!sched.breakfast && bAvail
@@ -139,7 +141,6 @@ export default function AdminMealDashboardPage() {
         choiceD = sched.dinnerChoice || "Normal"
       }
 
-      // GUEST MEALS: Only valid if updated on the correct date
       const gB = (updatedOnTime && bAvail) ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
       const gL = (updatedOnTime && lAvail) ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
       const gD = (updatedOnTime && dAvail) ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
@@ -148,7 +149,6 @@ export default function AdminMealDashboardPage() {
       const combinedL = (willEatL ? 1 : 0) + gL;
       const combinedD = (willEatD ? 1 : 0) + gD;
 
-      // Filter: Only include if they have at least one meal
       if (combinedB > 0 || combinedL > 0 || combinedD > 0) {
         totals.breakfast += combinedB;
         totals.lunch += combinedL;
@@ -212,7 +212,7 @@ export default function AdminMealDashboardPage() {
     })
 
     return { totals, choices, buildingData }
-  }, [students, viewContext, mealConfig, configLoading])
+  }, [students, viewContext, mealConfig, configLoading, isMounted])
 
   const canOverride = (userRole === 'Admin' || userRole === 'Branch Manager') && viewDay === 'tomorrow';
 
@@ -241,7 +241,7 @@ export default function AdminMealDashboardPage() {
 
   const handlePrint = () => { if (typeof window !== "undefined") window.print(); }
 
-  if (studentsLoading || configLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase">Kitchen Syncing...</p></div>
+  if (!isMounted || studentsLoading || configLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase">Kitchen Syncing...</p></div>
 
   return (
     <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
@@ -548,7 +548,7 @@ export default function AdminMealDashboardPage() {
                         <td className="border border-slate-300 p-2 font-black text-sm">R-{room.roomNo}</td>
                         <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.b || '-'}</td>
                         <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.l || '-'}</td>
-                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.d || '-'}</td>
+                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.done || '-'}</td>
                         <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.guests || '-'}</td>
                         <td className="border border-slate-300 p-2 text-[10px]">
                            {room.residents.filter((r:any) => r.choiceL !== 'Normal' || r.choiceD !== 'Normal').map((r:any) => 
