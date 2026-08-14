@@ -50,6 +50,7 @@ export default function AdminMealDashboardPage() {
   const [userRole, setUserRole] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
   const [expandedBuilding, setExpandedBuilding] = useState<string | null>(null)
+  const [viewDay, setViewDay] = useState<"yesterday" | "today" | "tomorrow">("today")
 
   useEffect(() => {
     setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
@@ -71,22 +72,28 @@ export default function AdminMealDashboardPage() {
   )
   const { data: mealConfig, isLoading: configLoading } = useDoc(mealConfigRef)
 
-  const tomorrowContext = useMemo(() => {
+  const viewContext = useMemo(() => {
     const now = new Date()
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
+    const targetDate = new Date(now)
     
-    const dayName = WEEKDAYS[tomorrow.getDay()]
-    const dateStr = tomorrow.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    const todayYMD = now.toLocaleDateString('en-CA') // YYYY-MM-DD
+    if (viewDay === 'tomorrow') targetDate.setDate(now.getDate() + 1)
+    if (viewDay === 'yesterday') targetDate.setDate(now.getDate() - 1)
     
-    return { dayName, dateStr, todayYMD }
-  }, [])
+    // The date when the student updated for this targetDate
+    const updateDate = new Date(targetDate)
+    updateDate.setDate(targetDate.getDate() - 1)
+    
+    const dayName = WEEKDAYS[targetDate.getDay()]
+    const dateStr = targetDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    const updateDateYMD = updateDate.toLocaleDateString('en-CA') // YYYY-MM-DD
+    
+    return { dayName, dateStr, updateDateYMD, targetDate }
+  }, [viewDay])
 
-  const tomorrowMenu = useMemo(() => {
+  const currentMenu = useMemo(() => {
     if (!routines || !userBranch) return null
-    return routines.find(r => r.day === tomorrowContext.dayName && r.branch === userBranch)
-  }, [routines, userBranch, tomorrowContext.dayName])
+    return routines.find(r => r.day === viewContext.dayName && r.branch === userBranch)
+  }, [routines, userBranch, viewContext.dayName])
 
   const mealStats = useMemo(() => {
     if (!students || configLoading) return { 
@@ -99,7 +106,7 @@ export default function AdminMealDashboardPage() {
     let choices = { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> }
     let buildingData: Record<string, any> = {}
 
-    const { dayName, todayYMD } = tomorrowContext
+    const { dayName, updateDateYMD } = viewContext
     const bAvail = mealConfig?.breakfastAvailable !== false;
     const lAvail = mealConfig?.lunchAvailable !== false;
     const dAvail = mealConfig?.dinnerAvailable !== false;
@@ -110,10 +117,12 @@ export default function AdminMealDashboardPage() {
       let willEatD = false
       let choiceL = "Normal"
       let choiceD = "Normal"
-      const updatedToday = s.lastMealUpdateDate === todayYMD;
+      
+      // Check if user updated their meals for THIS target date specifically on the expected update date
+      const updatedOnTime = s.lastMealUpdateDate === updateDateYMD;
 
-      // PRIORITY 1: Manual Update Today (Manager Override or Student Choice)
-      if (updatedToday) {
+      // PRIORITY 1: Manual Update (Happened on the update date)
+      if (updatedOnTime) {
         willEatB = !!s.mealStatus?.breakfast && bAvail
         willEatL = !!s.mealStatus?.lunch && lAvail
         willEatD = !!s.mealStatus?.dinner && dAvail
@@ -130,16 +139,16 @@ export default function AdminMealDashboardPage() {
         choiceD = sched.dinnerChoice || "Normal"
       }
 
-      // GUEST MEALS: Only valid if updated today
-      const gB = (updatedToday && bAvail) ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
-      const gL = (updatedToday && lAvail) ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
-      const gD = (updatedToday && dAvail) ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
+      // GUEST MEALS: Only valid if updated on the correct date
+      const gB = (updatedOnTime && bAvail) ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
+      const gL = (updatedOnTime && lAvail) ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
+      const gD = (updatedOnTime && dAvail) ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
 
       const combinedB = (willEatB ? 1 : 0) + gB;
       const combinedL = (willEatL ? 1 : 0) + gL;
       const combinedD = (willEatD ? 1 : 0) + gD;
 
-      // CRITICAL: Only include in distribution list if they have at least one meal tomorrow
+      // Filter: Only include if they have at least one meal
       if (combinedB > 0 || combinedL > 0 || combinedD > 0) {
         totals.breakfast += combinedB;
         totals.lunch += combinedL;
@@ -196,16 +205,16 @@ export default function AdminMealDashboardPage() {
           isSelfD: willEatD,
           choiceL,
           choiceD,
-          guests: updatedToday ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 },
-          isAuto: !!s.mealStatus?.autoMode
+          guests: updatedOnTime ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 },
+          isAuto: !updatedOnTime && s.mealStatus?.autoMode
         })
       }
     })
 
     return { totals, choices, buildingData }
-  }, [students, tomorrowContext, mealConfig, configLoading])
+  }, [students, viewContext, mealConfig, configLoading])
 
-  const canOverride = userRole === 'Admin' || userRole === 'Branch Manager';
+  const canOverride = (userRole === 'Admin' || userRole === 'Branch Manager') && viewDay === 'tomorrow';
 
   const handleToggleMeal = async (student: any, mealId: string) => {
     if (!canOverride) return;
@@ -223,7 +232,7 @@ export default function AdminMealDashboardPage() {
       await updateDoc(sRef, {
         [`mealStatus.${mealId}`]: !currentVal,
         [counterField]: increment(!currentVal ? 1 : -1),
-        lastMealUpdateDate: tomorrowContext.todayYMD,
+        lastMealUpdateDate: new Date().toLocaleDateString('en-CA'),
         updatedAt: serverTimestamp()
       });
       toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled for tomorrow.` });
@@ -241,22 +250,33 @@ export default function AdminMealDashboardPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
-            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Kitchen Dashboard</h1>
+            <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Analytics</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-xs mt-1">
-              Preparing for <span className="font-bold text-foreground">Tomorrow, {tomorrowContext.dayName} ({tomorrowContext.dateStr})</span>
+              Data for <span className="font-bold text-foreground">{viewContext.dayName} ({viewContext.dateStr})</span>
             </p>
           </div>
         </div>
-        <div className="ml-auto">
-           <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary" onClick={handlePrint}>
-              <Printer size={16}/> <span className="hidden sm:inline">Print Distribution List</span>
+        <div className="ml-auto flex items-center gap-2">
+           <Select value={viewDay} onValueChange={(v: any) => setViewDay(v)}>
+              <SelectTrigger className="w-[130px] h-10 bg-white font-bold text-xs rounded-xl shadow-sm border-primary/20">
+                <Calendar className="mr-2 h-4 w-4 text-primary" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="yesterday">Yesterday</SelectItem>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="tomorrow">Tomorrow</SelectItem>
+              </SelectContent>
+           </Select>
+           <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary rounded-xl" onClick={handlePrint}>
+              <Printer size={16}/> <span className="hidden sm:inline">Print</span>
            </Button>
         </div>
       </div>
 
       <div className="hidden print:block text-center space-y-2 mb-8 border-b-2 border-slate-900 pb-4">
          <h1 className="text-3xl font-black uppercase">Somikoron Hostel Kitchen</h1>
-         <p className="text-lg font-bold">Meal Distribution Sheet: {tomorrowContext.dayName}, {tomorrowContext.dateStr}</p>
+         <p className="text-lg font-bold">Meal Distribution Sheet: {viewContext.dayName}, {viewContext.dateStr}</p>
          <div className="flex justify-center gap-8 mt-2 text-sm font-bold">
             <span>B: {mealStats.totals.breakfast}</span>
             <span>L: {mealStats.totals.lunch}</span>
@@ -267,10 +287,10 @@ export default function AdminMealDashboardPage() {
       <Tabs defaultValue="summary" className="w-full print:hidden">
         <TabsList className={cn(
           "bg-secondary/50 p-1 mb-6 rounded-2xl w-full max-w-md mx-auto grid",
-          canOverride ? "grid-cols-2" : "grid-cols-1"
+          (userRole === 'Admin' || userRole === 'Branch Manager') ? "grid-cols-2" : "grid-cols-1"
         )}>
           <TabsTrigger value="summary" className="rounded-xl gap-2 font-bold h-10">Kitchen Prep</TabsTrigger>
-          {canOverride && (
+          {(userRole === 'Admin' || userRole === 'Branch Manager') && (
             <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Override</TabsTrigger>
           )}
         </TabsList>
@@ -281,10 +301,10 @@ export default function AdminMealDashboardPage() {
               <CardContent className="pt-6">
                  <div className="flex justify-between items-start">
                     <div className="space-y-1">
-                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Breakfast Tomorrow</p>
+                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Breakfast ({viewDay})</p>
                        <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.breakfast}</h2>
                        <p className="text-[10px] font-bold text-orange-600 flex items-center gap-1">
-                          <Soup size={10}/> {tomorrowMenu?.breakfast || 'Menu not set'}
+                          <Soup size={10}/> {currentMenu?.breakfast || 'Menu not set'}
                        </p>
                     </div>
                     <div className="bg-orange-50 p-3 rounded-2xl text-orange-500"><Utensils size={24}/></div>
@@ -296,10 +316,10 @@ export default function AdminMealDashboardPage() {
               <CardContent className="pt-6">
                  <div className="flex justify-between items-start">
                     <div className="space-y-1">
-                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Lunch Tomorrow</p>
+                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Lunch ({viewDay})</p>
                        <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.lunch}</h2>
                        <p className="text-[10px] font-bold text-success flex items-center gap-1">
-                          <ChefHat size={10}/> {tomorrowMenu?.lunch || 'Menu not set'}
+                          <ChefHat size={10}/> {currentMenu?.lunch || 'Menu not set'}
                        </p>
                     </div>
                     <div className="bg-success/5 p-3 rounded-2xl text-success"><ChefHat size={24}/></div>
@@ -311,10 +331,10 @@ export default function AdminMealDashboardPage() {
               <CardContent className="pt-6">
                  <div className="flex justify-between items-start">
                     <div className="space-y-1">
-                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Dinner Tomorrow</p>
+                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Dinner ({viewDay})</p>
                        <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.dinner}</h2>
                        <p className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
-                          <ShoppingBag size={10}/> {tomorrowMenu?.dinner || 'Menu not set'}
+                          <ShoppingBag size={10}/> {currentMenu?.dinner || 'Menu not set'}
                        </p>
                     </div>
                     <div className="bg-blue-50 p-3 rounded-2xl text-blue-500"><ShoppingBag size={24}/></div>
@@ -351,9 +371,9 @@ export default function AdminMealDashboardPage() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
                <h2 className="text-xl font-black text-slate-800 flex items-center gap-3 uppercase tracking-tight">
-                 <Truck size={24} className="text-primary"/> Delivery Distribution Sheet
+                 <Truck size={24} className="text-primary"/> Distribution Sheet ({viewDay})
                </h2>
-               <p className="text-[10px] font-bold text-muted-foreground uppercase">Showing active orders for tomorrow</p>
+               <p className="text-[10px] font-bold text-muted-foreground uppercase">Showing active orders</p>
             </div>
             
             {Object.values(mealStats.buildingData).sort((a,b) => a.name.localeCompare(b.name)).map((b: any) => (
@@ -427,64 +447,75 @@ export default function AdminMealDashboardPage() {
           </div>
         </TabsContent>
 
-        {canOverride && (
+        {(userRole === 'Admin' || userRole === 'Branch Manager') && (
           <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300">
-             <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
-                <CardHeader className="bg-slate-50/50 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                   <div>
-                     <CardTitle className="text-lg">Meal Override (Tomorrow)</CardTitle>
-                     <CardDescription>Manually toggle meals for specific students for tomorrow.</CardDescription>
+             {viewDay !== 'tomorrow' ? (
+                <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl border border-dashed text-center space-y-4">
+                   <Lock size={48} className="text-slate-200" />
+                   <div className="space-y-1">
+                      <p className="font-black text-slate-800">Override Disabled</p>
+                      <p className="text-xs text-muted-foreground uppercase font-bold">You can only manually override meals for "Tomorrow".</p>
                    </div>
-                   <div className="relative">
-                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                     <Input placeholder="Search name or room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
-                   </div>
-                </CardHeader>
-                <CardContent className="p-0 h-[600px] overflow-y-auto">
-                   <Table>
-                      <TableBody>
-                         {students?.filter(s => 
-                            s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            String(s.roomNumber).includes(searchTerm)
-                         ).map(s => (
-                           <TableRow key={s.id} className="border-b">
-                              <TableCell className="py-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div>
-                                  <div>
-                                    <p className="font-black text-slate-800 text-xs">{s.name}</p>
-                                    <p className="text-[8px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+                   <Button variant="outline" className="rounded-xl font-bold" onClick={() => setViewDay('tomorrow')}>Switch to Tomorrow</Button>
+                </div>
+             ) : (
+                <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
+                  <CardHeader className="bg-slate-50/50 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div>
+                      <CardTitle className="text-lg">Meal Override (Tomorrow)</CardTitle>
+                      <CardDescription>Manually toggle meals for specific students for tomorrow.</CardDescription>
+                    </div>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input placeholder="Search name or room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0 h-[600px] overflow-y-auto">
+                    <Table>
+                        <TableBody>
+                          {students?.filter(s => 
+                              s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                              String(s.roomNumber).includes(searchTerm)
+                          ).map(s => (
+                            <TableRow key={s.id} className="border-b">
+                                <TableCell className="py-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div>
+                                    <div>
+                                      <p className="font-black text-slate-800 text-xs">{s.name}</p>
+                                      <p className="text-[8px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+                                    </div>
                                   </div>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                 <div className="flex gap-2 justify-end">
-                                    {['breakfast', 'lunch', 'dinner'].map(m => {
-                                      const isAvail = mealConfig?.[`${m}Available`] !== false;
-                                      const isActive = s.lastMealUpdateDate === tomorrowContext.todayYMD ? !!s.mealStatus?.[m] : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[tomorrowContext.dayName]?.[m] : false);
-                                      return (
-                                        <button 
-                                          key={m} 
-                                          onClick={() => handleToggleMeal(s, m)} 
-                                          disabled={!canOverride || !isAvail} 
-                                          className={cn(
-                                            "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
-                                            (isActive && isAvail) ? "bg-primary text-white" : "bg-slate-100 text-slate-300",
-                                            !isAvail && "opacity-20"
-                                          )}
-                                        >
-                                          {m.charAt(0).toUpperCase()}
-                                        </button>
-                                      );
-                                    })}
-                                 </div>
-                              </TableCell>
-                           </TableRow>
-                         ))}
-                      </TableBody>
-                   </Table>
-                </CardContent>
-             </Card>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex gap-2 justify-end">
+                                      {['breakfast', 'lunch', 'dinner'].map(m => {
+                                        const isAvail = mealConfig?.[`${m}Available`] !== false;
+                                        const isActive = s.lastMealUpdateDate === viewContext.updateDateYMD ? !!s.mealStatus?.[m] : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.[m] : false);
+                                        return (
+                                          <button 
+                                            key={m} 
+                                            onClick={() => handleToggleMeal(s, m)} 
+                                            disabled={!canOverride || !isAvail} 
+                                            className={cn(
+                                              "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
+                                              (isActive && isAvail) ? "bg-primary text-white" : "bg-slate-100 text-slate-300",
+                                              !isAvail && "opacity-20"
+                                            )}
+                                          >
+                                            {m.charAt(0).toUpperCase()}
+                                          </button>
+                                        );
+                                      })}
+                                  </div>
+                                </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+             )}
           </TabsContent>
         )}
       </Tabs>
