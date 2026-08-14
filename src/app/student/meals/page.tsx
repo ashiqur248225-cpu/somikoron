@@ -74,6 +74,16 @@ const MEAL_TYPES = [
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+/**
+ * Robust YYYY-MM-DD formatter for local time
+ */
+const getLocYMD = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function StudentMealPage() {
   const { toast } = useToast()
   const db = useFirestore()
@@ -168,7 +178,7 @@ export default function StudentMealPage() {
 
   const hasAlreadyUpdatedToday = useMemo(() => {
     if (!student?.lastMealUpdateDate) return false;
-    const todayStr = new Date().toLocaleDateString('en-CA');
+    const todayStr = getLocYMD(new Date());
     return student.lastMealUpdateDate === todayStr;
   }, [student?.lastMealUpdateDate]);
 
@@ -208,7 +218,7 @@ export default function StudentMealPage() {
         if (mealConfig?.dinnerAvailable === false) finalMeals.dinner = false;
       }
 
-      const todayStr = new Date().toLocaleDateString('en-CA');
+      const todayStr = getLocYMD(new Date());
       const targetLabel = `${MONTHS[tomorrowDate.getMonth()]} ${tomorrowDate.getFullYear()}`;
       
       const isReSubmission = student.lastMealUpdateDate === todayStr;
@@ -258,8 +268,7 @@ export default function StudentMealPage() {
         updates.currentMonthDinner = diffD;
         updates.currentMonthGuestMeals = nextGuestTotal;
       } else {
-        // For same month or initial entry (where label was missing), we MUST use increment
-        // to preserve whatever data was already there (from Admin or previous logic)
+        // Incremental updates for current month or initial registration
         if (diffB !== 0) updates.currentMonthBreakfast = increment(diffB);
         if (diffL !== 0) updates.currentMonthLunch = increment(diffL);
         if (diffD !== 0) updates.currentMonthDinner = increment(diffD);
@@ -524,7 +533,7 @@ export default function StudentMealPage() {
                                   onClick={() => updateGuestCount(type.id as any, -1)}
                                   disabled={!canChange || guestCount <= 0}
                                 >
-                                   <Users className="h-3 w-3" />
+                                   <Plus className="h-3 w-3 rotate-45" />
                                 </Button>
                                 <span className="text-sm font-black text-slate-800 w-4 text-center">{guestCount}</span>
                                 <Button 

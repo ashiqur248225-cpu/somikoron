@@ -44,6 +44,16 @@ import { useToast } from "@/hooks/use-toast"
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
+/**
+ * Robust YYYY-MM-DD formatter for local time
+ */
+const getLocYMD = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function AdminMealDashboardPage() {
   const db = useFirestore()
   const { toast } = useToast()
@@ -84,13 +94,13 @@ export default function AdminMealDashboardPage() {
     if (viewDay === 'tomorrow') targetDate.setDate(now.getDate() + 1)
     if (viewDay === 'yesterday') targetDate.setDate(now.getDate() - 1)
     
-    // The date when the student updated for this targetDate
+    // updateDate is the day the student made their selection for the targetDate
     const updateDate = new Date(targetDate)
     updateDate.setDate(targetDate.getDate() - 1)
     
     const dayName = WEEKDAYS[targetDate.getDay()]
     const dateStr = targetDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    const updateDateYMD = updateDate.toLocaleDateString('en-CA') // YYYY-MM-DD
+    const updateDateYMD = getLocYMD(updateDate)
     
     return { dayName, dateStr, updateDateYMD, targetDate }
   }, [viewDay, isMounted])
@@ -141,6 +151,7 @@ export default function AdminMealDashboardPage() {
         choiceD = sched.dinnerChoice || "Normal"
       }
 
+      // Guest meals are usually only set during a manual update for specific day
       const gB = (updatedOnTime && bAvail) ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
       const gL = (updatedOnTime && lAvail) ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
       const gD = (updatedOnTime && dAvail) ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
@@ -232,7 +243,7 @@ export default function AdminMealDashboardPage() {
       await updateDoc(sRef, {
         [`mealStatus.${mealId}`]: !currentVal,
         [counterField]: increment(!currentVal ? 1 : -1),
-        lastMealUpdateDate: new Date().toLocaleDateString('en-CA'),
+        lastMealUpdateDate: getLocYMD(new Date()),
         updatedAt: serverTimestamp()
       });
       toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled for tomorrow.` });
