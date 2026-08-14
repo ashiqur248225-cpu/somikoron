@@ -94,15 +94,16 @@ export default function AdminMealDashboardPage() {
     if (viewDay === 'tomorrow') targetDate.setDate(now.getDate() + 1)
     if (viewDay === 'yesterday') targetDate.setDate(now.getDate() - 1)
     
-    // updateDate is the day the student made their selection for the targetDate
+    // The decision for targetDate was made on updateDate (usually the day before)
     const updateDate = new Date(targetDate)
     updateDate.setDate(targetDate.getDate() - 1)
     
     const dayName = WEEKDAYS[targetDate.getDay()]
     const dateStr = targetDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
     const updateDateYMD = getLocYMD(updateDate)
+    const todayYMD = getLocYMD(now)
     
-    return { dayName, dateStr, updateDateYMD, targetDate }
+    return { dayName, dateStr, updateDateYMD, targetDate, todayYMD }
   }, [viewDay, isMounted])
 
   const currentMenu = useMemo(() => {
@@ -111,7 +112,7 @@ export default function AdminMealDashboardPage() {
   }, [routines, userBranch, viewContext.dayName])
 
   const mealStats = useMemo(() => {
-    if (!students || configLoading || !isMounted) return { 
+    if (!students || !isMounted) return { 
       totals: { breakfast: 0, lunch: 0, dinner: 0, totalPlates: 0 },
       choices: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> },
       buildingData: {} as Record<string, any>
@@ -121,7 +122,7 @@ export default function AdminMealDashboardPage() {
     let choices = { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> }
     let buildingData: Record<string, any> = {}
 
-    const { dayName, updateDateYMD } = viewContext
+    const { dayName, updateDateYMD, todayYMD } = viewContext
     const bAvail = mealConfig?.breakfastAvailable !== false;
     const lAvail = mealConfig?.lunchAvailable !== false;
     const dAvail = mealConfig?.dinnerAvailable !== false;
@@ -133,9 +134,11 @@ export default function AdminMealDashboardPage() {
       let choiceL = "Normal"
       let choiceD = "Normal"
       
-      const updatedOnTime = s.lastMealUpdateDate === updateDateYMD;
-
-      if (updatedOnTime) {
+      const lastUpdateYMD = s.lastMealUpdateDate || "";
+      const isUpdatedForTarget = lastUpdateYMD === updateDateYMD || (viewDay === 'tomorrow' && lastUpdateYMD === todayYMD);
+      
+      // LOGIC: Use manual status if updated specifically for this cycle, otherwise check autoMode
+      if (isUpdatedForTarget) {
         willEatB = !!s.mealStatus?.breakfast && bAvail
         willEatL = !!s.mealStatus?.lunch && lAvail
         willEatD = !!s.mealStatus?.dinner && dAvail
@@ -151,10 +154,10 @@ export default function AdminMealDashboardPage() {
         choiceD = sched.dinnerChoice || "Normal"
       }
 
-      // Guest meals are usually only set during a manual update for specific day
-      const gB = (updatedOnTime && bAvail) ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
-      const gL = (updatedOnTime && lAvail) ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
-      const gD = (updatedOnTime && dAvail) ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
+      // Guest meals only apply if they were set for the specific upcoming cycle
+      const gB = (isUpdatedForTarget && bAvail) ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
+      const gL = (isUpdatedForTarget && lAvail) ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
+      const gD = (isUpdatedForTarget && dAvail) ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
 
       const combinedB = (willEatB ? 1 : 0) + gB;
       const combinedL = (willEatL ? 1 : 0) + gL;
@@ -216,14 +219,14 @@ export default function AdminMealDashboardPage() {
           isSelfD: willEatD,
           choiceL,
           choiceD,
-          guests: updatedOnTime ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 },
-          isAuto: !updatedOnTime && s.mealStatus?.autoMode
+          guests: isUpdatedForTarget ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 },
+          isAuto: !isUpdatedForTarget && s.mealStatus?.autoMode
         })
       }
     })
 
     return { totals, choices, buildingData }
-  }, [students, viewContext, mealConfig, configLoading, isMounted])
+  }, [students, viewContext, mealConfig, viewDay, isMounted])
 
   const canOverride = (userRole === 'Admin' || userRole === 'Branch Manager') && viewDay === 'tomorrow';
 
@@ -487,41 +490,52 @@ export default function AdminMealDashboardPage() {
                           {students?.filter(s => 
                               s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               String(s.roomNumber).includes(searchTerm)
-                          ).map(s => (
-                            <TableRow key={s.id} className="border-b">
-                                <TableCell className="py-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div>
-                                    <div>
-                                      <p className="font-black text-slate-800 text-xs">{s.name}</p>
-                                      <p className="text-[8px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+                          ).map(s => {
+                            const lastUpdateYMD = s.lastMealUpdateDate || "";
+                            const isUpdatedForTarget = lastUpdateYMD === viewContext.todayYMD;
+                            const isActiveB = isUpdatedForTarget ? !!s.mealStatus?.breakfast : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.breakfast : false);
+                            const isActiveL = isUpdatedForTarget ? !!s.mealStatus?.lunch : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.lunch : false);
+                            const isActiveD = isUpdatedForTarget ? !!s.mealStatus?.dinner : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.dinner : false);
+
+                            return (
+                              <TableRow key={s.id} className="border-b">
+                                  <TableCell className="py-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-9 w-9 rounded-lg bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">R-{s.roomNumber}</div>
+                                      <div>
+                                        <p className="font-black text-slate-800 text-xs">{s.name}</p>
+                                        <p className="text-[8px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+                                      </div>
                                     </div>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex gap-2 justify-end">
-                                      {['breakfast', 'lunch', 'dinner'].map(m => {
-                                        const isAvail = mealConfig?.[`${m}Available`] !== false;
-                                        const isActive = s.lastMealUpdateDate === viewContext.updateDateYMD ? !!s.mealStatus?.[m] : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.[m] : false);
-                                        return (
-                                          <button 
-                                            key={m} 
-                                            onClick={() => handleToggleMeal(s, m)} 
-                                            disabled={!canOverride || !isAvail} 
-                                            className={cn(
-                                              "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
-                                              (isActive && isAvail) ? "bg-primary text-white" : "bg-slate-100 text-slate-300",
-                                              !isAvail && "opacity-20"
-                                            )}
-                                          >
-                                            {m.charAt(0).toUpperCase()}
-                                          </button>
-                                        );
-                                      })}
-                                  </div>
-                                </TableCell>
-                            </TableRow>
-                          ))}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex gap-2 justify-end">
+                                        {[
+                                          { id: 'breakfast', active: isActiveB },
+                                          { id: 'lunch', active: isActiveL },
+                                          { id: 'dinner', active: isActiveD }
+                                        ].map(m => {
+                                          const isAvail = mealConfig?.[`${m.id}Available`] !== false;
+                                          return (
+                                            <button 
+                                              key={m.id} 
+                                              onClick={() => handleToggleMeal(s, m.id)} 
+                                              disabled={!canOverride || !isAvail} 
+                                              className={cn(
+                                                "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
+                                                (m.active && isAvail) ? "bg-primary text-white" : "bg-slate-100 text-slate-300",
+                                                !isAvail && "opacity-20"
+                                              )}
+                                            >
+                                              {m.id.charAt(0).toUpperCase()}
+                                            </button>
+                                          );
+                                        })}
+                                    </div>
+                                  </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                     </Table>
                   </CardContent>
@@ -559,7 +573,7 @@ export default function AdminMealDashboardPage() {
                         <td className="border border-slate-300 p-2 font-black text-sm">R-{room.roomNo}</td>
                         <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.b || '-'}</td>
                         <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.l || '-'}</td>
-                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.done || '-'}</td>
+                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.d || '-'}</td>
                         <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.guests || '-'}</td>
                         <td className="border border-slate-300 p-2 text-[10px]">
                            {room.residents.filter((r:any) => r.choiceL !== 'Normal' || r.choiceD !== 'Normal').map((r:any) => 
