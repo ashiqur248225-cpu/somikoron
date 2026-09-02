@@ -26,17 +26,29 @@ import {
   AlertCircle
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase"
-import { doc } from "firebase/firestore"
+import { doc, updateDoc, increment, serverTimestamp } from "firebase/firestore"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/**
+ * Robust YYYY-MM-DD formatter for local time
+ */
+const getLocYMD = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 export default function StudentDashboardPage() {
   const db = useFirestore()
   const [studentId, setStudentId] = useState("")
   const [isMounted, setIsMounted] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
@@ -45,6 +57,89 @@ export default function StudentDashboardPage() {
 
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
   const { data: student, isLoading } = useDoc(studentRef)
+
+  const userBranch = student?.branch || ""
+  const mealConfigRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
+  // SMART AUTO-SYNC: Catch up on missed decisions while in Auto Mode
+  useEffect(() => {
+    if (!student || !student.mealStatus?.autoMode || !isMounted || isSyncing) return;
+
+    const syncAutoMeals = async () => {
+      const lastUpdateStr = student.lastMealUpdateDate;
+      if (!lastUpdateStr) return;
+
+      const lastUpdate = new Date(lastUpdateStr);
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      
+      const lastUpdateMidnight = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
+      const yesterdayMidnight = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+      const yesterdayStr = getLocYMD(yesterdayMidnight);
+
+      if (lastUpdateMidnight >= yesterdayMidnight) return;
+
+      setIsSyncing(true);
+      try {
+        let currentMonthLabel = student.currentMonthLabel;
+        let counters = {
+          breakfast: Number(student.currentMonthBreakfast || 0),
+          lunch: Number(student.currentMonthLunch || 0),
+          dinner: Number(student.currentMonthDinner || 0),
+          guest: Number(student.currentMonthGuestMeals || 0)
+        };
+
+        let checkDecisionDate = new Date(lastUpdateMidnight);
+        
+        while (getLocYMD(checkDecisionDate) < yesterdayStr) {
+          checkDecisionDate.setDate(checkDecisionDate.getDate() + 1);
+          
+          // The meal occurs on the day AFTER the decision handled by Auto Mode
+          const mealDate = new Date(checkDecisionDate);
+          mealDate.setDate(mealDate.getDate() + 1);
+          
+          const mealMonthLabel = `${MONTHS[mealDate.getMonth()]} ${mealDate.getFullYear()}`;
+          
+          // Month transition check
+          if (currentMonthLabel && currentMonthLabel !== mealMonthLabel) {
+             counters = { breakfast: 0, lunch: 0, dinner: 0, guest: 0 };
+             currentMonthLabel = mealMonthLabel;
+          } else if (!currentMonthLabel) {
+             currentMonthLabel = mealMonthLabel;
+          }
+
+          const dayName = WEEKDAYS[mealDate.getDay()];
+          // Resilience: Default to true if specific schedule day is missing
+          const sched = student.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true };
+          
+          if (sched.breakfast && mealConfig?.breakfastAvailable !== false) counters.breakfast += 1;
+          if (sched.lunch && mealConfig?.lunchAvailable !== false) counters.lunch += 1;
+          if (sched.dinner && mealConfig?.dinnerAvailable !== false) counters.dinner += 1;
+        }
+
+        await updateDoc(studentRef, {
+          currentMonthBreakfast: counters.breakfast,
+          currentMonthLunch: counters.lunch,
+          currentMonthDinner: counters.dinner,
+          currentMonthGuestMeals: counters.guest,
+          currentMonthLabel,
+          lastMealUpdateDate: yesterdayStr,
+          updatedAt: serverTimestamp()
+        });
+      } catch (e) {
+        console.error("Auto-sync error:", e);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    syncAutoMeals();
+  }, [student, studentRef, isMounted, mealConfig, isSyncing]);
 
   const stats = useMemo(() => {
     if (!student) return null
@@ -86,9 +181,12 @@ export default function StudentDashboardPage() {
           <h1 className="text-lg font-black text-slate-800 truncate">Hi, {displayName}</h1>
           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Portal</p>
         </div>
-        <Badge className="bg-primary/10 text-primary border-none font-black text-[9px] uppercase px-3 rounded-full shrink-0">
-          R-{student.roomNumber}
-        </Badge>
+        <div className="flex items-center gap-2">
+           {isSyncing && <Loader2 className="h-4 w-4 animate-spin text-primary opacity-40" />}
+           <Badge className="bg-primary/10 text-primary border-none font-black text-[9px] uppercase px-3 rounded-full shrink-0">
+             R-{student.roomNumber}
+           </Badge>
+        </div>
       </div>
 
       {/* Main Account Card */}

@@ -146,7 +146,8 @@ export default function AdminMealDashboardPage() {
         choiceD = s.mealChoices?.dinner || "Normal"
       } 
       else if (s.mealStatus?.autoMode) {
-        const sched = s.weeklySchedule?.[dayName] || { breakfast: false, lunch: false, dinner: false }
+        // RESILIENT AUTO-MODE: Default to TRUE if schedule is missing, as Auto Mode usually implies 'Everything ON'
+        const sched = s.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true }
         willEatB = !!sched.breakfast && bAvail
         willEatL = !!sched.lunch && lAvail
         willEatD = !!sched.dinner && dAvail

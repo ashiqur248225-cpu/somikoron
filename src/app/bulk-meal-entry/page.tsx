@@ -17,7 +17,8 @@ import {
   Calculator,
   RotateCcw,
   Hash,
-  Users
+  Users,
+  RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -31,6 +32,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+const getLocYMD = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 export default function BulkMealEntryPage() {
   const { toast } = useToast()
@@ -42,6 +51,7 @@ export default function BulkMealEntryPage() {
   const [userRole, setUserRole] = useState("")
   const [assignedBuildingId, setAssignedBuildingId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   const [mealLogFilter, setMealLogFilter] = useState({
     month: "",
@@ -91,10 +101,16 @@ export default function BulkMealEntryPage() {
   const { data: students } = useCollection(studentsQuery)
 
   const mealConfigRef = useMemoFirebase(() => 
-    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
+    userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
     [db, userBranch]
   )
   const { data: mealConfig } = useDoc(mealConfigRef)
+
+  const mealRateRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: mealRateData } = useDoc(mealRateRef)
 
   const templatesRef = useMemoFirebase(() => doc(db, "configs", "smsTemplates"), [db])
   const { data: templatesData } = useDoc(templatesRef)
@@ -110,6 +126,77 @@ export default function BulkMealEntryPage() {
       s.paymentSystem === 'non-package'
     )
   }, [students, mealLogFilter.buildingId])
+
+  // SMART SYNC FOR ADMIN: Catch up all students before billing
+  const handleGlobalSync = async () => {
+    if (!students || !userBranch || isSyncing) return;
+    setIsSyncing(true);
+    const batch = writeBatch(db);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayStr = getLocYMD(yesterday);
+    let syncCount = 0;
+
+    try {
+      students.forEach(s => {
+        if (!s.isActive || !s.mealStatus?.autoMode || !s.lastMealUpdateDate || s.lastMealUpdateDate >= yesterdayStr) return;
+        
+        syncCount++;
+        let currentMonthLabel = s.currentMonthLabel;
+        let counters = {
+          b: Number(s.currentMonthBreakfast || 0),
+          l: Number(s.currentMonthLunch || 0),
+          d: Number(s.currentMonthDinner || 0),
+          g: Number(s.currentMonthGuestMeals || 0)
+        };
+
+        const lastUpdate = new Date(s.lastMealUpdateDate);
+        let checkDecisionDate = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
+
+        while (getLocYMD(checkDecisionDate) < yesterdayStr) {
+          checkDecisionDate.setDate(checkDecisionDate.getDate() + 1);
+          const mealDate = new Date(checkDecisionDate);
+          mealDate.setDate(mealDate.getDate() + 1);
+          const mealMonthLabel = `${MONTHS[mealDate.getMonth()]} ${mealDate.getFullYear()}`;
+
+          if (currentMonthLabel && currentMonthLabel !== mealMonthLabel) {
+            counters = { b: 0, l: 0, d: 0, g: 0 };
+            currentMonthLabel = mealMonthLabel;
+          } else if (!currentMonthLabel) {
+            currentMonthLabel = mealMonthLabel;
+          }
+
+          const dayName = WEEKDAYS[mealDate.getDay()];
+          const sched = s.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true };
+          if (sched.breakfast && mealConfig?.breakfastAvailable !== false) counters.b += 1;
+          if (sched.lunch && mealConfig?.lunchAvailable !== false) counters.l += 1;
+          if (sched.dinner && mealConfig?.dinnerAvailable !== false) counters.d += 1;
+        }
+
+        batch.update(doc(db, "students", s.id), {
+          currentMonthBreakfast: counters.b,
+          currentMonthLunch: counters.l,
+          currentMonthDinner: counters.d,
+          currentMonthGuestMeals: counters.g,
+          currentMonthLabel,
+          lastMealUpdateDate: yesterdayStr,
+          updatedAt: serverTimestamp()
+        });
+      });
+
+      if (syncCount > 0) {
+        await batch.commit();
+        toast({ title: "Auto-Sync Complete", description: `${syncCount} students synced to yesterday.` });
+      } else {
+        toast({ title: "Up to Date", description: "All students are already synced." });
+      }
+    } catch (e: any) {
+      toast({ variant: "destructive", description: e.message });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // POPULATE MEAL INPUTS AUTOMATICALLY FROM STUDENT COUNTERS (STUDENT + GUESTS)
   useEffect(() => {
@@ -139,22 +226,23 @@ export default function BulkMealEntryPage() {
   }, [filteredStudents])
 
   const grandBillSum = useMemo(() => {
-    const rate = Number(mealConfig?.rate || 0);
+    const rate = Number(mealRateData?.rate || 0);
     return filteredStudents.reduce((acc, s) => {
       return acc + (Number(mealInputs[s.id] || 0) * rate)
     }, 0)
-  }, [mealInputs, filteredStudents, mealConfig?.rate])
+  }, [mealInputs, filteredStudents, mealRateData?.rate])
 
   const handleBulkMealSubmit = async () => {
-    if (!students || !mealConfig?.rate) {
+    if (!students || !mealRateData?.rate) {
       toast({ variant: "destructive", title: "Error", description: "Meal rate not configured." });
       return;
     }
     setIsSubmitting(true);
     const batch = writeBatch(db);
-    const mealRate = Number(mealConfig.rate);
+    const mealRate = Number(mealRateData.rate);
     const monthLabel = `${mealLogFilter.month} ${mealLogFilter.year}`;
     const updatedRecords: any[] = [];
+    const todayStr = getLocYMD(new Date());
 
     try {
       filteredStudents.forEach(s => {
@@ -177,6 +265,7 @@ export default function BulkMealEntryPage() {
           currentMonthLunch: 0,
           currentMonthDinner: 0,
           currentMonthGuestMeals: 0,
+          lastMealUpdateDate: todayStr, // Handle the "handled up to today" rule
           updatedAt: serverTimestamp()
         });
 
@@ -230,11 +319,19 @@ export default function BulkMealEntryPage() {
         <div className="flex-1 overflow-hidden"><h1 className="text-lg font-bold truncate">Meal Entry</h1></div>
       </div>
 
-      <div className="hidden md:flex items-center gap-4">
-        {(userRole === 'Admin' || userRole === 'Branch Manager') && (
-          <Button variant="ghost" size="icon" onClick={() => router.back()}><ChevronLeft /></Button>
+      <div className="hidden md:flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          {(userRole === 'Admin' || userRole === 'Branch Manager') && (
+            <Button variant="ghost" size="icon" onClick={() => router.back()}><ChevronLeft /></Button>
+          )}
+          <div><h1 className="text-3xl font-bold text-primary tracking-tight">Bulk Meal Entry</h1><p className="text-muted-foreground text-sm">Update meal counts and guest meals for non-package residents.</p></div>
+        </div>
+        {userRole === 'Admin' && (
+          <Button onClick={handleGlobalSync} disabled={isSyncing} variant="outline" className="gap-2 font-bold rounded-xl border-primary/20 text-primary">
+            <RefreshCw size={16} className={cn(isSyncing && "animate-spin")} />
+            Sync Auto Counters
+          </Button>
         )}
-        <div><h1 className="text-3xl font-bold text-primary tracking-tight">Bulk Meal Entry</h1><p className="text-muted-foreground text-sm">Update meal counts and guest meals for non-package residents.</p></div>
       </div>
 
       <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
@@ -273,7 +370,7 @@ export default function BulkMealEntryPage() {
             <TableHeader className="bg-white sticky top-0 z-10"><TableRow className="border-none h-16"><TableHead className="font-black uppercase text-[11px] text-slate-500">Resident Details</TableHead><TableHead className="font-black uppercase text-[11px] text-center text-slate-500">Counters (Self | Guest)</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">Effective Billable</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">Meal Bill</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">New Balance</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredStudents.map(s => {
-                const count = Number(mealInputs[s.id] || 0); const rate = Number(mealConfig?.rate || 0); const bill = count * rate; const currentBal = Number(s.foodDueAmount || 0); const newBal = currentBal - bill;
+                const count = Number(mealInputs[s.id] || 0); const rate = Number(mealRateData?.rate || 0); const bill = count * rate; const currentBal = Number(s.foodDueAmount || 0); const newBal = currentBal - bill;
                 return (
                   <TableRow key={s.id} className={cn("group transition-all hover:bg-slate-50 h-20", newBal < 0 && "bg-destructive/[0.03]")}>
                     <TableCell><div className="flex items-center gap-4"><div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.name.substring(0, 2).toUpperCase()}</div><div><p className="font-bold text-slate-800 text-sm leading-none">{s.name}</p><p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">{s.buildingName} • R-{s.roomNumber}</p></div></div></TableCell>
