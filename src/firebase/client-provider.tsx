@@ -4,7 +4,7 @@ import React, { useMemo, useEffect, type ReactNode, useState } from 'react';
 import { FirebaseProvider } from '@/firebase/provider';
 import { initializeFirebase } from '@/firebase';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Loader2 } from 'lucide-react';
+import { Loader2, WifiOff } from 'lucide-react';
 import Image from 'next/image';
 import logoIcon from '../../public/icon.png';
 
@@ -15,6 +15,7 @@ interface FirebaseClientProviderProps {
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const [isFirebaseInitialized, setIsFirebaseInitialized] = useState(false);
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
+  const [showSlowConnectionMsg, setShowSlowConnectionMsg] = useState(false);
   
   const firebaseServices = useMemo(() => {
     return initializeFirebase();
@@ -26,7 +27,16 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
       setMinTimeElapsed(true);
     }, 3000);
 
-    if (!firebaseServices) return () => clearTimeout(timer);
+    // Safety fallback: If connection is taking too long (mobile data issues), force initialize after 8 seconds
+    const safetyTimer = setTimeout(() => {
+      setIsFirebaseInitialized(true);
+      setShowSlowConnectionMsg(true);
+    }, 8000);
+
+    if (!firebaseServices) return () => {
+      clearTimeout(timer);
+      clearTimeout(safetyTimer);
+    };
     
     const { auth } = firebaseServices;
     
@@ -34,17 +44,20 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         try {
-          await signInAnonymously(auth);
+          // Non-blocking sign in
+          signInAnonymously(auth).catch(e => console.error("Silent sign-in failed", e));
         } catch (error) {
-          console.error("Auto sign-in failed", error);
+          console.error("Auto sign-in logic error", error);
         }
       }
+      // Mark as initialized as soon as we have a state (auth responds)
       setIsFirebaseInitialized(true);
     });
 
     return () => {
       unsubscribe();
       clearTimeout(timer);
+      clearTimeout(safetyTimer);
     };
   }, [firebaseServices]);
 
@@ -75,6 +88,14 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.3em] opacity-60">
               Hostel Management Platform
             </p>
+            {showSlowConnectionMsg && (
+              <div className="pt-4 animate-in slide-in-from-top-2 flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2 text-[10px] font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-full border border-orange-100">
+                  <WifiOff size={10} /> Slow Connection Detected
+                </div>
+                <p className="text-[9px] text-slate-400 font-medium">Please wait while we establish a secure session...</p>
+              </div>
+            )}
           </div>
         </div>
         <div className="absolute bottom-12 left-0 right-0 text-center">
