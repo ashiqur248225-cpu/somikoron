@@ -30,19 +30,7 @@ import { doc, updateDoc, increment, serverTimestamp } from "firebase/firestore"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-/**
- * Robust YYYY-MM-DD formatter for local time
- */
-const getLocYMD = (date: Date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
+import { syncMissingAutoMeals } from "@/lib/meal-sync-service"
 
 export default function StudentDashboardPage() {
   const db = useFirestore()
@@ -53,93 +41,23 @@ export default function StudentDashboardPage() {
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
     setIsMounted(true)
-  }, [])
+    if (typeof window !== 'undefined') (window as any).firebaseDb = db;
+  }, [db])
 
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
   const { data: student, isLoading } = useDoc(studentRef)
 
-  const userBranch = student?.branch || ""
-  const mealConfigRef = useMemoFirebase(() => 
-    userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
-    [db, userBranch]
-  )
-  const { data: mealConfig } = useDoc(mealConfigRef)
-
-  // SMART AUTO-SYNC: Catch up on missed decisions while in Auto Mode
+  // Trigger Authoritative Auto Sync
   useEffect(() => {
-    if (!student || !student.mealStatus?.autoMode || !isMounted || isSyncing) return;
-
-    const syncAutoMeals = async () => {
-      const lastUpdateStr = student.lastMealUpdateDate;
-      if (!lastUpdateStr) return;
-
-      const lastUpdate = new Date(lastUpdateStr);
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(today.getDate() - 1);
-      
-      const lastUpdateMidnight = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
-      const yesterdayMidnight = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-      const yesterdayStr = getLocYMD(yesterdayMidnight);
-
-      if (lastUpdateMidnight >= yesterdayMidnight) return;
-
+    if (!student || !student.branch || !student.mealStatus?.autoMode || isSyncing) return;
+    
+    const triggerSync = async () => {
       setIsSyncing(true);
-      try {
-        let currentMonthLabel = student.currentMonthLabel;
-        let counters = {
-          breakfast: Number(student.currentMonthBreakfast || 0),
-          lunch: Number(student.currentMonthLunch || 0),
-          dinner: Number(student.currentMonthDinner || 0),
-          guest: Number(student.currentMonthGuestMeals || 0)
-        };
-
-        let checkDecisionDate = new Date(lastUpdateMidnight);
-        
-        while (getLocYMD(checkDecisionDate) < yesterdayStr) {
-          checkDecisionDate.setDate(checkDecisionDate.getDate() + 1);
-          
-          // The meal occurs on the day AFTER the decision handled by Auto Mode
-          const mealDate = new Date(checkDecisionDate);
-          mealDate.setDate(mealDate.getDate() + 1);
-          
-          const mealMonthLabel = `${MONTHS[mealDate.getMonth()]} ${mealDate.getFullYear()}`;
-          
-          // Month transition check
-          if (currentMonthLabel && currentMonthLabel !== mealMonthLabel) {
-             counters = { breakfast: 0, lunch: 0, dinner: 0, guest: 0 };
-             currentMonthLabel = mealMonthLabel;
-          } else if (!currentMonthLabel) {
-             currentMonthLabel = mealMonthLabel;
-          }
-
-          const dayName = WEEKDAYS[mealDate.getDay()];
-          // Resilience: Default to true if specific schedule day is missing
-          const sched = student.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true };
-          
-          if (sched.breakfast && mealConfig?.breakfastAvailable !== false) counters.breakfast += 1;
-          if (sched.lunch && mealConfig?.lunchAvailable !== false) counters.lunch += 1;
-          if (sched.dinner && mealConfig?.dinnerAvailable !== false) counters.dinner += 1;
-        }
-
-        await updateDoc(studentRef, {
-          currentMonthBreakfast: counters.breakfast,
-          currentMonthLunch: counters.lunch,
-          currentMonthDinner: counters.dinner,
-          currentMonthGuestMeals: counters.guest,
-          currentMonthLabel,
-          lastMealUpdateDate: yesterdayStr,
-          updatedAt: serverTimestamp()
-        });
-      } catch (e) {
-        console.error("Auto-sync error:", e);
-      } finally {
-        setIsSyncing(false);
-      }
-    };
-
-    syncAutoMeals();
-  }, [student, studentRef, isMounted, mealConfig, isSyncing]);
+      await syncMissingAutoMeals(db, student.branch, student.id);
+      setIsSyncing(false);
+    }
+    triggerSync();
+  }, [student, db]);
 
   const stats = useMemo(() => {
     if (!student) return null
@@ -148,7 +66,6 @@ export default function StudentDashboardPage() {
     const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0
     const foodBalanceDisplay = foodVal
     
-    // Cooking Bill Logic
     const cookVal = Number(student.cookingDueAmount || 0)
     const cookDue = cookVal < 0 ? Math.abs(cookVal) : 0
     const cookBalance = cookVal > 0 ? cookVal : 0
@@ -175,7 +92,6 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Sticky App Bar */}
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex-1 overflow-hidden">
           <h1 className="text-lg font-black text-slate-800 truncate">Hi, {displayName}</h1>
@@ -189,7 +105,6 @@ export default function StudentDashboardPage() {
         </div>
       </div>
 
-      {/* Main Account Card */}
       <Card className="border-none shadow-2xl bg-primary rounded-[2.5rem] overflow-hidden text-white relative">
         <div className="absolute top-0 right-0 p-8 opacity-10"><Wallet size={120} /></div>
         <CardContent className="p-8 space-y-6 relative z-10">
@@ -238,7 +153,6 @@ export default function StudentDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Cooking Bill Awareness Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
          <Card className={cn("border-none shadow-sm rounded-3xl overflow-hidden border-l-4", (stats?.rentDue || 0) > 0 ? "border-l-destructive bg-destructive/5" : "border-l-success bg-success/5")}>
             <CardContent className="p-5 flex items-center justify-between">
@@ -275,7 +189,6 @@ export default function StudentDashboardPage() {
          </Card>
       </div>
 
-      {/* Consumption Progress Card */}
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
         <CardContent className="p-5 flex justify-between items-center">
            <div className="flex items-center gap-3">
@@ -291,7 +204,6 @@ export default function StudentDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Recent Payment Card */}
       {stats?.lastPayment && (
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
           <CardHeader className="bg-success/5 border-b py-3 px-6 flex flex-row justify-between items-center">
@@ -319,7 +231,6 @@ export default function StudentDashboardPage() {
         </Card>
       )}
 
-      {/* Last Month Food Summary Card */}
       {stats?.lastMonthFood && (
         <Card className="border-none shadow-md bg-white rounded-[2rem] overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b py-4">

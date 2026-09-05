@@ -29,10 +29,10 @@ import { cn } from "@/lib/utils"
 import { sendSMS } from "@/app/actions/sms"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { syncMissingAutoMeals } from "@/lib/meal-sync-service"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const YEARS = ["2024", "2025", "2026", "2027", "2028"];
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 const getLocYMD = (date: Date) => {
   const y = date.getFullYear();
@@ -82,6 +82,17 @@ export default function BulkMealEntryPage() {
     })
   }, [])
 
+  // Trigger Shared Sync on Load
+  useEffect(() => {
+    if (!userBranch || isSyncing) return;
+    const runGlobalSync = async () => {
+      setIsSyncing(true);
+      await syncMissingAutoMeals(db, userBranch);
+      setIsSyncing(false);
+    }
+    runGlobalSync();
+  }, [userBranch, db]);
+
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
     if (userRole === 'Building Manager' && assignedBuildingId !== 'none') {
@@ -99,12 +110,6 @@ export default function BulkMealEntryPage() {
     return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students } = useCollection(studentsQuery)
-
-  const mealConfigRef = useMemoFirebase(() => 
-    userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
-    [db, userBranch]
-  )
-  const { data: mealConfig } = useDoc(mealConfigRef)
 
   const mealRateRef = useMemoFirebase(() => 
     userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
@@ -127,89 +132,26 @@ export default function BulkMealEntryPage() {
     )
   }, [students, mealLogFilter.buildingId])
 
-  // SMART SYNC FOR ADMIN: Catch up all students before billing
   const handleGlobalSync = async () => {
-    if (!students || !userBranch || isSyncing) return;
+    if (!userBranch || isSyncing) return;
     setIsSyncing(true);
-    const batch = writeBatch(db);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    const yesterdayStr = getLocYMD(yesterday);
-    let syncCount = 0;
-
-    try {
-      students.forEach(s => {
-        if (!s.isActive || !s.mealStatus?.autoMode || !s.lastMealUpdateDate || s.lastMealUpdateDate >= yesterdayStr) return;
-        
-        syncCount++;
-        let currentMonthLabel = s.currentMonthLabel;
-        let counters = {
-          b: Number(s.currentMonthBreakfast || 0),
-          l: Number(s.currentMonthLunch || 0),
-          d: Number(s.currentMonthDinner || 0),
-          g: Number(s.currentMonthGuestMeals || 0)
-        };
-
-        const lastUpdate = new Date(s.lastMealUpdateDate);
-        let checkDecisionDate = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
-
-        while (getLocYMD(checkDecisionDate) < yesterdayStr) {
-          checkDecisionDate.setDate(checkDecisionDate.getDate() + 1);
-          const mealDate = new Date(checkDecisionDate);
-          mealDate.setDate(mealDate.getDate() + 1);
-          const mealMonthLabel = `${MONTHS[mealDate.getMonth()]} ${mealDate.getFullYear()}`;
-
-          if (currentMonthLabel && currentMonthLabel !== mealMonthLabel) {
-            counters = { b: 0, l: 0, d: 0, g: 0 };
-            currentMonthLabel = mealMonthLabel;
-          } else if (!currentMonthLabel) {
-            currentMonthLabel = mealMonthLabel;
-          }
-
-          const dayName = WEEKDAYS[mealDate.getDay()];
-          const sched = s.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true };
-          if (sched.breakfast && mealConfig?.breakfastAvailable !== false) counters.b += 1;
-          if (sched.lunch && mealConfig?.lunchAvailable !== false) counters.l += 1;
-          if (sched.dinner && mealConfig?.dinnerAvailable !== false) counters.d += 1;
-        }
-
-        batch.update(doc(db, "students", s.id), {
-          currentMonthBreakfast: counters.b,
-          currentMonthLunch: counters.l,
-          currentMonthDinner: counters.d,
-          currentMonthGuestMeals: counters.g,
-          currentMonthLabel,
-          lastMealUpdateDate: yesterdayStr,
-          updatedAt: serverTimestamp()
-        });
-      });
-
-      if (syncCount > 0) {
-        await batch.commit();
-        toast({ title: "Auto-Sync Complete", description: `${syncCount} students synced to yesterday.` });
-      } else {
-        toast({ title: "Up to Date", description: "All students are already synced." });
-      }
-    } catch (e: any) {
-      toast({ variant: "destructive", description: e.message });
-    } finally {
-      setIsSyncing(false);
+    const result = await syncMissingAutoMeals(db, userBranch);
+    setIsSyncing(false);
+    if (result.success) {
+      toast({ title: "Sync Complete", description: `Updated ${result.syncedStudents} students.` });
+    } else {
+      toast({ variant: "destructive", title: "Sync Failed", description: result.error });
     }
   };
 
-  // POPULATE MEAL INPUTS AUTOMATICALLY FROM STUDENT COUNTERS (STUDENT + GUESTS)
   useEffect(() => {
     if (filteredStudents.length > 0) {
       const initialInputs: Record<string, string> = {};
       filteredStudents.forEach(s => {
-        // BREAKFAST counts as 0.5, LUNCH and DINNER count as 1.0
-        // GUEST counts as 1.0 each
         const breakfast = (Number(s.currentMonthBreakfast) || 0) * 0.5;
         const lunch = (Number(s.currentMonthLunch) || 0);
         const dinner = (Number(s.currentMonthDinner) || 0);
         const guest = (Number(s.currentMonthGuestMeals) || 0);
-        
         const effectiveTotal = breakfast + lunch + dinner + guest;
         initialInputs[s.id] = effectiveTotal.toString();
       });
@@ -217,19 +159,11 @@ export default function BulkMealEntryPage() {
     }
   }, [filteredStudents]);
 
-  const totalMealsCount = useMemo(() => {
-    return filteredStudents.reduce((acc, s) => acc + (Number(mealInputs[s.id]) || 0), 0)
-  }, [mealInputs, filteredStudents])
-
-  const totalGuestMealsCount = useMemo(() => {
-    return filteredStudents.reduce((acc, s) => acc + (Number(s.currentMonthGuestMeals) || 0), 0)
-  }, [filteredStudents])
-
+  const totalMealsCount = useMemo(() => filteredStudents.reduce((acc, s) => acc + (Number(mealInputs[s.id]) || 0), 0), [mealInputs, filteredStudents])
+  const totalGuestMealsCount = useMemo(() => filteredStudents.reduce((acc, s) => acc + (Number(s.currentMonthGuestMeals) || 0), 0), [filteredStudents])
   const grandBillSum = useMemo(() => {
     const rate = Number(mealRateData?.rate || 0);
-    return filteredStudents.reduce((acc, s) => {
-      return acc + (Number(mealInputs[s.id] || 0) * rate)
-    }, 0)
+    return filteredStudents.reduce((acc, s) => acc + (Number(mealInputs[s.id] || 0) * rate), 0)
   }, [mealInputs, filteredStudents, mealRateData?.rate])
 
   const handleBulkMealSubmit = async () => {
@@ -265,20 +199,15 @@ export default function BulkMealEntryPage() {
           currentMonthLunch: 0,
           currentMonthDinner: 0,
           currentMonthGuestMeals: 0,
-          lastMealUpdateDate: todayStr, // Handle the "handled up to today" rule
+          lastMealUpdateDate: todayStr,
           updatedAt: serverTimestamp()
         });
 
         const noticeId = doc(collection(db, "notices")).id;
         batch.set(doc(db, "notices", noticeId), {
-          id: noticeId,
-          studentId: s.id,
-          title: "Monthly Meal Bill Generated",
+          id: noticeId, studentId: s.id, title: "Monthly Meal Bill Generated",
           message: `Your meal bill for ${monthLabel} has been generated. Total Effective Meals (inc. guests): ${count}, Total Bill: ${totalCost} Tk.`,
-          type: "meal",
-          isRead: false,
-          createdAt: serverTimestamp(),
-          branch: userBranch
+          type: "meal", isRead: false, createdAt: serverTimestamp(), branch: userBranch
         });
 
         updatedRecords.push({ student: s, count, bill: totalCost });
@@ -286,7 +215,6 @@ export default function BulkMealEntryPage() {
 
       await batch.commit();
 
-      // Background SMS logic...
       if (apiConfig?.apikey && updatedRecords.length > 0) {
         (async () => {
           const template = templatesData?.templates?.find((t: any) => t.id === 'meal_summary')?.text || 
@@ -305,11 +233,8 @@ export default function BulkMealEntryPage() {
 
       toast({ title: "Bulk Entries Submitted", description: "Counters reset and balances updated." });
       router.push('/food-history');
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message });
-    } finally {
-      setIsSubmitting(false);
-    }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
+    finally { setIsSubmitting(false); }
   };
 
   return (

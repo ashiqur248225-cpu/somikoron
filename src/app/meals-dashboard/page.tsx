@@ -41,12 +41,10 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
+import { syncMissingAutoMeals } from "@/lib/meal-sync-service"
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
-/**
- * Robust YYYY-MM-DD formatter for local time
- */
 const getLocYMD = (date: Date) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -63,12 +61,26 @@ export default function AdminMealDashboardPage() {
   const [expandedBuilding, setExpandedBuilding] = useState<string | null>(null)
   const [viewDay, setViewDay] = useState<"yesterday" | "today" | "tomorrow">("today")
   const [isMounted, setIsMounted] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   useEffect(() => {
     setIsMounted(true)
-    setUserBranch(localStorage.getItem("user_branch") || "Main Branch")
+    const branch = localStorage.getItem("user_branch") || "Main Branch"
+    setUserBranch(branch)
     setUserRole(localStorage.getItem("user_role") || "Staff")
-  }, [])
+    if (typeof window !== 'undefined') (window as any).firebaseDb = db;
+  }, [db])
+
+  // Authoritative Global Sync for Branch on Page Load
+  useEffect(() => {
+    if (!userBranch || isSyncing) return;
+    const runGlobalSync = async () => {
+      setIsSyncing(true);
+      await syncMissingAutoMeals(db, userBranch);
+      setIsSyncing(false);
+    }
+    runGlobalSync();
+  }, [userBranch, db]);
 
   const studentsQuery = useMemoFirebase(() => {
     if (!userBranch) return null
@@ -94,7 +106,6 @@ export default function AdminMealDashboardPage() {
     if (viewDay === 'tomorrow') targetDate.setDate(now.getDate() + 1)
     if (viewDay === 'yesterday') targetDate.setDate(now.getDate() - 1)
     
-    // The decision for targetDate was made on updateDate (usually the day before)
     const updateDate = new Date(targetDate)
     updateDate.setDate(targetDate.getDate() - 1)
     
@@ -112,7 +123,7 @@ export default function AdminMealDashboardPage() {
   }, [routines, userBranch, viewContext.dayName])
 
   const mealStats = useMemo(() => {
-    if (!students || !isMounted) return { 
+    if (!students || !isMounted || !mealConfig) return { 
       totals: { breakfast: 0, lunch: 0, dinner: 0, totalPlates: 0 },
       choices: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> },
       buildingData: {} as Record<string, any>
@@ -123,39 +134,33 @@ export default function AdminMealDashboardPage() {
     let buildingData: Record<string, any> = {}
 
     const { dayName, updateDateYMD, todayYMD } = viewContext
-    const bAvail = mealConfig?.breakfastAvailable !== false;
-    const lAvail = mealConfig?.lunchAvailable !== false;
-    const dAvail = mealConfig?.dinnerAvailable !== false;
+    const bAvail = mealConfig.breakfastAvailable !== false;
+    const lAvail = mealConfig.lunchAvailable !== false;
+    const dAvail = mealConfig.dinnerAvailable !== false;
 
     students.forEach(s => {
-      let willEatB = false
-      let willEatL = false
-      let willEatD = false
-      let choiceL = "Normal"
-      let choiceD = "Normal"
+      let willEatB = false; let willEatL = false; let willEatD = false;
+      let choiceL = "Normal"; let choiceD = "Normal";
       
       const lastUpdateYMD = s.lastMealUpdateDate || "";
       const isUpdatedForTarget = lastUpdateYMD === updateDateYMD || (viewDay === 'tomorrow' && lastUpdateYMD === todayYMD);
       
-      // LOGIC: Use manual status if updated specifically for this cycle, otherwise check autoMode
       if (isUpdatedForTarget) {
-        willEatB = !!s.mealStatus?.breakfast && bAvail
-        willEatL = !!s.mealStatus?.lunch && lAvail
-        willEatD = !!s.mealStatus?.dinner && dAvail
-        choiceL = s.mealChoices?.lunch || "Normal"
-        choiceD = s.mealChoices?.dinner || "Normal"
+        willEatB = !!s.mealStatus?.breakfast && bAvail;
+        willEatL = !!s.mealStatus?.lunch && lAvail;
+        willEatD = !!s.mealStatus?.dinner && dAvail;
+        choiceL = s.mealChoices?.lunch || "Normal";
+        choiceD = s.mealChoices?.dinner || "Normal";
       } 
       else if (s.mealStatus?.autoMode) {
-        // RESILIENT AUTO-MODE: Default to TRUE if schedule is missing, as Auto Mode usually implies 'Everything ON'
         const sched = s.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true }
-        willEatB = !!sched.breakfast && bAvail
-        willEatL = !!sched.lunch && lAvail
-        willEatD = !!sched.dinner && dAvail
-        choiceL = sched.lunchChoice || "Normal"
-        choiceD = sched.dinnerChoice || "Normal"
+        willEatB = !!sched.breakfast && bAvail;
+        willEatL = !!sched.lunch && lAvail;
+        willEatD = !!sched.dinner && dAvail;
+        choiceL = sched.lunchChoice || "Normal";
+        choiceD = sched.dinnerChoice || "Normal";
       }
 
-      // Guest meals only apply if they were set for the specific upcoming cycle
       const gB = (isUpdatedForTarget && bAvail) ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
       const gL = (isUpdatedForTarget && lAvail) ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
       const gD = (isUpdatedForTarget && dAvail) ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
@@ -165,64 +170,26 @@ export default function AdminMealDashboardPage() {
       const combinedD = (willEatD ? 1 : 0) + gD;
 
       if (combinedB > 0 || combinedL > 0 || combinedD > 0) {
-        totals.breakfast += combinedB;
-        totals.lunch += combinedL;
-        totals.dinner += combinedD;
+        totals.breakfast += combinedB; totals.lunch += combinedL; totals.dinner += combinedD;
         totals.totalPlates += (combinedB + combinedL + combinedD);
 
         const bId = s.buildingId || "unassigned"
         const bName = s.buildingName || "Unassigned"
         
-        if (!buildingData[bId]) {
-          buildingData[bId] = { 
-            id: bId, 
-            name: bName, 
-            breakfast: 0, lunch: 0, dinner: 0, 
-            rooms: {} as Record<string, any>,
-            choiceCounts: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> }
-          }
-        }
+        if (!buildingData[bId]) buildingData[bId] = { id: bId, name: bName, breakfast: 0, lunch: 0, dinner: 0, rooms: {} as Record<string, any>, choiceCounts: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> } }
 
         const bd = buildingData[bId]
-        bd.breakfast += combinedB;
-        bd.lunch += combinedL;
-        bd.dinner += combinedD;
+        bd.breakfast += combinedB; bd.lunch += combinedL; bd.dinner += combinedD;
 
-        if (combinedL > 0) {
-          choices.lunch[choiceL] = (choices.lunch[choiceL] || 0) + combinedL
-          bd.choiceCounts.lunch[choiceL] = (bd.choiceCounts.lunch[choiceL] || 0) + combinedL
-        }
-        if (combinedD > 0) {
-          choices.dinner[choiceD] = (choices.dinner[choiceD] || 0) + combinedD
-          bd.choiceCounts.dinner[choiceD] = (bd.choiceCounts.dinner[choiceD] || 0) + combinedD
-        }
+        if (combinedL > 0) { choices.lunch[choiceL] = (choices.lunch[choiceL] || 0) + combinedL; bd.choiceCounts.lunch[choiceL] = (bd.choiceCounts.lunch[choiceL] || 0) + combinedL; }
+        if (combinedD > 0) { choices.dinner[choiceD] = (choices.dinner[choiceD] || 0) + combinedD; bd.choiceCounts.dinner[choiceD] = (bd.choiceCounts.dinner[choiceD] || 0) + combinedD; }
 
         const roomNo = s.roomNumber || "N/A"
-        if (!bd.rooms[roomNo]) {
-          bd.rooms[roomNo] = { 
-            roomNo, 
-            residents: [], 
-            roomTotals: { b: 0, l: 0, d: 0, guests: 0 } 
-          }
-        }
-        
+        if (!bd.rooms[roomNo]) bd.rooms[roomNo] = { roomNo, residents: [], roomTotals: { b: 0, l: 0, d: 0, guests: 0 } }
         const rd = bd.rooms[roomNo]
-        rd.roomTotals.b += combinedB
-        rd.roomTotals.l += combinedL
-        rd.roomTotals.d += combinedD
-        rd.roomTotals.guests += (gB + gL + gD)
+        rd.roomTotals.b += combinedB; rd.roomTotals.l += combinedL; rd.roomTotals.d += combinedD; rd.roomTotals.guests += (gB + gL + gD)
 
-        rd.residents.push({
-          id: s.id,
-          name: s.name,
-          isSelfB: willEatB,
-          isSelfL: willEatL,
-          isSelfD: willEatD,
-          choiceL,
-          choiceD,
-          guests: isUpdatedForTarget ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 },
-          isAuto: !isUpdatedForTarget && s.mealStatus?.autoMode
-        })
+        rd.residents.push({ id: s.id, name: s.name, isSelfB: willEatB, isSelfL: willEatL, isSelfD: willEatD, choiceL, choiceD, guests: isUpdatedForTarget ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 }, isAuto: !isUpdatedForTarget && s.mealStatus?.autoMode })
       }
     })
 
@@ -234,22 +201,13 @@ export default function AdminMealDashboardPage() {
   const handleToggleMeal = async (student: any, mealId: string) => {
     if (!canOverride) return;
     const isAvail = mealConfig?.[`${mealId}Available`] !== false;
-    if (!isAvail) {
-      toast({ variant: "destructive", title: "Meal Locked", description: "Admin has disabled this meal type." });
-      return;
-    }
+    if (!isAvail) { toast({ variant: "destructive", title: "Meal Locked", description: "Admin has disabled this meal type." }); return; }
 
     try {
       const currentVal = !!student.mealStatus?.[mealId];
       const sRef = doc(db, "students", student.id);
       const counterField = `currentMonth${mealId.charAt(0).toUpperCase() + mealId.slice(1)}`;
-      
-      await updateDoc(sRef, {
-        [`mealStatus.${mealId}`]: !currentVal,
-        [counterField]: increment(!currentVal ? 1 : -1),
-        lastMealUpdateDate: getLocYMD(new Date()),
-        updatedAt: serverTimestamp()
-      });
+      await updateDoc(sRef, { [`mealStatus.${mealId}`]: !currentVal, [counterField]: increment(!currentVal ? 1 : -1), lastMealUpdateDate: getLocYMD(new Date()), updatedAt: serverTimestamp() });
       toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled for tomorrow.` });
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
   }
@@ -268,6 +226,7 @@ export default function AdminMealDashboardPage() {
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Analytics</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-xs mt-1">
               Data for <span className="font-bold text-foreground">{viewContext.dayName} ({viewContext.dateStr})</span>
+              {isSyncing && <span className="ml-2 text-primary animate-pulse text-[10px] font-black uppercase">Background Sync Active...</span>}
             </p>
           </div>
         </div>
