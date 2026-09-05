@@ -47,7 +47,7 @@ export default function StudentDashboardPage() {
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
   const { data: student, isLoading } = useDoc(studentRef)
 
-  // Trigger Authoritative Auto Sync
+  // Authoritative background sync on load
   useEffect(() => {
     if (!student || !student.branch || !student.mealStatus?.autoMode || isSyncing) return;
     

@@ -20,6 +20,8 @@ const getLocYMD = (date: Date) => {
 export async function syncMissingAutoMeals(db: Firestore, branch: string, specificStudentId?: string) {
   if (!branch) return { success: false, msg: "Branch context missing" };
 
+  console.log(`[AUTO_SYNC_STARTED] Branch: ${branch}, Target: ${specificStudentId || 'ALL'}`);
+
   try {
     // 1. Fetch Global Meal Config for the branch
     const configRef = doc(db, "configs", `mealConfig_${branch}`);
@@ -50,34 +52,37 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
       if (!student.mealStatus?.autoMode || !student.lastMealUpdateDate) continue;
       
       const lastUpdateStr = student.lastMealUpdateDate;
+      // If already updated up to or past yesterday, skip (Idempotency)
       if (lastUpdateStr >= yesterdayStr) continue;
+
+      console.log(`[SYNCING_STUDENT] ${student.name} (${student.id})`);
+      console.log(`- last_sync_date: ${lastUpdateStr}`);
+      console.log(`- sync_until_date: ${yesterdayStr}`);
 
       syncCount++;
       const lastUpdate = new Date(lastUpdateStr);
       let checkDecisionDate = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
       
       let currentMonthLabel = student.currentMonthLabel;
-      let increments = { b: 0, l: 0, d: 0, g: 0 };
-      let newLastUpdateDate = lastUpdateStr;
+      let increments = { b: 0, l: 0, d: 0 };
+      let missingDates: string[] = [];
 
       // Iterative check for missing days
       while (getLocYMD(checkDecisionDate) < yesterdayStr) {
         checkDecisionDate.setDate(checkDecisionDate.getDate() + 1);
+        const decisionYMD = getLocYMD(checkDecisionDate);
+        missingDates.push(decisionYMD);
         
         // The meal occurs on the day AFTER the decision handled by Auto Mode
         const mealDate = new Date(checkDecisionDate);
         mealDate.setDate(mealDate.getDate() + 1);
         const mealMonthLabel = `${MONTHS[mealDate.getMonth()]} ${mealDate.getFullYear()}`;
         
-        // Month transition handling - if month changes during sync, we must flush increments
-        // but for simplicity and since we use increment(), we check label changes
+        // Month transition handling
         if (currentMonthLabel && currentMonthLabel !== mealMonthLabel) {
-           // If we hit a month boundary, we'd normally reset counters.
-           // In background sync, we'll assume the sync handles current month growth.
-           // Real reset happens when student.currentMonthLabel is physically updated below.
            currentMonthLabel = mealMonthLabel;
-           // Reset local increments for the new month part
-           increments = { b: 0, l: 0, d: 0, g: 0 };
+           // In background sync, we'll continue the increment on the student record
+           // as the PHYSICAL count is what matters for the billing cycle.
         } else if (!currentMonthLabel) {
            currentMonthLabel = mealMonthLabel;
         }
@@ -85,20 +90,23 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
         const dayName = WEEKDAYS[mealDate.getDay()];
         const sched = student.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true };
         
+        // Respect Admin Global Settings (Hard Restriction)
         if (sched.breakfast && mealConfig.breakfastAvailable !== false) { increments.b += 1; totalMealsAdded++; }
         if (sched.lunch && mealConfig.lunchAvailable !== false) { increments.l += 1; totalMealsAdded++; }
         if (sched.dinner && mealConfig.dinnerAvailable !== false) { increments.d += 1; totalMealsAdded++; }
-        
-        newLastUpdateDate = getLocYMD(checkDecisionDate);
       }
 
-      if (totalMealsAdded > 0 || newLastUpdateDate !== lastUpdateStr) {
+      console.log(`- missing_dates: ${missingDates.join(', ')}`);
+      console.log(`- meals_to_insert: B:${increments.b}, L:${increments.l}, D:${increments.d}`);
+
+      if (totalMealsAdded > 0 || getLocYMD(checkDecisionDate) !== lastUpdateStr) {
         const updateData: any = {
-          lastMealUpdateDate: newLastUpdateDate,
+          lastMealUpdateDate: getLocYMD(checkDecisionDate),
           currentMonthLabel,
           updatedAt: serverTimestamp()
         };
 
+        // Protected Incremental Update (Does not overwrite manual entries)
         if (increments.b > 0) updateData.currentMonthBreakfast = increment(increments.b);
         if (increments.l > 0) updateData.currentMonthLunch = increment(increments.l);
         if (increments.d > 0) updateData.currentMonthDinner = increment(increments.d);
@@ -109,12 +117,14 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
 
     if (syncCount > 0) {
       await batch.commit();
-      console.log(`[AUTO_SYNC] Completed. Synced ${syncCount} students. Total meals added: ${totalMealsAdded}`);
+      console.log(`[AUTO_SYNC_COMPLETED] Synced ${syncCount} students. Total meals added: ${totalMealsAdded}`);
+    } else {
+      console.log(`[AUTO_SYNC_COMPLETED] Everything already up to date.`);
     }
 
     return { success: true, syncedStudents: syncCount, mealsAdded: totalMealsAdded };
   } catch (error: any) {
-    console.error("[AUTO_SYNC] Error:", error);
+    console.error("[AUTO_SYNC_ERROR] Details:", error);
     return { success: false, error: error.message };
   }
 }
@@ -123,13 +133,12 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
 if (typeof window !== 'undefined') {
   (window as any).simulateMealSync = async (studentId: string, fakeLastUpdate: string) => {
     console.warn(`[TEST_MODE] Simulating sync for ${studentId} from ${fakeLastUpdate}`);
-    // This is for dev testing only. It temporarily updates a student to a past date to trigger sync.
-    const db = (window as any).firebaseDb; // Assumes db is exposed or accessible
-    if (!db) return "DB not accessible in window";
+    const db = (window as any).firebaseDb;
+    if (!db) return "DB not accessible in window. Open a page that uses Firebase first.";
     try {
       const { updateDoc } = await import("firebase/firestore");
       await updateDoc(doc(db, "students", studentId), { lastMealUpdateDate: fakeLastUpdate });
-      return "Simulated date set. Refresh or trigger sync to see results.";
+      return `Simulated date set to ${fakeLastUpdate}. Refresh any meal page to trigger sync.`;
     } catch (e: any) { return e.message; }
   };
 }

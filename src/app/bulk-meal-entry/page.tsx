@@ -82,7 +82,7 @@ export default function BulkMealEntryPage() {
     })
   }, [])
 
-  // Trigger Shared Sync on Load
+  // Trigger Authoritative Global Sync for Branch on Page Load
   useEffect(() => {
     if (!userBranch || isSyncing) return;
     const runGlobalSync = async () => {
