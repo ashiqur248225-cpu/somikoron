@@ -1,10 +1,11 @@
+
 "use client"
 
 import * as React from "react"
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, serverTimestamp, updateDoc, setDoc, arrayUnion, increment, collection, query, where, getDoc, writeBatch } from "firebase/firestore"
+import { doc, serverTimestamp, updateDoc, setDoc, arrayUnion, increment, collection, query, where, getDoc, writeBatch, deleteDoc } from "firebase/firestore"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -64,6 +65,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
@@ -101,6 +113,8 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isMealAdjustOpen, setIsMealAdjustOpen] = useState(false)
   const [isMigrationDialogOpen, setIsMigrationDialogOpen] = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [deleteConfirmName, setDeleteConfirmName] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   
   const [userRole, setUserRole] = useState("")
@@ -530,7 +544,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
           return apt;
         });
         batch.update(bRef, {
-          apartmentsDetail: updatedNewApts,
+          apartmentsDetail: updatedApts,
           occupiedSeats: increment(-1),
           emptySeats: increment(1),
           updatedAt: serverTimestamp()
@@ -616,6 +630,53 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
     }
   };
 
+  const handleDeleteStudent = async () => {
+    if (!student || !studentRef || userRole !== 'Admin') return;
+    setIsUpdating(true);
+    const batch = writeBatch(db);
+    try {
+      // 1. Release the seat if student is active
+      if (student.isActive) {
+        const bRef = doc(db, "buildings", student.buildingId);
+        const bSnap = await getDoc(bRef);
+        if (bSnap.exists()) {
+          const bData = bSnap.data();
+          const updatedApts = bData.apartmentsDetail.map((apt: any) => {
+            if (apt.name === student.apartmentName) {
+              return {
+                ...apt,
+                rooms: apt.rooms.map((room: any) => 
+                  String(room.roomNo) === String(student.roomNumber)
+                    ? { ...room, seats: room.seats.map((s: any) => s.seatNo === student.seatNumber ? { ...s, status: 'empty' } : s) }
+                    : room
+                )
+              }
+            }
+            return apt;
+          });
+          batch.update(bRef, {
+            apartmentsDetail: updatedApts,
+            occupiedSeats: increment(-1),
+            emptySeats: increment(1),
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+
+      // 2. Delete student doc
+      batch.delete(studentRef);
+      await batch.commit();
+      
+      toast({ title: "Profile Deleted", description: "All data removed from database." });
+      setIsDeleteOpen(false);
+      router.push('/students');
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   if (studentLoading || buildingsLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
   if (!student) return <div className="text-center p-20">Resident not found.</div>
 
@@ -647,9 +708,14 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                 <Edit size={16} className="text-primary" /> Edit Profile
               </DropdownMenuItem>
               {userRole === 'Admin' && (
-                <DropdownMenuItem onSelect={() => setIsMigrationDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer text-indigo-600">
-                  <Database size={16} /> Migration Setup
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onSelect={() => setIsMigrationDialogOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer text-indigo-600">
+                    <Database size={16} /> Migration Setup
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setIsDeleteOpen(true)} className="gap-2 font-medium p-3 rounded-lg cursor-pointer text-destructive">
+                    <Trash2 size={16} /> Delete Profile
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuItem onSelect={() => setIsExitDialogOpen(true)} className="gap-2 font-medium text-destructive p-3 rounded-lg cursor-pointer">
                 <Scale size={16} /> Process Exit & Settlement
@@ -674,9 +740,14 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
         </div>
         <div className="flex gap-3">
           {userRole === 'Admin' && (
-            <Button variant="outline" className="rounded-xl h-11 px-6 font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50" onClick={() => setIsMigrationDialogOpen(true)}>
-              <Database size={18} className="mr-2"/> Migration Setup
-            </Button>
+            <>
+              <Button variant="outline" className="rounded-xl h-11 px-6 font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50" onClick={() => setIsMigrationDialogOpen(true)}>
+                <Database size={18} className="mr-2"/> Migration Setup
+              </Button>
+              <Button variant="outline" className="rounded-xl h-11 px-6 font-bold border-destructive/20 text-destructive hover:bg-destructive/5" onClick={() => setIsDeleteOpen(true)}>
+                <Trash2 size={18} className="mr-2"/> Delete Profile
+              </Button>
+            </>
           )}
           <Button variant="outline" className="rounded-xl h-11 px-6 font-bold" onClick={() => setIsEditDialogOpen(true)}>
             <Edit size={18} className="mr-2"/> Edit Profile
@@ -1127,6 +1198,46 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                 </div>
               )}
            </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* DELETE DIALOG */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-destructive flex items-center gap-2">
+              <ShieldAlert /> Delete Profile
+            </DialogTitle>
+            <DialogDescription className="font-medium text-slate-600">
+              Are you sure you want to permanently delete this student and release their seat? This action is irreversible.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-2xl text-center">
+              <p className="text-xs font-bold text-destructive uppercase mb-1">To confirm, type the student name below:</p>
+              <p className="text-sm font-black text-slate-800">{student.name}</p>
+            </div>
+            <div className="space-y-2">
+               <Label className="text-[10px] font-black uppercase ml-1">Confirm Name</Label>
+               <Input 
+                 value={deleteConfirmName} 
+                 onChange={e => setDeleteConfirmName(e.target.value)} 
+                 placeholder="Type name exactly..."
+                 className="h-12 border-destructive/20 focus-visible:ring-destructive rounded-xl"
+               />
+            </div>
+          </div>
+          <DialogFooter className="grid grid-cols-2 gap-3">
+             <Button variant="outline" onClick={() => setIsDeleteOpen(false)} className="rounded-xl h-12 font-bold">Cancel</Button>
+             <Button 
+               variant="destructive" 
+               className="rounded-xl h-12 font-black shadow-lg shadow-destructive/20"
+               disabled={isUpdating || deleteConfirmName !== student.name}
+               onClick={handleDeleteStudent}
+             >
+                {isUpdating ? <Loader2 className="animate-spin" /> : <Trash2 className="mr-2" size={18}/>} Confirm Delete
+             </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
