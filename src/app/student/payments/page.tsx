@@ -52,6 +52,12 @@ export default function PaymentRequestPage() {
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
   const { data: student } = useDoc(studentRef)
 
+  const mealConfigRef = useMemoFirebase(() => 
+    student?.branch ? doc(db, "configs", `mealConfig_${student.branch}`) : null, 
+    [db, student?.branch]
+  )
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
   // Official Accounts for the branch
   const accountRef = useMemoFirebase(() => 
     student?.branch ? doc(db, "configs", `paymentAccounts_${student.branch}`) : null, 
@@ -80,15 +86,18 @@ export default function PaymentRequestPage() {
   const { data: recentRequests } = useCollection(requestsQuery)
 
   const duesSummary = useMemo(() => {
-    if (!student) return { monthlyRent: 0, outstandingDue: 0, foodBalance: 0 }
+    if (!student) return { monthlyRent: 0, outstandingDue: 0, foodBalance: 0, foodAdvanceReq: 0 }
     const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0)
     const foodVal = Number(student.foodDueAmount || 0)
+    const foodAdvanceReq = Number(mealConfig?.standardFoodAdvance || 0)
+    
     return {
       monthlyRent: Number(student.monthlyRent || 0),
       outstandingDue: rentDue,
-      foodBalance: foodVal
+      foodBalance: foodVal,
+      foodAdvanceReq
     }
-  }, [student])
+  }, [student, mealConfig])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -148,7 +157,7 @@ export default function PaymentRequestPage() {
       </div>
 
       {/* Dues Awareness Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-none shadow-sm bg-blue-50/50 rounded-2xl p-4 flex items-center gap-4">
           <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600"><CircleDollarSign size={20}/></div>
           <div>
@@ -170,6 +179,13 @@ export default function PaymentRequestPage() {
             <p className={cn("text-lg font-black", (duesSummary.foodBalance || 0) < 0 ? "text-destructive" : "text-success")}>
               ৳{duesSummary.foodBalance}
             </p>
+          </div>
+        </Card>
+        <Card className="border-none shadow-sm bg-primary/5 rounded-2xl p-4 flex items-center gap-4 border-l-4 border-l-primary">
+          <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary"><Smartphone size={20}/></div>
+          <div>
+            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Food Advance Req.</p>
+            <p className="text-lg font-black text-primary">৳{duesSummary.foodAdvanceReq}</p>
           </div>
         </Card>
       </div>

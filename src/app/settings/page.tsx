@@ -146,7 +146,8 @@ export default function SettingsPage() {
     endTime: "23:30",
     breakfastAvailable: true,
     lunchAvailable: true,
-    dinnerAvailable: true
+    dinnerAvailable: true,
+    standardFoodAdvance: "0"
   })
 
   // Utility Billing State
@@ -227,7 +228,8 @@ export default function SettingsPage() {
         endTime: mealConfigStore.endTime || "23:30",
         breakfastAvailable: mealConfigStore.breakfastAvailable !== false,
         lunchAvailable: mealConfigStore.lunchAvailable !== false,
-        dinnerAvailable: mealConfigStore.dinnerAvailable !== false
+        dinnerAvailable: mealConfigStore.dinnerAvailable !== false,
+        standardFoodAdvance: (mealConfigStore.standardFoodAdvance || "0").toString()
       })
     }
   }, [mealConfigStore])
@@ -256,6 +258,7 @@ export default function SettingsPage() {
     try {
       await setDoc(mealConfigRef, {
         ...mealConfigData,
+        standardFoodAdvance: Number(mealConfigData.standardFoodAdvance || 0),
         updatedAt: serverTimestamp()
       })
       toast({ title: "Meal Config Saved" })
@@ -589,6 +592,23 @@ export default function SettingsPage() {
                      </div>
                   </div>
                </div>
+
+               <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
+                  <Label className="text-xs font-bold uppercase text-primary mb-2 block">Standard Food Advance (৳)</Label>
+                  <div className="flex gap-4">
+                    <Input 
+                      type="number" 
+                      value={mealConfigData.standardFoodAdvance} 
+                      onChange={e => setMealConfigData({...mealConfigData, standardFoodAdvance: e.target.value})} 
+                      placeholder="Minimum Food Advance required"
+                      className="max-w-[300px] h-11 rounded-xl bg-white"
+                    />
+                    <p className="text-[9px] text-muted-foreground italic flex items-center">
+                      This amount will be added to the student's "Outstanding Due" in their dashboard.
+                    </p>
+                  </div>
+               </div>
+
                <Button onClick={handleSaveMealConfig} disabled={isUpdating} className="w-full h-11 gap-2 rounded-xl">
                   {isUpdating ? <Loader2 className="animate-spin" /> : <Save size={18}/>} Save Meal Rules
                </Button>

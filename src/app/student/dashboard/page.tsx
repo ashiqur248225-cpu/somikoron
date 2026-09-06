@@ -47,6 +47,12 @@ export default function StudentDashboardPage() {
   const studentRef = useMemoFirebase(() => studentId ? doc(db, "students", studentId) : null, [db, studentId])
   const { data: student, isLoading } = useDoc(studentRef)
 
+  const mealConfigRef = useMemoFirebase(() => 
+    student?.branch ? doc(db, "configs", `mealConfig_${student.branch}`) : null, 
+    [db, student?.branch]
+  )
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
   // Authoritative background sync on load
   useEffect(() => {
     if (!student || !student.branch || !student.mealStatus?.autoMode || isSyncing) return;
@@ -69,8 +75,11 @@ export default function StudentDashboardPage() {
     const cookVal = Number(student.cookingDueAmount || 0)
     const cookDue = cookVal < 0 ? Math.abs(cookVal) : 0
     const cookBalance = cookVal > 0 ? cookVal : 0
+
+    // Include global standard food advance if provided in config
+    const advanceRequirement = Number(mealConfig?.standardFoodAdvance || 0);
     
-    const totalDue = rentDue + foodDue + cookDue
+    const totalDue = rentDue + foodDue + cookDue + advanceRequirement
     
     const lastPayment = student.paymentsHistory?.[student.paymentsHistory.length - 1] || null
     const lastMonthFood = student.mealsHistory?.[student.mealsHistory.length - 1] || null
@@ -81,8 +90,8 @@ export default function StudentDashboardPage() {
     const g = student.currentMonthGuestMeals || 0
     const currentMonthMealsTotal = b + l + d + g
     
-    return { rentDue, foodBalanceDisplay, foodDue, cookDue, cookBalance, totalDue, lastPayment, lastMonthFood, currentMonthMealsTotal }
-  }, [student])
+    return { rentDue, foodBalanceDisplay, foodDue, cookDue, cookBalance, totalDue, lastPayment, lastMonthFood, currentMonthMealsTotal, advanceRequirement }
+  }, [student, mealConfig])
 
   if (!isMounted) return null;
   if (isLoading) return <div className="flex justify-center p-20 animate-pulse text-sm font-bold text-muted-foreground uppercase">Syncing Dashboard...</div>
@@ -134,12 +143,8 @@ export default function StudentDashboardPage() {
                 <p className="text-lg font-black text-red-200">৳{stats?.rentDue.toLocaleString()}</p>
              </div>
              <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
-                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">
-                  {(student.cookingDueAmount || 0) < 0 ? "Cooking Due" : "Cooking Bill"}
-                </p>
-                <p className={cn("text-lg font-black", (student.cookingDueAmount || 0) < 0 ? "text-red-300" : "text-green-300")}>
-                  ৳{student.cookingDueAmount || 0}
-                </p>
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Food Advance Required</p>
+                <p className="text-lg font-black text-blue-200">৳{stats?.advanceRequirement.toLocaleString()}</p>
              </div>
           </div>
 
