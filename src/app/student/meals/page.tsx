@@ -22,7 +22,6 @@ import {
   Calculator,
   Coins,
   Table as TableIcon,
-  Lock,
   ListChecks,
   CalendarDays,
   ChevronDown,
@@ -124,7 +123,10 @@ export default function StudentMealPage() {
   const [localGuestMeals, setLocalGuestMeals] = useState({ breakfast: 0, lunch: 0, dinner: 0 })
 
   useEffect(() => {
-    if (student?.mealStatus) setLocalMeals(student.mealStatus)
+    if (student?.mealStatus) {
+      // Force autoMode false locally as it's disabled in UI
+      setLocalMeals({ ...student.mealStatus, autoMode: false })
+    }
     if (student?.mealChoices) setMealChoices(student.mealChoices)
     if (student?.tomorrowGuestMeals) setLocalGuestMeals(student.tomorrowGuestMeals)
     if (student?.weeklySchedule) {
@@ -198,33 +200,19 @@ export default function StudentMealPage() {
     if (!studentRef || !timeWindow.isActive || isUpdating || !student) return
     setIsUpdating(true)
     try {
-      let finalMeals = { ...localMeals }
+      // Force autoMode false as it is disabled
+      let finalMeals = { ...localMeals, autoMode: false }
       let finalChoices = { ...mealChoices }
       let finalGuestMeals = { ...localGuestMeals }
       
-      if (localMeals.autoMode) {
-        const schedForTomorrow = weeklySchedule[tomorrowDay] || { breakfast: true, lunch: true, dinner: true }
-        finalMeals = {
-          ...finalMeals,
-          breakfast: !!schedForTomorrow.breakfast && mealConfig?.breakfastAvailable !== false,
-          lunch: !!schedForTomorrow.lunch && mealConfig?.lunchAvailable !== false,
-          dinner: !!schedForTomorrow.dinner && mealConfig?.dinnerAvailable !== false
-        }
-        if (schedForTomorrow.lunchChoice) finalChoices.lunch = schedForTomorrow.lunchChoice
-        if (schedForTomorrow.dinnerChoice) finalChoices.dinner = schedForTomorrow.dinnerChoice
-      } else {
-        if (mealConfig?.breakfastAvailable === false) finalMeals.breakfast = false;
-        if (mealConfig?.lunchAvailable === false) finalMeals.lunch = false;
-        if (mealConfig?.dinnerAvailable === false) finalMeals.dinner = false;
-      }
+      if (mealConfig?.breakfastAvailable === false) finalMeals.breakfast = false;
+      if (mealConfig?.lunchAvailable === false) finalMeals.lunch = false;
+      if (mealConfig?.dinnerAvailable === false) finalMeals.dinner = false;
 
       const todayStr = getLocYMD(new Date());
       const targetLabel = `${MONTHS[tomorrowDate.getMonth()]} ${tomorrowDate.getFullYear()}`;
       
       const isReSubmission = student.lastMealUpdateDate === todayStr;
-      
-      // CRITICAL FIX: Only treat as New Month Reset if a label already exists AND it is different.
-      // If student.currentMonthLabel is missing (initial state after admin entry), we do NOT reset.
       const isNewMonth = !!student.currentMonthLabel && student.currentMonthLabel !== targetLabel;
 
       const updates: any = { 
@@ -246,7 +234,6 @@ export default function StudentMealPage() {
           const prevVal = student.mealStatus?.[type] ? 1 : 0;
           return nextVal - prevVal;
         }
-        // First entry for this month label (or initial label setting)
         return nextVal;
       };
 
@@ -262,13 +249,11 @@ export default function StudentMealPage() {
       const diffD = calculateSelfDiff('dinner');
 
       if (isNewMonth) {
-        // Strict overwrite for real month transition reset
         updates.currentMonthBreakfast = diffB;
         updates.currentMonthLunch = diffL;
         updates.currentMonthDinner = diffD;
         updates.currentMonthGuestMeals = nextGuestTotal;
       } else {
-        // Incremental updates for current month or initial registration
         if (diffB !== 0) updates.currentMonthBreakfast = increment(diffB);
         if (diffL !== 0) updates.currentMonthLunch = increment(diffL);
         if (diffD !== 0) updates.currentMonthDinner = increment(diffD);
@@ -404,171 +389,90 @@ export default function StudentMealPage() {
                 onClick={() => toast({ variant: "destructive", title: "তথ্য", description: "এই অপশনটা আপাতত বন্ধ আছে।" })}
               >
                 <div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest">Auto Mode</p><p className="text-[8px] text-white/40 uppercase">Sync with weekly schedule</p></div>
-                <Switch disabled={true} checked={localMeals.autoMode} onCheckedChange={() => {}} />
+                <Switch disabled={true} checked={false} onCheckedChange={() => {}} />
               </div>
 
-              {localMeals.autoMode ? (
-                <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
-                   <div className="flex items-center gap-2 px-1">
-                      <ListChecks className="text-primary h-4 w-4" />
-                      <h3 className="text-xs font-black uppercase text-slate-700 tracking-widest">Weekly Schedule (Auto-Sync)</h3>
-                   </div>
-                   <div className="grid grid-cols-1 gap-3">
-                      {WEEKDAYS.map((day) => {
-                        const dayData = weeklySchedule[day] || { breakfast: true, lunch: true, dinner: true, lunchChoice: "Normal", dinnerChoice: "Normal" };
-                        const isExpanded = expandedDay === day;
-                        const menuForDay = weeklyMenu.find(r => r.day === day);
-                        
-                        return (
-                          <div key={day} className="border-2 rounded-2xl bg-slate-50/50 overflow-hidden">
-                             <div 
-                               className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-100/50 transition-colors"
-                               onClick={() => setExpandedDay(isExpanded ? null : day)}
-                             >
-                                <div className="flex items-center gap-3">
-                                   <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center font-black text-[10px]", day === todayDay ? "bg-primary text-white" : "bg-white border text-slate-400")}>
-                                      {day.substring(0, 2).toUpperCase()}
-                                   </div>
-                                   <span className="text-sm font-bold text-slate-700">{day}</span>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                   <div className="flex gap-1.5">
-                                      {['breakfast', 'lunch', 'dinner'].map(m => (
-                                        <div key={m} className={cn("w-2 h-2 rounded-full", (dayData[m] && mealConfig?.[`${m}Available`] !== false) ? "bg-success" : "bg-slate-200")} />
-                                      ))}
-                                   </div>
-                                   {isExpanded ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
-                                </div>
-                             </div>
-                             
-                             {isExpanded && (
-                               <div className="p-4 pt-0 space-y-4 animate-in slide-in-from-top-2 duration-200">
-                                  <Separator />
-                                  <div className="grid grid-cols-1 gap-4">
-                                     {MEAL_TYPES.map(type => {
-                                        const isAvail = mealConfig?.[`${type.id}Available`] !== false;
-                                        const { common, options } = getMealDetails(menuForDay?.[type.id] || "");
-                                        return (
-                                          <div key={type.id} className={cn("space-y-3", !isAvail && "opacity-40")}>
-                                             <div className="flex items-center justify-between">
-                                                <div className="space-y-0.5">
-                                                  <Label className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
-                                                     {type.icon} {type.label}
-                                                  </Label>
-                                                </div>
-                                                <Switch 
-                                                  disabled={!isAvail} 
-                                                  checked={isAvail ? dayData[type.id] : false} 
-                                                  onCheckedChange={() => toggleScheduleMeal(day, type.id)} 
-                                                />
-                                             </div>
-                                             {dayData[type.id] && isAvail && options && (
-                                               <RadioGroup 
-                                                 value={dayData[`${type.id}Choice`] || options[0]} 
-                                                 onValueChange={(v) => updateScheduleChoice(day, type.id, v)}
-                                                 className="flex gap-3 flex-wrap ml-2"
-                                               >
-                                                  {options.map(opt => (
-                                                    <div key={opt} className="flex items-center gap-1.5">
-                                                       <RadioGroupItem value={opt} id={`sched-${day}-${type.id}-${opt}`} className="h-3 w-3" />
-                                                       <Label htmlFor={`sched-${day}-${type.id}-${opt}`} className="text-[10px] font-bold text-slate-600">{opt}</Label>
-                                                    </div>
-                                                  ))}
-                                               </RadioGroup>
-                                             )}
-                                          </div>
-                                        )
-                                     })}
-                                  </div>
-                                </div>
-                             )}
-                          </div>
-                        )
-                      })}
-                   </div>
+              {/* Weekly Schedule is hidden and manual selection is forced as Auto Mode is disabled in UI */}
+              <div className="space-y-6">
+                <div className="flex justify-between items-center px-1">
+                  <p className="text-[10px] font-black uppercase text-primary tracking-widest">Tomorrow's Selection ({tomorrowDay})</p>
+                  <Badge variant="outline" className="text-[8px] font-bold text-muted-foreground uppercase">{tomorrowDay} Menu</Badge>
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center px-1">
-                    <p className="text-[10px] font-black uppercase text-primary tracking-widest">Tomorrow's Selection ({tomorrowDay})</p>
-                    <Badge variant="outline" className="text-[8px] font-bold text-muted-foreground uppercase">{tomorrowDay} Menu</Badge>
-                  </div>
-                  
-                  {MEAL_TYPES.map((type) => {
-                    const isAvailable = mealConfig?.[`${type.id}Available`] !== false
-                    const isChecked = isAvailable && localMeals[type.id as keyof typeof localMeals]
-                    const menuText = tomorrowMenu?.[type.id] || ""
-                    const { common, options } = getMealDetails(menuText)
-                    const guestKey = type.id === 'breakfast' ? 'breakfast' : (type.id === 'lunch' ? 'lunch' : 'dinner');
-                    const guestCount = Number(localGuestMeals[guestKey as keyof typeof localGuestMeals] || 0);
+                
+                {MEAL_TYPES.map((type) => {
+                  const isAvailable = mealConfig?.[`${type.id}Available`] !== false
+                  const isChecked = isAvailable && localMeals[type.id as keyof typeof localMeals]
+                  const menuText = tomorrowMenu?.[type.id] || ""
+                  const { common, options } = getMealDetails(menuText)
+                  const guestKey = type.id === 'breakfast' ? 'breakfast' : (type.id === 'lunch' ? 'lunch' : 'dinner');
+                  const guestCount = Number(localGuestMeals[guestKey as keyof typeof localGuestMeals] || 0);
 
-                    return (
-                      <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable) ? "opacity-30 border-slate-100" : (isChecked || guestCount > 0 ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <span className="text-2xl">{type.icon}</span>
-                            <div className="space-y-0.5">
-                              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">{type.label}</h3>
-                              <p className="text-[9px] font-bold text-primary uppercase">
-                                {isAvailable ? (common || (options ? 'Choice Available' : 'Regular')) : 'Locked by Admin'}
-                              </p>
-                            </div>
+                  return (
+                    <div key={type.id} className={cn("p-5 rounded-3xl border-2 transition-all space-y-4", (!isAvailable) ? "opacity-30 border-slate-100" : (isChecked || guestCount > 0 ? "border-success/20 bg-success/5" : "border-slate-50 bg-slate-50/30"))}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <span className="text-2xl">{type.icon}</span>
+                          <div className="space-y-0.5">
+                            <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">{type.label}</h3>
+                            <p className="text-[9px] font-bold text-primary uppercase">
+                              {isAvailable ? (common || (options ? 'Choice Available' : 'Regular')) : 'Locked by Admin'}
+                            </p>
                           </div>
-                          <Switch 
-                            disabled={!canChange || !isAvailable} 
-                            checked={isChecked as boolean} 
-                            onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} 
-                          />
                         </div>
-
-                        {/* GUEST MEAL PICKER */}
-                        {isAvailable && (
-                          <div className="pt-2 flex items-center justify-between bg-white/40 p-3 rounded-2xl border border-dashed border-success/20">
-                             <div className="flex items-center gap-2">
-                                <Users size={14} className="text-primary" />
-                                <span className="text-[10px] font-bold uppercase text-slate-600">Guest Meals</span>
-                             </div>
-                             <div className="flex items-center gap-3">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-7 w-7 rounded-full bg-white border shadow-sm" 
-                                  onClick={() => updateGuestCount(type.id as any, -1)}
-                                  disabled={!canChange || guestCount <= 0}
-                                >
-                                   <Plus className="h-3 w-3 rotate-45" />
-                                </Button>
-                                <span className="text-sm font-black text-slate-800 w-4 text-center">{guestCount}</span>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-7 w-7 rounded-full bg-white border shadow-sm" 
-                                  onClick={() => updateGuestCount(type.id as any, 1)}
-                                  disabled={!canChange || guestCount >= 10}
-                                >
-                                   <Plus className="h-3 w-3" />
-                                </Button>
-                             </div>
-                          </div>
-                        )}
-
-                        {isChecked && isAvailable && options && (
-                          <div className="pt-3 border-t border-success/10">
-                            <RadioGroup disabled={!canChange} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
-                               {options.map(opt => (
-                                 <div key={opt} className="flex items-center gap-2">
-                                    <RadioGroupItem value={opt} id={`${type.id}-${opt}`} className="border-success text-success" />
-                                    <Label htmlFor={`${type.id}-${opt}`} className="text-xs font-bold text-slate-700">{opt}</Label>
-                                 </div>
-                               ))}
-                            </RadioGroup>
-                          </div>
-                        )}
+                        <Switch 
+                          disabled={!canChange || !isAvailable} 
+                          checked={isChecked as boolean} 
+                          onCheckedChange={v => setLocalMeals({...localMeals, [type.id]: v})} 
+                        />
                       </div>
-                    )
-                  })}
-                </div>
-              )}
+
+                      {/* GUEST MEAL PICKER */}
+                      {isAvailable && (
+                        <div className="pt-2 flex items-center justify-between bg-white/40 p-3 rounded-2xl border border-dashed border-success/20">
+                           <div className="flex items-center gap-2">
+                              <Users size={14} className="text-primary" />
+                              <span className="text-[10px] font-bold uppercase text-slate-600">Guest Meals</span>
+                           </div>
+                           <div className="flex items-center gap-3">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 rounded-full bg-white border shadow-sm" 
+                                onClick={() => updateGuestCount(type.id as any, -1)}
+                                disabled={!canChange || guestCount <= 0}
+                              >
+                                 <Plus className="h-3 w-3 rotate-45" />
+                              </Button>
+                              <span className="text-sm font-black text-slate-800 w-4 text-center">{guestCount}</span>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 rounded-full bg-white border shadow-sm" 
+                                onClick={() => updateGuestCount(type.id as any, 1)}
+                                disabled={!canChange || guestCount >= 10}
+                              >
+                                 <Plus className="h-3 w-3" />
+                              </Button>
+                           </div>
+                        </div>
+                      )}
+
+                      {isChecked && isAvailable && options && (
+                        <div className="pt-3 border-t border-success/10">
+                          <RadioGroup disabled={!canChange} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
+                             {options.map(opt => (
+                               <div key={opt} className="flex items-center gap-2">
+                                  <RadioGroupItem value={opt} id={`${type.id}-${opt}`} className="border-success text-success" />
+                                  <Label htmlFor={`${type.id}-${opt}`} className="text-xs font-bold text-slate-700">{opt}</Label>
+                               </div>
+                             ))}
+                          </RadioGroup>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
            </div>
 
            {timeWindow.isActive && (
