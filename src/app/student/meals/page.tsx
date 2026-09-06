@@ -399,9 +399,12 @@ export default function StudentMealPage() {
            )}
            
            <div className={cn("space-y-6", (!canChange) && "opacity-50 pointer-events-none")}>
-              <div className="flex items-center justify-between p-4 bg-slate-900 rounded-3xl text-white">
+              <div 
+                className="flex items-center justify-between p-4 bg-slate-900 rounded-3xl text-white cursor-not-allowed"
+                onClick={() => toast({ variant: "destructive", title: "তথ্য", description: "এই অপশনটা আপাতত বন্ধ আছে।" })}
+              >
                 <div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest">Auto Mode</p><p className="text-[8px] text-white/40 uppercase">Sync with weekly schedule</p></div>
-                <Switch disabled={!canChange} checked={localMeals.autoMode} onCheckedChange={v => setLocalMeals({...localMeals, autoMode: v})} />
+                <Switch disabled={true} checked={localMeals.autoMode} onCheckedChange={() => {}} />
               </div>
 
               {localMeals.autoMode ? (
