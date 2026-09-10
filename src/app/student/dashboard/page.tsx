@@ -53,6 +53,12 @@ export default function StudentDashboardPage() {
   )
   const { data: mealConfig } = useDoc(mealConfigRef)
 
+  const mealRateRef = useMemoFirebase(() => 
+    student?.branch ? doc(db, "configs", `mealRate_${student.branch}`) : null, 
+    [db, student?.branch]
+  )
+  const { data: mealRateData } = useDoc(mealRateRef)
+
   // Authoritative background sync on load
   useEffect(() => {
     if (!student || !student.branch || !student.mealStatus?.autoMode || isSyncing) return;
@@ -89,9 +95,28 @@ export default function StudentDashboardPage() {
     const d = student.currentMonthDinner || 0
     const g = student.currentMonthGuestMeals || 0
     const currentMonthMealsTotal = b + l + d + g
+
+    // ESTIMATED FOOD BALANCE CALCULATION
+    const mealRate = Number(mealRateData?.rate || 0)
+    const effectiveMeals = (b * 0.5) + l + d + g
+    const estimatedMonthlyCost = effectiveMeals * mealRate
+    const estimatedFoodBalance = foodVal - estimatedMonthlyCost
     
-    return { rentDue, foodBalanceDisplay, foodDue, cookDue, cookBalance, totalDue, lastPayment, lastMonthFood, currentMonthMealsTotal, advanceRequirement }
-  }, [student, mealConfig])
+    return { 
+      rentDue, 
+      foodBalanceDisplay, 
+      foodDue, 
+      cookDue, 
+      cookBalance, 
+      totalDue, 
+      lastPayment, 
+      lastMonthFood, 
+      currentMonthMealsTotal, 
+      advanceRequirement,
+      estimatedFoodBalance,
+      mealRate
+    }
+  }, [student, mealConfig, mealRateData])
 
   if (!isMounted) return null;
   if (isLoading) return <div className="flex justify-center p-20 animate-pulse text-sm font-bold text-muted-foreground uppercase">Syncing Dashboard...</div>
@@ -192,6 +217,31 @@ export default function StudentDashboardPage() {
                {(stats?.cookDue || 0) > 0 ? <Smartphone size={20} className="text-destructive animate-pulse" /> : <CheckCircle2 size={20} className="text-success" />}
             </CardContent>
          </Card>
+
+         {/* ESTIMATED FOOD BALANCE CARD */}
+         {student.paymentSystem === 'non-package' && (
+           <Card className={cn("border-none shadow-sm rounded-3xl overflow-hidden border-l-4 md:col-span-2", (stats?.estimatedFoodBalance || 0) < 100 ? "border-l-destructive bg-destructive/5" : "border-l-success bg-success/5")}>
+              <CardContent className="p-5 flex items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shadow-inner", (stats?.estimatedFoodBalance || 0) < 100 ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success")}>
+                       <Calculator size={20}/>
+                    </div>
+                    <div>
+                       <p className="text-[8px] font-bold uppercase text-muted-foreground tracking-widest">Est. Food Balance (আনুমানিক)</p>
+                       <p className={cn("text-lg font-black", (stats?.estimatedFoodBalance || 0) < 100 ? "text-destructive" : "text-success")}>
+                         ৳{Math.round(stats?.estimatedFoodBalance || 0)}
+                       </p>
+                    </div>
+                 </div>
+                 {(stats?.estimatedFoodBalance || 0) < 100 && <AlertCircle size={20} className="text-destructive animate-pulse" />}
+              </CardContent>
+              <CardFooter className="px-5 pb-3 pt-0">
+                 <p className="text-[7px] text-muted-foreground italic leading-tight">
+                   *এটি একটি আনুমানিক হিসাব। মাসের শেষে আসল মিল রেট অনুযায়ী এটি পরিবর্তিত হতে পারে। (Est. Rate: ৳{stats?.mealRate})
+                 </p>
+              </CardFooter>
+           </Card>
+         )}
       </div>
 
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
