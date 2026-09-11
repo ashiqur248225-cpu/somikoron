@@ -456,6 +456,18 @@ export default function SMSPanelPage() {
     window.open(url, '_blank');
   }
 
+  const handleWhatsAppResend = (to: string, message: string) => {
+    if (!to) return;
+    const phones = to.split(',');
+    phones.forEach(phone => {
+      let cleanPhone = phone.trim().replace(/[^0-9]/g, '');
+      if (cleanPhone.length === 11 && cleanPhone.startsWith('01')) cleanPhone = `88${cleanPhone}`;
+      else if (cleanPhone.length === 10 && cleanPhone.startsWith('1')) cleanPhone = `880${cleanPhone}`;
+      const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+      window.open(url, '_blank');
+    });
+  }
+
   return (
     <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
@@ -668,6 +680,7 @@ export default function SMSPanelPage() {
                     <TableHead>Recipient</TableHead>
                     <TableHead>Message</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -682,7 +695,22 @@ export default function SMSPanelPage() {
                       <TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString()}</TableCell>
                       <TableCell className="font-mono text-[10px]">{log.to}</TableCell>
                       <TableCell className="max-w-[200px] text-[10px] line-clamp-1">{log.message}</TableCell>
-                      <TableCell><Badge variant="outline" className={cn("text-[8px] uppercase", log.status === 'Success' ? 'text-success' : 'text-destructive')}>{log.status}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn("text-[8px] uppercase", log.status === 'Success' ? 'text-success' : 'text-destructive')}>
+                          {log.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-success hover:bg-success/10" 
+                          onClick={() => handleWhatsAppResend(log.to, log.message)}
+                          title="Send via WhatsApp"
+                        >
+                          <MessageCircle size={14}/>
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
