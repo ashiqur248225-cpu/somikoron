@@ -504,16 +504,21 @@ export default function StudentMealPage() {
       <Dialog open={isLowBalanceDialogOpen} onOpenChange={setIsLowBalanceDialogOpen}>
         <DialogContent className="max-w-sm rounded-[2.5rem] border-none shadow-2xl overflow-hidden p-0">
           <div className="h-2 bg-destructive w-full" />
-          <div className="p-8 space-y-6 text-center">
+          <DialogHeader className="p-8 pb-4">
+            <DialogTitle className="text-xl font-black text-slate-800 uppercase tracking-tight text-center">
+              Insufficient Balance
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Alert informing the student about low balance restriction.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-8 pb-8 space-y-6 text-center">
             <div className="mx-auto h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive mb-2">
               <Wallet size={32} />
             </div>
-            <div className="space-y-2">
-               <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Insufficient Balance</h2>
-               <p className="text-sm font-medium text-slate-600 leading-relaxed">
-                 আপনার খাবারের আনুমানিক ব্যালেন্স বর্তমানে ৳৫০ এর নিচে। বিড়ম্বনা এড়াতে দয়া করে দ্রুত ব্যালেন্স রিচার্জ করুন। ব্যালেন্স রিচার্জ না করা পর্যন্ত নতুন মিল অন করা সম্ভব হবে না।
-               </p>
-            </div>
+            <p className="text-sm font-medium text-slate-600 leading-relaxed">
+              আপনার খাবারের আনুমানিক ব্যালেন্স বর্তমানে ৳৫০ এর নিচে। বিড়ম্বনা এড়াতে দয়া করে দ্রুত ব্যালেন্স রিচার্জ করুন। ব্যালেন্স রিচার্জ না করা পর্যন্ত নতুন মিল অন করা সম্ভব হবে না।
+            </p>
             <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
                <p className="text-[10px] font-black text-primary uppercase">Estimated Balance: ৳{Math.round(stats?.estimatedFoodBalance || 0)}</p>
             </div>
