@@ -189,6 +189,12 @@ export default function SMSPanelPage() {
   const mealConfigRef = useMemoFirebase(() => userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, [db, userBranch])
   const { data: mealConfig } = useDoc(mealConfigRef)
 
+  const mealRateRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: mealRateData } = useDoc(mealRateRef)
+
   const branchesQuery = useMemoFirebase(() => collection(db, "branches"), [db])
   const { data: branches } = useCollection(branchesQuery)
 
@@ -201,6 +207,16 @@ export default function SMSPanelPage() {
     return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole, branchFilter])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
+
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    if (userRole === 'Admin') {
+      if (branchFilter === 'all') return query(collection(db, "buildings"))
+      return query(collection(db, "buildings"), where("branch", "==", branchFilter))
+    }
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userBranch, userRole, branchFilter])
+  const { data: buildings } = useCollection(buildingsQuery)
 
   // LOGS & HISTORY
   const logsQuery = useMemoFirebase(() => {
@@ -233,31 +249,34 @@ export default function SMSPanelPage() {
     })
   }, [rawNoticeLogs])
 
-  const buildingsQuery = useMemoFirebase(() => {
-    if (!userBranch) return null
-    if (userRole === 'Admin') {
-      if (branchFilter === 'all') return query(collection(db, "buildings"))
-      return query(collection(db, "buildings"), where("branch", "==", branchFilter))
-    }
-    return query(collection(db, "buildings"), where("branch", "==", userBranch))
-  }, [db, userBranch, userRole, branchFilter])
-  const { data: buildings } = useCollection(buildingsQuery)
-
   const filteredStudents = useMemo(() => {
     if (!students) return []
     const today = new Date(); const todayStr = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`
+    const mealRate = Number(mealRateData?.rate || 0);
+
     return students.filter(s => {
       const search = searchTerm.toLowerCase()
       const matchesSearch = s.name.toLowerCase().includes(search) || (s.phone || "").includes(search)
       let matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
+      
       let matchesStatus = true
       if (statusFilter === 'birthday') matchesStatus = s.dob?.endsWith(todayStr)
       if (statusFilter === 'due') matchesStatus = (s.totalDue || 0) > 0
-      if (statusFilter === 'low_balance') matchesStatus = (s.foodDueAmount || 0) < 50 && s.paymentSystem === 'non-package'
+      if (statusFilter === 'low_balance') {
+        const b = s.currentMonthBreakfast || 0
+        const l = s.currentMonthLunch || 0
+        const d = s.currentMonthDinner || 0
+        const g = s.currentMonthGuestMeals || 0
+        const effectiveMeals = (b * 0.5) + l + d + g
+        const estimatedMonthlyCost = effectiveMeals * mealRate
+        const estimatedFoodBalance = Number(s.foodDueAmount || 0) - estimatedMonthlyCost
+        matchesStatus = estimatedFoodBalance < 50 && s.paymentSystem === 'non-package'
+      }
+
       let matchesResidentActive = residentActiveFilter === 'all' ? true : (residentActiveFilter === 'active' ? s.isActive === true : s.isActive === false)
       return matchesSearch && matchesBuilding && matchesStatus && matchesResidentActive
     })
-  }, [students, searchTerm, buildingFilter, statusFilter, residentActiveFilter])
+  }, [students, searchTerm, buildingFilter, statusFilter, residentActiveFilter, mealRateData])
 
   const roomTargets = useMemo(() => {
     if (!students || !buildings) return []
@@ -386,68 +405,53 @@ export default function SMSPanelPage() {
   }
 
   const handleDeleteHistory = async (collName: string) => {
-    if (!userBranch) {
-      toast({ variant: "destructive", title: "Error", description: "Branch context missing. Please refresh." });
-      return;
-    }
-    if (!window.confirm(`Are you sure you want to permanently delete ALL ${collName === 'notices' ? 'In-App Notice' : 'SMS'} history for this branch (${userBranch})?`)) return
+    if (!userBranch) return;
+    if (!window.confirm(`Are you sure?`)) return
     setIsSubmitting(true)
     try {
       const q = query(collection(db, collName), where("branch", "==", userBranch))
       const snap = await getDocs(q)
-      if (snap.empty) {
-        toast({ title: "No records", description: "There is nothing to delete." })
-        return
-      }
-      
-      const docs = snap.docs;
-      for (let i = 0; i < docs.length; i += 500) {
+      if (snap.empty) return
+      const batchSize = 500;
+      for (let i = 0; i < snap.docs.length; i += batchSize) {
         const batch = writeBatch(db)
-        const chunk = docs.slice(i, i + 500)
-        chunk.forEach(d => batch.delete(d.ref))
+        snap.docs.slice(i, i + batchSize).forEach(d => batch.delete(d.ref))
         await batch.commit()
       }
-      toast({ title: "History Cleared", description: `All ${collName} records for ${userBranch} have been removed.` })
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message })
-    } finally {
-      setIsSubmitting(false)
-    }
+      toast({ title: "History Cleared" })
+    } catch (e: any) { toast({ variant: "destructive", description: e.message }) } finally { setIsSubmitting(false) }
   }
 
   const handleDeleteSelected = async (collName: string, ids: string[]) => {
     if (ids.length === 0) return;
-    if (!window.confirm(`Delete ${ids.length} selected records?`)) return;
-    
+    if (!window.confirm(`Delete ${ids.length} selected?`)) return;
     setIsSubmitting(true);
     const batch = writeBatch(db);
     try {
-      ids.forEach(id => {
-        batch.delete(doc(db, collName, id));
-      });
+      ids.forEach(id => batch.delete(doc(db, collName, id)));
       await batch.commit();
-      toast({ title: "Deleted", description: `${ids.length} records removed.` });
       if (collName === 'smsLogs') setSelectedLogIds([]);
       if (collName === 'notices') setSelectedNoticeIds([]);
-    } catch (e: any) {
-      toast({ variant: "destructive", description: e.message });
-    } finally {
-      setIsSubmitting(false);
-    }
+      toast({ title: "Deleted" });
+    } catch (e: any) { toast({ variant: "destructive", description: e.message }); } finally { setIsSubmitting(false); }
   }
 
-  const handleWhatsAppSendManual = (to: string, message: string) => {
-    const phone = to.split(',')[0].trim();
-    let cleanPhone = phone.replace(/[^0-9]/g, '');
+  const handleWhatsAppSendManual = (student: any) => {
+    const mealRate = Number(mealRateData?.rate || 0);
+    const b = student.currentMonthBreakfast || 0;
+    const l = student.currentMonthLunch || 0;
+    const d = student.currentMonthDinner || 0;
+    const g = student.currentMonthGuestMeals || 0;
+    const effectiveMeals = (b * 0.5) + l + d + g;
+    const estimatedMonthlyCost = effectiveMeals * mealRate;
+    const estimatedFoodBalance = Math.round(Number(student.foodDueAmount || 0) - estimatedMonthlyCost);
+
+    const message = `প্রিয় ${student.name}, আপনার খাবারের আনুমানিক ব্যালেন্স বর্তমানে [৳${estimatedFoodBalance}]। বিড়ম্বনা এড়াতে দয়া করে দ্রুত ব্যালেন্স রিচার্জ করুন। ধন্যবাদ - সমীকরণ।`;
     
-    // Auto-detect and add Bangladesh country code for proper redirection
-    if (cleanPhone.length === 11 && cleanPhone.startsWith('01')) {
-      cleanPhone = `88${cleanPhone}`;
-    } else if (cleanPhone.length === 10 && cleanPhone.startsWith('1')) {
-       cleanPhone = `880${cleanPhone}`;
-    }
+    let cleanPhone = student.phone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 11 && cleanPhone.startsWith('01')) cleanPhone = `88${cleanPhone}`;
+    else if (cleanPhone.length === 10 && cleanPhone.startsWith('1')) cleanPhone = `880${cleanPhone}`;
     
-    // Standard WhatsApp API URL
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   }
@@ -486,26 +490,30 @@ export default function SMSPanelPage() {
               <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-white rounded-3xl flex flex-col">
                  <CardHeader className="bg-slate-50/50 border-b">
                    <div className="flex justify-between items-center"><CardTitle className="text-lg">Recipient Selector</CardTitle><Button variant="outline" size="sm" onClick={() => setSelectedStudents(selectedStudents.length === filteredStudents.length ? [] : filteredStudents.map(s => s.id))} className="text-[10px] font-bold uppercase">{selectedStudents.length === filteredStudents.length ? 'Unselect All' : 'Select All'}</Button></div>
-                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mt-4">
                      {userRole === 'Admin' && <Select value={branchFilter} onValueChange={setBranchFilter}><SelectTrigger className="bg-white h-9 text-xs"><MapPin size={12} className="mr-2 text-primary"/><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Branches</SelectItem>{branches?.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}</SelectContent></Select>}
                      <Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger className="bg-white h-9 text-xs"><Building2 size={12} className="mr-2"/><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select>
+                     <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="bg-white h-9 text-xs"><Filter size={12} className="mr-2"/><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Status</SelectItem><SelectItem value="due">With Dues</SelectItem><SelectItem value="low_balance">Low Food Balance</SelectItem><SelectItem value="birthday">Today Birthday</SelectItem></SelectContent></Select>
                      <div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/><Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search..." className="pl-8 h-9 border-none bg-white text-xs"/></div>
                    </div>
                  </CardHeader>
                  <CardContent className="p-0 overflow-x-auto flex-1">
                    <ScrollArea className="h-[400px]">
                      <Table>
-                       <TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="w-12"></TableHead><TableHead>Name</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Balance</TableHead></TableRow></TableHeader>
+                       <TableHeader className="bg-slate-50 sticky top-0 z-10"><TableRow><TableHead className="w-12"></TableHead><TableHead>Name</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
                        <TableBody>
                          {filteredStudents.map(s => (
                            <TableRow key={s.id} className={cn(selectedStudents.includes(s.id) && "bg-primary/5")}>
                              <TableCell><Checkbox checked={selectedStudents.includes(s.id)} onCheckedChange={() => setSelectedStudents(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} /></TableCell>
                              <TableCell className="font-bold text-xs truncate max-w-[120px]">{s.name}<br/><span className="text-[9px] text-muted-foreground font-normal">{s.phone}</span></TableCell>
                              <TableCell className="text-[10px] whitespace-nowrap">{s.buildingName} R-{s.roomNumber}</TableCell>
-                             <TableCell className="text-right font-bold text-xs">৳{s.totalDue}</TableCell>
+                             <TableCell className="text-right">
+                               <Button variant="ghost" size="icon" className="h-8 w-8 text-success hover:bg-success/10" onClick={() => handleWhatsAppSendManual(s)}>
+                                 <MessageCircle size={16}/>
+                               </Button>
+                             </TableCell>
                            </TableRow>
                          ))}
-                         {filteredStudents.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-20 italic text-muted-foreground">No students match filter.</TableCell></TableRow>}
                        </TableBody>
                      </Table>
                    </ScrollArea>
@@ -522,14 +530,6 @@ export default function SMSPanelPage() {
                     </SelectContent>
                   </Select>
                   <Textarea value={customMessage} onChange={e => setCustomMessage(e.target.value)} placeholder="Type your message here..." className="min-h-[150px] rounded-2xl bg-slate-50" />
-                  <div className="p-3 bg-secondary/30 rounded-xl overflow-hidden">
-                    <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Available Tags</p>
-                    <div className="flex flex-wrap gap-1">
-                      {SMART_TAGS.map(tag => (
-                        <span key={tag} className="text-[8px] bg-white px-1 py-0.5 rounded border border-slate-200 text-slate-600 font-mono">{tag}</span>
-                      ))}
-                    </div>
-                  </div>
                   <Button onClick={handleBroadcast} disabled={isSubmitting || selectedStudents.length === 0} className="w-full h-14 rounded-2xl font-black shadow-xl">
                     {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <Send className="mr-2" size={18}/>}
                     Send to {selectedStudents.length} Students
@@ -596,75 +596,44 @@ export default function SMSPanelPage() {
               </Button>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="w-10">
-                        <Checkbox 
-                          checked={selectedNoticeIds.length === noticeLogs.length && noticeLogs.length > 0}
-                          onCheckedChange={(checked) => setSelectedNoticeIds(checked ? noticeLogs.map(l => l.id) : [])}
-                        />
-                      </TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Target Student</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Message</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {noticeLogs.map(log => (
-                      <TableRow key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                        <TableCell>
-                          <Checkbox 
-                            checked={selectedNoticeIds.includes(log.id)} 
-                            onCheckedChange={() => setSelectedNoticeIds(prev => prev.includes(log.id) ? prev.filter(id => id !== log.id) : [...prev, log.id])} 
-                          />
-                        </TableCell>
-                        <TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString() || 'N/A'}</TableCell>
-                        <TableCell className="font-bold text-[10px] text-slate-600">
-                          {log.studentId === 'everyone' ? <Badge className="bg-primary text-[8px]">BROADCAST</Badge> : (log.studentId || 'N/A')}
-                        </TableCell>
-                        <TableCell className="font-black text-xs text-slate-800">{log.title}</TableCell>
-                        <TableCell className="max-w-[300px] text-[10px] text-slate-500 line-clamp-1">{log.message}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn("text-[8px] uppercase", log.isRead ? 'text-success border-success/20' : 'text-orange-400 border-orange-200')}>
-                            {log.isRead ? 'Read' : 'Unread'}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="md:hidden divide-y">
-                {noticeLogs.map(log => (
-                  <div key={log.id} className="p-4 space-y-3">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-2">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox 
+                        checked={selectedNoticeIds.length === noticeLogs.length && noticeLogs.length > 0}
+                        onCheckedChange={(checked) => setSelectedNoticeIds(checked ? noticeLogs.map(l => l.id) : [])}
+                      />
+                    </TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Target Student</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {noticeLogs.map(log => (
+                    <TableRow key={log.id}>
+                      <TableCell>
                         <Checkbox 
                           checked={selectedNoticeIds.includes(log.id)} 
                           onCheckedChange={() => setSelectedNoticeIds(prev => prev.includes(log.id) ? prev.filter(id => id !== log.id) : [...prev, log.id])} 
                         />
-                        <div className="space-y-0.5">
-                          <p className="text-[8px] font-black uppercase text-slate-400 tracking-widest">{log.createdAt?.toDate?.().toLocaleString() || 'Just now'}</p>
-                          <h4 className="font-black text-sm text-slate-800">{log.title}</h4>
-                        </div>
-                      </div>
-                      <Badge className={cn("text-[8px] uppercase h-5", log.isRead ? 'bg-success' : 'bg-orange-400')}>
-                        {log.isRead ? 'Read' : 'Unread'}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed">{log.message}</p>
-                    <div className="flex justify-between items-center pt-1">
-                       <span className="text-[10px] font-bold text-slate-500">Target: {log.studentId === 'everyone' ? 'Broadcast' : 'Individual'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {noticeLogs.length === 0 && <div className="text-center py-20 text-muted-foreground italic">No notice history found.</div>}
+                      </TableCell>
+                      <TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString() || 'N/A'}</TableCell>
+                      <TableCell className="font-bold text-[10px] text-slate-600">
+                        {log.studentId === 'everyone' ? <Badge className="bg-primary text-[8px]">BROADCAST</Badge> : (log.studentId || 'N/A')}
+                      </TableCell>
+                      <TableCell className="font-black text-xs text-slate-800">{log.title}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn("text-[8px] uppercase", log.isRead ? 'text-success border-success/20' : 'text-orange-400 border-orange-200')}>
+                          {log.isRead ? 'Read' : 'Unread'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -686,81 +655,38 @@ export default function SMSPanelPage() {
               </Button>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="w-10">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox 
+                        checked={selectedLogIds.length === smsLogs.length && smsLogs.length > 0}
+                        onCheckedChange={(checked) => setSelectedLogIds(checked ? smsLogs.map(l => l.id) : [])}
+                      />
+                    </TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Recipient</TableHead>
+                    <TableHead>Message</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {smsLogs.map(log => (
+                    <TableRow key={log.id}>
+                      <TableCell>
                         <Checkbox 
-                          checked={selectedLogIds.length === smsLogs.length && smsLogs.length > 0}
-                          onCheckedChange={(checked) => setSelectedLogIds(checked ? smsLogs.map(l => l.id) : [])}
+                          checked={selectedLogIds.includes(log.id)} 
+                          onCheckedChange={() => setSelectedLogIds(prev => prev.includes(log.id) ? prev.filter(id => id !== log.id) : [...prev, log.id])} 
                         />
-                      </TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Recipient</TableHead>
-                      <TableHead>Message</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
+                      </TableCell>
+                      <TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString()}</TableCell>
+                      <TableCell className="font-mono text-[10px]">{log.to}</TableCell>
+                      <TableCell className="max-w-[200px] text-[10px] line-clamp-1">{log.message}</TableCell>
+                      <TableCell><Badge variant="outline" className={cn("text-[8px] uppercase", log.status === 'Success' ? 'text-success' : 'text-destructive')}>{log.status}</Badge></TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {smsLogs.map(log => (
-                      <TableRow key={log.id}>
-                        <TableCell>
-                          <Checkbox 
-                            checked={selectedLogIds.includes(log.id)} 
-                            onCheckedChange={() => setSelectedLogIds(prev => prev.includes(log.id) ? prev.filter(id => id !== log.id) : [...prev, log.id])} 
-                          />
-                        </TableCell>
-                        <TableCell className="text-[10px] font-bold text-slate-400">{log.createdAt?.toDate?.().toLocaleString()}</TableCell>
-                        <TableCell className="font-mono text-[10px]">{log.to}</TableCell>
-                        <TableCell className="max-w-[200px] text-[10px] line-clamp-1">{log.message}</TableCell>
-                        <TableCell><Badge variant="outline" className={cn("text-[8px] uppercase", log.status === 'Success' ? 'text-success' : 'text-destructive')}>{log.status}</Badge></TableCell>
-                        <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-success hover:bg-success/10" 
-                            title="Send via WhatsApp"
-                            onClick={() => handleWhatsAppSendManual(log.to, log.message)}
-                          >
-                            <MessageCircle size={16}/>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="md:hidden divide-y">
-                 {smsLogs.map(log => (
-                   <div key={log.id} className="p-4 space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
-                           <Checkbox 
-                            checked={selectedLogIds.includes(log.id)} 
-                            onCheckedChange={() => setSelectedLogIds(prev => prev.includes(log.id) ? prev.filter(id => id !== log.id) : [...prev, log.id])} 
-                          />
-                          <div className="space-y-0.5">
-                             <p className="text-[8px] font-bold text-slate-400 uppercase">{log.createdAt?.toDate?.().toLocaleString()}</p>
-                             <p className="text-xs font-mono font-black text-slate-700">{log.to}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className={cn("text-[8px] uppercase h-5", log.status === 'Success' ? 'text-success border-success/20' : 'text-destructive border-destructive/20')}>
-                            {log.status}
-                          </Badge>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-success" onClick={() => handleWhatsAppSendManual(log.to, log.message)}>
-                            <MessageCircle size={16}/>
-                          </Button>
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-slate-600 font-medium leading-relaxed italic bg-slate-50 p-2 rounded-lg border border-dashed">"{log.message}"</p>
-                   </div>
-                 ))}
-              </div>
-              {smsLogs.length === 0 && <div className="text-center py-20 text-muted-foreground italic">No SMS logs found.</div>}
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -787,7 +713,6 @@ export default function SMSPanelPage() {
                         <TableCell className="text-right text-primary font-black text-xs">{s.dob}</TableCell>
                       </TableRow>
                     ))}
-                    {birthdayStudents.length === 0 && !isScanning && <TableRow><TableCell className="text-center py-24 text-muted-foreground italic">No birthdays found today.</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               </ScrollArea>
@@ -814,7 +739,6 @@ export default function SMSPanelPage() {
               <div className="md:col-span-2 p-4 bg-primary/5 rounded-2xl border border-primary/10 mb-4">
                  <Label className="text-xs font-black uppercase text-primary mb-2 block">Global Branding</Label>
                  <Input value={hostelNameForSms} onChange={e => setHostelNameForSms(e.target.value)} placeholder="Hostel Name for SMS" className="h-12 rounded-xl border-primary/20 bg-white font-bold" />
-                 <p className="text-[9px] text-muted-foreground mt-2">This replaces [Hostel Name] in all templates.</p>
               </div>
               {localTemplates.map((t, i) => (
                 <div key={t.id} className="p-5 bg-slate-50 rounded-2xl border space-y-3">
@@ -839,21 +763,15 @@ export default function SMSPanelPage() {
                 <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">API Authentication Key</Label>
                 <div className="relative">
                   <Key size={16} className="absolute left-3 top-3.5 text-muted-foreground" />
-                  <Input type="password" value={apiConfig.apikey} onChange={e => setApiConfig({...apiConfig, apikey: e.target.value})} className="pl-10 h-12 rounded-xl bg-slate-50 border-none shadow-inner" placeholder="Your API Secret" />
+                  <Input type="password" value={apiConfig.apikey} onChange={e => setApiConfig({...apiConfig, apikey: e.target.value})} className="pl-10 h-12 rounded-xl bg-slate-50 border-none shadow-inner" />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Sender Mask / ID</Label>
                 <div className="relative">
                   <Smartphone size={16} className="absolute left-3 top-3.5 text-muted-foreground" />
-                  <Input value={apiConfig.senderid} onChange={e => setApiConfig({...apiConfig, senderid: e.target.value})} className="pl-10 h-12 rounded-xl bg-slate-50 border-none shadow-inner" placeholder="Optional: Approved Mask" />
+                  <Input value={apiConfig.senderid} onChange={e => setApiConfig({...apiConfig, senderid: e.target.value})} className="pl-10 h-12 rounded-xl bg-slate-50 border-none shadow-inner" />
                 </div>
-              </div>
-              <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex gap-3">
-                 <Info className="text-primary h-5 w-5 shrink-0" />
-                 <p className="text-[10px] text-slate-600 leading-relaxed font-medium">
-                   Only use Alpha Net BD compatible API keys. Make sure your account has enough credit before broadcasting.
-                 </p>
               </div>
               <Button onClick={handleSaveApiConfig} disabled={isSubmitting} className="w-full h-14 rounded-2xl font-black text-lg shadow-xl shadow-slate-200 transition-all hover:scale-[1.02]">
                 {isSubmitting ? <Loader2 className="animate-spin mr-2"/> : <ShieldCheck className="mr-2" size={20}/>} Update Gateway Security

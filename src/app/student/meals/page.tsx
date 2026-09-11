@@ -27,7 +27,8 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
-  Plus
+  Plus,
+  Wallet
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
 import { doc, serverTimestamp, updateDoc, collection, query, where, increment } from "firebase/firestore"
@@ -90,6 +91,7 @@ export default function StudentMealPage() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [isLowBalanceDialogOpen, setIsLowBalanceDialogOpen] = useState(false)
 
   useEffect(() => {
     setStudentId(localStorage.getItem("somikoron_auth_id") || "")
@@ -108,6 +110,12 @@ export default function StudentMealPage() {
   )
   const { data: mealConfig } = useDoc(mealConfigRef)
 
+  const mealRateRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: mealRateData } = useDoc(mealRateRef)
+
   const routineQuery = useMemoFirebase(() => collection(db, "mealRoutines"), [db])
   const { data: routines } = useCollection(routineQuery)
   
@@ -124,7 +132,6 @@ export default function StudentMealPage() {
 
   useEffect(() => {
     if (student?.mealStatus) {
-      // Force autoMode false locally as it's disabled in UI
       setLocalMeals({ ...student.mealStatus, autoMode: false })
     }
     if (student?.mealChoices) setMealChoices(student.mealChoices)
@@ -139,6 +146,22 @@ export default function StudentMealPage() {
       setWeeklySchedule(defaultSched)
     }
   }, [student])
+
+  const stats = useMemo(() => {
+    if (!student) return null
+    const foodVal = Number(student.foodDueAmount || 0)
+    const b = student.currentMonthBreakfast || 0
+    const l = student.currentMonthLunch || 0
+    const d = student.currentMonthDinner || 0
+    const g = student.currentMonthGuestMeals || 0
+    
+    const mealRate = Number(mealRateData?.rate || 0)
+    const effectiveMeals = (b * 0.5) + l + d + g
+    const estimatedMonthlyCost = effectiveMeals * mealRate
+    const estimatedFoodBalance = foodVal - estimatedMonthlyCost
+    
+    return { estimatedFoodBalance, mealRate }
+  }, [student, mealRateData])
 
   const timeWindow = useMemo(() => {
     if (!isMounted) return { isActive: false, startStr: "", endStr: "" }
@@ -198,9 +221,18 @@ export default function StudentMealPage() {
 
   const handleUpdateMeals = useCallback(async () => {
     if (!studentRef || !timeWindow.isActive || isUpdating || !student) return
+    
+    // LOW BALANCE RESTRICTION
+    const isTurningAnyOn = localMeals.breakfast || localMeals.lunch || localMeals.dinner || 
+                           localGuestMeals.breakfast > 0 || localGuestMeals.lunch > 0 || localGuestMeals.dinner > 0;
+    
+    if (isTurningAnyOn && stats && stats.estimatedFoodBalance < 50) {
+      setIsLowBalanceDialogOpen(true);
+      return;
+    }
+
     setIsUpdating(true)
     try {
-      // Force autoMode false as it is disabled
       let finalMeals = { ...localMeals, autoMode: false }
       let finalChoices = { ...mealChoices }
       let finalGuestMeals = { ...localGuestMeals }
@@ -226,7 +258,6 @@ export default function StudentMealPage() {
         currentMonthLabel: targetLabel
       }
 
-      // SELF MEAL DIFFERENTIAL
       const calculateSelfDiff = (type: 'breakfast' | 'lunch' | 'dinner') => {
         const nextVal = finalMeals[type] ? 1 : 0;
         if (isNewMonth) return nextVal;
@@ -237,7 +268,6 @@ export default function StudentMealPage() {
         return nextVal;
       };
 
-      // GUEST MEAL DIFFERENTIAL
       const nextGuestTotal = Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner);
       const prevGuestTotal = (isReSubmission && !isNewMonth) 
         ? (Number(student.tomorrowGuestMeals?.breakfast || 0) + Number(student.tomorrowGuestMeals?.lunch || 0) + Number(student.tomorrowGuestMeals?.dinner || 0)) 
@@ -267,23 +297,7 @@ export default function StudentMealPage() {
     } finally { 
       setIsUpdating(false) 
     }
-  }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, localGuestMeals, weeklySchedule, tomorrowDay, tomorrowDate, toast, mealConfig]);
-
-  const toggleScheduleMeal = (day: string, meal: string) => {
-    const isAvail = mealConfig?.[`${meal}Available`] !== false;
-    if (!isAvail) return;
-    setWeeklySchedule(prev => ({
-      ...prev,
-      [day]: { ...prev[day], [meal]: !prev[day][meal] }
-    }))
-  }
-
-  const updateScheduleChoice = (day: string, mealType: string, choice: string) => {
-    setWeeklySchedule(prev => ({
-      ...prev,
-      [day]: { ...prev[day], [`${mealType}Choice`]: choice }
-    }))
-  }
+  }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, localGuestMeals, weeklySchedule, tomorrowDay, tomorrowDate, toast, mealConfig, stats]);
 
   const getMealDetails = (text: string) => {
     if (!text) return { common: "Regular Diet", options: null };
@@ -392,7 +406,6 @@ export default function StudentMealPage() {
                 <Switch disabled={true} checked={false} onCheckedChange={() => {}} />
               </div>
 
-              {/* Weekly Schedule is hidden and manual selection is forced as Auto Mode is disabled in UI */}
               <div className="space-y-6">
                 <div className="flex justify-between items-center px-1">
                   <p className="text-[10px] font-black uppercase text-primary tracking-widest">Tomorrow's Selection ({tomorrowDay})</p>
@@ -426,7 +439,6 @@ export default function StudentMealPage() {
                         />
                       </div>
 
-                      {/* GUEST MEAL PICKER */}
                       {isAvailable && (
                         <div className="pt-2 flex items-center justify-between bg-white/40 p-3 rounded-2xl border border-dashed border-success/20">
                            <div className="flex items-center gap-2">
@@ -487,6 +499,37 @@ export default function StudentMealPage() {
            )}
         </CardContent>
       </Card>
+
+      {/* LOW BALANCE DIALOG */}
+      <Dialog open={isLowBalanceDialogOpen} onOpenChange={setIsLowBalanceDialogOpen}>
+        <DialogContent className="max-w-sm rounded-[2.5rem] border-none shadow-2xl overflow-hidden p-0">
+          <div className="h-2 bg-destructive w-full" />
+          <div className="p-8 space-y-6 text-center">
+            <div className="mx-auto h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive mb-2">
+              <Wallet size={32} />
+            </div>
+            <div className="space-y-2">
+               <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Insufficient Balance</h2>
+               <p className="text-sm font-medium text-slate-600 leading-relaxed">
+                 আপনার খাবারের আনুমানিক ব্যালেন্স বর্তমানে ৳৫০ এর নিচে। বিড়ম্বনা এড়াতে দয়া করে দ্রুত ব্যালেন্স রিচার্জ করুন। ব্যালেন্স রিচার্জ না করা পর্যন্ত নতুন মিল অন করা সম্ভব হবে না।
+               </p>
+            </div>
+            <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
+               <p className="text-[10px] font-black text-primary uppercase">Estimated Balance: ৳{Math.round(stats?.estimatedFoodBalance || 0)}</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <Link href="/student/payments" className="w-full">
+                <Button className="w-full h-12 rounded-xl font-black text-sm uppercase shadow-lg shadow-primary/10">
+                  Recharge Now
+                </Button>
+              </Link>
+              <Button variant="ghost" onClick={() => setIsLowBalanceDialogOpen(false)} className="text-xs font-bold uppercase text-muted-foreground">
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
