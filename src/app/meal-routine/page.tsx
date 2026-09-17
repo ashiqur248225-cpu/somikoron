@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Utensils, Save, Plus, Trash2, Clock, CheckCircle2, Loader2, ChevronLeft, Table as TableIcon } from "lucide-react"
+import { Utensils, Save, Plus, Trash2, Clock, CheckCircle2, Loader2, ChevronLeft, Table as TableIcon, Coffee, Sun, Moon } from "lucide-react"
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
 import { doc, setDoc, collection, serverTimestamp } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
@@ -85,7 +85,7 @@ export default function MealRoutinePage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20">
-      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           {!isLimitedRole && <SidebarTrigger className="-ml-1" />}
           {!isLimitedRole && <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />}
@@ -149,43 +149,86 @@ export default function MealRoutinePage() {
           ))}
         </div>
       ) : (
-        <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden">
-          <CardHeader className="bg-slate-50 border-b">
-            <div className="flex items-center gap-3">
-              <div className="bg-primary/10 p-2 rounded-xl text-primary"><TableIcon size={20}/></div>
-              <CardTitle className="text-lg">সাপ্তাহিক খাবারের রুটিন (Weekly Table)</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto scrollbar-hide">
-              <Table className="min-w-[500px] md:min-w-full">
+        <div className="space-y-6">
+          {/* Mobile View: Card Style */}
+          <div className="md:hidden space-y-4">
+            {DAYS.map((day) => (
+              <Card key={day} className="border-none shadow-sm bg-white rounded-3xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <CardHeader className="bg-primary/5 border-b py-3 px-6">
+                  <CardTitle className="text-md font-black text-primary uppercase tracking-tight flex items-center gap-2">
+                    <Clock size={16} /> {day}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex gap-4">
+                    <div className="h-10 w-10 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
+                      <span className="text-xl">🌅</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[9px] font-black uppercase text-orange-600 tracking-widest">Breakfast</p>
+                      <p className="text-sm font-bold text-slate-700 leading-tight">{localRoutine[day]?.breakfast || 'Not set'}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="h-10 w-10 rounded-2xl bg-success/5 flex items-center justify-center text-success shrink-0">
+                      <span className="text-xl">☀️</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[9px] font-black uppercase text-success tracking-widest">Lunch</p>
+                      <p className="text-sm font-bold text-slate-700 leading-tight">{localRoutine[day]?.lunch || 'Not set'}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
+                      <span className="text-xl">🌙</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[9px] font-black uppercase text-blue-600 tracking-widest">Dinner</p>
+                      <p className="text-sm font-bold text-slate-700 leading-tight">{localRoutine[day]?.dinner || 'Not set'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Desktop View: Table Style */}
+          <Card className="hidden md:block border-none shadow-sm bg-white rounded-3xl overflow-hidden">
+            <CardHeader className="bg-slate-50 border-b">
+              <div className="flex items-center gap-3">
+                <div className="bg-primary/10 p-2 rounded-xl text-primary"><TableIcon size={20}/></div>
+                <CardTitle className="text-lg">সাপ্তাহিক খাবারের রুটিন (Weekly Table)</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
                 <TableHeader className="bg-slate-50/50">
                   <TableRow>
-                    <TableHead className="w-20 md:w-32 font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-2">Day</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-2">Breakfast</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-2">Lunch</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-2">Dinner</TableHead>
+                    <TableHead className="w-32 font-black uppercase text-[11px] tracking-widest text-slate-500">Day</TableHead>
+                    <TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Breakfast</TableHead>
+                    <TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Lunch</TableHead>
+                    <TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Dinner</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {DAYS.map((day) => (
                     <TableRow key={day} className="hover:bg-slate-50 transition-colors">
-                      <TableCell className="font-black text-slate-800 py-3 px-2 text-[10px] md:text-sm">{day}</TableCell>
-                      <TableCell className="text-[10px] md:text-sm font-medium text-slate-600 py-3 px-2 leading-tight">{localRoutine[day]?.breakfast || '-'}</TableCell>
-                      <TableCell className="text-[10px] md:text-sm font-medium text-slate-600 py-3 px-2 leading-tight">{localRoutine[day]?.lunch || '-'}</TableCell>
-                      <TableCell className="text-[10px] md:text-sm font-medium text-slate-600 py-3 px-2 leading-tight">{localRoutine[day]?.dinner || '-'}</TableCell>
+                      <TableCell className="font-black text-slate-800 py-4">{day}</TableCell>
+                      <TableCell className="text-sm font-medium text-slate-600 py-4">{localRoutine[day]?.breakfast || '-'}</TableCell>
+                      <TableCell className="text-sm font-medium text-slate-600 py-4">{localRoutine[day]?.lunch || '-'}</TableCell>
+                      <TableCell className="text-sm font-medium text-slate-600 py-4">{localRoutine[day]?.dinner || '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </div>
-          </CardContent>
-          <CardFooter className="bg-slate-50/50 border-t p-4">
-             <p className="text-[10px] text-muted-foreground font-medium italic w-full text-center">
-               বি.দ্র: বিশেষ প্রয়োজনে রুটিন পরিবর্তন হতে পারে। আপডেটের জন্য নোটিশ ফলো করুন।
-             </p>
-          </CardFooter>
-        </Card>
+            </CardContent>
+            <CardFooter className="bg-slate-50/50 border-t p-4">
+              <p className="text-[10px] text-muted-foreground font-medium italic w-full text-center">
+                বি.দ্র: বিশেষ প্রয়োজনে রুটিন পরিবর্তন হতে পারে। আপডেটের জন্য নোটিশ ফলো করুন।
+              </p>
+            </CardFooter>
+          </Card>
+        </div>
       )}
     </div>
   )
