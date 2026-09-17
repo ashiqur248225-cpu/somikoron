@@ -245,9 +245,11 @@ export default function AdminMealDashboardPage() {
                 <SelectItem value="tomorrow">Tomorrow</SelectItem>
               </SelectContent>
            </Select>
-           <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary rounded-xl" onClick={handlePrint}>
-              <Printer size={16}/> <span className="hidden sm:inline">Print</span>
-           </Button>
+           {(userRole === 'Admin' || userRole === 'Branch Manager') && (
+             <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary rounded-xl" onClick={handlePrint}>
+                <Printer size={16}/> <span className="hidden sm:inline">Print</span>
+             </Button>
+           )}
         </div>
       </div>
 
