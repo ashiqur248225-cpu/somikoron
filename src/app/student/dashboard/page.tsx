@@ -75,17 +75,17 @@ export default function StudentDashboardPage() {
     if (!student) return null
     const rentDue = Object.values(student.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0)
     const foodVal = Number(student.foodDueAmount || 0)
-    const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0
-    const foodBalanceDisplay = foodVal
     
     const cookVal = Number(student.cookingDueAmount || 0)
     const cookDue = cookVal < 0 ? Math.abs(cookVal) : 0
     const cookBalance = cookVal > 0 ? cookVal : 0
 
-    // Include global standard food advance if provided in config
-    const advanceRequirement = Number(mealConfig?.standardFoodAdvance || 0);
+    // NEW LOGIC: Food Shortage Calculation
+    const foodRequired = Number(mealConfig?.standardFoodAdvance || 0);
+    const foodShortage = Math.max(0, foodRequired - foodVal);
     
-    const totalDue = rentDue + foodDue + cookDue + advanceRequirement
+    // Outstanding Due = Rent Due + Cooking Due + Food Shortage
+    const totalDue = rentDue + cookDue + foodShortage
     
     const lastPayment = student.paymentsHistory?.[student.paymentsHistory.length - 1] || null
     const lastMonthFood = student.mealsHistory?.[student.mealsHistory.length - 1] || null
@@ -104,15 +104,15 @@ export default function StudentDashboardPage() {
     
     return { 
       rentDue, 
-      foodBalanceDisplay, 
-      foodDue, 
+      foodBalance: foodVal,
+      foodRequired,
+      foodShortage,
       cookDue, 
       cookBalance, 
       totalDue, 
       lastPayment, 
       lastMonthFood, 
       currentMonthMealsTotal, 
-      advanceRequirement,
       estimatedFoodBalance,
       mealRate
     }
@@ -150,26 +150,30 @@ export default function StudentDashboardPage() {
             <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md"><TrendingUp size={24}/></div>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
              <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
-                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Advance Balance</p>
-                <p className="text-lg font-black">৳{student.advanceAmount?.toLocaleString()}</p>
-             </div>
-             <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
-                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">
-                  {(student.foodDueAmount || 0) < 0 ? "Food Due" : "Food Balance"}
-                </p>
-                <p className={cn("text-lg font-black", (student.foodDueAmount || 0) < 0 ? "text-red-300" : "text-green-300")}>
-                  ৳{stats?.foodBalanceDisplay.toLocaleString()}
-                </p>
-             </div>
-             <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
-                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Rent Due</p>
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Rent Arrears</p>
                 <p className="text-lg font-black text-red-200">৳{stats?.rentDue.toLocaleString()}</p>
              </div>
              <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
-                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Food Advance Required</p>
-                <p className="text-lg font-black text-blue-200">৳{stats?.advanceRequirement.toLocaleString()}</p>
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Food Balance</p>
+                <p className={cn("text-lg font-black", (stats?.foodBalance || 0) < 0 ? "text-red-300" : "text-green-300")}>
+                  ৳{stats?.foodBalance.toLocaleString()}
+                </p>
+             </div>
+             <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Food Required</p>
+                <p className="text-lg font-black text-blue-200">৳{stats?.foodRequired.toLocaleString()}</p>
+             </div>
+             {stats && stats.foodShortage > 0 && (
+               <div className="bg-white/10 p-4 rounded-3xl border border-white/5 animate-in zoom-in">
+                  <p className="text-[8px] font-bold uppercase text-orange-200 mb-1">Food Shortage</p>
+                  <p className="text-lg font-black text-orange-400">৳{stats.foodShortage.toLocaleString()}</p>
+               </div>
+             )}
+             <div className="bg-white/10 p-4 rounded-3xl border border-white/5">
+                <p className="text-[8px] font-bold uppercase text-white/50 mb-1">Security Advance</p>
+                <p className="text-lg font-black">৳{student.advanceAmount?.toLocaleString()}</p>
              </div>
           </div>
 
@@ -283,42 +287,6 @@ export default function StudentDashboardPage() {
                 <Button variant="ghost" size="sm" className="h-8 text-primary font-bold text-[10px] uppercase gap-1">Receipt <ChevronRight size={14}/></Button>
              </Link>
           </CardContent>
-        </Card>
-      )}
-
-      {stats?.lastMonthFood && (
-        <Card className="border-none shadow-md bg-white rounded-[2rem] overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b py-4">
-             <div className="flex justify-between items-center">
-                <CardTitle className="text-[10px] font-black uppercase text-primary flex items-center gap-2">
-                  <Receipt size={14}/> Previous Month Final Bill
-                </CardTitle>
-                <Badge variant="outline" className="text-[8px] font-black uppercase">{stats.lastMonthFood.month}</Badge>
-             </div>
-          </CardHeader>
-          <CardContent className="p-6">
-             <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="space-y-0.5">
-                   <p className="text-[8px] font-bold text-muted-foreground uppercase">Total Meals</p>
-                   <p className="text-sm font-black text-slate-800">{stats.lastMonthFood.totalMeals}</p>
-                </div>
-                <div className="space-y-0.5">
-                   <p className="text-[8px] font-bold text-muted-foreground uppercase">Rate</p>
-                   <p className="text-sm font-black text-slate-800">৳{stats.lastMonthFood.perMealCost}</p>
-                </div>
-                <div className="space-y-0.5">
-                   <p className="text-[8px] font-bold text-muted-foreground uppercase">Total Bill</p>
-                   <p className="text-sm font-black text-destructive">৳{stats.lastMonthFood.totalCost}</p>
-                </div>
-             </div>
-          </CardContent>
-          <CardFooter className="bg-slate-50/30 border-t p-3 flex justify-center">
-             <Link href="/student/meals">
-                <Button variant="ghost" size="sm" className="h-6 text-primary font-bold text-[8px] uppercase gap-1">
-                   View Full Breakdown <ChevronRight size={10}/>
-                </Button>
-             </Link>
-          </CardFooter>
         </Card>
       )}
 

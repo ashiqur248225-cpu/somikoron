@@ -121,6 +121,13 @@ export default function DashboardPage() {
   const balanceRef = useMemoFirebase(() => userBranch ? doc(db, "netBalance", userBranch) : null, [db, userBranch])
   const { data: branchBalance } = useDoc(balanceRef)
 
+  // Meal Config for Shortage Logic
+  const mealConfigRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
   // Queries
   const buildingsQuery = useMemoFirebase(() => {
     if (!userBranch || !isReady) return null
@@ -161,8 +168,10 @@ export default function DashboardPage() {
 
   // Statistics Calculation with Smart Building Filtering
   const stats = useMemo(() => {
-    if (!isReady) return { income: 0, expense: 0, activeResidents: 0, totalDue: 0 }
+    if (!isReady || !mealConfig) return { income: 0, expense: 0, activeResidents: 0, totalDue: 0 }
     const now = new Date()
+    const advanceRequirement = Number(mealConfig.standardFoodAdvance || 0);
+
     const isWithinRange = (date: Date, range: string) => {
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
       if (range === 'today') return date >= startOfToday
@@ -207,10 +216,13 @@ export default function DashboardPage() {
       return s.isActive && matchesBuilding
     })
 
+    // NEW LOGIC: Cumulative branch due calculation including Food Shortage
     const totalDue = filteredStudents.reduce((acc, s) => {
-      const rentDue = Number(s.totalDue || 0);
-      const foodDebt = (s.foodDueAmount || 0) < 0 ? Math.abs(s.foodDueAmount) : 0;
-      return acc + rentDue + foodDebt;
+      const rentDue = Object.values(s.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
+      const foodVal = Number(s.foodDueAmount || 0);
+      const foodShortage = Math.max(0, advanceRequirement - foodVal);
+      const cookDue = (s.cookingDueAmount || 0) < 0 ? Math.abs(s.cookingDueAmount) : 0;
+      return acc + rentDue + foodShortage + cookDue;
     }, 0)
 
     return { 
@@ -219,7 +231,7 @@ export default function DashboardPage() {
       activeResidents: filteredStudents.length,
       totalDue
     }
-  }, [allPayments, allExpenses, students, timeRange, selectedBuildingId, isReady])
+  }, [allPayments, allExpenses, students, timeRange, selectedBuildingId, isReady, mealConfig])
 
   // Prevent UI rendering for non-management roles
   if (!isReady || ['Staff', 'Worker', 'General Staff', 'Student'].includes(userRole)) {

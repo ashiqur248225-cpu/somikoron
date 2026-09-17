@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Users, Search, Loader2, Eye, Printer, TrendingUp, Filter, MoreVertical, CircleDollarSign, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase"
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
 import { collection, query, where, doc, updateDoc, increment, serverTimestamp } from "firebase/firestore"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
@@ -64,19 +65,29 @@ export default function DuesPage() {
   }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
 
+  const mealConfigRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: mealConfig } = useDoc(mealConfigRef)
+
   const processedData = useMemo(() => {
     if (!students) return []
+    const advanceRequirement = Number(mealConfig?.standardFoodAdvance || 0);
+
     return students.map(s => {
       const rentDue = Object.values(s.duesBreakdown || {}).reduce((a: any, b: any) => a + Number(b.amount || 0), 0);
       const foodVal = Number(s.foodDueAmount || 0);
-      const foodDue = foodVal < 0 ? Math.abs(foodVal) : 0;
+      
+      // NEW LOGIC: Calculate Food Shortage instead of simple Food Due
+      const foodShortage = Math.max(0, advanceRequirement - foodVal);
       
       const cookVal = Number(s.cookingDueAmount || 0);
       const cookDue = cookVal < 0 ? Math.abs(cookVal) : 0;
       
-      const displayTotalDue = rentDue + foodDue + cookDue;
+      const displayTotalDue = rentDue + foodShortage + cookDue;
       
-      return { ...s, foodBalance: foodVal, cookingBalance: cookVal, rentDue, displayTotalDue, foodDue, cookDue }
+      return { ...s, foodBalance: foodVal, cookingBalance: cookVal, rentDue, displayTotalDue, foodShortage, cookDue }
     }).filter(s => {
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
@@ -85,13 +96,13 @@ export default function DuesPage() {
       let matchesDueCategory = true;
       if (dueCategoryFilter === 'rent') matchesDueCategory = s.rentDue > 0;
       if (dueCategoryFilter === 'cooking') matchesDueCategory = s.cookDue > 0;
-      if (dueCategoryFilter === 'food') matchesDueCategory = s.foodDue > 0;
+      if (dueCategoryFilter === 'food') matchesDueCategory = s.foodShortage > 0;
 
       const hasDue = s.displayTotalDue > 0
       
       return matchesStatus && matchesSearch && matchesBuilding && matchesDueCategory && hasDue
     }).sort((a, b) => b.displayTotalDue - a.displayTotalDue)
-  }, [students, searchTerm, buildingFilter, statusFilter, dueCategoryFilter])
+  }, [students, searchTerm, buildingFilter, statusFilter, dueCategoryFilter, mealConfig])
 
   const stats = useMemo(() => {
     const totalDue = processedData.reduce((acc, curr) => acc + curr.displayTotalDue, 0)
@@ -107,7 +118,6 @@ export default function DuesPage() {
   const handleReset = () => {
     setSearchTerm("")
     setBuildingFilter("all")
-    setRoomFilter("all")
     setStatusFilter("active")
     setDueCategoryFilter("all")
   }
@@ -169,8 +179,8 @@ export default function DuesPage() {
             <tr>
               <th>Name</th>
               <th>Location</th>
-              <th className="text-right">Rent Due</th>
-              <th className="text-right">Food Due</th>
+              <th className="text-right">Rent Arrears</th>
+              <th className="text-right">Food Shortage</th>
               <th className="text-right">Cook Due</th>
               <th className="text-right">Total Outstanding</th>
             </tr>
@@ -181,7 +191,7 @@ export default function DuesPage() {
                 <td className="font-bold">{s.name}<br/><span className="text-[7pt] font-normal text-slate-500">{s.phone}</span></td>
                 <td>{s.buildingName} • R-{s.roomNumber}</td>
                 <td className="text-right">৳{s.rentDue.toLocaleString()}</td>
-                <td className="text-right">৳{s.foodDue.toLocaleString()}</td>
+                <td className="text-right">৳{s.foodShortage.toLocaleString()}</td>
                 <td className="text-right">৳{s.cookDue.toLocaleString()}</td>
                 <td className="text-right font-black">৳{s.displayTotalDue.toLocaleString()}</td>
               </tr>
@@ -221,7 +231,7 @@ export default function DuesPage() {
                       <TableCell className="font-bold">{s.name}<br/><span className="text-[10px] text-muted-foreground">{s.phone}</span></TableCell>
                       <TableCell className="text-xs">{s.buildingName} • R-{s.roomNumber}</TableCell>
                       <TableCell className="text-right text-[10px] font-bold text-slate-500">
-                        R:{s.rentDue} | F:{s.foodDue} | C:{s.cookDue}
+                        R:{s.rentDue} | F:{s.foodShortage} | C:{s.cookDue}
                       </TableCell>
                       <TableCell className="text-right font-black text-destructive text-lg">৳{s.displayTotalDue.toLocaleString()}</TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -242,7 +252,7 @@ export default function DuesPage() {
                   <div className="flex justify-between items-start"><div><h3 className="font-black text-slate-800 text-lg leading-tight">{s.name}</h3><p className="text-xs text-muted-foreground font-medium mt-0.5">{s.phone}</p></div><Badge variant="destructive" className="text-[10px]">Due</Badge></div>
                   <div className="grid grid-cols-3 gap-2 bg-secondary/50 p-2 rounded-xl text-center">
                     <div className="space-y-0.5"><p className="text-[7px] font-bold uppercase opacity-60">Rent</p><p className="text-[10px] font-black">৳{s.rentDue}</p></div>
-                    <div className="space-y-0.5"><p className="text-[7px] font-bold uppercase opacity-60">Food</p><p className="text-[10px] font-black">৳{s.foodDue}</p></div>
+                    <div className="space-y-0.5"><p className="text-[7px] font-bold uppercase opacity-60">Food Shortage</p><p className="text-[10px] font-black">৳{s.foodShortage}</p></div>
                     <div className="space-y-0.5"><p className="text-[7px] font-bold uppercase opacity-60">Cook</p><p className="text-[10px] font-black">৳{s.cookDue}</p></div>
                   </div>
                   <div className="bg-destructive/10 p-3 rounded-xl flex justify-between items-center"><span className="text-[10px] font-bold text-destructive uppercase">Total Outstanding</span><span className="text-xl font-black text-destructive">৳{s.displayTotalDue.toLocaleString()}</span></div>
@@ -271,9 +281,9 @@ export default function DuesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Combined Dues</SelectItem>
-                  <SelectItem value="rent">Rent Due Only</SelectItem>
+                  <SelectItem value="rent">Rent Arrears Only</SelectItem>
                   <SelectItem value="cooking">Cooking Bill Due Only</SelectItem>
-                  <SelectItem value="food">Food Balance Due Only</SelectItem>
+                  <SelectItem value="food">Food Shortage Only</SelectItem>
                 </SelectContent>
               </Select>
             </div>
