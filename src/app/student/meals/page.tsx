@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
@@ -123,33 +122,44 @@ export default function StudentMealPage() {
     return routines.filter(r => r.branch === userBranch)
   }, [routines, userBranch])
 
-  const pendingRequestsQuery = useMemoFirebase(() => {
-    if (!studentId) return null;
-    return query(collection(db, "mealRequests"), where("studentId", "==", studentId), where("status", "==", "pending"), limit(1))
-  }, [db, studentId])
-  const { data: pendingRequests } = useCollection(pendingRequestsQuery)
-
   const [localMeals, setLocalMeals] = useState({ breakfast: false, lunch: false, dinner: false, autoMode: false })
   const [mealChoices, setMealChoices] = useState<Record<string, string>>({})
   const [weeklySchedule, setWeeklySchedule] = useState<Record<string, any>>({})
   const [localGuestMeals, setLocalGuestMeals] = useState({ breakfast: 0, lunch: 0, dinner: 0 })
 
+  const tomorrowDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d;
+  }, [currentTime]);
+
+  const tomorrowYMD = useMemo(() => getLocYMD(tomorrowDate), [tomorrowDate]);
+  const tomorrowDay = WEEKDAYS[tomorrowDate.getDay()];
+
   useEffect(() => {
-    if (student?.mealStatus) {
-      setLocalMeals({ ...student.mealStatus, autoMode: false })
+    if (student) {
+      const isAlreadyDecidedForTomorrow = student.lastMealUpdateDateTomorrow === tomorrowYMD;
+      
+      if (isAlreadyDecidedForTomorrow) {
+        setLocalMeals({ ...student.mealStatus, autoMode: false });
+        if (student.tomorrowGuestMeals) setLocalGuestMeals(student.tomorrowGuestMeals);
+      } else {
+        // Fresh start for tomorrow decision (Attendance Mode)
+        setLocalMeals({ breakfast: false, lunch: false, dinner: false, autoMode: false });
+        setLocalGuestMeals({ breakfast: 0, lunch: 0, dinner: 0 });
+      }
+
+      if (student.mealChoices) setMealChoices(student.mealChoices);
+      if (student.weeklySchedule) setWeeklySchedule(student.weeklySchedule);
+      else {
+        const defaultSched: any = {}
+        WEEKDAYS.forEach(day => {
+          defaultSched[day] = { breakfast: true, lunch: true, dinner: true }
+        })
+        setWeeklySchedule(defaultSched)
+      }
     }
-    if (student?.mealChoices) setMealChoices(student.mealChoices)
-    if (student?.tomorrowGuestMeals) setLocalGuestMeals(student.tomorrowGuestMeals)
-    if (student?.weeklySchedule) {
-      setWeeklySchedule(student.weeklySchedule)
-    } else {
-      const defaultSched: any = {}
-      WEEKDAYS.forEach(day => {
-        defaultSched[day] = { breakfast: true, lunch: true, dinner: true, lunchChoice: "Normal", dinnerChoice: "Normal" }
-      })
-      setWeeklySchedule(defaultSched)
-    }
-  }, [student])
+  }, [student, tomorrowYMD])
 
   const stats = useMemo(() => {
     if (!student) return null
@@ -205,20 +215,15 @@ export default function StudentMealPage() {
     }
   }, [currentTime, mealConfig, isMounted])
 
-  const hasAlreadyUpdatedToday = useMemo(() => {
+  const hasAlreadyUpdatedForTomorrow = useMemo(() => {
     if (!student) return false;
-    const todayStr = getLocYMD(new Date());
-    // Tomorrow decision field is the authoritative lock for student's next-day window
-    return student.lastMealUpdateDateTomorrow === todayStr;
-  }, [student]);
+    return student.lastMealUpdateDateTomorrow === tomorrowYMD;
+  }, [student, tomorrowYMD]);
 
   const canChange = useMemo(() => {
-    return isMounted && timeWindow.isActive && !hasAlreadyUpdatedToday;
-  }, [isMounted, timeWindow.isActive, hasAlreadyUpdatedToday])
+    return isMounted && timeWindow.isActive && !hasAlreadyUpdatedForTomorrow;
+  }, [isMounted, timeWindow.isActive, hasAlreadyUpdatedForTomorrow])
 
-  const tomorrowDate = new Date();
-  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-  const tomorrowDay = WEEKDAYS[tomorrowDate.getDay()];
   const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
 
   const handleUpdateMeals = useCallback(async () => {
@@ -238,7 +243,6 @@ export default function StudentMealPage() {
       let finalChoices = { ...mealChoices }
       let finalGuestMeals = { ...localGuestMeals }
       
-      const todayStr = getLocYMD(new Date());
       const targetLabel = `${MONTHS[tomorrowDate.getMonth()]} ${tomorrowDate.getFullYear()}`;
       
       const updates: any = { 
@@ -247,23 +251,22 @@ export default function StudentMealPage() {
         weeklySchedule, 
         tomorrowGuestMeals: finalGuestMeals,
         lastMealUpdate: serverTimestamp(),
-        lastMealUpdateDateTomorrow: todayStr, // Decisions for tomorrow
+        lastMealUpdateDateTomorrow: tomorrowYMD, // Locked for target date
         updatedAt: serverTimestamp(),
         currentMonthLabel: targetLabel
       }
 
-      const diffB = (finalMeals.breakfast ? 1 : 0) - (student.mealStatus?.breakfast ? 1 : 0);
-      const diffL = (finalMeals.lunch ? 1 : 0) - (student.mealStatus?.lunch ? 1 : 0);
-      const diffD = (finalMeals.dinner ? 1 : 0) - (student.mealStatus?.dinner ? 1 : 0);
-
-      const nextGuestTotal = Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner);
-      const prevGuestTotal = Number(student.tomorrowGuestMeals?.breakfast || 0) + Number(student.tomorrowGuestMeals?.lunch || 0) + Number(student.tomorrowGuestMeals?.dinner || 0);
-      const diffGuest = nextGuestTotal - prevGuestTotal;
+      // Difference calculation between fresh start and manual decision
+      // Since it's a fresh decision for tomorrowYMD, we increment based on new finalMeals
+      const diffB = (finalMeals.breakfast ? 1 : 0);
+      const diffL = (finalMeals.lunch ? 1 : 0);
+      const diffD = (finalMeals.dinner ? 1 : 0);
+      const guestTotal = Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner);
 
       if (diffB !== 0) updates.currentMonthBreakfast = increment(diffB);
       if (diffL !== 0) updates.currentMonthLunch = increment(diffL);
       if (diffD !== 0) updates.currentMonthDinner = increment(diffD);
-      if (diffGuest !== 0) updates.currentMonthGuestMeals = increment(diffGuest);
+      if (guestTotal !== 0) updates.currentMonthGuestMeals = increment(guestTotal);
 
       await updateDoc(studentRef, updates)
       toast({ title: "Preferences Saved", description: `Meals for tomorrow (${tomorrowDay}) updated.` })
@@ -272,7 +275,7 @@ export default function StudentMealPage() {
     } finally { 
       setIsUpdating(false) 
     }
-  }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, localGuestMeals, weeklySchedule, tomorrowDay, tomorrowDate, toast, mealConfig, stats]);
+  }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, localGuestMeals, weeklySchedule, tomorrowDay, tomorrowDate, tomorrowYMD, toast, mealConfig, stats]);
 
   const updateGuestCount = (type: 'breakfast' | 'lunch' | 'dinner', delta: number) => {
     const key = type === 'breakfast' ? 'breakfast' : (type === 'lunch' ? 'lunch' : 'dinner');
@@ -288,7 +291,7 @@ export default function StudentMealPage() {
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex-1 overflow-hidden">
           <h1 className="text-lg font-black text-slate-800 truncate">Catering</h1>
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Meals Management</p>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Attendance System</p>
         </div>
       </div>
 
@@ -298,9 +301,9 @@ export default function StudentMealPage() {
              <div className="p-6 bg-amber-50 rounded-3xl border border-amber-200 flex flex-col items-center gap-3 text-center">
                 <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shadow-sm"><Clock size={24}/></div>
                 <div className="space-y-1">
-                   <p className="text-sm font-black text-amber-900 uppercase tracking-tight">Updates Closed</p>
+                   <p className="text-sm font-black text-amber-900 uppercase tracking-tight">Window Closed</p>
                    <p className="text-[10px] text-amber-700 font-bold uppercase leading-relaxed">
-                     Update window: <span className="text-amber-900 font-black">{timeWindow.startStr}</span> to <span className="text-amber-900 font-black">{timeWindow.endStr}</span>.
+                     Attendance window: <span className="text-amber-900 font-black">{timeWindow.startStr}</span> to <span className="text-amber-900 font-black">{timeWindow.endStr}</span>.
                    </p>
                 </div>
              </div>
@@ -312,9 +315,9 @@ export default function StudentMealPage() {
                      <p className="text-[10px] text-primary font-black uppercase leading-tight">Window open for tomorrow ({tomorrowDay}).</p>
                    </div>
                 </div>
-                {hasAlreadyUpdatedToday && (
+                {hasAlreadyUpdatedForTomorrow && (
                   <div className="px-4 py-2 bg-success/10 rounded-full border border-success/20 w-fit mx-auto">
-                    <p className="text-[9px] font-black text-success uppercase">✓ Preference locked for tomorrow</p>
+                    <p className="text-[9px] font-black text-success uppercase">✓ Attendance marked for tomorrow</p>
                   </div>
                 )}
              </div>
@@ -364,14 +367,14 @@ export default function StudentMealPage() {
            {timeWindow.isActive && (
              <Button 
                onClick={handleUpdateMeals} 
-               disabled={isUpdating || hasAlreadyUpdatedToday} 
+               disabled={isUpdating || hasAlreadyUpdatedForTomorrow} 
                className={cn(
                  "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl gap-3 transition-transform active:scale-95",
-                 hasAlreadyUpdatedToday ? "bg-success hover:bg-success/90" : "bg-primary hover:bg-primary/90"
+                 hasAlreadyUpdatedForTomorrow ? "bg-success hover:bg-success/90" : "bg-primary hover:bg-primary/90"
                )}
              >
                 {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
-                {hasAlreadyUpdatedToday ? `Saved for ${tomorrowDay}` : `Confirm for ${tomorrowDay}`}
+                {hasAlreadyUpdatedForTomorrow ? `Saved for ${tomorrowDay}` : `Mark Attendance for ${tomorrowDay}`}
              </Button>
            )}
         </CardContent>

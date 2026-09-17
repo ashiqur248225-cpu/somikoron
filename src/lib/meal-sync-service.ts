@@ -1,9 +1,8 @@
-
 /**
  * @fileOverview Authoritative Meal & Utility Synchronization Service
  * Handles background syncing of missing meals for students in Auto Mode
  * and automatic monthly charging of Utility Bills (Cooking Bill).
- * Ensures idempotency and respects manual decisions tracked via dual fields.
+ * Ensures idempotency and respects manual decisions tracked via dual target-date fields.
  */
 
 import { Firestore, doc, getDoc, collection, query, where, getDocs, writeBatch, increment, serverTimestamp } from "firebase/firestore";
@@ -45,10 +44,12 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
 
     const batch = writeBatch(db);
     const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+    
     const yesterdayStr = getLocYMD(yesterday);
     const todayStr = getLocYMD(today);
+    const tomorrowStr = getLocYMD(tomorrow);
     
     const currentMonthLabel = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
     
@@ -71,29 +72,29 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
         }
       }
 
-      // 2. Missing Meal Sync (Auto Mode Only)
-      // Check if decision for Today or Tomorrow has already been made manually
-      const alreadyHandledToday = student.lastMealUpdateDateToday === todayStr || student.lastMealUpdateDateTomorrow === yesterdayStr;
+      // 2. Missing Meal Sync (Respecting Manual Attendance)
+      // If student has marked attendance for today or admin has overridden today, skip auto-sync for today.
+      const hasManualToday = student.lastMealUpdateDateToday === todayStr || student.lastMealUpdateDateTomorrow === todayStr;
 
-      if (student.mealStatus?.autoMode && !alreadyHandledToday) {
-        const lastUpdateStr = student.lastMealUpdateDate || student.lastMealUpdateDateTomorrow || student.lastMealUpdateDateToday;
+      if (student.mealStatus?.autoMode && !hasManualToday) {
+        // Find the last date that was successfully updated/synced
+        const lastSyncedDateStr = student.lastMealUpdateDate || student.lastMealUpdateDateToday || student.lastMealUpdateDateTomorrow;
         
-        if (lastUpdateStr && lastUpdateStr < todayStr) {
+        if (lastSyncedDateStr && lastSyncedDateStr < todayStr) {
           syncCount++;
-          const lastUpdate = new Date(lastUpdateStr);
-          let checkDecisionDate = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
+          const lastUpdate = new Date(lastSyncedDateStr);
+          let checkDate = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
           
-          let targetMonthLabel = student.currentMonthLabel || currentMonthLabel;
           let increments = { b: 0, l: 0, d: 0 };
 
-          while (getLocYMD(checkDecisionDate) < todayStr) {
-            checkDecisionDate.setDate(checkDecisionDate.getDate() + 1);
+          while (getLocYMD(checkDate) < todayStr) {
+            checkDate.setDate(checkDate.getDate() + 1);
+            const checkYMD = getLocYMD(checkDate);
             
-            // Deciding for the day after checkDecisionDate
-            const mealDayDate = new Date(checkDecisionDate);
-            mealDayDate.setDate(mealDayDate.getDate() + 1);
-            
-            const dayName = WEEKDAYS[mealDayDate.getDay()];
+            // Final safety: if checkYMD is today and manual is already set, break
+            if (checkYMD === todayStr && hasManualToday) break;
+
+            const dayName = WEEKDAYS[checkDate.getDay()];
             const sched = student.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true };
             
             if (sched.breakfast && mealConfig.breakfastAvailable !== false) { increments.b += 1; totalMealsAdded++; }
@@ -101,7 +102,7 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
             if (sched.dinner && mealConfig.dinnerAvailable !== false) { increments.d += 1; totalMealsAdded++; }
           }
 
-          studentUpdateData.lastMealUpdateDate = getLocYMD(checkDecisionDate);
+          studentUpdateData.lastMealUpdateDate = getLocYMD(checkDate);
           if (increments.b > 0) studentUpdateData.currentMonthBreakfast = increment(increments.b);
           if (increments.l > 0) studentUpdateData.currentMonthLunch = increment(increments.l);
           if (increments.d > 0) studentUpdateData.currentMonthDinner = increment(increments.d);
