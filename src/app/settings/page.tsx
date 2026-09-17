@@ -953,6 +953,7 @@ export default function SettingsPage() {
           </div>
           <DialogFooter><Button onClick={() => setIsSecurityDialogOpen(false)} className="w-full">Close</Button></DialogFooter>
         </DialogContent>
+      </Dialog>
 
       {activeFlyer && (
         <div className="print-only print-report-container flex flex-col items-center justify-center h-[297mm] w-[210mm] border-[10mm] border-primary bg-white">
