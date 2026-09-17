@@ -81,8 +81,11 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
                     isActive ? "text-primary scale-110" : "text-slate-400"
                   )}
                 >
-                  <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className="text-[8px] font-bold uppercase tracking-tighter">{item.title}</span>
+                  <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                  <span className={cn(
+                    "text-[9px] font-black uppercase tracking-tighter",
+                    isActive ? "text-primary" : "text-slate-400"
+                  )}>{item.title}</span>
                   {isActive && <div className="w-1 h-1 bg-primary rounded-full mt-0.5" />}
                 </Link>
               )

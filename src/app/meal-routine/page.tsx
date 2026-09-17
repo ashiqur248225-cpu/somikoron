@@ -81,18 +81,20 @@ export default function MealRoutinePage() {
   }
 
   const isEditable = userRole === 'Admin' || userRole === 'Branch Manager';
+  const isLimitedRole = ['Staff', 'Worker', 'General Staff', 'Student'].includes(userRole);
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
-          {userRole === 'Student' && (
-            <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2">
+          {isLimitedRole ? (
+            <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2 h-10 w-10">
               <ChevronLeft size={24} />
             </Button>
+          ) : (
+            <SidebarTrigger className="-ml-1" />
           )}
-          {userRole !== 'Student' && <SidebarTrigger className="-ml-1" />}
-          {userRole !== 'Student' && <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />}
+          {!isLimitedRole && <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />}
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Routine</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-sm mt-1">
@@ -160,27 +162,29 @@ export default function MealRoutinePage() {
               <CardTitle className="text-lg">সাপ্তাহিক খাবারের রুটিন (Weekly Table)</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="p-0 overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50/50">
-                <TableRow>
-                  <TableHead className="w-32 font-black uppercase text-[11px] tracking-widest text-slate-500">Day</TableHead>
-                  <TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Breakfast (সকাল)</TableHead>
-                  <TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Lunch (দুপুর)</TableHead>
-                  <TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Dinner (রাত)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {DAYS.map((day) => (
-                  <TableRow key={day} className="hover:bg-slate-50 transition-colors">
-                    <TableCell className="font-black text-slate-800 py-4">{day}</TableCell>
-                    <TableCell className="text-sm font-medium text-slate-600">{localRoutine[day]?.breakfast || '-'}</TableCell>
-                    <TableCell className="text-sm font-medium text-slate-600">{localRoutine[day]?.lunch || '-'}</TableCell>
-                    <TableCell className="text-sm font-medium text-slate-600">{localRoutine[day]?.dinner || '-'}</TableCell>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto scrollbar-hide">
+              <Table className="min-w-[600px] md:min-w-full">
+                <TableHeader className="bg-slate-50/50">
+                  <TableRow>
+                    <TableHead className="w-24 md:w-32 font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-3">Day</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-3">Breakfast</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-3">Lunch</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-3">Dinner</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {DAYS.map((day) => (
+                    <TableRow key={day} className="hover:bg-slate-50 transition-colors">
+                      <TableCell className="font-black text-slate-800 py-3 px-3 text-xs md:text-sm">{day}</TableCell>
+                      <TableCell className="text-[11px] md:text-sm font-medium text-slate-600 py-3 px-3 leading-tight">{localRoutine[day]?.breakfast || '-'}</TableCell>
+                      <TableCell className="text-[11px] md:text-sm font-medium text-slate-600 py-3 px-3 leading-tight">{localRoutine[day]?.lunch || '-'}</TableCell>
+                      <TableCell className="text-[11px] md:text-sm font-medium text-slate-600 py-3 px-3 leading-tight">{localRoutine[day]?.dinner || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
           <CardFooter className="bg-slate-50/50 border-t p-4">
              <p className="text-[10px] text-muted-foreground font-medium italic w-full text-center">

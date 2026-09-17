@@ -106,12 +106,16 @@ export default function ProfilePage() {
 
   const sortedSalaryHistory = [...(staffData?.salaryHistory || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
+  const isLimitedRole = ['Staff', 'Worker', 'General Staff'].includes(userInfo.role);
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => router.back()}>
-          <ChevronLeft />
-        </Button>
+        {!isLimitedRole && (
+          <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => router.back()}>
+            <ChevronLeft />
+          </Button>
+        )}
         <div>
           <h1 className="text-3xl font-bold text-primary tracking-tight">My Profile</h1>
           <p className="text-muted-foreground text-sm">Manage your account information and preferences.</p>

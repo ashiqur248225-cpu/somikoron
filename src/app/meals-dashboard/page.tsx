@@ -217,12 +217,14 @@ export default function AdminMealDashboardPage() {
 
   if (!isMounted || studentsLoading || configLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase">Kitchen Syncing...</p></div>
 
+  const isLimitedRole = ['Staff', 'Worker', 'General Staff', 'Student'].includes(userRole);
+
   return (
     <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
+          {!isLimitedRole && <SidebarTrigger className="-ml-1" />}
+          {!isLimitedRole && <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />}
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Analytics</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-xs mt-1">
