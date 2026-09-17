@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { 
   Calculator, 
   Building2, 
@@ -103,7 +103,6 @@ export default function DailyMealRatePage() {
       const lastUpdateYMD = s.lastMealUpdateDate || "";
       
       // Determine if student was active for this specific date
-      // If the target is Future/Today, use current status/schedule
       if (targetDateYMD >= todayYMD) {
         const isUpdated = lastUpdateYMD === todayYMD || lastUpdateYMD === updateDateForTargetYMD;
         if (isUpdated) {
@@ -124,8 +123,6 @@ export default function DailyMealRatePage() {
           dCount += Number(s.tomorrowGuestMeals?.dinner || 0);
         }
       } else {
-        // For past dates, we assume full attendance if in auto mode 
-        // (Since we don't have daily history logs yet, this is an estimation)
         if (s.mealStatus?.autoMode) {
           const sched = s.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true }
           eatsB = !!sched.breakfast && bAvail;
@@ -167,7 +164,6 @@ export default function DailyMealRatePage() {
       const dailyExpenses = expenses.filter(e => e.expenseDate === ymd)
       const cost = dailyExpenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0)
       
-      // We'll just show cost for now as calculating historical meal counts precisely requires snapshots
       list.push({ date: ymd, cost, building: buildings?.find(b => b.id === selectedBuildingId)?.name })
     }
     return list
