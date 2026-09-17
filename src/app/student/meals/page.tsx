@@ -28,10 +28,12 @@ import {
   ChevronUp,
   Users,
   Plus,
-  Wallet
+  Wallet,
+  ChefHat,
+  Send
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, serverTimestamp, updateDoc, collection, query, where, increment } from "firebase/firestore"
+import { doc, serverTimestamp, updateDoc, collection, query, where, increment, addDoc, getDocs, limit } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -123,6 +125,13 @@ export default function StudentMealPage() {
     if (!routines || !userBranch) return []
     return routines.filter(r => r.branch === userBranch)
   }, [routines, userBranch])
+
+  // Track if there is a pending emergency request
+  const pendingRequestsQuery = useMemoFirebase(() => {
+    if (!studentId) return null;
+    return query(collection(db, "mealRequests"), where("studentId", "==", studentId), where("status", "==", "pending"), limit(1))
+  }, [db, studentId])
+  const { data: pendingRequests } = useCollection(pendingRequestsQuery)
 
   const [localMeals, setLocalMeals] = useState({ breakfast: false, lunch: false, dinner: false, autoMode: false })
   const [mealChoices, setMealChoices] = useState<Record<string, string>>({})
@@ -299,6 +308,44 @@ export default function StudentMealPage() {
     }
   }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, localGuestMeals, weeklySchedule, tomorrowDay, tomorrowDate, toast, mealConfig, stats]);
 
+  const handleEmergencyRequest = async () => {
+    if (!student || isUpdating) return;
+    
+    const usedCount = Number(student.emergencyMealUsedCount || 0);
+    if (usedCount >= 2) {
+      toast({ variant: "destructive", title: "লিমিট শেষ", description: "আপনি সর্বোচ্চ ২ বার জরুরী মিল রিকোয়েস্ট ব্যবহার করেছেন।" });
+      return;
+    }
+
+    if (pendingRequests && pendingRequests.length > 0) {
+      toast({ variant: "destructive", title: "অনুরোধ প্রক্রিয়াধীন", description: "আপনার একটি অনুরোধ অলরেডি পেন্ডিং আছে।" });
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const reqId = doc(collection(db, "mealRequests")).id;
+      await setDoc(doc(db, "mealRequests", reqId), {
+        id: reqId,
+        studentId: student.id,
+        studentName: student.name,
+        phone: student.phone,
+        buildingId: student.buildingId,
+        buildingName: student.buildingName,
+        roomNumber: student.roomNumber,
+        status: "pending",
+        branch: student.branch,
+        createdAt: serverTimestamp()
+      });
+      toast({ title: "অনুরোধ পাঠানো হয়েছে", description: "ম্যানেজার এটি এপ্রুভ করলে আপনার কালকের মিল অন হয়ে যাবে।" });
+      setIsLowBalanceDialogOpen(false);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
   const getMealDetails = (text: string) => {
     if (!text) return { common: "Regular Diet", options: null };
     if (!text.includes('/')) return { common: text, options: null };
@@ -352,6 +399,23 @@ export default function StudentMealPage() {
           </Button>
         </Link>
       </div>
+
+      {pendingRequests && pendingRequests.length > 0 && (
+        <Card className="border-none shadow-md bg-orange-50 rounded-3xl overflow-hidden border-l-4 border-l-orange-500 animate-pulse">
+           <CardContent className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                 <div className="h-10 w-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 shadow-inner">
+                    <History size={20}/>
+                 </div>
+                 <div>
+                    <p className="text-[8px] font-bold uppercase text-orange-700 tracking-widest">Emergency Request</p>
+                    <p className="text-sm font-black text-orange-900">Pending Approval...</p>
+                 </div>
+              </div>
+              <Badge className="bg-orange-200 text-orange-800 border-none text-[8px] font-black uppercase">Wait</Badge>
+           </CardContent>
+        </Card>
+      )}
 
       <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden border-l-4 border-l-primary">
         <CardHeader className="bg-slate-50/50 border-b py-4">
@@ -522,12 +586,30 @@ export default function StudentMealPage() {
             <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
                <p className="text-[10px] font-black text-primary uppercase">Estimated Balance: ৳{Math.round(stats?.estimatedFoodBalance || 0)}</p>
             </div>
+            
             <div className="flex flex-col gap-3">
               <Link href="/student/payments" className="w-full">
                 <Button className="w-full h-12 rounded-xl font-black text-sm uppercase shadow-lg shadow-primary/10">
                   Recharge Now
                 </Button>
               </Link>
+              
+              <Separator />
+              
+              <div className="space-y-3">
+                 <p className="text-[10px] text-muted-foreground font-bold uppercase">Emergency Option (Limit: 2)</p>
+                 <Button 
+                   variant="outline" 
+                   onClick={handleEmergencyRequest} 
+                   disabled={isUpdating || (student?.emergencyMealUsedCount || 0) >= 2} 
+                   className="w-full h-12 rounded-xl border-orange-200 text-orange-600 font-bold uppercase gap-2 hover:bg-orange-50"
+                 >
+                   {isUpdating ? <Loader2 className="animate-spin h-4 w-4"/> : <ChefHat size={16}/>}
+                   Request Emergency Meal
+                 </Button>
+                 <p className="text-[8px] text-slate-400 font-medium">জরুরী অবস্থায় টাকা যোগাড় করতে ২-৩ দিন সময় পেতে এডমিনকে অনুরোধ জানান।</p>
+              </div>
+
               <Button variant="ghost" onClick={() => setIsLowBalanceDialogOpen(false)} className="text-xs font-bold uppercase text-muted-foreground">
                 Close
               </Button>

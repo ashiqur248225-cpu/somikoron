@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -26,7 +27,8 @@ import {
   ShoppingBag,
   UserCircle,
   Soup,
-  Calculator
+  Calculator,
+  ChefHat
 } from "lucide-react"
 import {
   Sidebar,
@@ -96,6 +98,7 @@ export function AppSidebar() {
     { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Buildings", url: buildingsUrl, icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Meal Requests", url: "/meal-requests", icon: ChefHat, roles: ["Admin", "Branch Manager"] },
     { title: "Meal Rate", url: "/meal-rate", icon: Calculator, roles: ["Admin"] },
     { title: "Meal Analytics", url: "/meals-dashboard", icon: Utensils, roles: ["Admin", "Branch Manager", "Building Manager", "Staff", "Worker"] },
     { title: "Meal Routine", url: "/meal-routine", icon: Soup, roles: ["Admin", "Branch Manager", "Building Manager", "Staff", "Worker", "Student"] },

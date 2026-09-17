@@ -98,6 +98,7 @@
         "currentMonthDinner": { "type": "number" },
         "currentMonthGuestMeals": { "type": "number" },
         "tomorrowGuestMeals": { "type": "object" },
+        "emergencyMealUsedCount": { "type": "number", "default": 0 },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
@@ -145,6 +146,23 @@
         "password": { "type": "string" },
         "isActive": { "type": "boolean", "default": true }
       }
+    },
+    "MealRequest": {
+      "title": "Meal Request",
+      "type": "object",
+      "description": "Emergency meal requests from students with low balance.",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "phone": { "type": "string" },
+        "buildingId": { "type": "string" },
+        "buildingName": { "type": "string" },
+        "roomNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "branch": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -157,6 +175,7 @@
     "/staff/{staffId}": { "schema": "Staff", "description": "Staff directory" },
     "/marketExpenses/{id}": { "schema": "MarketExpense", "description": "Bazaar tracking" },
     "/mealRoutines/{day}": { "schema": "MealRoutine", "description": "Weekly food menu" },
+    "/mealRequests/{id}": { "schema": "MealRequest", "description": "Emergency meal requests" },
     "/paymentRequests/{id}": { "schema": "object", "description": "Student payment submissions" },
     "/payments/{paymentId}": { "schema": "object", "description": "Income transactions" },
     "/expenses/{expenseId}": { "schema": "object", "description": "Expense records" },
