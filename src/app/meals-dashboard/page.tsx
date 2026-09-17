@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
   Utensils, 
@@ -234,7 +235,7 @@ export default function AdminMealDashboardPage() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
-           <Select value={viewDay} onValueChange={(v: any) => setViewDay(v)}>
+          <Select value={viewDay} onValueChange={(v: any) => setViewDay(v)}>
               <SelectTrigger className="w-[130px] h-10 bg-white font-bold text-xs rounded-xl shadow-sm border-primary/20">
                 <Calendar className="mr-2 h-4 w-4 text-primary" />
                 <SelectValue />
@@ -244,23 +245,23 @@ export default function AdminMealDashboardPage() {
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="tomorrow">Tomorrow</SelectItem>
               </SelectContent>
-           </Select>
-           {(userRole === 'Admin' || userRole === 'Branch Manager') && (
-             <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary rounded-xl" onClick={handlePrint}>
+          </Select>
+          {(userRole === 'Admin' || userRole === 'Branch Manager') && (
+            <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary rounded-xl" onClick={handlePrint}>
                 <Printer size={16}/> <span className="hidden sm:inline">Print</span>
-             </Button>
-           )}
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="hidden print:block text-center space-y-2 mb-8 border-b-2 border-slate-900 pb-4">
-         <h1 className="text-3xl font-black uppercase">Somikoron Hostel Kitchen</h1>
-         <p className="text-lg font-bold">Meal Distribution Sheet: {viewContext.dayName}, {viewContext.dateStr}</p>
-         <div className="flex justify-center gap-8 mt-2 text-sm font-bold">
+        <h1 className="text-3xl font-black uppercase">Somikoron Hostel Kitchen</h1>
+        <p className="text-lg font-bold">Meal Distribution Sheet: {viewContext.dayName}, {viewContext.dateStr}</p>
+        <div className="flex justify-center gap-8 mt-2 text-sm font-bold">
             <span>B: {mealStats.totals.breakfast}</span>
             <span>L: {mealStats.totals.lunch}</span>
             <span>D: {mealStats.totals.dinner}</span>
-         </div>
+        </div>
       </div>
 
       <Tabs defaultValue="summary" className="w-full print:hidden">
@@ -278,81 +279,81 @@ export default function AdminMealDashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl group hover:shadow-md transition-all">
               <CardContent className="pt-6">
-                 <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start">
                     <div className="space-y-1">
-                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Breakfast ({viewDay})</p>
-                       <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.breakfast}</h2>
-                       <p className="text-[10px] font-bold text-orange-600 flex items-center gap-1">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Breakfast ({viewDay})</p>
+                      <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.breakfast}</h2>
+                      <p className="text-[10px] font-bold text-orange-600 flex items-center gap-1">
                           <Soup size={10}/> {currentMenu?.breakfast || 'Menu not set'}
-                       </p>
+                      </p>
                     </div>
                     <div className="bg-orange-50 p-3 rounded-2xl text-orange-500"><Utensils size={24}/></div>
-                 </div>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl group hover:shadow-md transition-all">
               <CardContent className="pt-6">
-                 <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start">
                     <div className="space-y-1">
-                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Lunch ({viewDay})</p>
-                       <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.lunch}</h2>
-                       <p className="text-[10px] font-bold text-success flex items-center gap-1">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Lunch ({viewDay})</p>
+                      <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.lunch}</h2>
+                      <p className="text-[10px] font-bold text-success flex items-center gap-1">
                           <ChefHat size={10}/> {currentMenu?.lunch || 'Menu not set'}
-                       </p>
+                      </p>
                     </div>
                     <div className="bg-success/5 p-3 rounded-2xl text-success"><ChefHat size={24}/></div>
-                 </div>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl group hover:shadow-md transition-all">
               <CardContent className="pt-6">
-                 <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start">
                     <div className="space-y-1">
-                       <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Dinner ({viewDay})</p>
-                       <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.dinner}</h2>
-                       <p className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
+                      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Dinner ({viewDay})</p>
+                      <h2 className="text-4xl font-black text-slate-800">{mealStats.totals.dinner}</h2>
+                      <p className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
                           <ShoppingBag size={10}/> {currentMenu?.dinner || 'Menu not set'}
-                       </p>
+                      </p>
                     </div>
                     <div className="bg-blue-50 p-3 rounded-2xl text-blue-500"><ShoppingBag size={24}/></div>
-                 </div>
+                </div>
               </CardContent>
             </Card>
           </div>
 
           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-             <div className="space-y-4">
+            <div className="space-y-4">
                 <div className="text-[10px] font-black uppercase text-success tracking-[0.3em] border-b border-white/10 pb-2">Lunch Prep Breakdown</div>
                 <div className="grid grid-cols-2 gap-4">
                   {Object.entries(mealStats.choices.lunch).length > 0 ? Object.entries(mealStats.choices.lunch).map(([choice, count]) => (
                     <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center shadow-inner">
-                       <span className="text-xs font-bold text-white/80">{choice}</span>
-                       <span className="text-2xl font-black text-success">{count}</span>
+                      <span className="text-xs font-bold text-white/80">{choice}</span>
+                      <span className="text-2xl font-black text-success">{count}</span>
                     </div>
                   )) : <p className="text-xs text-white/40 italic">No custom choices requested.</p>}
                 </div>
-             </div>
-             <div className="space-y-4">
+            </div>
+            <div className="space-y-4">
                 <div className="text-[10px] font-black uppercase text-blue-400 tracking-[0.3em] border-b border-white/10 pb-2">Dinner Prep Breakdown</div>
                 <div className="grid grid-cols-2 gap-4">
                   {Object.entries(mealStats.choices.dinner).length > 0 ? Object.entries(mealStats.choices.dinner).map(([choice, count]) => (
                     <div key={choice} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center shadow-inner">
-                       <span className="text-xs font-bold text-white/80">{choice}</span>
-                       <span className="text-2xl font-black text-blue-400">{count}</span>
+                      <span className="text-xs font-bold text-white/80">{choice}</span>
+                      <span className="text-2xl font-black text-blue-400">{count}</span>
                     </div>
                   )) : <p className="text-xs text-white/40 italic">No custom choices requested.</p>}
                 </div>
-             </div>
+            </div>
           </Card>
 
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-               <h2 className="text-xl font-black text-slate-800 flex items-center gap-3 uppercase tracking-tight">
-                 <Truck size={24} className="text-primary"/> Distribution Sheet ({viewDay})
-               </h2>
-               <p className="text-[10px] font-bold text-muted-foreground uppercase">Showing active orders</p>
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-3 uppercase tracking-tight">
+                <Truck size={24} className="text-primary"/> Distribution Sheet ({viewDay})
+              </h2>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase">Showing active orders</p>
             </div>
             
             {Object.values(mealStats.buildingData).sort((a,b) => a.name.localeCompare(b.name)).map((b: any) => (
@@ -371,54 +372,95 @@ export default function AdminMealDashboardPage() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-3">
-                     <Badge className="bg-orange-50 text-orange-600 border-none font-black h-8 px-4 text-xs">B: {b.breakfast}</Badge>
-                     <Badge className="bg-success/5 text-success border-none font-black h-8 px-4 text-xs">L: {b.lunch}</Badge>
-                     <Badge className="bg-blue-50 text-blue-600 border-none font-black h-8 px-4 text-xs">D: {b.dinner}</Badge>
-                     <div className="bg-slate-100 h-8 w-8 rounded-xl flex items-center justify-center text-slate-400">
+                    <Badge className="bg-orange-50 text-orange-600 border-none font-black h-8 px-4 text-xs">B: {b.breakfast}</Badge>
+                    <Badge className="bg-success/5 text-success border-none font-black h-8 px-4 text-xs">L: {b.lunch}</Badge>
+                    <Badge className="bg-blue-50 text-blue-600 border-none font-black h-8 px-4 text-xs">D: {b.dinner}</Badge>
+                    <div className="bg-slate-100 h-8 w-8 rounded-xl flex items-center justify-center text-slate-400">
                         {expandedBuilding === b.id ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
-                     </div>
+                    </div>
                   </div>
                 </div>
 
                 {expandedBuilding === b.id && (
                   <div className="border-t animate-in slide-in-from-top-2 duration-300">
-                    <Table>
-                      <TableHeader className="bg-slate-50/50">
-                        <TableRow className="border-none">
-                          <TableHead className="font-black uppercase text-[10px] w-20">Room</TableHead>
-                          <TableHead className="font-black uppercase text-[10px]">Resident(s)</TableHead>
-                          <TableHead className="font-black uppercase text-[10px] text-center">Breakfast</TableHead>
-                          <TableHead className="font-black uppercase text-[10px] text-center">Lunch</TableHead>
-                          <TableHead className="font-black uppercase text-[10px] text-center">Dinner</TableHead>
-                          <TableHead className="font-black uppercase text-[10px] text-right">Guests</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                         {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
-                           <TableRow key={room.roomNo} className="hover:bg-slate-50/30 border-b border-dashed last:border-none">
-                              <TableCell className="font-black text-primary py-4">R-{room.roomNo}</TableCell>
-                              <TableCell>
-                                <div className="space-y-1">
-                                  {room.residents.map((r: any) => (
-                                    <div key={r.id} className="flex items-center gap-2">
-                                       <span className="text-xs font-bold text-slate-700">{r.name}</span>
+                    {/* Desktop View: Table */}
+                    <div className="hidden md:block">
+                      <Table>
+                        <TableHeader className="bg-slate-50/50">
+                          <TableRow className="border-none">
+                            <TableHead className="font-black uppercase text-[10px] w-20">Room</TableHead>
+                            <TableHead className="font-black uppercase text-[10px]">Resident(s)</TableHead>
+                            <TableHead className="font-black uppercase text-[10px] text-center">Breakfast</TableHead>
+                            <TableHead className="font-black uppercase text-[10px] text-center">Lunch</TableHead>
+                            <TableHead className="font-black uppercase text-[10px] text-center">Dinner</TableHead>
+                            <TableHead className="font-black uppercase text-[10px] text-right">Guests</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
+                            <TableRow key={room.roomNo} className="hover:bg-slate-50/30 border-b border-dashed last:border-none">
+                                <TableCell className="font-black text-primary py-4">R-{room.roomNo}</TableCell>
+                                <TableCell>
+                                  <div className="space-y-1">
+                                    {room.residents.map((r: any) => (
+                                      <div key={r.id} className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-slate-700">{r.name}</span>
+                                        {r.isAuto && <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 text-primary uppercase font-bold">Auto</Badge>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center font-black text-orange-600">{room.roomTotals.b || '-'}</TableCell>
+                                <TableCell className="text-center font-black text-success">{room.roomTotals.l || '-'}</TableCell>
+                                <TableCell className="text-center font-black text-blue-600">{room.roomTotals.d || '-'}</TableCell>
+                                <TableCell className="text-right">
+                                  {room.roomTotals.guests > 0 ? (
+                                    <Badge className="bg-primary text-[10px] font-black">{room.roomTotals.guests}G</Badge>
+                                  ) : <span className="text-slate-200">-</span>}
+                                </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile View: Cards */}
+                    <div className="md:hidden space-y-3 p-4 bg-slate-50/30">
+                       {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
+                         <div key={room.roomNo} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                            <div className="flex justify-between items-center">
+                               <Badge className="bg-primary text-[10px] font-black uppercase h-6 px-3">Room {room.roomNo}</Badge>
+                               <div className="flex gap-1.5">
+                                  <Badge className="bg-orange-50 text-orange-600 border-none font-black text-[9px] h-5">B: {room.roomTotals.b}</Badge>
+                                  <Badge className="bg-success/5 text-success border-none font-black text-[9px] h-5">L: {room.roomTotals.l}</Badge>
+                                  <Badge className="bg-blue-50 text-blue-600 border-none font-black text-[9px] h-5">D: {room.roomTotals.d}</Badge>
+                               </div>
+                            </div>
+                            <Separator className="opacity-50" />
+                            <div className="space-y-2">
+                               {room.residents.map((r: any) => (
+                                 <div key={r.id} className="flex justify-between items-center bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                                    <div className="flex items-center gap-2">
+                                       <span className="text-[11px] font-black text-slate-700">{r.name.split(' ')[0]}</span>
                                        {r.isAuto && <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 text-primary uppercase font-bold">Auto</Badge>}
                                     </div>
-                                  ))}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-center font-black text-orange-600">{room.roomTotals.b || '-'}</TableCell>
-                              <TableCell className="text-center font-black text-success">{room.roomTotals.l || '-'}</TableCell>
-                              <TableCell className="text-center font-black text-blue-600">{room.roomTotals.d || '-'}</TableCell>
-                              <TableCell className="text-right">
-                                 {room.roomTotals.guests > 0 ? (
-                                   <Badge className="bg-primary text-[10px] font-black">{room.roomTotals.guests}G</Badge>
-                                 ) : <span className="text-slate-200">-</span>}
-                              </TableCell>
-                           </TableRow>
-                         ))}
-                      </TableBody>
-                    </Table>
+                                    <div className="flex gap-1">
+                                       {r.isSelfB && <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-1.5 rounded-md">B</span>}
+                                       {r.isSelfL && <span className="text-[8px] font-black text-success bg-success/5 px-1.5 rounded-md">L</span>}
+                                       {r.isSelfD && <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-1.5 rounded-md">D</span>}
+                                    </div>
+                                 </div>
+                               ))}
+                            </div>
+                            {room.roomTotals.guests > 0 && (
+                              <div className="flex justify-between items-center bg-primary/5 p-2 px-3 rounded-xl border border-primary/10">
+                                 <span className="text-[9px] font-black uppercase text-primary tracking-widest">Guest Plates</span>
+                                 <Badge className="bg-primary text-[10px] font-black h-5">{room.roomTotals.guests}</Badge>
+                              </div>
+                            )}
+                         </div>
+                       ))}
+                    </div>
                   </div>
                 )}
               </Card>
