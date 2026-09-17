@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -32,8 +33,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
-export default function StaffProfilePage(props: { params: Promise<{ id: string }> }) {
-  const { id } = React.use(props.params)
+export default function StaffProfilePage({ 
+  params 
+}: { 
+  params: Promise<{ id: string }> 
+}) {
+  const { id } = React.use(params)
   const router = useRouter()
   const db = useFirestore()
   const { toast } = useToast()

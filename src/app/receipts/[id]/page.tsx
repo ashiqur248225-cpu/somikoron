@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -11,8 +12,12 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
-export default function ReceiptPage(props: { params: React.Promise<{ id: string }> }) {
-  const { id } = React.use(props.params)
+export default function ReceiptPage({ 
+  params 
+}: { 
+  params: Promise<{ id: string }> 
+}) {
+  const { id } = React.use(params)
   const router = useRouter()
   const db = useFirestore()
   const [isMounted, setIsMounted] = useState(false)

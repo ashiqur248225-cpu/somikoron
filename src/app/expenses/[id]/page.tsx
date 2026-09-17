@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -60,8 +61,12 @@ const DEFAULT_EXPENSE_CATEGORIES = [
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export default function ExpenseDetailsPage(props: { params: Promise<{ id: string }> }) {
-  const { id } = React.use(props.params)
+export default function ExpenseDetailsPage({ 
+  params 
+}: { 
+  params: Promise<{ id: string }> 
+}) {
+  const { id } = React.use(params)
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()
@@ -378,10 +383,7 @@ export default function ExpenseDetailsPage(props: { params: Promise<{ id: string
                 {editForm.category === 'salary' && (
                   <div className="space-y-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
                     <Label className="text-xs font-bold uppercase text-primary">Salary Info</Label>
-                    <Select value={editForm.receiver} onValueChange={val => setEditForm({...editForm, receiver: val})}>
-                      <SelectTrigger className="bg-white"><SelectValue placeholder="Employee" /></SelectTrigger>
-                      <SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <Select value={editForm.receiver} onValueChange={val => setEditForm({...editForm, receiver: v})}><SelectTrigger className="bg-white h-11 rounded-xl shadow-sm"><SelectValue placeholder="Recipient" /></SelectTrigger><SelectContent>{staffList?.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select>
                     <div className="grid grid-cols-2 gap-2">
                       <Select value={editForm.month} onValueChange={val => setEditForm({...editForm, month: val})}>
                         <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>

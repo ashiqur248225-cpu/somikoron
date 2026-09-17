@@ -100,8 +100,12 @@ interface PastPaymentEntry {
   date: string;
 }
 
-export default function StudentDetailsPage(props: { params: Promise<{ id: string }> }) {
-  const { id } = React.use(props.params)
+export default function StudentDetailsPage({ 
+  params 
+}: { 
+  params: Promise<{ id: string }> 
+}) {
+  const { id } = React.use(params)
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()
@@ -1085,7 +1089,7 @@ export default function StudentDetailsPage(props: { params: Promise<{ id: string
                           <Label className="text-[8px]">Period</Label>
                           <div className="flex gap-1"><Select value={d.month} onValueChange={v => setMigrationForm({...migrationForm, dues: migrationForm.dues.map(x => x.id === d.id ? {...x, month: v} : x)})}><SelectTrigger className="h-8 text-[10px]"><SelectValue/></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select><Select value={d.year} onValueChange={v => setMigrationForm({...migrationForm, dues: migrationForm.dues.map(x => x.id === d.id ? {...x, year: v} : x)})}><SelectTrigger className="h-8 text-[10px]"><SelectValue/></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
                        </div>
-                       <div className="w-24 space-y-1"><Label className="text-[8px]">Amount</Label><Input type="number" value={d.amount} onChange={e => setMigrationForm({...migrationForm, dues: migrationForm.dues.map(x => x.id === d.id ? {...x, amount: e.target.value} : x)})} className="h-8 text-[10px]" /></div>
+                       <div className="w-24 space-y-1"><Label className="text-[8px]">Amount</Label><Input type="number" value={d.amount} onChange={e => updateDueEntry(d.id, 'amount', e.target.value)} className="h-8 text-[10px] font-bold" /></div>
                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setMigrationForm({...migrationForm, dues: migrationForm.dues.filter(x => x.id !== d.id)})}><X size={14}/></Button>
                     </div>
                   ))}

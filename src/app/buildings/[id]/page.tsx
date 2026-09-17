@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -77,11 +78,12 @@ interface ApartmentDetail {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-export default function BuildingDetailsPage(props: { 
-  params: Promise<{ id: string }>,
-  searchParams: Promise<any>
+export default function BuildingDetailsPage({ 
+  params 
+}: { 
+  params: Promise<{ id: string }> 
 }) {
-  const { id } = React.use(props.params)
+  const { id } = React.use(params)
   const router = useRouter()
   const { toast } = useToast()
   const db = useFirestore()
