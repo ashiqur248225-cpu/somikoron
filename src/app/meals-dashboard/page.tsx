@@ -159,7 +159,8 @@ export default function AdminMealDashboardPage() {
       let choiceL = "Normal"; let choiceD = "Normal";
       
       const lastUpdateYMD = s.lastMealUpdateDate || "";
-      const isUpdatedForTarget = lastUpdateYMD === updateDateYMD || (viewDay === 'tomorrow' && lastUpdateYMD === todayYMD);
+      // isUpdatedForTarget: Decision happened on the expected day OR decision was retroactively updated today
+      const isUpdatedForTarget = lastUpdateYMD === updateDateYMD || lastUpdateYMD === todayYMD;
       
       if (isUpdatedForTarget) {
         willEatB = !!s.mealStatus?.breakfast && bAvail;
@@ -212,7 +213,7 @@ export default function AdminMealDashboardPage() {
     return { totals, choices, buildingData }
   }, [students, viewContext, mealConfig, viewDay, isMounted])
 
-  const canOverride = (userRole === 'Admin' || userRole === 'Branch Manager') && viewDay === 'tomorrow';
+  const canOverride = (userRole === 'Admin' || userRole === 'Branch Manager');
 
   const handleToggleMeal = async (student: any, mealId: string) => {
     if (!canOverride) return;
@@ -221,9 +222,10 @@ export default function AdminMealDashboardPage() {
 
     try {
       const todayStr = getLocYMD(new Date());
-      const isUpdatedForTarget = student.lastMealUpdateDate === todayStr;
+      // For overrides, we mark the decision date as TODAY to prevent auto-sync service from overwriting it.
+      const isCurrentlyUpdated = student.lastMealUpdateDate === todayStr;
       
-      const currentVal = isUpdatedForTarget 
+      const currentVal = isCurrentlyUpdated 
         ? !!student.mealStatus?.[mealId] 
         : (student.mealStatus?.autoMode ? !!student.weeklySchedule?.[viewContext.dayName]?.[mealId] : !!student.mealStatus?.[mealId]);
       
@@ -237,10 +239,9 @@ export default function AdminMealDashboardPage() {
         updatedAt: serverTimestamp()
       }
 
-      if (!isUpdatedForTarget) {
-        // If first manual update today, we must snapshot all statuses from auto to make the counter correct
+      if (!isCurrentlyUpdated) {
+        // If first manual update today, we must snapshot all statuses from previous/auto to make the counter correct
         updateData["mealStatus.autoMode"] = false;
-        // Snapshot other meals too if they weren't updated yet
         ['breakfast', 'lunch', 'dinner'].forEach(m => {
           if (m !== mealId) {
              const mActive = student.mealStatus?.autoMode ? !!student.weeklySchedule?.[viewContext.dayName]?.[m] : !!student.mealStatus?.[m];
@@ -261,9 +262,9 @@ export default function AdminMealDashboardPage() {
 
     try {
       const todayStr = getLocYMD(new Date());
-      const isUpdatedForTarget = student.lastMealUpdateDate === todayStr;
+      const isCurrentlyUpdated = student.lastMealUpdateDate === todayStr;
       
-      const currentGuestCount = isUpdatedForTarget ? Number(student.tomorrowGuestMeals?.[mealId] || 0) : 0;
+      const currentGuestCount = isCurrentlyUpdated ? Number(student.tomorrowGuestMeals?.[mealId] || 0) : 0;
       const newGuestCount = Math.max(0, currentGuestCount + delta);
       const diff = newGuestCount - currentGuestCount;
 
@@ -275,7 +276,7 @@ export default function AdminMealDashboardPage() {
         updatedAt: serverTimestamp() 
       };
 
-      if (!isUpdatedForTarget) {
+      if (!isCurrentlyUpdated) {
         // Force snapshot from auto to manual
         updateData["mealStatus.autoMode"] = false;
         ['breakfast', 'lunch', 'dinner'].forEach(m => {
@@ -545,21 +546,11 @@ export default function AdminMealDashboardPage() {
 
         {(userRole === 'Admin' || userRole === 'Branch Manager') && (
           <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300">
-             {viewDay !== 'tomorrow' ? (
-                <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl border border-dashed text-center space-y-4">
-                   <Lock size={48} className="text-slate-200" />
-                   <div className="space-y-1">
-                      <p className="font-black text-slate-800">Override Disabled</p>
-                      <p className="text-xs text-muted-foreground uppercase font-bold">You can only manually override meals for "Tomorrow".</p>
-                   </div>
-                   <Button variant="outline" className="rounded-xl font-bold" onClick={() => setViewDay('tomorrow')}>Switch to Tomorrow</Button>
-                </div>
-             ) : (
                 <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
                   <CardHeader className="bg-slate-50/50 border-b flex flex-col lg:flex-row justify-between lg:items-center gap-4">
                     <div>
-                      <CardTitle className="text-lg">Meal Override (Tomorrow)</CardTitle>
-                      <CardDescription>Manually toggle meals and guest counts for specific students.</CardDescription>
+                      <CardTitle className="text-lg">Meal Override ({viewDay})</CardTitle>
+                      <CardDescription>Manually toggle meals and guest counts for students.</CardDescription>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Select value={buildingFilter} onValueChange={setBuildingFilter}>
@@ -587,15 +578,16 @@ export default function AdminMealDashboardPage() {
                               return matchesSearch && matchesBuilding;
                           }).map(s => {
                             const lastUpdateYMD = s.lastMealUpdateDate || "";
-                            const isUpdatedForTarget = lastUpdateYMD === viewContext.todayYMD;
+                            // Decided: Either decision was made on the expected day OR decision was made/overridden today
+                            const isCurrentlyDecided = lastUpdateYMD === viewContext.updateDateYMD || lastUpdateYMD === viewContext.todayYMD;
                             
-                            const isActiveB = isUpdatedForTarget ? !!s.mealStatus?.breakfast : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.breakfast : false);
-                            const isActiveL = isUpdatedForTarget ? !!s.mealStatus?.lunch : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.lunch : false);
-                            const isActiveD = isUpdatedForTarget ? !!s.mealStatus?.dinner : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.dinner : false);
+                            const isActiveB = isCurrentlyDecided ? !!s.mealStatus?.breakfast : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.breakfast : false);
+                            const isActiveL = isCurrentlyDecided ? !!s.mealStatus?.lunch : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.lunch : false);
+                            const isActiveD = isCurrentlyDecided ? !!s.mealStatus?.dinner : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.dinner : false);
 
-                            const gCountB = isUpdatedForTarget ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
-                            const gCountL = isUpdatedForTarget ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
-                            const gCountD = isUpdatedForTarget ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
+                            const gCountB = isCurrentlyDecided ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
+                            const gCountL = isCurrentlyDecided ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
+                            const gCountD = isCurrentlyDecided ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
 
                             return (
                               <TableRow key={s.id} className="border-b">
@@ -670,7 +662,6 @@ export default function AdminMealDashboardPage() {
                     </Table>
                   </CardContent>
                 </Card>
-             )}
           </TabsContent>
         )}
       </Tabs>
