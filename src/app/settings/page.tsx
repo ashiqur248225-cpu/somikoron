@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
@@ -626,7 +625,7 @@ export default function SettingsPage() {
                       className="max-w-[300px] h-11 rounded-xl bg-white"
                     />
                     <p className="text-[9px] text-muted-foreground italic flex items-center">
-                      This amount will be added to the student's "Outstanding Due" in their dashboard.
+                      This amount will be added to the student&apos;s "Outstanding Due" in their dashboard.
                     </p>
                   </div>
                </div>
@@ -745,7 +744,7 @@ export default function SettingsPage() {
               <CardHeader className="flex flex-row items-center justify-between">
                  <div>
                    <div className="flex items-center gap-2 text-indigo-600"><Layers size={20}/><CardTitle>Market Category Dictionary</CardTitle></div>
-                   <CardDescription>Setup Category -> Sub Category -> Item for kitchen inventory.</CardDescription>
+                   <CardDescription>Setup Category &rarr; Sub Category &rarr; Item for kitchen inventory.</CardDescription>
                  </div>
                  <Button variant="outline" size="sm" onClick={handleAddMarketCat} className="h-8 gap-1 border-indigo-200 text-indigo-600"><Plus size={14}/> New Category</Button>
               </CardHeader>
