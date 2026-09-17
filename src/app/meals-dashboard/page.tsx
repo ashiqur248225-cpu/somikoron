@@ -32,7 +32,8 @@ import {
   Minus,
   DoorOpen,
   User,
-  ShieldAlert
+  ShieldAlert,
+  History
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -80,17 +81,13 @@ export default function AdminMealDashboardPage() {
     
     setUserBranch(branch)
     setUserRole(role)
-    // For Building Managers, default building is their assigned one
     if (role === 'Building Manager' && bId !== 'none') {
       setBuildingFilter(bId)
     }
-    
-    if (typeof window !== 'undefined') (window as any).firebaseDb = db;
-  }, [db])
+  }, [])
 
   const isKitchenStaff = useMemo(() => ['Staff', 'Worker'].includes(userRole), [userRole]);
 
-  // Authoritative Global Sync for Branch on Page Load
   useEffect(() => {
     if (!userBranch || isSyncing) return;
     const runGlobalSync = async () => {
@@ -123,7 +120,7 @@ export default function AdminMealDashboardPage() {
   const { data: mealConfig, isLoading: configLoading } = useDoc(mealConfigRef)
 
   const viewContext = useMemo(() => {
-    if (!isMounted) return { dayName: "", dateStr: "", updateDateYMD: "", targetDate: new Date() }
+    if (!isMounted) return { dayName: "", dateStr: "", updateDateYMD: "", targetDate: new Date(), todayYMD: "" }
     
     const now = new Date()
     const targetDate = new Date(now)
@@ -131,15 +128,11 @@ export default function AdminMealDashboardPage() {
     if (viewDay === 'tomorrow') targetDate.setDate(now.getDate() + 1)
     if (viewDay === 'yesterday') targetDate.setDate(now.getDate() - 1)
     
-    const updateDate = new Date(targetDate)
-    updateDate.setDate(targetDate.getDate() - 1)
-    
     const dayName = WEEKDAYS[targetDate.getDay()]
     const dateStr = targetDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    const updateDateYMD = getLocYMD(updateDate)
     const todayYMD = getLocYMD(now)
     
-    return { dayName, dateStr, updateDateYMD, targetDate, todayYMD }
+    return { dayName, dateStr, targetDate, todayYMD }
   }, [viewDay, isMounted])
 
   const currentMenu = useMemo(() => {
@@ -158,7 +151,7 @@ export default function AdminMealDashboardPage() {
     let choices = { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> }
     let buildingData: Record<string, any> = {}
 
-    const { dayName, updateDateYMD, todayYMD } = viewContext
+    const { dayName, todayYMD } = viewContext
     const bAvail = mealConfig.breakfastAvailable !== false;
     const lAvail = mealConfig.lunchAvailable !== false;
     const dAvail = mealConfig.dinnerAvailable !== false;
@@ -167,10 +160,10 @@ export default function AdminMealDashboardPage() {
       let willEatB = false; let willEatL = false; let willEatD = false;
       let choiceL = "Normal"; let choiceD = "Normal";
       
-      const lastUpdateYMD = s.lastMealUpdateDate || "";
-      const isUpdatedForTarget = lastUpdateYMD === updateDateYMD || lastUpdateYMD === todayYMD;
+      const isManualUpdated = (viewDay === 'today' && s.lastMealUpdateDateToday === todayYMD) || 
+                              (viewDay === 'tomorrow' && s.lastMealUpdateDateTomorrow === todayYMD);
       
-      if (isUpdatedForTarget) {
+      if (isManualUpdated) {
         willEatB = !!s.mealStatus?.breakfast && bAvail;
         willEatL = !!s.mealStatus?.lunch && lAvail;
         willEatD = !!s.mealStatus?.dinner && dAvail;
@@ -184,22 +177,23 @@ export default function AdminMealDashboardPage() {
         willEatD = !!sched.dinner && dAvail;
         choiceL = sched.lunchChoice || "Normal";
         choiceD = sched.dinnerChoice || "Normal";
+      } else {
+        // Fallback for manual off-day or yesterday history
+        willEatB = !!s.mealStatus?.breakfast && bAvail;
+        willEatL = !!s.mealStatus?.lunch && lAvail;
+        willEatD = !!s.mealStatus?.dinner && dAvail;
       }
 
-      const gB = (isUpdatedForTarget && bAvail) ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
-      const gL = (isUpdatedForTarget && lAvail) ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
-      const gD = (isUpdatedForTarget && dAvail) ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
-
-      const combinedB = (willEatB ? 1 : 0) + gB;
-      const combinedL = (willEatL ? 1 : 0) + gL;
-      const combinedD = (willEatD ? 1 : 0) + gD;
+      const combinedB = (willEatB ? 1 : 0) + (isManualUpdated ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0);
+      const combinedL = (willEatL ? 1 : 0) + (isManualUpdated ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0);
+      const combinedD = (willEatD ? 1 : 0) + (isManualUpdated ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0);
 
       if (combinedB > 0 || combinedL > 0 || combinedD > 0) {
         totals.breakfast += combinedB; totals.lunch += combinedL; totals.dinner += combinedD;
         totals.totalPlates += (combinedB + combinedL + combinedD);
 
-        const bId = s.buildingId || "unassigned"
-        const bName = s.buildingName || "Unassigned"
+        const bId = s.buildingId || "unassigned";
+        const bName = s.buildingName || "Unassigned";
         
         if (!buildingData[bId]) buildingData[bId] = { id: bId, name: bName, breakfast: 0, lunch: 0, dinner: 0, rooms: {} as Record<string, any>, choiceCounts: { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> } }
 
@@ -212,18 +206,22 @@ export default function AdminMealDashboardPage() {
         const roomNo = s.roomNumber || "N/A"
         if (!bd.rooms[roomNo]) bd.rooms[roomNo] = { roomNo, residents: [], roomTotals: { b: 0, l: 0, d: 0, guests: 0 } }
         const rd = bd.rooms[roomNo]
-        rd.roomTotals.b += combinedB; rd.roomTotals.l += combinedL; rd.roomTotals.d += combinedD; rd.roomTotals.guests += (gB + gL + gD)
+        rd.roomTotals.b += combinedB; rd.roomTotals.l += combinedL; rd.roomTotals.d += combinedD;
 
-        rd.residents.push({ id: s.id, name: s.name, phone: s.phone, isSelfB: willEatB, isSelfL: willEatL, isSelfD: willEatD, choiceL, choiceD, guests: isUpdatedForTarget ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 }, isAuto: !isUpdatedForTarget && s.mealStatus?.autoMode })
+        rd.residents.push({ 
+          id: s.id, 
+          name: s.name, 
+          phone: s.phone, 
+          isSelfB: willEatB, isSelfL: willEatL, isSelfD: willEatD, 
+          choiceL, choiceD, 
+          guests: isManualUpdated ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 }, 
+          isAuto: !isManualUpdated && s.mealStatus?.autoMode 
+        })
       }
     })
 
     return { totals, choices, buildingData }
   }, [students, viewContext, mealConfig, viewDay, isMounted])
-
-  const showOverrideTab = useMemo(() => {
-    return ['Admin', 'Branch Manager', 'Building Manager', 'Staff', 'Worker'].includes(userRole);
-  }, [userRole]);
 
   const canOverride = useMemo(() => {
     if (userRole === 'Admin' || userRole === 'Branch Manager' || userRole === 'Building Manager') return true;
@@ -234,18 +232,16 @@ export default function AdminMealDashboardPage() {
   }, [userRole, isKitchenStaff, viewDay]);
 
   const handleToggleMeal = async (student: any, mealId: string) => {
-    if (!canOverride) {
-      toast({ variant: "destructive", title: "Access Denied", description: "You cannot override for this date." });
-      return;
-    }
+    if (!canOverride) return;
     const isAvail = mealConfig?.[`${mealId}Available`] !== false;
-    if (!isAvail) { toast({ variant: "destructive", title: "Meal Locked", description: "Admin has disabled this meal type." }); return; }
+    if (!isAvail) { toast({ variant: "destructive", title: "Meal Locked" }); return; }
 
     try {
       const todayStr = getLocYMD(new Date());
-      const isCurrentlyUpdated = student.lastMealUpdateDate === todayStr;
+      const decisionField = viewDay === 'tomorrow' ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
+      const isAlreadyDecided = student[decisionField] === todayStr;
       
-      const currentVal = isCurrentlyUpdated 
+      const currentVal = isAlreadyDecided 
         ? !!student.mealStatus?.[mealId] 
         : (student.mealStatus?.autoMode ? !!student.weeklySchedule?.[viewContext.dayName]?.[mealId] : !!student.mealStatus?.[mealId]);
       
@@ -255,11 +251,11 @@ export default function AdminMealDashboardPage() {
       const updateData: any = {
         [`mealStatus.${mealId}`]: !currentVal,
         [counterField]: increment(!currentVal ? 1 : -1),
-        lastMealUpdateDate: todayStr,
+        [decisionField]: todayStr,
         updatedAt: serverTimestamp()
       }
 
-      if (!isCurrentlyUpdated) {
+      if (!isAlreadyDecided) {
         updateData["mealStatus.autoMode"] = false;
         ['breakfast', 'lunch', 'dinner'].forEach(m => {
           if (m !== mealId) {
@@ -270,20 +266,18 @@ export default function AdminMealDashboardPage() {
       }
 
       await updateDoc(sRef, updateData);
-      toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled.` });
+      toast({ title: "Decision Saved", description: `${student.name}'s ${mealId} updated for ${viewDay}.` });
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
   }
 
   const handleUpdateGuestMeal = async (student: any, mealId: string, delta: number) => {
     if (!canOverride) return;
-    const isAvail = mealConfig?.[`${mealId}Available`] !== false;
-    if (!isAvail) { toast({ variant: "destructive", title: "Meal Locked" }); return; }
-
     try {
       const todayStr = getLocYMD(new Date());
-      const isCurrentlyUpdated = student.lastMealUpdateDate === todayStr;
+      const decisionField = viewDay === 'tomorrow' ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
+      const isAlreadyDecided = student[decisionField] === todayStr;
       
-      const currentGuestCount = isCurrentlyUpdated ? Number(student.tomorrowGuestMeals?.[mealId] || 0) : 0;
+      const currentGuestCount = isAlreadyDecided ? Number(student.tomorrowGuestMeals?.[mealId] || 0) : 0;
       const newGuestCount = Math.max(0, currentGuestCount + delta);
       const diff = newGuestCount - currentGuestCount;
 
@@ -291,11 +285,11 @@ export default function AdminMealDashboardPage() {
       const updateData: any = { 
         [`tomorrowGuestMeals.${mealId}`]: newGuestCount, 
         currentMonthGuestMeals: increment(diff),
-        lastMealUpdateDate: todayStr,
+        [decisionField]: todayStr,
         updatedAt: serverTimestamp() 
       };
 
-      if (!isCurrentlyUpdated) {
+      if (!isAlreadyDecided) {
         updateData["mealStatus.autoMode"] = false;
         ['breakfast', 'lunch', 'dinner'].forEach(m => {
            const mActive = student.mealStatus?.autoMode ? !!student.weeklySchedule?.[viewContext.dayName]?.[m] : !!student.mealStatus?.[m];
@@ -310,9 +304,7 @@ export default function AdminMealDashboardPage() {
 
   const handlePrint = () => { if (typeof window !== "undefined") window.print(); }
 
-  if (!isMounted || studentsLoading || configLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase animate-pulse">Kitchen Syncing...</p></div>
-
-  const isLimitedRole = ['Staff', 'Worker', 'General Staff', 'Student'].includes(userRole);
+  if (!isMounted || studentsLoading || configLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase">Syncing Dashboard...</p></div>
 
   const filteredOverrideStudents = students?.filter(s => {
     const search = searchTerm.toLowerCase();
@@ -326,13 +318,12 @@ export default function AdminMealDashboardPage() {
     <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
-          {!isLimitedRole && <SidebarTrigger className="-ml-1" />}
-          {!isLimitedRole && <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />}
+          {['Admin', 'Branch Manager', 'Building Manager'].includes(userRole) && <SidebarTrigger className="-ml-1" />}
+          <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Analytics</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-xs mt-1">
-              Data for <span className="font-bold text-foreground">{viewContext.dayName} ({viewContext.dateStr})</span>
-              {isSyncing && <span className="ml-2 text-primary animate-pulse text-[10px] font-black uppercase">Background Sync Active...</span>}
+              Decision Day: <span className="font-bold text-foreground">{viewContext.dayName} ({viewContext.dateStr})</span>
             </p>
           </div>
         </div>
@@ -343,42 +334,26 @@ export default function AdminMealDashboardPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="yesterday">Yesterday</SelectItem>
+                {['Admin', 'Branch Manager', 'Building Manager'].includes(userRole) && <SelectItem value="yesterday">Yesterday</SelectItem>}
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="tomorrow">Tomorrow</SelectItem>
               </SelectContent>
           </Select>
-          {(userRole === 'Admin' || userRole === 'Branch Manager') && (
-            <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary rounded-xl" onClick={handlePrint}>
-                <Printer size={16}/> <span className="hidden sm:inline">Print</span>
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div className="hidden print:block text-center space-y-2 mb-8 border-b-2 border-slate-900 pb-4">
-        <h1 className="text-3xl font-black uppercase">Somikoron Hostel Kitchen</h1>
-        <p className="text-lg font-bold">Meal Distribution Sheet: {viewContext.dayName}, {viewContext.dateStr}</p>
-        <div className="flex justify-center gap-8 mt-2 text-sm font-bold">
-            <span>B: {mealStats.totals.breakfast}</span>
-            <span>L: {mealStats.totals.lunch}</span>
-            <span>D: {mealStats.totals.dinner}</span>
+          <Button variant="outline" size="sm" className="gap-2 font-bold h-10 border-primary/20 text-primary rounded-xl" onClick={handlePrint}>
+              <Printer size={16}/> <span className="hidden sm:inline">Print</span>
+          </Button>
         </div>
       </div>
 
       <Tabs defaultValue="summary" className="w-full print:hidden">
-        <TabsList className={cn(
-          "bg-secondary/50 p-1 mb-6 rounded-2xl w-full max-w-md mx-auto grid",
-          showOverrideTab ? "grid-cols-2" : "grid-cols-1"
-        )}>
+        <TabsList className="bg-secondary/50 p-1 mb-6 rounded-2xl w-full max-w-md mx-auto grid grid-cols-2">
           <TabsTrigger value="summary" className="rounded-xl gap-2 font-bold h-10">Kitchen Prep</TabsTrigger>
-          {showOverrideTab && (
-            <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Overrides</TabsTrigger>
-          )}
+          <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Overrides</TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary" className="space-y-8 animate-in fade-in duration-500">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           {/* Prep Cards Section - Same as original */}
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl group hover:shadow-md transition-all">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start">
@@ -451,13 +426,9 @@ export default function AdminMealDashboardPage() {
           </Card>
 
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black text-slate-800 flex items-center gap-3 uppercase tracking-tight">
+            <h2 className="text-xl font-black text-slate-800 flex items-center gap-3 uppercase tracking-tight">
                 <Truck size={24} className="text-primary"/> Distribution Sheet ({viewDay})
-              </h2>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase">Showing active orders</p>
-            </div>
-            
+            </h2>
             {Object.values(mealStats.buildingData).sort((a,b) => a.name.localeCompare(b.name)).map((b: any) => (
               <Card key={b.id} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden border-t-4 border-t-primary/10">
                 <div 
@@ -485,16 +456,15 @@ export default function AdminMealDashboardPage() {
 
                 {expandedBuilding === b.id && (
                   <div className="border-t animate-in slide-in-from-top-2 duration-300">
-                    {/* Desktop View: Table */}
                     <div className="hidden md:block">
                       <Table>
                         <TableHeader className="bg-slate-50/50">
                           <TableRow className="border-none">
                             <TableHead className="font-black uppercase text-[10px] w-20">Room</TableHead>
                             <TableHead className="font-black uppercase text-[10px]">Resident(s)</TableHead>
-                            <TableHead className="font-black uppercase text-[10px] text-center">Breakfast</TableHead>
-                            <TableHead className="font-black uppercase text-[10px] text-center">Lunch</TableHead>
-                            <TableHead className="font-black uppercase text-[10px] text-center">Dinner</TableHead>
+                            <TableHead className="font-black uppercase text-[10px] text-center">B</TableHead>
+                            <TableHead className="font-black uppercase text-[10px] text-center">L</TableHead>
+                            <TableHead className="font-black uppercase text-[10px] text-center">D</TableHead>
                             <TableHead className="font-black uppercase text-[10px] text-right">Guests</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -526,7 +496,6 @@ export default function AdminMealDashboardPage() {
                       </Table>
                     </div>
 
-                    {/* Mobile View: Cards */}
                     <div className="md:hidden space-y-3 p-4 bg-slate-50/30">
                        {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
                          <div key={room.roomNo} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3">
@@ -554,12 +523,6 @@ export default function AdminMealDashboardPage() {
                                  </div>
                                ))}
                             </div>
-                            {room.roomTotals.guests > 0 && (
-                              <div className="flex justify-between items-center bg-primary/5 p-2 px-3 rounded-xl border border-primary/10">
-                                 <span className="text-[9px] font-black uppercase text-primary tracking-widest">Guest Plates</span>
-                                 <Badge className="bg-primary text-[10px] font-black h-5">{room.roomTotals.guests}</Badge>
-                              </div>
-                            )}
                          </div>
                        ))}
                     </div>
@@ -570,285 +533,176 @@ export default function AdminMealDashboardPage() {
           </div>
         </TabsContent>
 
-        {showOverrideTab && (
-          <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300 space-y-6">
-            {!canOverride ? (
-              <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl border border-dashed text-center space-y-4">
-                <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
-                   <ShieldAlert size={32} />
-                </div>
-                <div>
-                   <h3 className="text-xl font-black text-slate-800">Override Disabled</h3>
-                   <p className="text-sm text-muted-foreground font-medium max-w-xs mx-auto">
-                     Kitchen Staff can only manually override meals for "Today" and "Tomorrow".
-                   </p>
-                </div>
-                <Button onClick={() => setViewDay('today')} className="rounded-xl font-bold h-11 px-8 gap-2">
-                   Switch to Today <RefreshCw size={16}/>
-                </Button>
+        <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300 space-y-6">
+          {!canOverride ? (
+            <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl border border-dashed text-center space-y-4">
+              <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive"><ShieldAlert size={32} /></div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-slate-800">Override Disabled</h3>
+                <p className="text-sm text-muted-foreground font-medium max-w-xs mx-auto">
+                  You can only manually override meals for "Today" and "Tomorrow".
+                </p>
               </div>
-            ) : (
-                <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
-                  <CardHeader className="bg-slate-50/50 border-b space-y-4">
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                      <div>
-                        <CardTitle className="text-lg">Manual Overrides ({viewDay})</CardTitle>
-                        <CardDescription>Manually toggle meals and guest counts for specific dates.</CardDescription>
-                      </div>
-                      <Badge variant="outline" className="h-7 px-4 rounded-full border-primary text-primary font-black uppercase text-[10px]">
-                        Target: {viewContext.dayName}, {viewContext.dateStr}
-                      </Badge>
-                    </div>
-                    
-                    {/* Multi-Filter Section */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Building</Label>
-                        <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-                          <SelectTrigger className="h-10 bg-white rounded-xl border-none shadow-inner font-bold text-xs">
-                             <Building2 size={14} className="mr-2 text-primary" />
-                             <SelectValue placeholder="All Buildings" />
-                          </SelectTrigger>
-                          <SelectContent>
-                             <SelectItem value="all">Entire Branch</SelectItem>
-                             {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Room No.</Label>
-                        <div className="relative">
-                          <DoorOpen className="absolute left-3 top-2.5 h-4 w-4 text-primary" />
-                          <Input placeholder="Room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner text-xs font-bold" value={roomFilter} onChange={e => setRoomFilter(e.target.value)}/>
-                        </div>
-                      </div>
-                      <div className="lg:col-span-2 space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Student Search (Name/Phone)</Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-2.5 h-4 w-4 text-primary" />
-                          <Input placeholder="Type to search..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner text-xs font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
-                        </div>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent className="p-0">
-                    {/* Desktop View: Table */}
-                    <div className="hidden md:block">
-                      <Table>
-                        <TableHeader className="bg-slate-50">
-                          <TableRow className="border-none h-12">
-                            <TableHead className="font-black uppercase text-[10px] text-slate-500 pl-6">Student & Location</TableHead>
-                            <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Self Meals (B/L/D)</TableHead>
-                            <TableHead className="font-black uppercase text-[10px] text-slate-500 text-right pr-6">Guest Counts</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredOverrideStudents.map(s => {
-                            const lastUpdateYMD = s.lastMealUpdateDate || "";
-                            const isCurrentlyDecided = lastUpdateYMD === viewContext.updateDateYMD || lastUpdateYMD === viewContext.todayYMD;
-                            const isActiveB = isCurrentlyDecided ? !!s.mealStatus?.breakfast : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.breakfast : false);
-                            const isActiveL = isCurrentlyDecided ? !!s.mealStatus?.lunch : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.lunch : false);
-                            const isActiveD = isCurrentlyDecided ? !!s.mealStatus?.dinner : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.dinner : false);
-                            const gCountB = isCurrentlyDecided ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
-                            const gCountL = isCurrentlyDecided ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
-                            const gCountD = isCurrentlyDecided ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
-
-                            return (
-                              <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors border-b last:border-none">
-                                <TableCell className="py-4 pl-6">
-                                  <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-xs shadow-sm">
-                                      {s.roomNumber}
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      <p className="font-black text-slate-800 text-sm">{s.name}</p>
-                                      <p className="text-[9px] font-bold text-muted-foreground uppercase flex items-center gap-1">
-                                        <Building2 size={10}/> {s.buildingName} • ID: {s.phone}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <div className="flex justify-center gap-2">
-                                      {[
-                                        { id: 'breakfast', active: isActiveB, label: 'B' },
-                                        { id: 'lunch', active: isActiveL, label: 'L' },
-                                        { id: 'dinner', active: isActiveD, label: 'D' }
-                                      ].map(m => {
-                                        const isAvail = mealConfig?.[`${m.id}Available`] !== false;
-                                        return (
-                                          <button 
-                                            key={m.id} 
-                                            onClick={() => handleToggleMeal(s, m.id)} 
-                                            disabled={!isAvail} 
-                                            className={cn(
-                                              "h-10 w-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shadow-sm active:scale-90", 
-                                              (m.active && isAvail) ? "bg-primary text-white" : "bg-slate-100 text-slate-300",
-                                              !isAvail && "opacity-20 cursor-not-allowed"
-                                            )}
-                                            title={`${m.id.charAt(0).toUpperCase() + m.id.slice(1)} Meal`}
-                                          >
-                                            {m.label}
-                                          </button>
-                                        );
-                                      })}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-right pr-6">
-                                  <div className="flex justify-end gap-2">
-                                     {['breakfast', 'lunch', 'dinner'].map((mId) => {
-                                       const gCount = mId === 'breakfast' ? gCountB : (mId === 'lunch' ? gCountL : gCountD);
-                                       const isAvail = mealConfig?.[`${mId}Available`] !== false;
-                                       return (
-                                         <div key={`${mId}-guest`} className={cn("flex flex-col items-center gap-1 bg-slate-50 rounded-xl border border-slate-100 p-1", !isAvail && "opacity-20")}>
-                                           <span className="text-[7px] font-black text-muted-foreground uppercase">{mId.substring(0, 1)}G</span>
-                                           <div className="flex items-center px-1">
-                                             <button 
-                                               onClick={() => handleUpdateGuestMeal(s, mId, -1)}
-                                               disabled={gCount <= 0 || !isAvail}
-                                               className="h-6 w-5 flex items-center justify-center text-slate-400 hover:text-destructive transition-colors disabled:opacity-10"
-                                             >
-                                               <Minus size={10} />
-                                             </button>
-                                             <span className="w-5 text-center text-[11px] font-black text-primary">{gCount}</span>
-                                             <button 
-                                               onClick={() => handleUpdateGuestMeal(s, mId, 1)}
-                                               disabled={!isAvail}
-                                               className="h-6 w-5 flex items-center justify-center text-slate-400 hover:text-primary transition-colors disabled:opacity-10"
-                                             >
-                                               <Plus size={10} />
-                                             </button>
-                                           </div>
-                                         </div>
-                                       )
-                                     })}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                          {filteredOverrideStudents.length === 0 && (
-                            <TableRow><TableCell colSpan={3} className="text-center py-20 text-muted-foreground italic">No residents found matching your criteria.</TableCell></TableRow>
-                          )}
-                        </TableBody>
-                    </Table>
-                    </div>
-
-                    {/* Mobile View: Cards */}
-                    <div className="md:hidden space-y-3 p-4 bg-slate-50/50">
-                       {filteredOverrideStudents.map(s => {
-                          const lastUpdateYMD = s.lastMealUpdateDate || "";
-                          const isCurrentlyDecided = lastUpdateYMD === viewContext.updateDateYMD || lastUpdateYMD === viewContext.todayYMD;
-                          const isActiveB = isCurrentlyDecided ? !!s.mealStatus?.breakfast : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.breakfast : false);
-                          const isActiveL = isCurrentlyDecided ? !!s.mealStatus?.lunch : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.lunch : false);
-                          const isActiveD = isCurrentlyDecided ? !!s.mealStatus?.dinner : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.dinner : false);
-                          const gCountB = isCurrentlyDecided ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
-                          const gCountL = isCurrentlyDecided ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
-                          const gCountD = isCurrentlyDecided ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
-
-                          return (
-                            <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
-                               <CardContent className="p-4 space-y-4">
-                                  <div className="flex justify-between items-start">
-                                     <div className="flex items-center gap-3">
-                                        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-black shadow-sm">
-                                           {s.roomNumber}
-                                        </div>
-                                        <div>
-                                           <h3 className="font-black text-slate-800 text-sm leading-tight">{s.name}</h3>
-                                           <p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName} • ID: {s.phone}</p>
-                                        </div>
-                                     </div>
-                                  </div>
-                                  
-                                  <Separator className="opacity-50" />
-                                  
-                                  <div className="grid grid-cols-2 gap-4">
-                                     <div className="space-y-2">
-                                        <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest ml-1">Self Meals</p>
-                                        <div className="flex gap-2">
-                                           {[{ id: 'breakfast', active: isActiveB, label: 'B' }, { id: 'lunch', active: isActiveL, label: 'L' }, { id: 'dinner', active: isActiveD, label: 'D' }].map(m => (
-                                              <button key={m.id} onClick={() => handleToggleMeal(s, m.id)} className={cn("h-11 flex-1 rounded-xl flex items-center justify-center font-black transition-all shadow-sm active:scale-90", m.active ? "bg-primary text-white" : "bg-slate-100 text-slate-300")}>
-                                                 {m.label}
-                                              </button>
-                                           ))}
-                                        </div>
-                                     </div>
-                                     <div className="space-y-2">
-                                        <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest text-right mr-1">Guest Counts</p>
-                                        <div className="flex gap-1 justify-end">
-                                           {['breakfast', 'lunch', 'dinner'].map(mId => {
-                                              const gCount = mId === 'breakfast' ? gCountB : (mId === 'lunch' ? gCountL : gCountD);
-                                              return (
-                                                <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-xl border border-slate-100 p-1 flex-1">
-                                                   <span className="text-[6px] font-black opacity-40 uppercase">{mId[0]}G</span>
-                                                   <div className="flex items-center justify-between w-full">
-                                                      <button onClick={() => handleUpdateGuestMeal(s, mId, -1)} disabled={gCount <= 0} className="h-5 w-4 flex items-center justify-center text-slate-300"><Minus size={8}/></button>
-                                                      <span className="text-[10px] font-black text-primary">{gCount}</span>
-                                                      <button onClick={() => handleUpdateGuestMeal(s, mId, 1)} className="h-5 w-4 flex items-center justify-center text-slate-300"><Plus size={8}/></button>
-                                                   </div>
-                                                </div>
-                                              )
-                                           })}
-                                        </div>
-                                     </div>
-                                  </div>
-                               </CardContent>
-                            </Card>
-                          )
-                       })}
-                       {filteredOverrideStudents.length === 0 && <p className="text-center py-12 text-xs text-muted-foreground italic">No residents found.</p>}
-                    </div>
-                  </CardContent>
-                </Card>
-            )}
-          </TabsContent>
-        )}
-      </Tabs>
-
-      <div className="hidden print:block space-y-8">
-        {Object.values(mealStats.buildingData).sort((a,b) => a.name.localeCompare(b.name)).map((b: any) => (
-          <div key={b.id} className="space-y-4 break-after-page">
-             <div className="bg-slate-100 p-4 rounded-lg flex justify-between items-center">
-                <h3 className="text-xl font-bold">{b.name}</h3>
-                <div className="flex gap-4 font-bold text-sm">
-                   <span>B: {b.breakfast}</span>
-                   <span>L: {b.lunch}</span>
-                   <span>D: {b.dinner}</span>
+              <Button onClick={() => setViewDay('today')} className="rounded-xl font-bold h-11 px-8 gap-2">Switch to Today <RefreshCw size={16}/></Button>
+            </div>
+          ) : (
+            <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
+              <CardHeader className="bg-slate-50/50 border-b space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                  <div>
+                    <CardTitle className="text-lg">Manual Overrides ({viewDay})</CardTitle>
+                    <CardDescription>Manually toggle meals for {viewDay}. Decision dates will be tracked per-field.</CardDescription>
+                  </div>
+                  <Badge variant="outline" className="h-7 px-4 rounded-full border-primary text-primary font-black uppercase text-[10px]">
+                    Target: {viewContext.dayName}, {viewContext.dateStr}
+                  </Badge>
                 </div>
-             </div>
-             <table className="w-full border-collapse border border-slate-300">
-                <thead>
-                   <tr className="bg-slate-50">
-                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">Room</th>
-                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">B</th>
-                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">L</th>
-                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">D</th>
-                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">G</th>
-                      <th className="border border-slate-300 p-2 text-left text-xs uppercase">Notes</th>
-                   </tr>
-                </thead>
-                <tbody>
-                   {Object.values(b.rooms).sort((x: any, y: any) => x.roomNo.localeCompare(y.roomNo, undefined, {numeric: true})).map((room: any) => (
-                     <tr key={room.roomNo}>
-                        <td className="border border-slate-300 p-2 font-black text-sm">R-{room.roomNo}</td>
-                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.b || '-'}</td>
-                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.l || '-'}</td>
-                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.d || '-'}</td>
-                        <td className="border border-slate-300 p-2 text-center font-bold">{room.roomTotals.guests || '-'}</td>
-                        <td className="border border-slate-300 p-2 text-[10px]">
-                           {room.residents.filter((r:any) => r.choiceL !== 'Normal' || r.choiceD !== 'Normal').map((r:any) => 
-                             `${r.name.split(' ')[0]}: L-${r.choiceL}, D-${r.choiceD}`
-                           ).join('; ')}
-                        </td>
-                     </tr>
-                   ))}
-                </tbody>
-             </table>
-          </div>
-        ))}
-      </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Building</Label>
+                    <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                      <SelectTrigger className="h-10 bg-white rounded-xl border-none shadow-inner font-bold text-xs"><Building2 size={14} className="mr-2 text-primary"/><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                         <SelectItem value="all">Entire Branch</SelectItem>
+                         {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Room No.</Label>
+                    <div className="relative"><DoorOpen className="absolute left-3 top-2.5 h-4 w-4 text-primary"/><Input placeholder="Room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner text-xs font-bold" value={roomFilter} onChange={e => setRoomFilter(e.target.value)}/></div>
+                  </div>
+                  <div className="lg:col-span-2 space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Resident Search</Label>
+                    <div className="relative"><User className="absolute left-3 top-2.5 h-4 w-4 text-primary"/><Input placeholder="Name or phone..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner text-xs font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
+                  </div>
+                </div>
+              </CardHeader>
+              
+              <CardContent className="p-0">
+                {/* Desktop View: Table */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow className="border-none h-12">
+                        <TableHead className="font-black uppercase text-[10px] text-slate-500 pl-6">Student & Location</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Decision Date Status</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Meals (B/L/D)</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] text-slate-500 text-right pr-6">Guests</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredOverrideStudents.map(s => {
+                        const todayYMD = viewContext.todayYMD;
+                        const decisionField = viewDay === 'tomorrow' ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
+                        const isAlreadyDecided = s[decisionField] === todayYMD;
+                        
+                        const isActiveB = isAlreadyDecided ? !!s.mealStatus?.breakfast : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.breakfast : !!s.mealStatus?.breakfast);
+                        const isActiveL = isAlreadyDecided ? !!s.mealStatus?.lunch : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.lunch : !!s.mealStatus?.lunch);
+                        const isActiveD = isAlreadyDecided ? !!s.mealStatus?.dinner : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.dinner : !!s.mealStatus?.dinner);
+                        
+                        const gCountB = isAlreadyDecided ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
+                        const gCountL = isAlreadyDecided ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
+                        const gCountD = isAlreadyDecided ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
+
+                        return (
+                          <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors border-b last:border-none">
+                            <TableCell className="py-4 pl-6">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
+                                <div className="space-y-0.5"><p className="font-black text-slate-800 text-sm">{s.name}</p><p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p></div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                               {isAlreadyDecided ? <Badge className="bg-success/10 text-success text-[7px] font-black h-5 uppercase">Locked Today</Badge> : <Badge variant="outline" className="text-[7px] font-bold h-5 uppercase">Pending</Badge>}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex justify-center gap-2">
+                                  {[{ id: 'breakfast', active: isActiveB, label: 'B' }, { id: 'lunch', active: isActiveL, label: 'L' }, { id: 'dinner', active: isActiveD, label: 'D' }].map(m => (
+                                    <button key={m.id} onClick={() => handleToggleMeal(s, m.id)} className={cn("h-9 w-9 rounded-lg flex items-center justify-center font-black text-xs shadow-sm", m.active ? "bg-primary text-white" : "bg-slate-100 text-slate-300")}>
+                                      {m.label}
+                                    </button>
+                                  ))}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                               <div className="flex justify-end gap-2">
+                                  {['breakfast', 'lunch', 'dinner'].map(mId => {
+                                    const val = mId === 'breakfast' ? gCountB : (mId === 'lunch' ? gCountL : gCountD);
+                                    return (
+                                      <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-lg p-1 border">
+                                         <span className="text-[6px] font-black text-muted-foreground uppercase">{mId[0]}G</span>
+                                         <div className="flex items-center gap-2">
+                                            <button onClick={() => handleUpdateGuestMeal(s, mId, -1)} disabled={val <= 0} className="h-5 w-4 flex items-center justify-center text-slate-300"><Minus size={8}/></button>
+                                            <span className="text-[10px] font-black text-primary">{val}</span>
+                                            <button onClick={() => handleUpdateGuestMeal(s, mId, 1)} className="h-5 w-4 flex items-center justify-center text-slate-300"><Plus size={8}/></button>
+                                         </div>
+                                      </div>
+                                    )
+                                  })}
+                               </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile View: Cards */}
+                <div className="md:hidden space-y-3 p-4 bg-slate-50/50">
+                   {filteredOverrideStudents.map(s => {
+                      const todayYMD = viewContext.todayYMD;
+                      const decisionField = viewDay === 'tomorrow' ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
+                      const isAlreadyDecided = s[decisionField] === todayYMD;
+                      
+                      const isActiveB = isAlreadyDecided ? !!s.mealStatus?.breakfast : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.breakfast : !!s.mealStatus?.breakfast);
+                      const isActiveL = isAlreadyDecided ? !!s.mealStatus?.lunch : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.lunch : !!s.mealStatus?.lunch);
+                      const isActiveD = isAlreadyDecided ? !!s.mealStatus?.dinner : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.dinner : !!s.mealStatus?.dinner);
+
+                      return (
+                        <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                           <CardContent className="p-4 space-y-4">
+                              <div className="flex justify-between items-start">
+                                 <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-black shadow-sm">{s.roomNumber}</div>
+                                    <div><h3 className="font-black text-slate-800 text-sm">{s.name}</h3><p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p></div>
+                                 </div>
+                                 {isAlreadyDecided && <Badge className="bg-success text-[7px] font-black uppercase h-5">Decision Locked</Badge>}
+                              </div>
+                              <Separator className="opacity-50" />
+                              <div className="grid grid-cols-2 gap-4">
+                                 <div className="space-y-2">
+                                    <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Self Meals</p>
+                                    <div className="flex gap-2">
+                                       {[{ id: 'breakfast', active: isActiveB, label: 'B' }, { id: 'lunch', active: isActiveL, label: 'L' }, { id: 'dinner', active: isActiveD, label: 'D' }].map(m => (
+                                          <button key={m.id} onClick={() => handleToggleMeal(s, m.id)} className={cn("h-10 flex-1 rounded-xl flex items-center justify-center font-black shadow-sm", m.active ? "bg-primary text-white" : "bg-slate-100 text-slate-300")}>{m.label}</button>
+                                       ))}
+                                    </div>
+                                 </div>
+                                 <div className="space-y-2">
+                                    <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest text-right">Guests</p>
+                                    <div className="flex gap-1 justify-end">
+                                       {['breakfast', 'lunch', 'dinner'].map(mId => (
+                                          <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-xl border p-1 flex-1">
+                                             <span className="text-[6px] font-black opacity-40 uppercase">{mId[0]}G</span>
+                                             <span className="text-[10px] font-black text-primary">{isAlreadyDecided ? Number(s.tomorrowGuestMeals?.[mId] || 0) : 0}</span>
+                                          </div>
+                                       ))}
+                                    </div>
+                                 </div>
+                              </div>
+                           </CardContent>
+                        </Card>
+                      )
+                   })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

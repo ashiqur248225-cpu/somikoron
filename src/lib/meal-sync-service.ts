@@ -3,7 +3,7 @@
  * @fileOverview Authoritative Meal & Utility Synchronization Service
  * Handles background syncing of missing meals for students in Auto Mode
  * and automatic monthly charging of Utility Bills (Cooking Bill).
- * Ensures idempotency and respects admin global restrictions.
+ * Ensures idempotency and respects manual decisions tracked via dual fields.
  */
 
 import { Firestore, doc, getDoc, collection, query, where, getDocs, writeBatch, increment, serverTimestamp } from "firebase/firestore";
@@ -21,10 +21,7 @@ const getLocYMD = (date: Date) => {
 export async function syncMissingAutoMeals(db: Firestore, branch: string, specificStudentId?: string) {
   if (!branch) return { success: false, msg: "Branch context missing" };
 
-  console.log(`[SYNC_STARTED] Branch: ${branch}, Target: ${specificStudentId || 'ALL'}`);
-
   try {
-    // 1. Fetch Global Configs
     const mealConfigRef = doc(db, "configs", `mealConfig_${branch}`);
     const billingConfigRef = doc(db, "configs", `billingConfig_${branch}`);
     
@@ -36,7 +33,6 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
     const mealConfig = mealConfigSnap.exists() ? mealConfigSnap.data() : { breakfastAvailable: true, lunchAvailable: true, dinnerAvailable: true };
     const billingConfig = billingConfigSnap.exists() ? billingConfigSnap.data() : { cookingBill: 500 };
 
-    // 2. Identify relevant students
     let students: any[] = [];
     if (specificStudentId) {
       const sSnap = await getDoc(doc(db, "students", specificStudentId));
@@ -52,6 +48,7 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
     const yesterdayStr = getLocYMD(yesterday);
+    const todayStr = getLocYMD(today);
     
     const currentMonthLabel = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
     
@@ -63,8 +60,7 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
       let studentUpdateData: any = {};
       let needsUpdate = false;
 
-      // --- LOGIC A: AUTOMATIC MONTHLY COOKING BILL CHARGE ---
-      // If student hasn't been charged for current month yet
+      // 1. Monthly Utility Charge (Idempotent)
       if (student.lastCookingBillMonth !== currentMonthLabel) {
         const chargeAmount = Number(billingConfig.cookingBill || 0);
         if (chargeAmount > 0) {
@@ -72,16 +68,17 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
           studentUpdateData.lastCookingBillMonth = currentMonthLabel;
           needsUpdate = true;
           utilityChargesCount++;
-          console.log(`[UTILITY_CHARGE] Charged ৳${chargeAmount} to ${student.name} for ${currentMonthLabel}`);
         }
       }
 
-      // --- LOGIC B: MISSING MEAL SYNC (AUTO MODE ONLY) ---
-      if (student.mealStatus?.autoMode && student.lastMealUpdateDate) {
-        const lastUpdateStr = student.lastMealUpdateDate;
+      // 2. Missing Meal Sync (Auto Mode Only)
+      // Check if decision for Today or Tomorrow has already been made manually
+      const alreadyHandledToday = student.lastMealUpdateDateToday === todayStr || student.lastMealUpdateDateTomorrow === yesterdayStr;
+
+      if (student.mealStatus?.autoMode && !alreadyHandledToday) {
+        const lastUpdateStr = student.lastMealUpdateDate || student.lastMealUpdateDateTomorrow || student.lastMealUpdateDateToday;
         
-        // If already updated up to or past yesterday, skip meal part
-        if (lastUpdateStr < yesterdayStr) {
+        if (lastUpdateStr && lastUpdateStr < todayStr) {
           syncCount++;
           const lastUpdate = new Date(lastUpdateStr);
           let checkDecisionDate = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
@@ -89,21 +86,14 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
           let targetMonthLabel = student.currentMonthLabel || currentMonthLabel;
           let increments = { b: 0, l: 0, d: 0 };
 
-          // Iterative check for missing days
-          while (getLocYMD(checkDecisionDate) < yesterdayStr) {
+          while (getLocYMD(checkDecisionDate) < todayStr) {
             checkDecisionDate.setDate(checkDecisionDate.getDate() + 1);
             
-            // The meal occurs on the day AFTER the decision handled by Auto Mode
-            const mealDate = new Date(checkDecisionDate);
-            mealDate.setDate(mealDate.getDate() + 1);
-            const mealMonthLabel = `${MONTHS[mealDate.getMonth()]} ${mealDate.getFullYear()}`;
+            // Deciding for the day after checkDecisionDate
+            const mealDayDate = new Date(checkDecisionDate);
+            mealDayDate.setDate(mealDayDate.getDate() + 1);
             
-            // Month transition handling for meals
-            if (targetMonthLabel && targetMonthLabel !== mealMonthLabel) {
-               targetMonthLabel = mealMonthLabel;
-            }
-
-            const dayName = WEEKDAYS[mealDate.getDay()];
+            const dayName = WEEKDAYS[mealDayDate.getDay()];
             const sched = student.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true };
             
             if (sched.breakfast && mealConfig.breakfastAvailable !== false) { increments.b += 1; totalMealsAdded++; }
@@ -112,7 +102,6 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
           }
 
           studentUpdateData.lastMealUpdateDate = getLocYMD(checkDecisionDate);
-          studentUpdateData.currentMonthLabel = targetMonthLabel;
           if (increments.b > 0) studentUpdateData.currentMonthBreakfast = increment(increments.b);
           if (increments.l > 0) studentUpdateData.currentMonthLunch = increment(increments.l);
           if (increments.d > 0) studentUpdateData.currentMonthDinner = increment(increments.d);
@@ -129,12 +118,11 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
 
     if (syncCount > 0 || utilityChargesCount > 0) {
       await batch.commit();
-      console.log(`[SYNC_COMPLETED] Synced ${syncCount} students. Meals: ${totalMealsAdded}, Utility Charges: ${utilityChargesCount}`);
     }
 
     return { success: true, syncedStudents: syncCount, mealsAdded: totalMealsAdded, utilityCharges: utilityChargesCount };
   } catch (error: any) {
-    console.error("[SYNC_ERROR] Details:", error);
+    console.error("[SYNC_ERROR]", error);
     return { success: false, error: error.message };
   }
 }

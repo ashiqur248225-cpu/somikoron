@@ -99,7 +99,10 @@
         "currentMonthGuestMeals": { "type": "number" },
         "tomorrowGuestMeals": { "type": "object" },
         "emergencyMealUsedCount": { "type": "number", "default": 0 },
-        "lastCookingBillMonth": { "type": "string", "description": "Last month the recurring cooking bill was charged." },
+        "lastCookingBillMonth": { "type": "string" },
+        "lastMealUpdateDate": { "type": "string" },
+        "lastMealUpdateDateToday": { "type": "string", "description": "YYYY-MM-DD decision date for Today's meals" },
+        "lastMealUpdateDateTomorrow": { "type": "string", "description": "YYYY-MM-DD decision date for Tomorrow's meals" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },

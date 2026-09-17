@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
@@ -75,9 +76,6 @@ const MEAL_TYPES = [
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-/**
- * Robust YYYY-MM-DD formatter for local time
- */
 const getLocYMD = (date: Date) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -125,7 +123,6 @@ export default function StudentMealPage() {
     return routines.filter(r => r.branch === userBranch)
   }, [routines, userBranch])
 
-  // Track if there is a pending emergency request
   const pendingRequestsQuery = useMemoFirebase(() => {
     if (!studentId) return null;
     return query(collection(db, "mealRequests"), where("studentId", "==", studentId), where("status", "==", "pending"), limit(1))
@@ -135,7 +132,6 @@ export default function StudentMealPage() {
   const [localMeals, setLocalMeals] = useState({ breakfast: false, lunch: false, dinner: false, autoMode: false })
   const [mealChoices, setMealChoices] = useState<Record<string, string>>({})
   const [weeklySchedule, setWeeklySchedule] = useState<Record<string, any>>({})
-  const [expandedDay, setExpandedDay] = useState<string | null>(null)
   const [localGuestMeals, setLocalGuestMeals] = useState({ breakfast: 0, lunch: 0, dinner: 0 })
 
   useEffect(() => {
@@ -210,28 +206,24 @@ export default function StudentMealPage() {
   }, [currentTime, mealConfig, isMounted])
 
   const hasAlreadyUpdatedToday = useMemo(() => {
-    if (!student?.lastMealUpdateDate) return false;
+    if (!student) return false;
     const todayStr = getLocYMD(new Date());
-    return student.lastMealUpdateDate === todayStr;
-  }, [student?.lastMealUpdateDate]);
+    // Tomorrow decision field is the authoritative lock for student's next-day window
+    return student.lastMealUpdateDateTomorrow === todayStr;
+  }, [student]);
 
   const canChange = useMemo(() => {
-    // Student can only change if in window AND has not already updated today (either by self or admin override)
     return isMounted && timeWindow.isActive && !hasAlreadyUpdatedToday;
   }, [isMounted, timeWindow.isActive, hasAlreadyUpdatedToday])
 
-  const todayDay = isMounted ? WEEKDAYS[new Date().getDay()] : "Saturday"
   const tomorrowDate = new Date();
   tomorrowDate.setDate(tomorrowDate.getDate() + 1);
   const tomorrowDay = WEEKDAYS[tomorrowDate.getDay()];
-  
-  const todayMenu = weeklyMenu.find(r => r.day === todayDay)
   const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
 
   const handleUpdateMeals = useCallback(async () => {
     if (!studentRef || !timeWindow.isActive || isUpdating || !student) return
     
-    // LOW BALANCE RESTRICTION
     const isTurningAnyOn = localMeals.breakfast || localMeals.lunch || localMeals.dinner || 
                            localGuestMeals.breakfast > 0 || localGuestMeals.lunch > 0 || localGuestMeals.dinner > 0;
     
@@ -246,136 +238,41 @@ export default function StudentMealPage() {
       let finalChoices = { ...mealChoices }
       let finalGuestMeals = { ...localGuestMeals }
       
-      if (mealConfig?.breakfastAvailable === false) finalMeals.breakfast = false;
-      if (mealConfig?.lunchAvailable === false) finalMeals.lunch = false;
-      if (mealConfig?.dinnerAvailable === false) finalMeals.dinner = false;
-
       const todayStr = getLocYMD(new Date());
       const targetLabel = `${MONTHS[tomorrowDate.getMonth()]} ${tomorrowDate.getFullYear()}`;
       
-      const isReSubmission = student.lastMealUpdateDate === todayStr;
-      const isNewMonth = !!student.currentMonthLabel && student.currentMonthLabel !== targetLabel;
-
       const updates: any = { 
         mealStatus: finalMeals, 
         mealChoices: finalChoices, 
         weeklySchedule, 
         tomorrowGuestMeals: finalGuestMeals,
         lastMealUpdate: serverTimestamp(),
-        lastMealUpdateDate: todayStr,
+        lastMealUpdateDateTomorrow: todayStr, // Decisions for tomorrow
         updatedAt: serverTimestamp(),
         currentMonthLabel: targetLabel
       }
 
-      const calculateSelfDiff = (type: 'breakfast' | 'lunch' | 'dinner') => {
-        const nextVal = finalMeals[type] ? 1 : 0;
-        if (isNewMonth) return nextVal;
-        if (isReSubmission) {
-          const prevVal = student.mealStatus?.[type] ? 1 : 0;
-          return nextVal - prevVal;
-        }
-        return nextVal;
-      };
+      const diffB = (finalMeals.breakfast ? 1 : 0) - (student.mealStatus?.breakfast ? 1 : 0);
+      const diffL = (finalMeals.lunch ? 1 : 0) - (student.mealStatus?.lunch ? 1 : 0);
+      const diffD = (finalMeals.dinner ? 1 : 0) - (student.mealStatus?.dinner ? 1 : 0);
 
       const nextGuestTotal = Number(finalGuestMeals.breakfast) + Number(finalGuestMeals.lunch) + Number(finalGuestMeals.dinner);
-      const prevGuestTotal = (isReSubmission && !isNewMonth) 
-        ? (Number(student.tomorrowGuestMeals?.breakfast || 0) + Number(student.tomorrowGuestMeals?.lunch || 0) + Number(student.tomorrowGuestMeals?.dinner || 0)) 
-        : 0;
+      const prevGuestTotal = Number(student.tomorrowGuestMeals?.breakfast || 0) + Number(student.tomorrowGuestMeals?.lunch || 0) + Number(student.tomorrowGuestMeals?.dinner || 0);
       const diffGuest = nextGuestTotal - prevGuestTotal;
 
-      const diffB = calculateSelfDiff('breakfast');
-      const diffL = calculateSelfDiff('lunch');
-      const diffD = calculateSelfDiff('dinner');
-
-      if (isNewMonth) {
-        updates.currentMonthBreakfast = diffB;
-        updates.currentMonthLunch = diffL;
-        updates.currentMonthDinner = diffD;
-        updates.currentMonthGuestMeals = nextGuestTotal;
-      } else {
-        if (diffB !== 0) updates.currentMonthBreakfast = increment(diffB);
-        if (diffL !== 0) updates.currentMonthLunch = increment(diffL);
-        if (diffD !== 0) updates.currentMonthDinner = increment(diffD);
-        if (diffGuest !== 0) updates.currentMonthGuestMeals = increment(diffGuest);
-      }
+      if (diffB !== 0) updates.currentMonthBreakfast = increment(diffB);
+      if (diffL !== 0) updates.currentMonthLunch = increment(diffL);
+      if (diffD !== 0) updates.currentMonthDinner = increment(diffD);
+      if (diffGuest !== 0) updates.currentMonthGuestMeals = increment(diffGuest);
 
       await updateDoc(studentRef, updates)
-      toast({ title: "Preferences Saved", description: `Meals for tomorrow (${tomorrowDay}) updated successfully.` })
+      toast({ title: "Preferences Saved", description: `Meals for tomorrow (${tomorrowDay}) updated.` })
     } catch (e: any) { 
       toast({ variant: "destructive", title: "Error", description: e.message }) 
     } finally { 
       setIsUpdating(false) 
     }
   }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, localGuestMeals, weeklySchedule, tomorrowDay, tomorrowDate, toast, mealConfig, stats]);
-
-  const handleEmergencyRequest = async () => {
-    if (!student || isUpdating) return;
-    
-    const usedCount = Number(student.emergencyMealUsedCount || 0);
-    if (usedCount >= 2) {
-      toast({ variant: "destructive", title: "লিমিট শেষ", description: "আপনি সর্বোচ্চ ২ বার জরুরী মিল রিকোয়েস্ট ব্যবহার করেছেন।" });
-      return;
-    }
-
-    if (pendingRequests && pendingRequests.length > 0) {
-      toast({ variant: "destructive", title: "অনুরোধ প্রক্রিয়াধীন", description: "আপনার একটি অনুরোধ অলরেডি পেন্ডিং আছে।" });
-      return;
-    }
-
-    setIsUpdating(true);
-    try {
-      const reqId = doc(collection(db, "mealRequests")).id;
-      await setDoc(doc(db, "mealRequests", reqId), {
-        id: reqId,
-        studentId: student.id,
-        studentName: student.name,
-        phone: student.phone,
-        buildingId: student.buildingId,
-        buildingName: student.buildingName,
-        roomNumber: student.roomNumber,
-        status: "pending",
-        branch: student.branch,
-        createdAt: serverTimestamp()
-      });
-      toast({ title: "অনুরোধ পাঠানো হয়েছে", description: "ম্যানেজার এটি এপ্রুভ করলে আপনার কালকের মিল অন হয়ে যাবে।" });
-      setIsLowBalanceDialogOpen(false);
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message });
-    } finally {
-      setIsUpdating(false);
-    }
-  }
-
-  const getMealDetails = (text: string) => {
-    if (!text) return { common: "Regular Diet", options: null };
-    if (!text.includes('/')) return { common: text, options: null };
-    const parts = text.split(',');
-    const lastPart = parts[parts.length - 1];
-    if (lastPart.includes('/')) {
-      const common = parts.length > 1 ? parts.slice(0, -1).join(', ').trim() : "";
-      const options = lastPart.split('/').map(t => t.trim());
-      return { common, options };
-    }
-    return { common: text, options: null };
-  }
-
-  const currentMonthConsumption = useMemo(() => {
-    const now = new Date();
-    const currentLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
-    const b = student?.currentMonthBreakfast || 0;
-    const l = student?.currentMonthLunch || 0;
-    const d = student?.currentMonthDinner || 0;
-    const g = student?.currentMonthGuestMeals || 0;
-    return {
-      month: currentLabel,
-      breakfast: b,
-      lunch: l,
-      dinner: d,
-      guest: g,
-      studentTotal: b + l + d,
-      grandTotal: b + l + d + g
-    }
-  }, [student])
 
   const updateGuestCount = (type: 'breakfast' | 'lunch' | 'dinner', delta: number) => {
     const key = type === 'breakfast' ? 'breakfast' : (type === 'lunch' ? 'lunch' : 'dinner');
@@ -384,103 +281,50 @@ export default function StudentMealPage() {
     setLocalGuestMeals({ ...localGuestMeals, [key]: newVal });
   }
 
-  if (isLoading) return <div className="flex justify-center p-20 animate-pulse">Syncing Kitchen...</div>
+  if (isLoading) return <div className="flex justify-center p-20 animate-pulse font-bold text-muted-foreground">SYNCING KITCHEN...</div>
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500 max-w-4xl mx-auto w-full">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex-1 overflow-hidden">
           <h1 className="text-lg font-black text-slate-800 truncate">Catering</h1>
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Meals</p>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Meals Management</p>
         </div>
-        <Link href="/meal-routine">
-          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl bg-primary/5 text-primary">
-             <TableIcon size={20} />
-          </Button>
-        </Link>
       </div>
-
-      {pendingRequests && pendingRequests.length > 0 && (
-        <Card className="border-none shadow-md bg-orange-50 rounded-3xl overflow-hidden border-l-4 border-l-orange-500 animate-pulse">
-           <CardContent className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                 <div className="h-10 w-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 shadow-inner">
-                    <History size={20}/>
-                 </div>
-                 <div>
-                    <p className="text-[8px] font-bold uppercase text-orange-700 tracking-widest">Emergency Request</p>
-                    <p className="text-sm font-black text-orange-900">Pending Approval...</p>
-                 </div>
-              </div>
-              <Badge className="bg-orange-200 text-orange-800 border-none text-[8px] font-black uppercase">Wait</Badge>
-           </CardContent>
-        </Card>
-      )}
-
-      <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden border-l-4 border-l-primary">
-        <CardHeader className="bg-slate-50/50 border-b py-4">
-           <CardTitle className="text-xs font-black uppercase text-primary flex items-center gap-2">
-             <CheckCircle2 size={14}/> Today's Menu ({todayDay})
-           </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 grid grid-cols-3 gap-3 text-center">
-           <div className="space-y-1"><p className="text-[8px] font-bold text-muted-foreground uppercase">Breakfast</p><p className="text-[10px] font-bold text-slate-700">{todayMenu?.breakfast || 'Normal'}</p></div>
-           <div className="space-y-1"><p className="text-[8px] font-bold text-muted-foreground uppercase">Lunch</p><p className="text-[10px] font-bold text-slate-700">{todayMenu?.lunch || 'Normal'}</p></div>
-           <div className="space-y-1"><p className="text-[8px] font-bold text-muted-foreground uppercase">Dinner</p><p className="text-[10px] font-bold text-slate-700">{todayMenu?.dinner || 'Normal'}</p></div>
-        </CardContent>
-      </Card>
 
       <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden">
         <CardContent className="p-6 md:p-8 space-y-8">
            {!timeWindow.isActive ? (
-             <div className="p-6 bg-amber-50 rounded-3xl border border-amber-200 flex flex-col items-center gap-3 text-center animate-in zoom-in-95">
-                <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shadow-sm"><Clock size={24} className="animate-pulse" /></div>
+             <div className="p-6 bg-amber-50 rounded-3xl border border-amber-200 flex flex-col items-center gap-3 text-center">
+                <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shadow-sm"><Clock size={24}/></div>
                 <div className="space-y-1">
                    <p className="text-sm font-black text-amber-900 uppercase tracking-tight">Updates Closed</p>
                    <p className="text-[10px] text-amber-700 font-bold uppercase leading-relaxed">
-                     Update window is between <span className="text-amber-900 font-black">{timeWindow.startStr}</span> and <span className="text-amber-900 font-black">{timeWindow.endStr}</span>.
+                     Update window: <span className="text-amber-900 font-black">{timeWindow.startStr}</span> to <span className="text-amber-900 font-black">{timeWindow.endStr}</span>.
                    </p>
                 </div>
              </div>
            ) : (
              <div className="space-y-4">
                 <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 flex gap-3 items-center">
-                   <Zap size={18} className="text-primary shrink-0 animate-bounce" />
+                   <Zap size={18} className="text-primary shrink-0" />
                    <div className="flex-1">
-                     <p className="text-[10px] text-primary font-black uppercase leading-tight">
-                       Window open from {timeWindow.startStr} to {timeWindow.endStr}.
-                     </p>
-                     <p className="text-[8px] text-primary/70 uppercase font-bold mt-1">You can turn meals ON or OFF for Tomorrow ({tomorrowDay}).</p>
+                     <p className="text-[10px] text-primary font-black uppercase leading-tight">Window open for tomorrow ({tomorrowDay}).</p>
                    </div>
                 </div>
                 {hasAlreadyUpdatedToday && (
                   <div className="px-4 py-2 bg-success/10 rounded-full border border-success/20 w-fit mx-auto">
-                    <p className="text-[9px] font-black text-success uppercase">✓ Preference recorded for tomorrow</p>
+                    <p className="text-[9px] font-black text-success uppercase">✓ Preference locked for tomorrow</p>
                   </div>
                 )}
              </div>
            )}
            
            <div className={cn("space-y-6", (!canChange) && "opacity-50 pointer-events-none")}>
-              <div 
-                className="flex items-center justify-between p-4 bg-slate-900 rounded-3xl text-white cursor-not-allowed"
-                onClick={() => toast({ variant: "destructive", title: "তথ্য", description: "এই অপশনটা আপাতত বন্ধ আছে।" })}
-              >
-                <div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest">Auto Mode</p><p className="text-[8px] text-white/40 uppercase">Sync with weekly schedule</p></div>
-                <Switch disabled={true} checked={false} onCheckedChange={() => {}} />
-              </div>
-
               <div className="space-y-6">
-                <div className="flex justify-between items-center px-1">
-                  <p className="text-[10px] font-black uppercase text-primary tracking-widest">Tomorrow's Selection ({tomorrowDay})</p>
-                  <Badge variant="outline" className="text-[8px] font-bold text-muted-foreground uppercase">{tomorrowDay} Menu</Badge>
-                </div>
-                
                 {MEAL_TYPES.map((type) => {
                   const isAvailable = mealConfig?.[`${type.id}Available`] !== false
                   const isChecked = isAvailable && localMeals[type.id as keyof typeof localMeals]
-                  const menuText = tomorrowMenu?.[type.id] || ""
-                  const { common, options } = getMealDetails(menuText)
                   const guestKey = type.id === 'breakfast' ? 'breakfast' : (type.id === 'lunch' ? 'lunch' : 'dinner');
                   const guestCount = Number(localGuestMeals[guestKey as keyof typeof localGuestMeals] || 0);
 
@@ -491,9 +335,7 @@ export default function StudentMealPage() {
                           <span className="text-2xl">{type.icon}</span>
                           <div className="space-y-0.5">
                             <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">{type.label}</h3>
-                            <p className="text-[9px] font-bold text-primary uppercase">
-                              {isAvailable ? (common || (options ? 'Choice Available' : 'Regular')) : 'Locked by Admin'}
-                            </p>
+                            <p className="text-[9px] font-bold text-primary uppercase">{isAvailable ? 'Available' : 'Disabled'}</p>
                           </div>
                         </div>
                         <Switch 
@@ -505,44 +347,12 @@ export default function StudentMealPage() {
 
                       {isAvailable && (
                         <div className="pt-2 flex items-center justify-between bg-white/40 p-3 rounded-2xl border border-dashed border-success/20">
+                           <div className="flex items-center gap-3"><Users size={14} className="text-primary"/><span className="text-[10px] font-bold uppercase text-slate-600">Guest Meals</span></div>
                            <div className="flex items-center gap-3">
-                              <Users size={14} className="text-primary" />
-                              <span className="text-[10px] font-bold uppercase text-slate-600">Guest Meals</span>
-                           </div>
-                           <div className="flex items-center gap-3">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-7 w-7 rounded-full bg-white border shadow-sm" 
-                                onClick={() => updateGuestCount(type.id as any, -1)}
-                                disabled={!canChange || guestCount <= 0}
-                              >
-                                 <Plus className="h-3 w-3 rotate-45" />
-                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-white border" onClick={() => updateGuestCount(type.id as any, -1)} disabled={!canChange || guestCount <= 0}><Plus className="h-3 w-3 rotate-45" /></Button>
                               <span className="text-sm font-black text-slate-800 w-4 text-center">{guestCount}</span>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-7 w-7 rounded-full bg-white border shadow-sm" 
-                                onClick={() => updateGuestCount(type.id as any, 1)}
-                                disabled={!canChange || guestCount >= 10}
-                              >
-                                 <Plus className="h-3 w-3" />
-                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-white border" onClick={() => updateGuestCount(type.id as any, 1)} disabled={!canChange || guestCount >= 10}><Plus className="h-3 w-3" /></Button>
                            </div>
-                        </div>
-                      )}
-
-                      {isChecked && isAvailable && options && (
-                        <div className="pt-3 border-t border-success/10">
-                          <RadioGroup disabled={!canChange} value={mealChoices[type.id] || options[0]} onValueChange={v => setMealChoices({...mealChoices, [type.id]: v})} className="flex gap-4 flex-wrap">
-                             {options.map(opt => (
-                               <div key={opt} className="flex items-center gap-2">
-                                  <RadioGroupItem value={opt} id={`${type.id}-${opt}`} className="border-success text-success" />
-                                  <Label htmlFor={`${type.id}-${opt}`} className="text-xs font-bold text-slate-700">{opt}</Label>
-                               </div>
-                             ))}
-                          </RadioGroup>
                         </div>
                       )}
                     </div>
@@ -557,95 +367,29 @@ export default function StudentMealPage() {
                disabled={isUpdating || hasAlreadyUpdatedToday} 
                className={cn(
                  "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl gap-3 transition-transform active:scale-95",
-                 hasAlreadyUpdatedToday 
-                   ? "bg-success hover:bg-success/90 shadow-success/20" 
-                   : "bg-primary hover:bg-primary/90 shadow-primary/20"
+                 hasAlreadyUpdatedToday ? "bg-success hover:bg-success/90" : "bg-primary hover:bg-primary/90"
                )}
              >
                 {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
-                {hasAlreadyUpdatedToday ? `Preference Saved for ${tomorrowDay}` : `Confirm & Submit for ${tomorrowDay}`}
+                {hasAlreadyUpdatedToday ? `Saved for ${tomorrowDay}` : `Confirm for ${tomorrowDay}`}
              </Button>
            )}
         </CardContent>
       </Card>
 
-      {/* LOW BALANCE DIALOG */}
       <Dialog open={isLowBalanceDialogOpen} onOpenChange={setIsLowBalanceDialogOpen}>
-        <DialogContent className="max-w-sm rounded-[2.5rem] border-none shadow-2xl overflow-hidden p-0">
-          <div className="h-2 bg-destructive w-full" />
-          <DialogHeader className="p-8 pb-4">
-            <DialogTitle className="text-xl font-black text-slate-800 uppercase tracking-tight text-center">
-              Insufficient Balance
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              Alert informing the student about low balance restriction.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-8 pb-8 space-y-6 text-center">
-            <div className="mx-auto h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive mb-2">
-              <Wallet size={32} />
-            </div>
-            <p className="text-sm font-medium text-slate-600 leading-relaxed">
-              আপনার খাবারের আনুমানিক ব্যালেন্স বর্তমানে ৳৫০ এর নিচে। বিড়ম্বনা এড়াতে দয়া করে দ্রুত ব্যালেন্স রিচার্জ করুন। ব্যালেন্স রিচার্জ না করা পর্যন্ত নতুন মিল অন করা সম্ভব হবে না।
-            </p>
-            <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
-               <p className="text-[10px] font-black text-primary uppercase">Estimated Balance: ৳{Math.round(stats?.estimatedFoodBalance || 0)}</p>
-            </div>
-            
-            <div className="flex flex-col gap-3">
-              <Link href="/student/payments" className="w-full">
-                <Button className="w-full h-12 rounded-xl font-black text-sm uppercase shadow-lg shadow-primary/10">
-                  Recharge Now
-                </Button>
-              </Link>
-              
-              <Separator />
-              
-              <div className="space-y-3">
-                 <p className="text-[10px] text-muted-foreground font-bold uppercase">Emergency Option (Limit: 2)</p>
-                 <Button 
-                   variant="outline" 
-                   onClick={handleEmergencyRequest} 
-                   disabled={isUpdating || (student?.emergencyMealUsedCount || 0) >= 2 || (pendingRequests && pendingRequests.length > 0)} 
-                   className="w-full h-12 rounded-xl border-orange-200 text-orange-600 font-bold uppercase gap-2 hover:bg-orange-50"
-                 >
-                   {isUpdating ? <Loader2 className="animate-spin h-4 w-4"/> : <ChefHat size={16}/>}
-                   {(pendingRequests && pendingRequests.length > 0) ? "Request Pending..." : "Request Emergency Meal"}
-                 </Button>
-                 <p className="text-[8px] text-slate-400 font-medium">জরুরী অবস্থায় টাকা যোগাড় করতে ২-৩ দিন সময় পেতে এডমিনকে অনুরোধ জানান।</p>
-              </div>
-
-              <Button variant="ghost" onClick={() => setIsLowBalanceDialogOpen(false)} className="text-xs font-bold uppercase text-muted-foreground">
-                Close
-              </Button>
-            </div>
-          </div>
+        <DialogContent className="max-w-sm rounded-[2.5rem] p-8 text-center space-y-6">
+          <div className="mx-auto h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive mb-2"><Wallet size={32} /></div>
+          <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Low Balance</h2>
+          <p className="text-sm font-medium text-slate-600 leading-relaxed">
+            আপনার খাবারের আনুমানিক ব্যালেন্স বর্তমানে ৳৫০ এর নিচে। বিড়ম্বনা এড়াতে দয়া করে দ্রুত ব্যালেন্স রিচার্জ করুন।
+          </p>
+          <Link href="/student/payments" className="w-full">
+            <Button className="w-full h-12 rounded-xl font-black text-sm uppercase">Recharge Now</Button>
+          </Link>
+          <Button variant="ghost" onClick={() => setIsLowBalanceDialogOpen(false)} className="text-xs font-bold uppercase text-muted-foreground">Close</Button>
         </DialogContent>
       </Dialog>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-primary">Monthly Counter ({currentMonthConsumption.month})</CardTitle></CardHeader>
-          <CardContent className="p-6">
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
-                <div className="bg-orange-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">B</p><p className="text-sm font-black">{currentMonthConsumption.breakfast}</p></div>
-                <div className="bg-success/5 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">L</p><p className="text-sm font-black">{currentMonthConsumption.lunch}</p></div>
-                <div className="bg-blue-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">D</p><p className="text-sm font-black">{currentMonthConsumption.dinner}</p></div>
-                <div className="bg-purple-50 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Guest</p><p className="text-sm font-black">{currentMonthConsumption.guest}</p></div>
-                <div className="bg-slate-100 p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Self</p><p className="text-sm font-black">{currentMonthConsumption.studentTotal}</p></div>
-                <div className="bg-slate-900 text-white p-2 rounded-xl"><p className="text-[8px] font-bold uppercase">Total</p><p className="text-sm font-black">{currentMonthConsumption.grandTotal}</p></div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-          <CardHeader className="bg-slate-50/50 border-b py-3 px-6"><CardTitle className="text-xs font-black uppercase text-muted-foreground">Guest Policy</CardTitle></CardHeader>
-          <CardContent className="p-6 flex flex-col justify-center items-center text-center">
-             <Users size={24} className="text-primary mb-2 opacity-20" />
-             <p className="text-[9px] font-medium italic text-slate-400">আপনার গেস্ট মিলগুলো মাসিক মোট কাউন্টারে যোগ হবে। প্রতিটি গেস্ট মিল ১.০ হিসেবে গণ্য করা হবে।</p>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   )
 }
