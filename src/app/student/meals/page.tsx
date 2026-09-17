@@ -553,11 +553,16 @@ export default function StudentMealPage() {
            {timeWindow.isActive && (
              <Button 
                onClick={handleUpdateMeals} 
-               disabled={isUpdating} 
-               className="w-full h-16 rounded-[2rem] text-lg font-black bg-primary hover:bg-primary/90 shadow-2xl shadow-primary/20 gap-3 transition-transform active:scale-95"
+               disabled={isUpdating || hasAlreadyUpdatedToday} 
+               className={cn(
+                 "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl gap-3 transition-transform active:scale-95",
+                 hasAlreadyUpdatedToday 
+                   ? "bg-success hover:bg-success/90 shadow-success/20" 
+                   : "bg-primary hover:bg-primary/90 shadow-primary/20"
+               )}
              >
                 {isUpdating ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} 
-                {hasAlreadyUpdatedToday ? `Update Selection for ${tomorrowDay}` : `Confirm & Submit for ${tomorrowDay}`}
+                {hasAlreadyUpdatedToday ? `Preference Saved for ${tomorrowDay}` : `Confirm & Submit for ${tomorrowDay}`}
              </Button>
            )}
         </CardContent>
@@ -600,11 +605,11 @@ export default function StudentMealPage() {
                  <Button 
                    variant="outline" 
                    onClick={handleEmergencyRequest} 
-                   disabled={isUpdating || (student?.emergencyMealUsedCount || 0) >= 2} 
+                   disabled={isUpdating || (student?.emergencyMealUsedCount || 0) >= 2 || (pendingRequests && pendingRequests.length > 0)} 
                    className="w-full h-12 rounded-xl border-orange-200 text-orange-600 font-bold uppercase gap-2 hover:bg-orange-50"
                  >
                    {isUpdating ? <Loader2 className="animate-spin h-4 w-4"/> : <ChefHat size={16}/>}
-                   Request Emergency Meal
+                   {(pendingRequests && pendingRequests.length > 0) ? "Request Pending..." : "Request Emergency Meal"}
                  </Button>
                  <p className="text-[8px] text-slate-400 font-medium">জরুরী অবস্থায় টাকা যোগাড় করতে ২-৩ দিন সময় পেতে এডমিনকে অনুরোধ জানান।</p>
               </div>
