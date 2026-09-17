@@ -27,7 +27,9 @@ import {
   Calendar,
   Soup,
   Lock,
-  RefreshCw
+  RefreshCw,
+  Plus,
+  Minus
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -218,11 +220,72 @@ export default function AdminMealDashboardPage() {
     if (!isAvail) { toast({ variant: "destructive", title: "Meal Locked", description: "Admin has disabled this meal type." }); return; }
 
     try {
-      const currentVal = !!student.mealStatus?.[mealId];
+      const todayStr = getLocYMD(new Date());
+      const isUpdatedForTarget = student.lastMealUpdateDate === todayStr;
+      
+      const currentVal = isUpdatedForTarget 
+        ? !!student.mealStatus?.[mealId] 
+        : (student.mealStatus?.autoMode ? !!student.weeklySchedule?.[viewContext.dayName]?.[mealId] : !!student.mealStatus?.[mealId]);
+      
       const sRef = doc(db, "students", student.id);
       const counterField = `currentMonth${mealId.charAt(0).toUpperCase() + mealId.slice(1)}`;
-      await updateDoc(sRef, { [`mealStatus.${mealId}`]: !currentVal, [counterField]: increment(!currentVal ? 1 : -1), lastMealUpdateDate: getLocYMD(new Date()), updatedAt: serverTimestamp() });
-      toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled for tomorrow.` });
+      
+      const updateData: any = {
+        [`mealStatus.${mealId}`]: !currentVal,
+        [counterField]: increment(!currentVal ? 1 : -1),
+        lastMealUpdateDate: todayStr,
+        updatedAt: serverTimestamp()
+      }
+
+      if (!isUpdatedForTarget) {
+        // If first manual update today, we must snapshot all statuses from auto to make the counter correct
+        updateData["mealStatus.autoMode"] = false;
+        // Snapshot other meals too if they weren't updated yet
+        ['breakfast', 'lunch', 'dinner'].forEach(m => {
+          if (m !== mealId) {
+             const mActive = student.mealStatus?.autoMode ? !!student.weeklySchedule?.[viewContext.dayName]?.[m] : !!student.mealStatus?.[m];
+             updateData[`mealStatus.${m}`] = mActive;
+          }
+        });
+      }
+
+      await updateDoc(sRef, updateData);
+      toast({ title: "Updated", description: `${student.name}'s ${mealId} toggled.` });
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
+  }
+
+  const handleUpdateGuestMeal = async (student: any, mealId: string, delta: number) => {
+    if (!canOverride) return;
+    const isAvail = mealConfig?.[`${mealId}Available`] !== false;
+    if (!isAvail) { toast({ variant: "destructive", title: "Meal Locked" }); return; }
+
+    try {
+      const todayStr = getLocYMD(new Date());
+      const isUpdatedForTarget = student.lastMealUpdateDate === todayStr;
+      
+      const currentGuestCount = isUpdatedForTarget ? Number(student.tomorrowGuestMeals?.[mealId] || 0) : 0;
+      const newGuestCount = Math.max(0, currentGuestCount + delta);
+      const diff = newGuestCount - currentGuestCount;
+
+      const sRef = doc(db, "students", student.id);
+      const updateData: any = { 
+        [`tomorrowGuestMeals.${mealId}`]: newGuestCount, 
+        currentMonthGuestMeals: increment(diff),
+        lastMealUpdateDate: todayStr,
+        updatedAt: serverTimestamp() 
+      };
+
+      if (!isUpdatedForTarget) {
+        // Force snapshot from auto to manual
+        updateData["mealStatus.autoMode"] = false;
+        ['breakfast', 'lunch', 'dinner'].forEach(m => {
+           const mActive = student.mealStatus?.autoMode ? !!student.weeklySchedule?.[viewContext.dayName]?.[m] : !!student.mealStatus?.[m];
+           updateData[`mealStatus.${m}`] = mActive;
+        });
+      }
+
+      await updateDoc(sRef, updateData);
+      toast({ title: "Guest Updated" });
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
   }
 
@@ -496,7 +559,7 @@ export default function AdminMealDashboardPage() {
                   <CardHeader className="bg-slate-50/50 border-b flex flex-col lg:flex-row justify-between lg:items-center gap-4">
                     <div>
                       <CardTitle className="text-lg">Meal Override (Tomorrow)</CardTitle>
-                      <CardDescription>Manually toggle meals for specific students for tomorrow.</CardDescription>
+                      <CardDescription>Manually toggle meals and guest counts for specific students.</CardDescription>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Select value={buildingFilter} onValueChange={setBuildingFilter}>
@@ -525,9 +588,14 @@ export default function AdminMealDashboardPage() {
                           }).map(s => {
                             const lastUpdateYMD = s.lastMealUpdateDate || "";
                             const isUpdatedForTarget = lastUpdateYMD === viewContext.todayYMD;
+                            
                             const isActiveB = isUpdatedForTarget ? !!s.mealStatus?.breakfast : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.breakfast : false);
                             const isActiveL = isUpdatedForTarget ? !!s.mealStatus?.lunch : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.lunch : false);
                             const isActiveD = isUpdatedForTarget ? !!s.mealStatus?.dinner : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.dinner : false);
+
+                            const gCountB = isUpdatedForTarget ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
+                            const gCountL = isUpdatedForTarget ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
+                            const gCountD = isUpdatedForTarget ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
 
                             return (
                               <TableRow key={s.id} className="border-b">
@@ -541,28 +609,58 @@ export default function AdminMealDashboardPage() {
                                     </div>
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    <div className="flex gap-2 justify-end">
-                                        {[
-                                          { id: 'breakfast', active: isActiveB },
-                                          { id: 'lunch', active: isActiveL },
-                                          { id: 'dinner', active: isActiveD }
-                                        ].map(m => {
-                                          const isAvail = mealConfig?.[`${m.id}Available`] !== false;
-                                          return (
-                                            <button 
-                                              key={m.id} 
-                                              onClick={() => handleToggleMeal(s, m.id)} 
-                                              disabled={!canOverride || !isAvail} 
-                                              className={cn(
-                                                "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
-                                                (m.active && isAvail) ? "bg-primary text-white" : "bg-slate-100 text-slate-300",
-                                                !isAvail && "opacity-20"
-                                              )}
-                                            >
-                                              {m.id.charAt(0).toUpperCase()}
-                                            </button>
-                                          );
-                                        })}
+                                    <div className="flex flex-col gap-3 items-end">
+                                      {/* SELF MEALS */}
+                                      <div className="flex gap-2">
+                                          {[
+                                            { id: 'breakfast', active: isActiveB },
+                                            { id: 'lunch', active: isActiveL },
+                                            { id: 'dinner', active: isActiveD }
+                                          ].map(m => {
+                                            const isAvail = mealConfig?.[`${m.id}Available`] !== false;
+                                            return (
+                                              <button 
+                                                key={m.id} 
+                                                onClick={() => handleToggleMeal(s, m.id)} 
+                                                disabled={!canOverride || !isAvail} 
+                                                className={cn(
+                                                  "h-9 w-9 rounded-xl flex items-center justify-center font-black text-[10px] transition-all shadow-sm", 
+                                                  (m.active && isAvail) ? "bg-primary text-white" : "bg-slate-100 text-slate-300",
+                                                  !isAvail && "opacity-20"
+                                                )}
+                                              >
+                                                {m.id.charAt(0).toUpperCase()}
+                                              </button>
+                                            );
+                                          })}
+                                      </div>
+                                      
+                                      {/* GUEST MEALS */}
+                                      <div className="flex gap-2">
+                                         {['breakfast', 'lunch', 'dinner'].map((mId) => {
+                                           const gCount = mId === 'breakfast' ? gCountB : (mId === 'lunch' ? gCountL : gCountD);
+                                           const isAvail = mealConfig?.[`${mId}Available`] !== false;
+                                           return (
+                                             <div key={`${mId}-guest`} className={cn("flex items-center bg-slate-50 rounded-xl border border-slate-100 p-0.5", !isAvail && "opacity-20")}>
+                                               <button 
+                                                 onClick={() => handleUpdateGuestMeal(s, mId, -1)}
+                                                 disabled={!canOverride || gCount <= 0 || !isAvail}
+                                                 className="h-7 w-6 flex items-center justify-center text-slate-400 hover:text-destructive disabled:opacity-20"
+                                               >
+                                                 <Minus size={10} />
+                                               </button>
+                                               <span className="w-4 text-center text-[10px] font-black text-primary">{gCount}</span>
+                                               <button 
+                                                 onClick={() => handleUpdateGuestMeal(s, mId, 1)}
+                                                 disabled={!canOverride || !isAvail}
+                                                 className="h-7 w-6 flex items-center justify-center text-slate-400 hover:text-primary disabled:opacity-20"
+                                               >
+                                                 <Plus size={10} />
+                                               </button>
+                                             </div>
+                                           )
+                                         })}
+                                      </div>
                                     </div>
                                   </TableCell>
                               </TableRow>
