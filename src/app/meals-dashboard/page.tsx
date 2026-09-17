@@ -60,6 +60,7 @@ export default function AdminMealDashboardPage() {
   const [userBranch, setUserBranch] = useState("")
   const [userRole, setUserRole] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
+  const [buildingFilter, setBuildingFilter] = useState("all")
   const [expandedBuilding, setExpandedBuilding] = useState<string | null>(null)
   const [viewDay, setViewDay] = useState<"yesterday" | "today" | "tomorrow">("today")
   const [isMounted, setIsMounted] = useState(false)
@@ -68,8 +69,13 @@ export default function AdminMealDashboardPage() {
   useEffect(() => {
     setIsMounted(true)
     const branch = localStorage.getItem("user_branch") || "Main Branch"
+    const role = localStorage.getItem("user_role") || "Staff"
+    const bId = localStorage.getItem("assigned_building_id") || "none"
+    
     setUserBranch(branch)
-    setUserRole(localStorage.getItem("user_role") || "Staff")
+    setUserRole(role)
+    setBuildingFilter((role === 'Building Manager' && bId !== 'none') ? bId : "all")
+    
     if (typeof window !== 'undefined') (window as any).firebaseDb = db;
   }, [db])
 
@@ -92,6 +98,12 @@ export default function AdminMealDashboardPage() {
 
   const routineQuery = useMemoFirebase(() => collection(db, "mealRoutines"), [db])
   const { data: routines } = useCollection(routineQuery)
+
+  const buildingsQuery = useMemoFirebase(() => {
+    if (!userBranch) return null
+    return query(collection(db, "buildings"), where("branch", "==", userBranch))
+  }, [db, userBranch])
+  const { data: buildings } = useCollection(buildingsQuery)
 
   const mealConfigRef = useMemoFirebase(() => 
     userBranch ? doc(db, "configs", `mealConfig_${userBranch}`) : null, 
@@ -481,23 +493,36 @@ export default function AdminMealDashboardPage() {
                 </div>
              ) : (
                 <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
-                  <CardHeader className="bg-slate-50/50 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                  <CardHeader className="bg-slate-50/50 border-b flex flex-col lg:flex-row justify-between lg:items-center gap-4">
                     <div>
                       <CardTitle className="text-lg">Meal Override (Tomorrow)</CardTitle>
                       <CardDescription>Manually toggle meals for specific students for tomorrow.</CardDescription>
                     </div>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Search name or room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                        <SelectTrigger className="w-full sm:w-[160px] h-10 bg-white rounded-xl border-none shadow-inner font-bold text-xs">
+                           <Building2 size={14} className="mr-2 text-primary" />
+                           <SelectValue placeholder="All Buildings" />
+                        </SelectTrigger>
+                        <SelectContent>
+                           <SelectItem value="all">All Buildings</SelectItem>
+                           {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="Search name or room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner w-full sm:w-[240px]" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-0 h-[600px] overflow-y-auto">
                     <Table>
                         <TableBody>
-                          {students?.filter(s => 
-                              s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              String(s.roomNumber).includes(searchTerm)
-                          ).map(s => {
+                          {students?.filter(s => {
+                              const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || String(s.roomNumber).includes(searchTerm);
+                              const matchesBuilding = buildingFilter === 'all' || s.buildingId === buildingFilter;
+                              return matchesSearch && matchesBuilding;
+                          }).map(s => {
                             const lastUpdateYMD = s.lastMealUpdateDate || "";
                             const isUpdatedForTarget = lastUpdateYMD === viewContext.todayYMD;
                             const isActiveB = isUpdatedForTarget ? !!s.mealStatus?.breakfast : (s.mealStatus?.autoMode ? !!s.weeklySchedule?.[viewContext.dayName]?.breakfast : false);
