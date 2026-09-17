@@ -25,7 +25,8 @@ import {
   LayoutGrid,
   ShoppingBag,
   UserCircle,
-  Soup
+  Soup,
+  Calculator
 } from "lucide-react"
 import {
   Sidebar,
@@ -95,6 +96,7 @@ export function AppSidebar() {
     { title: "Students", url: "/students", icon: Users, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Buildings", url: buildingsUrl, icon: Building2, roles: ["Admin", "Branch Manager", "Building Manager"] },
     { title: "Due", url: "/dues", icon: CircleAlert, roles: ["Admin", "Branch Manager", "Building Manager"] },
+    { title: "Meal Rate", url: "/meal-rate", icon: Calculator, roles: ["Admin"] },
     { title: "Meal Analytics", url: "/meals-dashboard", icon: Utensils, roles: ["Admin", "Branch Manager", "Building Manager", "Staff", "Worker"] },
     { title: "Meal Routine", url: "/meal-routine", icon: Soup, roles: ["Admin", "Branch Manager", "Building Manager", "Staff", "Worker", "Student"] },
     { title: "Market Tracking", url: "/market", icon: ShoppingBag, roles: ["Admin", "Branch Manager", "Building Manager"] },
