@@ -216,8 +216,9 @@ export default function StudentMealPage() {
   }, [student?.lastMealUpdateDate]);
 
   const canChange = useMemo(() => {
-    return isMounted && timeWindow.isActive;
-  }, [isMounted, timeWindow.isActive])
+    // Student can only change if in window AND has not already updated today (either by self or admin override)
+    return isMounted && timeWindow.isActive && !hasAlreadyUpdatedToday;
+  }, [isMounted, timeWindow.isActive, hasAlreadyUpdatedToday])
 
   const todayDay = isMounted ? WEEKDAYS[new Date().getDay()] : "Saturday"
   const tomorrowDate = new Date();
