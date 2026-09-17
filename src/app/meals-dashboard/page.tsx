@@ -31,7 +31,8 @@ import {
   Plus,
   Minus,
   DoorOpen,
-  User
+  User,
+  ShieldAlert
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -88,13 +89,6 @@ export default function AdminMealDashboardPage() {
   }, [db])
 
   const isKitchenStaff = useMemo(() => ['Staff', 'Worker'].includes(userRole), [userRole]);
-
-  // If kitchen staff selects yesterday (not possible via UI but safety check), redirect them to today
-  useEffect(() => {
-    if (isKitchenStaff && viewDay === 'yesterday') {
-      setViewDay('today');
-    }
-  }, [isKitchenStaff, viewDay]);
 
   // Authoritative Global Sync for Branch on Page Load
   useEffect(() => {
@@ -227,6 +221,10 @@ export default function AdminMealDashboardPage() {
     return { totals, choices, buildingData }
   }, [students, viewContext, mealConfig, viewDay, isMounted])
 
+  const showOverrideTab = useMemo(() => {
+    return ['Admin', 'Branch Manager', 'Building Manager', 'Staff', 'Worker'].includes(userRole);
+  }, [userRole]);
+
   const canOverride = useMemo(() => {
     if (userRole === 'Admin' || userRole === 'Branch Manager' || userRole === 'Building Manager') return true;
     if (isKitchenStaff) {
@@ -345,8 +343,7 @@ export default function AdminMealDashboardPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {/* Kitchen Staff can only see Today and Tomorrow */}
-                {!isKitchenStaff && <SelectItem value="yesterday">Yesterday</SelectItem>}
+                <SelectItem value="yesterday">Yesterday</SelectItem>
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="tomorrow">Tomorrow</SelectItem>
               </SelectContent>
@@ -372,10 +369,10 @@ export default function AdminMealDashboardPage() {
       <Tabs defaultValue="summary" className="w-full print:hidden">
         <TabsList className={cn(
           "bg-secondary/50 p-1 mb-6 rounded-2xl w-full max-w-md mx-auto grid",
-          canOverride ? "grid-cols-2" : "grid-cols-1"
+          showOverrideTab ? "grid-cols-2" : "grid-cols-1"
         )}>
           <TabsTrigger value="summary" className="rounded-xl gap-2 font-bold h-10">Kitchen Prep</TabsTrigger>
-          {canOverride && (
+          {showOverrideTab && (
             <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Overrides</TabsTrigger>
           )}
         </TabsList>
@@ -573,8 +570,24 @@ export default function AdminMealDashboardPage() {
           </div>
         </TabsContent>
 
-        {canOverride && (
+        {showOverrideTab && (
           <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300 space-y-6">
+            {!canOverride ? (
+              <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl border border-dashed text-center space-y-4">
+                <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
+                   <ShieldAlert size={32} />
+                </div>
+                <div>
+                   <h3 className="text-xl font-black text-slate-800">Override Disabled</h3>
+                   <p className="text-sm text-muted-foreground font-medium max-w-xs mx-auto">
+                     Kitchen Staff can only manually override meals for "Today" and "Tomorrow".
+                   </p>
+                </div>
+                <Button onClick={() => setViewDay('today')} className="rounded-xl font-bold h-11 px-8 gap-2">
+                   Switch to Today <RefreshCw size={16}/>
+                </Button>
+              </div>
+            ) : (
                 <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
                   <CardHeader className="bg-slate-50/50 border-b space-y-4">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -789,6 +802,7 @@ export default function AdminMealDashboardPage() {
                     </div>
                   </CardContent>
                 </Card>
+            )}
           </TabsContent>
         )}
       </Tabs>
