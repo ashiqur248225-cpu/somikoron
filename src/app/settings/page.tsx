@@ -85,12 +85,22 @@ interface RoomGroup {
   npRent: string;
 }
 
-const DEFAULT_MARKET_CATEGORIES: Record<string, string[]> = {
-  "Groceries": ["Oil", "Rice", "Lentils (Dal)", "Salt/Sugar", "Spices", "Other"],
-  "Vegetables": ["Potato", "Onion", "Green Chili", "Seasonal Veg", "Other"],
-  "Fish/Meat": ["Chicken", "Beef", "Fish", "Egg", "Other"],
-  "Kitchen Tools": ["Cleaning", "Utensils", "Gas Refill", "Other"],
-  "Others": ["General"]
+const DEFAULT_MARKET_CATEGORIES: Record<string, Record<string, string[]>> = {
+  "Groceries": {
+    "Oil": ["Soybean Oil", "Mustard Oil"],
+    "Rice": ["Miniket Rice", "Najirshail Rice", "Chinigura Rice"],
+    "Lentils": ["Masur Dal", "Mug Dal"],
+    "Salt/Sugar": ["Refined Salt", "Brown Sugar", "White Sugar"]
+  },
+  "Vegetables": {
+    "Daily": ["Potato", "Onion", "Ginger", "Garlic"],
+    "Seasonal": ["Cauliflower", "Tomato", "Green Chili"]
+  },
+  "Protein": {
+    "Meat": ["Chicken", "Beef"],
+    "Egg": ["Chicken Egg"],
+    "Fish": ["Rui Fish", "Pangas Fish"]
+  }
 }
 
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -126,7 +136,7 @@ export default function SettingsPage() {
   const [enhancedSecurity, setEnhancedSecurity] = useState(false)
   
   // Categories Management States
-  const [marketCats, setMarketCats] = useState<Record<string, string[]>>(DEFAULT_MARKET_CATEGORIES)
+  const [marketCats, setMarketCats] = useState<Record<string, Record<string, string[]>>>(DEFAULT_MARKET_CATEGORIES)
   const [expenseCats, setExpenseCats] = useState<any[]>(DEFAULT_EXPENSE_CATEGORIES)
 
   // Project Planner State
@@ -445,18 +455,25 @@ export default function SettingsPage() {
     }
   }, [activeFlyer]);
 
-  // CATEGORY MANAGEMENT LOGIC
+  // CATEGORY MANAGEMENT LOGIC (UPGRADED TO 3 LEVELS)
   const handleAddMarketCat = () => {
     const name = prompt("Enter New Market Category Name:")
     if (name && !marketCats[name]) {
-      setMarketCats({ ...marketCats, [name]: ["General"] })
+      setMarketCats({ ...marketCats, [name]: { "General": [] } })
     }
   }
 
   const handleAddMarketSubCat = (catName: string) => {
     const sub = prompt(`Enter new sub-category for ${catName}:`)
-    if (sub && !marketCats[catName].includes(sub)) {
-      setMarketCats({ ...marketCats, [catName]: [...marketCats[catName], sub] })
+    if (sub && !marketCats[catName][sub]) {
+      setMarketCats({ ...marketCats, [catName]: { ...marketCats[catName], [sub]: [] } })
+    }
+  }
+
+  const handleAddMarketItem = (catName: string, subName: string) => {
+    const item = prompt(`Enter new item for ${catName} -> ${subName}:`)
+    if (item && !marketCats[catName][subName].includes(item)) {
+      setMarketCats({ ...marketCats, [catName]: { ...marketCats[catName], [subName]: [...marketCats[catName][subName], item] } })
     }
   }
 
@@ -466,7 +483,12 @@ export default function SettingsPage() {
   }
 
   const handleRemoveMarketSubCat = (catName: string, subName: string) => {
-    setMarketCats({ ...marketCats, [catName]: marketCats[catName].filter(s => s !== subName) })
+    const { [subName]: removed, ...rest } = marketCats[catName]
+    setMarketCats({ ...marketCats, [catName]: rest })
+  }
+
+  const handleRemoveMarketItem = (catName: string, subName: string, itemName: string) => {
+    setMarketCats({ ...marketCats, [catName]: { ...marketCats[catName], [subName]: marketCats[catName][subName].filter(i => i !== itemName) } })
   }
 
   const handleAddExpenseCat = () => {
@@ -718,37 +740,58 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="categories" className="space-y-8 animate-in fade-in duration-300">
-           {/* MARKET CATEGORIES MANAGEMENT */}
+           {/* MARKET CATEGORIES MANAGEMENT (UPGRADED TO 3 LEVELS) */}
            <Card className="border-none shadow-sm overflow-hidden border-t-4 border-t-indigo-500">
               <CardHeader className="flex flex-row items-center justify-between">
                  <div>
                    <div className="flex items-center gap-2 text-indigo-600"><Layers size={20}/><CardTitle>Market Category Dictionary</CardTitle></div>
-                   <CardDescription>Setup sub-categories for kitchen inventory items.</CardDescription>
+                   <CardDescription>Setup Category -> Sub Category -> Item for kitchen inventory.</CardDescription>
                  </div>
-                 <Button variant="outline" size="sm" onClick={handleAddMarketCat} className="h-8 gap-1 border-indigo-200 text-indigo-600"><Plus size={14}/> Add Category</Button>
+                 <Button variant="outline" size="sm" onClick={handleAddMarketCat} className="h-8 gap-1 border-indigo-200 text-indigo-600"><Plus size={14}/> New Category</Button>
               </CardHeader>
               <CardContent className="space-y-6">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {Object.entries(marketCats).map(([cat, subs]) => (
-                      <div key={cat} className="p-4 bg-slate-50 rounded-2xl border space-y-3 relative group">
+                 <div className="space-y-6">
+                    {Object.entries(marketCats).map(([cat, subCats]) => (
+                      <div key={cat} className="p-6 bg-slate-50 rounded-3xl border space-y-4 relative group">
                          <div className="flex justify-between items-center pr-8">
-                            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                               <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"/> {cat}
-                            </h3>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive absolute top-2 right-2 opacity-20 group-hover:opacity-100" onClick={() => handleRemoveMarketCat(cat)}>
-                               <X size={12}/>
-                            </Button>
+                            <div className="flex items-center gap-2">
+                               <div className="w-2 h-2 rounded-full bg-indigo-500"/>
+                               <h3 className="font-black text-slate-800 uppercase text-sm tracking-widest">{cat}</h3>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button variant="ghost" size="sm" onClick={() => handleAddMarketSubCat(cat)} className="h-7 px-3 text-[9px] font-black uppercase text-indigo-600 border border-dashed border-indigo-200 hover:bg-indigo-50">
+                                 + Add Sub Category
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive opacity-40 group-hover:opacity-100" onClick={() => handleRemoveMarketCat(cat)}>
+                                 <X size={14}/>
+                              </Button>
+                            </div>
                          </div>
-                         <div className="flex flex-wrap gap-2">
-                            {subs.map(sub => (
-                              <Badge key={sub} variant="secondary" className="gap-1 h-6 pl-2 pr-1 rounded-lg text-[9px] font-bold bg-white border">
-                                {sub}
-                                <X size={10} className="text-destructive cursor-pointer hover:scale-125" onClick={() => handleRemoveMarketSubCat(cat, sub)} />
-                              </Badge>
+                         
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-2 pl-4 border-l-2 border-indigo-100">
+                            {Object.entries(subCats).map(([sub, items]) => (
+                              <div key={sub} className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3 relative group/sub">
+                                 <div className="flex justify-between items-center">
+                                    <h4 className="font-bold text-slate-700 text-xs">{sub}</h4>
+                                    <div className="flex gap-1">
+                                      <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive opacity-0 group-hover/sub:opacity-100" onClick={() => handleRemoveMarketSubCat(cat, sub)}>
+                                         <Trash2 size={12}/>
+                                      </Button>
+                                    </div>
+                                 </div>
+                                 <div className="flex flex-wrap gap-2">
+                                    {items.map(item => (
+                                      <Badge key={item} variant="secondary" className="gap-1 h-6 pl-2 pr-1 rounded-lg text-[9px] font-bold bg-slate-100 border-none text-slate-600">
+                                        {item}
+                                        <X size={10} className="text-slate-400 cursor-pointer hover:text-destructive" onClick={() => handleRemoveMarketItem(cat, sub, item)} />
+                                      </Badge>
+                                    ))}
+                                    <Button variant="ghost" size="sm" onClick={() => handleAddMarketItem(cat, sub)} className="h-6 px-2 text-[8px] font-black uppercase text-primary border border-dashed border-primary/30 hover:bg-primary/5">
+                                       + Item
+                                    </Button>
+                                 </div>
+                              </div>
                             ))}
-                            <Button variant="ghost" size="sm" onClick={() => handleAddMarketSubCat(cat)} className="h-6 px-2 text-[9px] font-black uppercase text-indigo-600 border border-dashed border-indigo-200 hover:bg-indigo-50">
-                               + Sub
-                            </Button>
                          </div>
                       </div>
                     ))}
