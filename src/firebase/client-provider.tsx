@@ -6,7 +6,6 @@ import { initializeFirebase } from '@/firebase';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { Loader2, WifiOff } from 'lucide-react';
 import Image from 'next/image';
-import logoIcon from '../../public/icon.png';
 
 interface FirebaseClientProviderProps {
   children: ReactNode;
@@ -70,7 +69,7 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
         <div className="flex flex-col items-center gap-6 animate-in zoom-in duration-700">
           <div className="relative h-28 w-28 md:h-36 md:w-32 flex items-center justify-center">
             <Image 
-              src={logoIcon}
+              src="/icon.png"
               width={120}
               height={120}
               alt="Somikoron Logo" 

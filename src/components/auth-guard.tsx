@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -12,7 +11,6 @@ import { Button } from "@/components/ui/button"
 import { Loader2, Lock, Smartphone, ShieldCheck, UserCircle, Eye, EyeOff } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Image from 'next/image';
-import logoIcon from '../../public/icon.png';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -62,7 +60,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     checkPersistence()
   }, [db, isPublicPage])
 
-  // NEW: Background Identity Verification
+  // Background Identity Verification
   useEffect(() => {
     if (!isAuthenticated || isPublicPage) return;
 
@@ -208,7 +206,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           <div className="text-center space-y-2">
             <div className="inline-flex items-center justify-center">
               <Image 
-                src={logoIcon}
+                src="/icon.png"
                 width={80} 
                 height={80} 
                 alt="Somikoron Logo" 

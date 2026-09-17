@@ -25,8 +25,6 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
 export default function DuesPage() {
   const router = useRouter()
   const db = useFirestore()
@@ -65,64 +63,6 @@ export default function DuesPage() {
     return query(collection(db, "students"), where("branch", "==", userBranch))
   }, [db, userBranch, userRole, assignedBuildingId])
   const { data: students, isLoading: studentsLoading } = useCollection(studentsQuery)
-
-  // AUTO DUE GENERATION LOGIC FOR ALL STUDENTS IN VIEW
-  useEffect(() => {
-    if (!students || !db) return;
-
-    const syncMissingDues = async () => {
-      const now = new Date();
-      const todayLimit = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      students.forEach((s: any) => {
-        if (!s.isActive) return;
-        
-        const billingDateStr = s.billingStartDate || "";
-        const billingDate = new Date(billingDateStr);
-        if (isNaN(billingDate.getTime())) return;
-
-        const updatedDues = { ...(s.duesBreakdown || {}) };
-        let totalDueIncrement = 0;
-        let hasChanges = false;
-
-        let checkDate = new Date(billingDate.getFullYear(), billingDate.getMonth(), 1);
-
-        while (checkDate <= todayLimit) {
-          const m = MONTHS[checkDate.getMonth()];
-          const y = checkDate.getFullYear().toString();
-          const label = `${m} ${y}`;
-
-          const inBreakdown = updatedDues[label];
-          const inHistory = s.paymentsHistory?.some((p: any) => 
-            p.month === m && p.year === y && (Number(p.seatAmount) > 0 || p.method === 'adjustment')
-          );
-
-          if (!getDocData(inBreakdown) && !inHistory) {
-            const rent = Number(s.monthlyRent || 0);
-            if (rent > 0) {
-              updatedDues[label] = { month: m, year: y, amount: rent };
-              totalDueIncrement += rent;
-              hasChanges = true;
-            }
-          }
-          checkDate.setMonth(checkDate.getMonth() + 1);
-        }
-
-        if (hasChanges) {
-          const sRef = doc(db, "students", s.id);
-          updateDoc(sRef, {
-            duesBreakdown: updatedDues,
-            totalDue: increment(totalDueIncrement),
-            updatedAt: serverTimestamp()
-          }).catch(() => {});
-        }
-      });
-    };
-
-    const getDocData = (val: any) => val;
-
-    syncMissingDues();
-  }, [students, db]);
 
   const processedData = useMemo(() => {
     if (!students) return []
@@ -167,6 +107,7 @@ export default function DuesPage() {
   const handleReset = () => {
     setSearchTerm("")
     setBuildingFilter("all")
+    setRoomFilter("all")
     setStatusFilter("active")
     setDueCategoryFilter("all")
   }
