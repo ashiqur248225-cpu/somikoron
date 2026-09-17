@@ -87,13 +87,7 @@ export default function MealRoutinePage() {
     <div className="max-w-5xl mx-auto space-y-8 pb-20">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none">
         <div className="flex items-center gap-2">
-          {isLimitedRole ? (
-            <Button variant="ghost" size="icon" onClick={() => router.back()} className="-ml-2 h-10 w-10">
-              <ChevronLeft size={24} />
-            </Button>
-          ) : (
-            <SidebarTrigger className="-ml-1" />
-          )}
+          {!isLimitedRole && <SidebarTrigger className="-ml-1" />}
           {!isLimitedRole && <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />}
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Routine</h1>
@@ -164,22 +158,22 @@ export default function MealRoutinePage() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto scrollbar-hide">
-              <Table className="min-w-[600px] md:min-w-full">
+              <Table className="min-w-[500px] md:min-w-full">
                 <TableHeader className="bg-slate-50/50">
                   <TableRow>
-                    <TableHead className="w-24 md:w-32 font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-3">Day</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-3">Breakfast</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-3">Lunch</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-3">Dinner</TableHead>
+                    <TableHead className="w-20 md:w-32 font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-2">Day</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-2">Breakfast</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-2">Lunch</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] md:text-[11px] tracking-widest text-slate-500 px-2">Dinner</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {DAYS.map((day) => (
                     <TableRow key={day} className="hover:bg-slate-50 transition-colors">
-                      <TableCell className="font-black text-slate-800 py-3 px-3 text-xs md:text-sm">{day}</TableCell>
-                      <TableCell className="text-[11px] md:text-sm font-medium text-slate-600 py-3 px-3 leading-tight">{localRoutine[day]?.breakfast || '-'}</TableCell>
-                      <TableCell className="text-[11px] md:text-sm font-medium text-slate-600 py-3 px-3 leading-tight">{localRoutine[day]?.lunch || '-'}</TableCell>
-                      <TableCell className="text-[11px] md:text-sm font-medium text-slate-600 py-3 px-3 leading-tight">{localRoutine[day]?.dinner || '-'}</TableCell>
+                      <TableCell className="font-black text-slate-800 py-3 px-2 text-[10px] md:text-sm">{day}</TableCell>
+                      <TableCell className="text-[10px] md:text-sm font-medium text-slate-600 py-3 px-2 leading-tight">{localRoutine[day]?.breakfast || '-'}</TableCell>
+                      <TableCell className="text-[10px] md:text-sm font-medium text-slate-600 py-3 px-2 leading-tight">{localRoutine[day]?.lunch || '-'}</TableCell>
+                      <TableCell className="text-[10px] md:text-sm font-medium text-slate-600 py-3 px-2 leading-tight">{localRoutine[day]?.dinner || '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
