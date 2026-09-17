@@ -123,7 +123,6 @@ export default function StudentMealPage() {
   }, [routines, userBranch])
 
   const [localMeals, setLocalMeals] = useState({ breakfast: false, lunch: false, dinner: false, autoMode: false })
-  const [mealChoices, setMealChoices] = useState<Record<string, string>>({})
   const [weeklySchedule, setWeeklySchedule] = useState<Record<string, any>>({})
   const [localGuestMeals, setLocalGuestMeals] = useState({ breakfast: 0, lunch: 0, dinner: 0 })
 
@@ -141,7 +140,7 @@ export default function StudentMealPage() {
       const isAlreadyDecidedForTomorrow = student.lastMealUpdateDateTomorrow === tomorrowYMD;
       
       if (isAlreadyDecidedForTomorrow) {
-        setLocalMeals({ ...student.mealStatus, autoMode: false });
+        setLocalMeals({ ...student.tomorrowMealStatus, autoMode: false });
         if (student.tomorrowGuestMeals) setLocalGuestMeals(student.tomorrowGuestMeals);
       } else {
         // Fresh start for tomorrow decision (Attendance Mode)
@@ -149,7 +148,6 @@ export default function StudentMealPage() {
         setLocalGuestMeals({ breakfast: 0, lunch: 0, dinner: 0 });
       }
 
-      if (student.mealChoices) setMealChoices(student.mealChoices);
       if (student.weeklySchedule) setWeeklySchedule(student.weeklySchedule);
       else {
         const defaultSched: any = {}
@@ -224,8 +222,6 @@ export default function StudentMealPage() {
     return isMounted && timeWindow.isActive && !hasAlreadyUpdatedForTomorrow;
   }, [isMounted, timeWindow.isActive, hasAlreadyUpdatedForTomorrow])
 
-  const tomorrowMenu = weeklyMenu.find(r => r.day === tomorrowDay)
-
   const handleUpdateMeals = useCallback(async () => {
     if (!studentRef || !timeWindow.isActive || isUpdating || !student) return
     
@@ -240,24 +236,20 @@ export default function StudentMealPage() {
     setIsUpdating(true)
     try {
       let finalMeals = { ...localMeals, autoMode: false }
-      let finalChoices = { ...mealChoices }
       let finalGuestMeals = { ...localGuestMeals }
-      
       const targetLabel = `${MONTHS[tomorrowDate.getMonth()]} ${tomorrowDate.getFullYear()}`;
       
       const updates: any = { 
-        mealStatus: finalMeals, 
-        mealChoices: finalChoices, 
+        tomorrowMealStatus: finalMeals, 
         weeklySchedule, 
         tomorrowGuestMeals: finalGuestMeals,
         lastMealUpdate: serverTimestamp(),
-        lastMealUpdateDateTomorrow: tomorrowYMD, // Locked for target date
+        lastMealUpdateDateTomorrow: tomorrowYMD, 
         updatedAt: serverTimestamp(),
         currentMonthLabel: targetLabel
       }
 
-      // Difference calculation between fresh start and manual decision
-      // Since it's a fresh decision for tomorrowYMD, we increment based on new finalMeals
+      // Add to current month counters (Tomorrow is the target)
       const diffB = (finalMeals.breakfast ? 1 : 0);
       const diffL = (finalMeals.lunch ? 1 : 0);
       const diffD = (finalMeals.dinner ? 1 : 0);
@@ -275,7 +267,7 @@ export default function StudentMealPage() {
     } finally { 
       setIsUpdating(false) 
     }
-  }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, mealChoices, localGuestMeals, weeklySchedule, tomorrowDay, tomorrowDate, tomorrowYMD, toast, mealConfig, stats]);
+  }, [student, studentRef, timeWindow.isActive, isUpdating, localMeals, localGuestMeals, weeklySchedule, tomorrowDay, tomorrowDate, tomorrowYMD, toast, mealConfig, stats]);
 
   const updateGuestCount = (type: 'breakfast' | 'lunch' | 'dinner', delta: number) => {
     const key = type === 'breakfast' ? 'breakfast' : (type === 'lunch' ? 'lunch' : 'dinner');

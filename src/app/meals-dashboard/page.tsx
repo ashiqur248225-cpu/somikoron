@@ -158,7 +158,7 @@ export default function AdminMealDashboardPage() {
     let choices = { lunch: {} as Record<string, number>, dinner: {} as Record<string, number> }
     let buildingData: Record<string, any> = {}
 
-    const { dayName, todayYMD, yesterdayYMD, tomorrowYMD, targetDateYMD } = viewContext
+    const { dayName, todayYMD, tomorrowYMD, targetDateYMD } = viewContext
     const bAvail = mealConfig.breakfastAvailable !== false;
     const lAvail = mealConfig.lunchAvailable !== false;
     const dAvail = mealConfig.dinnerAvailable !== false;
@@ -167,49 +167,36 @@ export default function AdminMealDashboardPage() {
       let willEatB = false; let willEatL = false; let willEatD = false;
       let choiceL = "Normal"; let choiceD = "Normal";
       
-      // Attendance Mode Logic:
-      // If we are looking at Tomorrow, it's a blank slate unless updated for tomorrow's target date today.
-      if (viewDay === 'tomorrow') {
-        const isDecidedForTomorrow = s.lastMealUpdateDateTomorrow === tomorrowYMD;
-        if (isDecidedForTomorrow) {
-          willEatB = !!s.mealStatus?.breakfast && bAvail;
-          willEatL = !!s.mealStatus?.lunch && lAvail;
-          willEatD = !!s.mealStatus?.dinner && dAvail;
-        } else {
-          willEatB = false; willEatL = false; willEatD = false;
-        }
-      } else if (viewDay === 'today') {
-        const isDecidedForTodayManually = s.lastMealUpdateDateToday === todayYMD;
-        const wasDecidedYesterdayForToday = s.lastMealUpdateDateTomorrow === todayYMD;
+      const isTomorrow = viewDay === 'tomorrow';
+      const isToday = viewDay === 'today';
+      const isYesterday = viewDay === 'yesterday';
 
-        if (isDecidedForTodayManually || wasDecidedYesterdayForToday) {
-          willEatB = !!s.mealStatus?.breakfast && bAvail;
-          willEatL = !!s.mealStatus?.lunch && lAvail;
-          willEatD = !!s.mealStatus?.dinner && dAvail;
-        } else if (s.mealStatus?.autoMode) {
-          const sched = s.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true }
-          willEatB = !!sched.breakfast && bAvail;
-          willEatL = !!sched.lunch && lAvail;
-          willEatD = !!sched.dinner && dAvail;
-        } else {
-          willEatB = !!s.mealStatus?.breakfast && bAvail;
-          willEatL = !!s.mealStatus?.lunch && lAvail;
-          willEatD = !!s.mealStatus?.dinner && dAvail;
-        }
+      const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : (isToday ? 'lastMealUpdateDateToday' : 'lastMealUpdateDateToday');
+      const statusObj = isTomorrow ? s.tomorrowMealStatus : s.mealStatus;
+      const guestObj = isTomorrow ? s.tomorrowGuestMeals : (isToday ? s.guestMeals : s.guestMeals);
+
+      const isDecided = s[decisionField] === targetDateYMD;
+
+      if (isDecided) {
+        willEatB = !!statusObj?.breakfast && bAvail;
+        willEatL = !!statusObj?.lunch && lAvail;
+        willEatD = !!statusObj?.dinner && dAvail;
+      } else if (isToday && s.mealStatus?.autoMode) {
+        const sched = s.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true }
+        willEatB = !!sched.breakfast && bAvail;
+        willEatL = !!sched.lunch && lAvail;
+        willEatD = !!sched.dinner && dAvail;
       } else {
-        // Yesterday (History)
-        willEatB = !!s.mealStatus?.breakfast && bAvail;
-        willEatL = !!s.mealStatus?.lunch && lAvail;
-        willEatD = !!s.mealStatus?.dinner && dAvail;
+        // Blanket OFF for un-decided future/past or manual mode without decision
+        willEatB = false; willEatL = false; willEatD = false;
       }
 
       choiceL = s.mealChoices?.lunch || "Normal";
       choiceD = s.mealChoices?.dinner || "Normal";
 
-      const gCount = (viewDay === 'tomorrow' && s.lastMealUpdateDateTomorrow === tomorrowYMD) || (viewDay === 'today' && (s.lastMealUpdateDateToday === todayYMD || s.lastMealUpdateDateTomorrow === todayYMD));
-      const combinedB = (willEatB ? 1 : 0) + (gCount ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0);
-      const combinedL = (willEatL ? 1 : 0) + (gCount ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0);
-      const combinedD = (willEatD ? 1 : 0) + (gCount ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0);
+      const combinedB = (willEatB ? 1 : 0) + (isDecided ? Number(guestObj?.breakfast || 0) : 0);
+      const combinedL = (willEatL ? 1 : 0) + (isDecided ? Number(guestObj?.lunch || 0) : 0);
+      const combinedD = (willEatD ? 1 : 0) + (isDecided ? Number(guestObj?.dinner || 0) : 0);
 
       if (combinedB > 0 || combinedL > 0 || combinedD > 0) {
         totals.breakfast += combinedB; totals.lunch += combinedL; totals.dinner += combinedD;
@@ -237,7 +224,7 @@ export default function AdminMealDashboardPage() {
           phone: s.phone, 
           isSelfB: willEatB, isSelfL: willEatL, isSelfD: willEatD, 
           choiceL, choiceD, 
-          guests: gCount ? (s.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 }, 
+          guests: isDecided ? (guestObj || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 }, 
           isAuto: s.mealStatus?.autoMode 
         })
       }
@@ -247,12 +234,8 @@ export default function AdminMealDashboardPage() {
   }, [students, viewContext, mealConfig, viewDay, isMounted])
 
   const canOverride = useMemo(() => {
-    if (userRole === 'Admin' || userRole === 'Branch Manager' || userRole === 'Building Manager') return true;
-    if (isKitchenStaff) {
-      return viewDay === 'today' || viewDay === 'tomorrow' || viewDay === 'yesterday';
-    }
-    return false;
-  }, [userRole, isKitchenStaff, viewDay]);
+    return userRole === 'Admin' || userRole === 'Branch Manager' || userRole === 'Building Manager' || isKitchenStaff;
+  }, [userRole, isKitchenStaff]);
 
   const handleToggleMeal = async (student: any, mealId: string) => {
     if (!canOverride) return;
@@ -261,38 +244,39 @@ export default function AdminMealDashboardPage() {
 
     try {
       const targetDateYMD = viewContext.targetDateYMD;
-      const decisionField = viewDay === 'tomorrow' ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
+      const isTomorrow = viewDay === 'tomorrow';
+      const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
+      const statusField = isTomorrow ? `tomorrowMealStatus.${mealId}` : `mealStatus.${mealId}`;
       
-      const isAlreadyDecidedForTargetDate = student[decisionField] === targetDateYMD;
+      const isAlreadyDecided = student[decisionField] === targetDateYMD;
+      const statusObj = isTomorrow ? student.tomorrowMealStatus : student.mealStatus;
 
       let currentVal = false;
-      if (isAlreadyDecidedForTargetDate) {
-        currentVal = !!student.mealStatus?.[mealId];
-      } else {
-        // Attendance mode: If first click for target date, start from OFF
-        currentVal = false;
+      if (isAlreadyDecided) {
+        currentVal = !!statusObj?.[mealId];
       }
       
       const sRef = doc(db, "students", student.id);
       const counterField = `currentMonth${mealId.charAt(0).toUpperCase() + mealId.slice(1)}`;
       
       const updateData: any = {
-        [`mealStatus.${mealId}`]: !currentVal,
+        [statusField]: !currentVal,
         [counterField]: increment(!currentVal ? 1 : -1),
         [decisionField]: targetDateYMD,
         updatedAt: serverTimestamp()
       }
 
-      // First decision logic: ensure a blank slate for the day's decision
-      if (!isAlreadyDecidedForTargetDate) {
+      // If first decision for target date, reset other fields for isolated attendance
+      if (!isAlreadyDecided) {
         updateData["mealStatus.autoMode"] = false;
         ['breakfast', 'lunch', 'dinner'].forEach(m => {
           if (m !== mealId) {
-            updateData[`mealStatus.${m}`] = false; // Attendance mode starts fresh
+             const f = isTomorrow ? `tomorrowMealStatus.${m}` : `mealStatus.${m}`;
+             updateData[f] = false;
           }
         });
-        // Clear guests if new day decision
-        updateData["tomorrowGuestMeals"] = { breakfast: 0, lunch: 0, dinner: 0 };
+        const guestField = isTomorrow ? "tomorrowGuestMeals" : "guestMeals";
+        updateData[guestField] = { breakfast: 0, lunch: 0, dinner: 0 };
       }
 
       await updateDoc(sRef, updateData);
@@ -304,16 +288,20 @@ export default function AdminMealDashboardPage() {
     if (!canOverride) return;
     try {
       const targetDateYMD = viewContext.targetDateYMD;
-      const decisionField = viewDay === 'tomorrow' ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
-      const isAlreadyDecided = student[decisionField] === targetDateYMD;
+      const isTomorrow = viewDay === 'tomorrow';
+      const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
+      const guestObjField = isTomorrow ? "tomorrowGuestMeals" : "guestMeals";
       
-      const currentGuestCount = isAlreadyDecided ? Number(student.tomorrowGuestMeals?.[mealId] || 0) : 0;
+      const isAlreadyDecided = student[decisionField] === targetDateYMD;
+      const guestObj = isTomorrow ? student.tomorrowGuestMeals : student.guestMeals;
+      
+      const currentGuestCount = isAlreadyDecided ? Number(guestObj?.[mealId] || 0) : 0;
       const newGuestCount = Math.max(0, currentGuestCount + delta);
       const diff = newGuestCount - currentGuestCount;
 
       const sRef = doc(db, "students", student.id);
       const updateData: any = { 
-        [`tomorrowGuestMeals.${mealId}`]: newGuestCount, 
+        [`${guestObjField}.${mealId}`]: newGuestCount, 
         currentMonthGuestMeals: increment(diff),
         [decisionField]: targetDateYMD,
         updatedAt: serverTimestamp() 
@@ -322,7 +310,8 @@ export default function AdminMealDashboardPage() {
       if (!isAlreadyDecided) {
         updateData["mealStatus.autoMode"] = false;
         ['breakfast', 'lunch', 'dinner'].forEach(m => {
-           updateData[`mealStatus.${m}`] = false; // Fresh start for attendance
+           const f = isTomorrow ? `tomorrowMealStatus.${m}` : `mealStatus.${m}`;
+           updateData[f] = false;
         });
       }
 
@@ -562,231 +551,186 @@ export default function AdminMealDashboardPage() {
         </TabsContent>
 
         <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300 space-y-6">
-          {!canOverride ? (
-            <div className="flex flex-col items-center justify-center p-20 bg-white rounded-3xl border border-dashed text-center space-y-4">
-              <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center text-destructive"><ShieldAlert size={32} /></div>
-              <div className="space-y-1">
-                <h3 className="text-xl font-black text-slate-800">Override Disabled</h3>
-                <p className="text-sm text-muted-foreground font-medium max-w-xs mx-auto">
-                  You can only manually override meals for "Tomorrow, Today, and Yesterday".
-                </p>
+          <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
+            <CardHeader className="bg-slate-50/50 border-b space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                <div>
+                  <CardTitle className="text-lg">Manual Overrides ({viewDay})</CardTitle>
+                  <CardDescription>
+                    {viewDay === 'tomorrow' ? "Attendance Mode: Blank slate for tomorrow's prep." : "Live Management: Final adjustments for the day."}
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="h-7 px-4 rounded-full border-primary text-primary font-black uppercase text-[10px]">
+                  Target: {viewContext.dayName}, {viewContext.dateStr}
+                </Badge>
               </div>
-              <Button onClick={() => setViewDay('today')} className="rounded-xl font-bold h-11 px-8 gap-2">Switch to Today <RefreshCw size={16}/></Button>
-            </div>
-          ) : (
-            <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
-              <CardHeader className="bg-slate-50/50 border-b space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                  <div>
-                    <CardTitle className="text-lg">Manual Overrides ({viewDay})</CardTitle>
-                    <CardDescription>
-                      {viewDay === 'tomorrow' ? "Attendance Mode: Blank slate for tomorrow's prep." : "Live Management: Final adjustments for the day."}
-                    </CardDescription>
-                  </div>
-                  <Badge variant="outline" className="h-7 px-4 rounded-full border-primary text-primary font-black uppercase text-[10px]">
-                    Target: {viewContext.dayName}, {viewContext.dateStr}
-                  </Badge>
-                </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Building</Label>
-                    <Select value={buildingFilter} onValueChange={setBuildingFilter}>
-                      <SelectTrigger className="h-10 bg-white rounded-xl border-none shadow-inner font-bold text-xs"><Building2 size={14} className="mr-2 text-primary"/><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                         <SelectItem value="all">Entire Branch</SelectItem>
-                         {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Room No.</Label>
-                    <div className="relative"><DoorOpen className="absolute left-3 top-2.5 h-4 w-4 text-primary"/><Input placeholder="Room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner text-xs font-bold" value={roomFilter} onChange={e => setRoomFilter(e.target.value)}/></div>
-                  </div>
-                  <div className="lg:col-span-2 space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Resident Search</Label>
-                    <div className="relative"><User className="absolute left-3 top-2.5 h-4 w-4 text-primary"/><Input placeholder="Name or phone..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner text-xs font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
-                  </div>
-                </div>
-              </CardHeader>
               
-              <CardContent className="p-0">
-                {/* Desktop View: Table */}
-                <div className="hidden md:block">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow className="border-none h-12">
-                        <TableHead className="font-black uppercase text-[10px] text-slate-500 pl-6">Student & Location</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Decision Status</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Mark Meals (B/L/D)</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] text-slate-500 text-right pr-6">Guests</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredOverrideStudents.map(s => {
-                        const targetDateYMD = viewContext.targetDateYMD;
-                        const todayYMD = viewContext.todayYMD;
-                        const yesterdayYMD = viewContext.yesterdayYMD;
-                        
-                        const isDecidedForTodayManually = s.lastMealUpdateDateToday === todayYMD;
-                        const isDecidedForTomorrowManually = s.lastMealUpdateDateTomorrow === targetDateYMD;
-                        const wasDecidedYesterdayForToday = s.lastMealUpdateDateTomorrow === todayYMD;
-
-                        let isActiveB = false; let isActiveL = false; let isActiveD = false;
-                        let isDecisionLocked = false;
-
-                        if (viewDay === 'tomorrow') {
-                          isDecisionLocked = isDecidedForTomorrowManually;
-                          if (isDecisionLocked) {
-                             isActiveB = !!s.mealStatus?.breakfast;
-                             isActiveL = !!s.mealStatus?.lunch;
-                             isActiveD = !!s.mealStatus?.dinner;
-                          } else {
-                             isActiveB = false; isActiveL = false; isActiveD = false; // Attendance mode fresh
-                          }
-                        } else if (viewDay === 'today') {
-                          isDecisionLocked = isDecidedForTodayManually || wasDecidedYesterdayForToday;
-                          if (isDecisionLocked) {
-                             isActiveB = !!s.mealStatus?.breakfast;
-                             isActiveL = !!s.mealStatus?.lunch;
-                             isActiveD = !!s.mealStatus?.dinner;
-                          } else if (s.mealStatus?.autoMode) {
-                             isActiveB = !!s.weeklySchedule?.[viewContext.dayName]?.breakfast;
-                             isActiveL = !!s.weeklySchedule?.[viewContext.dayName]?.lunch;
-                             isActiveD = !!s.weeklySchedule?.[viewContext.dayName]?.dinner;
-                          } else {
-                             isActiveB = !!s.mealStatus?.breakfast;
-                             isActiveL = !!s.mealStatus?.lunch;
-                             isActiveD = !!s.mealStatus?.dinner;
-                          }
-                        } else {
-                          // Yesterday
-                          isActiveB = !!s.mealStatus?.breakfast;
-                          isActiveL = !!s.mealStatus?.lunch;
-                          isActiveD = !!s.mealStatus?.dinner;
-                          isDecisionLocked = true;
-                        }
-                        
-                        const gCountB = isDecisionLocked ? Number(s.tomorrowGuestMeals?.breakfast || 0) : 0;
-                        const gCountL = isDecisionLocked ? Number(s.tomorrowGuestMeals?.lunch || 0) : 0;
-                        const gCountD = isDecisionLocked ? Number(s.tomorrowGuestMeals?.dinner || 0) : 0;
-
-                        return (
-                          <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors border-b last:border-none">
-                            <TableCell className="py-4 pl-6">
-                              <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
-                                <div className="space-y-0.5"><p className="font-black text-slate-800 text-sm">{s.name}</p><p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p></div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                               {isDecisionLocked ? <Badge className="bg-success/10 text-success text-[7px] font-black h-5 uppercase">Marked</Badge> : <Badge variant="outline" className="text-[7px] font-bold h-5 uppercase">Pending</Badge>}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <div className="flex justify-center gap-2">
-                                  {[{ id: 'breakfast', active: isActiveB, label: 'B' }, { id: 'lunch', active: isActiveL, label: 'L' }, { id: 'dinner', active: isActiveD, label: 'D' }].map(m => (
-                                    <button key={m.id} onClick={() => handleToggleMeal(s, m.id)} className={cn("h-9 w-9 rounded-lg flex items-center justify-center font-black text-xs shadow-sm transition-all", m.active ? "bg-primary text-white scale-105" : "bg-slate-100 text-slate-300 hover:bg-slate-200")}>
-                                      {m.label}
-                                    </button>
-                                  ))}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right pr-6">
-                               <div className="flex justify-end gap-2">
-                                  {['breakfast', 'lunch', 'dinner'].map(mId => {
-                                    const val = mId === 'breakfast' ? gCountB : (mId === 'lunch' ? gCountL : gCountD);
-                                    return (
-                                      <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-lg p-1 border">
-                                         <span className="text-[6px] font-black text-muted-foreground uppercase">{mId[0]}G</span>
-                                         <div className="flex items-center gap-2">
-                                            <button onClick={() => handleUpdateGuestMeal(s, mId, -1)} disabled={val <= 0} className="h-5 w-4 flex items-center justify-center text-slate-300"><Minus size={8}/></button>
-                                            <span className="text-[10px] font-black text-primary">{val}</span>
-                                            <button onClick={() => handleUpdateGuestMeal(s, mId, 1)} className="h-5 w-4 flex items-center justify-center text-slate-300"><Plus size={8}/></button>
-                                         </div>
-                                      </div>
-                                    )
-                                  })}
-                               </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Building</Label>
+                  <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                    <SelectTrigger className="h-10 bg-white rounded-xl border-none shadow-inner font-bold text-xs"><Building2 size={14} className="mr-2 text-primary"/><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Entire Branch</SelectItem>
+                        {buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
-
-                {/* Mobile View: Cards */}
-                <div className="md:hidden space-y-3 p-4 bg-slate-50/50">
-                   {filteredOverrideStudents.map(s => {
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Room No.</Label>
+                  <div className="relative"><DoorOpen className="absolute left-3 top-2.5 h-4 w-4 text-primary"/><Input placeholder="Room..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner text-xs font-bold" value={roomFilter} onChange={e => setRoomFilter(e.target.value)}/></div>
+                </div>
+                <div className="lg:col-span-2 space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Resident Search</Label>
+                  <div className="relative"><User className="absolute left-3 top-2.5 h-4 w-4 text-primary"/><Input placeholder="Name or phone..." className="pl-10 h-10 border-none bg-white rounded-xl shadow-inner text-xs font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
+                </div>
+              </div>
+            </CardHeader>
+            
+            <CardContent className="p-0">
+              {/* Desktop View: Table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow className="border-none h-12">
+                      <TableHead className="font-black uppercase text-[10px] text-slate-500 pl-6">Student & Location</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Decision Status</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Mark Meals (B/L/D)</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-slate-500 text-right pr-6">Guests</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredOverrideStudents.map(s => {
                       const targetDateYMD = viewContext.targetDateYMD;
-                      const todayYMD = viewContext.todayYMD;
+                      const isTomorrow = viewDay === 'tomorrow';
+                      const isToday = viewDay === 'today';
+                      const isYesterday = viewDay === 'yesterday';
+
+                      const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : (isToday ? 'lastMealUpdateDateToday' : 'lastMealUpdateDateToday');
+                      const isDecisionLocked = s[decisionField] === targetDateYMD;
                       
-                      const isDecidedForTodayManually = s.lastMealUpdateDateToday === todayYMD;
-                      const isDecidedForTomorrowManually = s.lastMealUpdateDateTomorrow === targetDateYMD;
-                      const wasDecidedYesterdayForToday = s.lastMealUpdateDateTomorrow === todayYMD;
+                      const statusObj = isTomorrow ? s.tomorrowMealStatus : s.mealStatus;
+                      const guestObj = isTomorrow ? s.tomorrowGuestMeals : s.guestMeals;
 
                       let isActiveB = false; let isActiveL = false; let isActiveD = false;
-                      let isDecisionLocked = false;
 
-                      if (viewDay === 'tomorrow') {
-                        isDecisionLocked = isDecidedForTomorrowManually;
-                        if (isDecisionLocked) {
-                           isActiveB = !!s.mealStatus?.breakfast; isActiveL = !!s.mealStatus?.lunch; isActiveD = !!s.mealStatus?.dinner;
-                        }
-                      } else if (viewDay === 'today') {
-                        isDecisionLocked = isDecidedForTodayManually || wasDecidedYesterdayForToday;
-                        if (isDecisionLocked) {
-                           isActiveB = !!s.mealStatus?.breakfast; isActiveL = !!s.mealStatus?.lunch; isActiveD = !!s.mealStatus?.dinner;
-                        } else if (s.mealStatus?.autoMode) {
-                           isActiveB = !!s.weeklySchedule?.[viewContext.dayName]?.breakfast; isActiveL = !!s.weeklySchedule?.[viewContext.dayName]?.lunch; isActiveD = !!s.weeklySchedule?.[viewContext.dayName]?.dinner;
-                        } else {
-                           isActiveB = !!s.mealStatus?.breakfast; isActiveL = !!s.mealStatus?.lunch; isActiveD = !!s.mealStatus?.dinner;
-                        }
-                      } else {
-                        isActiveB = !!s.mealStatus?.breakfast; isActiveL = !!s.mealStatus?.lunch; isActiveD = !!s.mealStatus?.dinner;
-                        isDecisionLocked = true;
+                      if (isDecisionLocked) {
+                          isActiveB = !!statusObj?.breakfast;
+                          isActiveL = !!statusObj?.lunch;
+                          isActiveD = !!statusObj?.dinner;
+                      } else if (isToday && s.mealStatus?.autoMode) {
+                          isActiveB = !!s.weeklySchedule?.[viewContext.dayName]?.breakfast;
+                          isActiveL = !!s.weeklySchedule?.[viewContext.dayName]?.lunch;
+                          isActiveD = !!s.weeklySchedule?.[viewContext.dayName]?.dinner;
                       }
+                      
+                      const gCountB = isDecisionLocked ? Number(guestObj?.breakfast || 0) : 0;
+                      const gCountL = isDecisionLocked ? Number(guestObj?.lunch || 0) : 0;
+                      const gCountD = isDecisionLocked ? Number(guestObj?.dinner || 0) : 0;
 
                       return (
-                        <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
-                           <CardContent className="p-4 space-y-4">
-                              <div className="flex justify-between items-start">
-                                 <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-black shadow-sm">{s.roomNumber}</div>
-                                    <div><h3 className="font-black text-slate-800 text-sm">{s.name}</h3><p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p></div>
-                                 </div>
-                                 {isDecisionLocked && <Badge className="bg-success text-[7px] font-black uppercase h-5">Marked</Badge>}
-                              </div>
-                              <Separator className="opacity-50" />
-                              <div className="grid grid-cols-2 gap-4">
-                                 <div className="space-y-2">
-                                    <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Self Meals</p>
-                                    <div className="flex gap-2">
-                                       {[{ id: 'breakfast', active: isActiveB, label: 'B' }, { id: 'lunch', active: isActiveL, label: 'L' }, { id: 'dinner', active: isActiveD, label: 'D' }].map(m => (
-                                          <button key={m.id} onClick={() => handleToggleMeal(s, m.id)} className={cn("h-10 flex-1 rounded-xl flex items-center justify-center font-black shadow-sm transition-all", m.active ? "bg-primary text-white" : "bg-slate-100 text-slate-300")}>{m.label}</button>
-                                       ))}
+                        <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors border-b last:border-none">
+                          <TableCell className="py-4 pl-6">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
+                              <div className="space-y-0.5"><p className="font-black text-slate-800 text-sm">{s.name}</p><p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p></div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                              {isDecisionLocked ? <Badge className="bg-success/10 text-success text-[7px] font-black h-5 uppercase">Marked</Badge> : <Badge variant="outline" className="text-[7px] font-bold h-5 uppercase">Pending</Badge>}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex justify-center gap-2">
+                                {[{ id: 'breakfast', active: isActiveB, label: 'B' }, { id: 'lunch', active: isActiveL, label: 'L' }, { id: 'dinner', active: isActiveD, label: 'D' }].map(m => (
+                                  <button key={m.id} onClick={() => handleToggleMeal(s, m.id)} className={cn("h-9 w-9 rounded-lg flex items-center justify-center font-black text-xs shadow-sm transition-all", m.active ? "bg-primary text-white scale-105" : "bg-slate-100 text-slate-300 hover:bg-slate-200")}>
+                                    {m.label}
+                                  </button>
+                                ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right pr-6">
+                              <div className="flex justify-end gap-2">
+                                {['breakfast', 'lunch', 'dinner'].map(mId => {
+                                  const val = mId === 'breakfast' ? gCountB : (mId === 'lunch' ? gCountL : gCountD);
+                                  return (
+                                    <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-lg p-1 border">
+                                        <span className="text-[6px] font-black text-muted-foreground uppercase">{mId[0]}G</span>
+                                        <div className="flex items-center gap-2">
+                                          <button onClick={() => handleUpdateGuestMeal(s, mId, -1)} disabled={val <= 0} className="h-5 w-4 flex items-center justify-center text-slate-300"><Minus size={8}/></button>
+                                          <span className="text-[10px] font-black text-primary">{val}</span>
+                                          <button onClick={() => handleUpdateGuestMeal(s, mId, 1)} className="h-5 w-4 flex items-center justify-center text-slate-300"><Plus size={8}/></button>
+                                        </div>
                                     </div>
-                                 </div>
-                                 <div className="space-y-2">
-                                    <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest text-right">Guests</p>
-                                    <div className="flex gap-1 justify-end">
-                                       {['breakfast', 'lunch', 'dinner'].map(mId => (
-                                          <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-xl border p-1 flex-1">
-                                             <span className="text-[6px] font-black opacity-40 uppercase">{mId[0]}G</span>
-                                             <span className="text-[10px] font-black text-primary">{isDecisionLocked ? Number(s.tomorrowGuestMeals?.[mId] || 0) : 0}</span>
-                                          </div>
-                                       ))}
-                                    </div>
-                                 </div>
+                                  )
+                                })}
                               </div>
-                           </CardContent>
-                        </Card>
-                      )
-                   })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile View: Cards */}
+              <div className="md:hidden space-y-3 p-4 bg-slate-50/50">
+                  {filteredOverrideStudents.map(s => {
+                    const targetDateYMD = viewContext.targetDateYMD;
+                    const isTomorrow = viewDay === 'tomorrow';
+                    const isToday = viewDay === 'today';
+
+                    const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
+                    const isDecisionLocked = s[decisionField] === targetDateYMD;
+                    const statusObj = isTomorrow ? s.tomorrowMealStatus : s.mealStatus;
+                    const guestObj = isTomorrow ? s.tomorrowGuestMeals : s.guestMeals;
+
+                    let isActiveB = false; let isActiveL = false; let isActiveD = false;
+
+                    if (isDecisionLocked) {
+                        isActiveB = !!statusObj?.breakfast; isActiveL = !!statusObj?.lunch; isActiveD = !!statusObj?.dinner;
+                    } else if (isToday && s.mealStatus?.autoMode) {
+                        isActiveB = !!s.weeklySchedule?.[viewContext.dayName]?.breakfast; isActiveL = !!s.weeklySchedule?.[viewContext.dayName]?.lunch; isActiveD = !!s.weeklySchedule?.[viewContext.dayName]?.dinner;
+                    }
+
+                    return (
+                      <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                          <CardContent className="p-4 space-y-4">
+                            <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-black shadow-sm">{s.roomNumber}</div>
+                                  <div><h3 className="font-black text-slate-800 text-sm">{s.name}</h3><p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p></div>
+                                </div>
+                                {isDecisionLocked && <Badge className="bg-success text-[7px] font-black uppercase h-5">Marked</Badge>}
+                            </div>
+                            <Separator className="opacity-50" />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Self Meals</p>
+                                  <div className="flex gap-2">
+                                      {[{ id: 'breakfast', active: isActiveB, label: 'B' }, { id: 'lunch', active: isActiveL, label: 'L' }, { id: 'dinner', active: isActiveD, label: 'D' }].map(m => (
+                                        <button key={m.id} onClick={() => handleToggleMeal(s, m.id)} className={cn("h-10 flex-1 rounded-xl flex items-center justify-center font-black shadow-sm transition-all", m.active ? "bg-primary text-white" : "bg-slate-100 text-slate-300")}>{m.label}</button>
+                                      ))}
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest text-right">Guests</p>
+                                  <div className="flex gap-1 justify-end">
+                                      {['breakfast', 'lunch', 'dinner'].map(mId => (
+                                        <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-xl border p-1 flex-1">
+                                            <span className="text-[6px] font-black opacity-40 uppercase">{mId[0]}G</span>
+                                            <span className="text-[10px] font-black text-primary">{isDecisionLocked ? Number(guestObj?.[mId] || 0) : 0}</span>
+                                        </div>
+                                      ))}
+                                  </div>
+                                </div>
+                            </div>
+                          </CardContent>
+                      </Card>
+                    )
+                  })}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

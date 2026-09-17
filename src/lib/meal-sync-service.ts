@@ -2,7 +2,7 @@
  * @fileOverview Authoritative Meal & Utility Synchronization Service
  * Handles background syncing of missing meals for students in Auto Mode
  * and automatic monthly charging of Utility Bills (Cooking Bill).
- * Ensures idempotency and respects manual decisions tracked via dual target-date fields.
+ * Ensures idempotency and respects manual decisions tracked via isolated Today/Tomorrow fields.
  */
 
 import { Firestore, doc, getDoc, collection, query, where, getDocs, writeBatch, increment, serverTimestamp } from "firebase/firestore";
@@ -44,18 +44,13 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
 
     const batch = writeBatch(db);
     const today = new Date();
-    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-    
-    const yesterdayStr = getLocYMD(yesterday);
     const todayStr = getLocYMD(today);
-    const tomorrowStr = getLocYMD(tomorrow);
-    
     const currentMonthLabel = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
     
     let syncCount = 0;
     let totalMealsAdded = 0;
     let utilityChargesCount = 0;
+    let promotionCount = 0;
 
     for (const student of students) {
       let studentUpdateData: any = {};
@@ -72,13 +67,27 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
         }
       }
 
-      // 2. Missing Meal Sync (Respecting Manual Attendance)
-      // If student has marked attendance for today or admin has overridden today, skip auto-sync for today.
-      const hasManualToday = student.lastMealUpdateDateToday === todayStr || student.lastMealUpdateDateTomorrow === todayStr;
+      // 2. Meal Promotion (Tomorrow -> Today Handover)
+      // If yesterday a decision was made for today (todayStr), promote it to current mealStatus
+      if (student.lastMealUpdateDateTomorrow === todayStr && student.lastMealUpdateDateToday !== todayStr) {
+          studentUpdateData.mealStatus = student.tomorrowMealStatus || { breakfast: false, lunch: false, dinner: false };
+          studentUpdateData.guestMeals = student.tomorrowGuestMeals || { breakfast: 0, lunch: 0, dinner: 0 };
+          studentUpdateData.lastMealUpdateDateToday = todayStr;
+          
+          // Clear future field for next cycle
+          studentUpdateData.tomorrowMealStatus = { breakfast: false, lunch: false, dinner: false };
+          studentUpdateData.tomorrowGuestMeals = { breakfast: 0, lunch: 0, dinner: 0 };
+          
+          needsUpdate = true;
+          promotionCount++;
+      }
+
+      // 3. Missing Meal Sync (Respecting Isolated Decision Fields)
+      const hasManualToday = student.lastMealUpdateDateToday === todayStr;
 
       if (student.mealStatus?.autoMode && !hasManualToday) {
-        // Find the last date that was successfully updated/synced
-        const lastSyncedDateStr = student.lastMealUpdateDate || student.lastMealUpdateDateToday || student.lastMealUpdateDateTomorrow;
+        // Find the authoritative last update/sync date
+        const lastSyncedDateStr = student.lastMealUpdateDate || student.lastMealUpdateDateToday;
         
         if (lastSyncedDateStr && lastSyncedDateStr < todayStr) {
           syncCount++;
@@ -91,7 +100,7 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
             checkDate.setDate(checkDate.getDate() + 1);
             const checkYMD = getLocYMD(checkDate);
             
-            // Final safety: if checkYMD is today and manual is already set, break
+            // Safety: if checkYMD is today and manual today is already set (unlikely in this block), skip
             if (checkYMD === todayStr && hasManualToday) break;
 
             const dayName = WEEKDAYS[checkDate.getDay()];
@@ -117,11 +126,17 @@ export async function syncMissingAutoMeals(db: Firestore, branch: string, specif
       }
     }
 
-    if (syncCount > 0 || utilityChargesCount > 0) {
+    if (syncCount > 0 || utilityChargesCount > 0 || promotionCount > 0) {
       await batch.commit();
     }
 
-    return { success: true, syncedStudents: syncCount, mealsAdded: totalMealsAdded, utilityCharges: utilityChargesCount };
+    return { 
+        success: true, 
+        syncedStudents: syncCount, 
+        promoted: promotionCount,
+        mealsAdded: totalMealsAdded, 
+        utilityCharges: utilityChargesCount 
+    };
   } catch (error: any) {
     console.error("[SYNC_ERROR]", error);
     return { success: false, error: error.message };
