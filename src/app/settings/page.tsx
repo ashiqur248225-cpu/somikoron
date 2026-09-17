@@ -454,44 +454,86 @@ export default function SettingsPage() {
     }
   }, [activeFlyer]);
 
-  // CATEGORY MANAGEMENT LOGIC (UPGRADED TO 3 LEVELS)
+  // CATEGORY MANAGEMENT LOGIC (UPGRADED TO 3 LEVELS) - Fixed with robust state manipulation
   const handleAddMarketCat = () => {
-    const name = prompt("Enter New Market Category Name:")
-    if (name && !marketCats[name]) {
-      setMarketCats({ ...marketCats, [name]: { "General": [] } })
-    }
+    const name = window.prompt("Enter New Market Category Name:")
+    if (!name) return;
+    
+    setMarketCats(prev => {
+      if (prev[name]) {
+        toast({ variant: "destructive", description: "Category already exists" });
+        return prev;
+      }
+      return { ...prev, [name]: { "General": [] } };
+    });
   }
 
   const handleAddMarketSubCat = (catName: string) => {
-    const sub = prompt(`Enter new sub-category for ${catName}:`)
-    if (sub && !marketCats[catName][sub]) {
-      setMarketCats({ ...marketCats, [catName]: { ...marketCats[catName], [sub]: [] } })
-    }
+    const sub = window.prompt(`Enter new sub-category for ${catName}:`)
+    if (!sub) return;
+
+    setMarketCats(prev => {
+      const currentCat = prev[catName] || {};
+      if (currentCat[sub]) {
+        toast({ variant: "destructive", description: "Sub-category already exists" });
+        return prev;
+      }
+      return { 
+        ...prev, 
+        [catName]: { ...currentCat, [sub]: [] } 
+      };
+    });
   }
 
   const handleAddMarketItem = (catName: string, subName: string) => {
-    const item = prompt(`Enter new item for ${catName} -> ${subName}:`)
-    if (item && !marketCats[catName][subName].includes(item)) {
-      setMarketCats({ ...marketCats, [catName]: { ...marketCats[catName], [subName]: [...marketCats[catName][subName], item] } })
-    }
+    const item = window.prompt(`Enter new item for ${catName} &rarr; ${subName}:`)
+    if (!item) return;
+
+    setMarketCats(prev => {
+      const cat = prev[catName] || {};
+      const subItems = cat[subName] || [];
+      if (subItems.includes(item)) {
+        toast({ variant: "destructive", description: "Item already exists" });
+        return prev;
+      }
+      return {
+        ...prev,
+        [catName]: {
+          ...cat,
+          [subName]: [...subItems, item]
+        }
+      };
+    });
   }
 
   const handleRemoveMarketCat = (name: string) => {
-    const { [name]: removed, ...rest } = marketCats
-    setMarketCats(rest)
+    if (!window.confirm(`Delete entire category "${name}"?`)) return;
+    setMarketCats(prev => {
+      const { [name]: removed, ...rest } = prev;
+      return rest;
+    });
   }
 
   const handleRemoveMarketSubCat = (catName: string, subName: string) => {
-    const { [subName]: removed, ...rest } = marketCats[catName]
-    setMarketCats({ ...marketCats, [catName]: rest })
+    if (!window.confirm(`Delete sub-category "${subName}"?`)) return;
+    setMarketCats(prev => {
+      const { [subName]: removed, ...rest } = prev[catName];
+      return { ...prev, [catName]: rest };
+    });
   }
 
   const handleRemoveMarketItem = (catName: string, subName: string, itemName: string) => {
-    setMarketCats({ ...marketCats, [catName]: { ...marketCats[catName], [subName]: marketCats[catName][subName].filter(i => i !== itemName) } })
+    setMarketCats(prev => ({ 
+      ...prev, 
+      [catName]: { 
+        ...prev[catName], 
+        [subName]: prev[catName][subName].filter(i => i !== itemName) 
+      } 
+    }));
   }
 
   const handleAddExpenseCat = () => {
-    const label = prompt("Enter Expense Category Label:")
+    const label = window.prompt("Enter Expense Category Label:")
     if (label) {
       const id = label.toLowerCase().replace(/\s+/g, '_')
       setExpenseCats([...expenseCats, { id, label }])
@@ -911,7 +953,6 @@ export default function SettingsPage() {
           </div>
           <DialogFooter><Button onClick={() => setIsSecurityDialogOpen(false)} className="w-full">Close</Button></DialogFooter>
         </DialogContent>
-      </Dialog>
 
       {activeFlyer && (
         <div className="print-only print-report-container flex flex-col items-center justify-center h-[297mm] w-[210mm] border-[10mm] border-primary bg-white">
