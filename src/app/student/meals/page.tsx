@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
@@ -33,7 +32,7 @@ import {
   Send
 } from "lucide-react"
 import { useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase"
-import { doc, serverTimestamp, updateDoc, collection, query, where, increment, addDoc, getDocs, limit } from "firebase/firestore"
+import { doc, serverTimestamp, updateDoc, setDoc, collection, query, where, increment, addDoc, getDocs, limit } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -505,7 +504,7 @@ export default function StudentMealPage() {
 
                       {isAvailable && (
                         <div className="pt-2 flex items-center justify-between bg-white/40 p-3 rounded-2xl border border-dashed border-success/20">
-                           <div className="flex items-center gap-2">
+                           <div className="flex items-center gap-3">
                               <Users size={14} className="text-primary" />
                               <span className="text-[10px] font-bold uppercase text-slate-600">Guest Meals</span>
                            </div>
