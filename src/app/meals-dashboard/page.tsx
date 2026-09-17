@@ -86,7 +86,7 @@ export default function AdminMealDashboardPage() {
     }
   }, [])
 
-  const isKitchenStaff = useMemo(() => ['Staff', 'Worker'].includes(userRole), [userRole]);
+  const isKitchenStaff = useMemo(() => ['Staff', 'Worker', 'General Staff'].includes(userRole), [userRole]);
 
   useEffect(() => {
     if (!userBranch || isSyncing) return;
@@ -224,9 +224,12 @@ export default function AdminMealDashboardPage() {
   }, [students, viewContext, mealConfig, viewDay, isMounted])
 
   const canOverride = useMemo(() => {
+    // If they are admin/manager, always allow
     if (userRole === 'Admin' || userRole === 'Branch Manager' || userRole === 'Building Manager') return true;
+    
+    // For kitchen staff, allow Yesterday, Today, Tomorrow (fixed role list)
     if (isKitchenStaff) {
-      return viewDay === 'today' || viewDay === 'tomorrow';
+      return viewDay === 'today' || viewDay === 'tomorrow' || viewDay === 'yesterday';
     }
     return false;
   }, [userRole, isKitchenStaff, viewDay]);
@@ -304,7 +307,7 @@ export default function AdminMealDashboardPage() {
 
   const handlePrint = () => { if (typeof window !== "undefined") window.print(); }
 
-  if (!isMounted || studentsLoading || configLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase">Syncing Dashboard...</p></div>
+  if (!isMounted || studentsLoading || configLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase animate-pulse">Syncing Dashboard...</p></div>
 
   const filteredOverrideStudents = students?.filter(s => {
     const search = searchTerm.toLowerCase();
@@ -318,7 +321,7 @@ export default function AdminMealDashboardPage() {
     <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
       <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
-          {['Admin', 'Branch Manager', 'Building Manager'].includes(userRole) && <SidebarTrigger className="-ml-1" />}
+          {['Admin', 'Branch Manager', 'Building Manager', 'Staff', 'Worker', 'General Staff'].includes(userRole) && <SidebarTrigger className="-ml-1" />}
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Analytics</h1>
@@ -334,7 +337,7 @@ export default function AdminMealDashboardPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {['Admin', 'Branch Manager', 'Building Manager'].includes(userRole) && <SelectItem value="yesterday">Yesterday</SelectItem>}
+                <SelectItem value="yesterday">Yesterday</SelectItem>
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="tomorrow">Tomorrow</SelectItem>
               </SelectContent>
@@ -352,7 +355,7 @@ export default function AdminMealDashboardPage() {
         </TabsList>
 
         <TabsContent value="summary" className="space-y-8 animate-in fade-in duration-500">
-           {/* Prep Cards Section - Same as original */}
+           {/* Prep Cards Section */}
            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl group hover:shadow-md transition-all">
               <CardContent className="pt-6">
@@ -540,7 +543,7 @@ export default function AdminMealDashboardPage() {
               <div className="space-y-1">
                 <h3 className="text-xl font-black text-slate-800">Override Disabled</h3>
                 <p className="text-sm text-muted-foreground font-medium max-w-xs mx-auto">
-                  You can only manually override meals for "Today" and "Tomorrow".
+                  Your current role or selected day does not permit manual overrides.
                 </p>
               </div>
               <Button onClick={() => setViewDay('today')} className="rounded-xl font-bold h-11 px-8 gap-2">Switch to Today <RefreshCw size={16}/></Button>
@@ -587,7 +590,7 @@ export default function AdminMealDashboardPage() {
                     <TableHeader className="bg-slate-50">
                       <TableRow className="border-none h-12">
                         <TableHead className="font-black uppercase text-[10px] text-slate-500 pl-6">Student & Location</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Decision Date Status</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Decision Status</TableHead>
                         <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Meals (B/L/D)</TableHead>
                         <TableHead className="font-black uppercase text-[10px] text-slate-500 text-right pr-6">Guests</TableHead>
                       </TableRow>
