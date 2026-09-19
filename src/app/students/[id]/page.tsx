@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -190,7 +189,6 @@ export default function StudentDetailsPage({
     }
   }, [student])
 
-  // Populate Migration Form when dialog opens
   useEffect(() => {
     if (isMigrationDialogOpen && student) {
       const dues = Object.entries(student.duesBreakdown || {}).map(([label, data]: any) => ({
@@ -639,7 +637,6 @@ export default function StudentDetailsPage({
     setIsUpdating(true);
     const batch = writeBatch(db);
     try {
-      // 1. Release the seat if student is active
       if (student.isActive) {
         const bRef = doc(db, "buildings", student.buildingId);
         const bSnap = await getDoc(bRef);
@@ -667,7 +664,6 @@ export default function StudentDetailsPage({
         }
       }
 
-      // 2. Delete student doc
       batch.delete(studentRef);
       await batch.commit();
       
@@ -1081,7 +1077,7 @@ export default function StudentDetailsPage({
             <Separator />
             
             <div className="space-y-4">
-               <div className="flex justify-between items-center"><h3 className="font-bold text-slate-700">Dues Breakdown</h3><Button size="sm" variant="outline" onClick={() => setMigrationForm({...migrationForm, dues: [...migrationForm.dues, { id: Math.random().toString(36).substr(2,9), month: 'January', year: '2024', amount: '0' }]})}><Plus size={14} className="mr-1"/> Add Month</Button></div>
+               <div className="flex justify-between items-center"><h3 className="font-bold text-slate-700">Dues Breakdown</h3><Button size="sm" variant="outline" onClick={() => setMigrationForm({...migrationForm, dues: [...migrationForm.dues, { id: Math.random().toString(36).substr(2,9), month: MONTHS[new Date().getMonth()], year: new Date().getFullYear().toString(), amount: String(student?.monthlyRent || 0) }]})}><Plus size={14} className="mr-1"/> Add Month</Button></div>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {migrationForm.dues.map((d, i) => (
                     <div key={d.id} className="p-3 bg-slate-50 rounded-xl border flex items-end gap-2">
@@ -1089,7 +1085,7 @@ export default function StudentDetailsPage({
                           <Label className="text-[8px]">Period</Label>
                           <div className="flex gap-1"><Select value={d.month} onValueChange={v => setMigrationForm({...migrationForm, dues: migrationForm.dues.map(x => x.id === d.id ? {...x, month: v} : x)})}><SelectTrigger className="h-8 text-[10px]"><SelectValue/></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select><Select value={d.year} onValueChange={v => setMigrationForm({...migrationForm, dues: migrationForm.dues.map(x => x.id === d.id ? {...x, year: v} : x)})}><SelectTrigger className="h-8 text-[10px]"><SelectValue/></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
                        </div>
-                       <div className="w-24 space-y-1"><Label className="text-[8px]">Amount</Label><Input type="number" value={d.amount} onChange={e => updateDueEntry(d.id, 'amount', e.target.value)} className="h-8 text-[10px] font-bold" /></div>
+                       <div className="w-24 space-y-1"><Label className="text-[8px]">Amount</Label><Input type="number" value={d.amount} onChange={e => setMigrationForm({...migrationForm, dues: migrationForm.dues.map(x => x.id === d.id ? {...x, amount: e.target.value} : x)})} className="h-8 text-[10px] font-bold" /></div>
                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setMigrationForm({...migrationForm, dues: migrationForm.dues.filter(x => x.id !== d.id)})}><X size={14}/></Button>
                     </div>
                   ))}
@@ -1205,7 +1201,6 @@ export default function StudentDetailsPage({
         </DialogContent>
       </Dialog>
 
-      {/* DELETE DIALOG */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>

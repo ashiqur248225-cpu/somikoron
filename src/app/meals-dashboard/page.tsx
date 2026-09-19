@@ -51,6 +51,7 @@ import { useToast } from "@/hooks/use-toast"
 import { syncMissingAutoMeals } from "@/lib/meal-sync-service"
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+const MEAL_CHOICE_OPTIONS = ["Normal", "Beef", "Chicken", "Fish", "Egg", "Vegetable"]
 
 const getLocYMD = (date: Date) => {
   const y = date.getFullYear();
@@ -187,7 +188,6 @@ export default function AdminMealDashboardPage() {
         willEatL = !!sched.lunch && lAvail;
         willEatD = !!sched.dinner && dAvail;
       } else {
-        // Blanket OFF for un-decided future/past or manual mode without decision
         willEatB = false; willEatL = false; willEatD = false;
       }
 
@@ -266,7 +266,6 @@ export default function AdminMealDashboardPage() {
         updatedAt: serverTimestamp()
       }
 
-      // If first decision for target date, reset other fields for isolated attendance
       if (!isAlreadyDecided) {
         updateData["mealStatus.autoMode"] = false;
         ['breakfast', 'lunch', 'dinner'].forEach(m => {
@@ -320,6 +319,20 @@ export default function AdminMealDashboardPage() {
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
   }
 
+  const handleUpdateChoice = async (studentId: string, mealType: 'lunch' | 'dinner', choice: string) => {
+    if (!canOverride) return;
+    try {
+      const sRef = doc(db, "students", studentId);
+      await updateDoc(sRef, {
+        [`mealChoices.${mealType}`]: choice,
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Choice Saved", description: `${mealType} choice set to ${choice}` });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    }
+  }
+
   const handlePrint = () => { if (typeof window !== "undefined") window.print(); }
 
   if (!isMounted || studentsLoading || configLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase animate-pulse">Syncing Dashboard...</p></div>
@@ -334,7 +347,7 @@ export default function AdminMealDashboardPage() {
 
   return (
     <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
-      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-4 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-6 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur md:static md:m-0 md:h-auto md:border-none md:bg-transparent md:px-0 md:backdrop-blur-none print:hidden">
         <div className="flex items-center gap-2">
           {['Admin', 'Branch Manager', 'Building Manager', 'Staff', 'Worker', 'General Staff'].includes(userRole) && <SidebarTrigger className="-ml-1" />}
           <Separator orientation="vertical" className="mr-2 h-4 md:hidden" />
@@ -588,14 +601,13 @@ export default function AdminMealDashboardPage() {
             </CardHeader>
             
             <CardContent className="p-0">
-              {/* Desktop View: Table */}
               <div className="hidden md:block">
                 <Table>
                   <TableHeader className="bg-slate-50">
                     <TableRow className="border-none h-12">
                       <TableHead className="font-black uppercase text-[10px] text-slate-500 pl-6">Student & Location</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Decision Status</TableHead>
                       <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Mark Meals (B/L/D)</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Meal Choices</TableHead>
                       <TableHead className="font-black uppercase text-[10px] text-slate-500 text-right pr-6">Guests</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -604,24 +616,16 @@ export default function AdminMealDashboardPage() {
                       const targetDateYMD = viewContext.targetDateYMD;
                       const isTomorrow = viewDay === 'tomorrow';
                       const isToday = viewDay === 'today';
-                      const isYesterday = viewDay === 'yesterday';
-
                       const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : (isToday ? 'lastMealUpdateDateToday' : 'lastMealUpdateDateToday');
                       const isDecisionLocked = s[decisionField] === targetDateYMD;
-                      
                       const statusObj = isTomorrow ? s.tomorrowMealStatus : s.mealStatus;
                       const guestObj = isTomorrow ? s.tomorrowGuestMeals : s.guestMeals;
 
                       let isActiveB = false; let isActiveL = false; let isActiveD = false;
-
                       if (isDecisionLocked) {
-                          isActiveB = !!statusObj?.breakfast;
-                          isActiveL = !!statusObj?.lunch;
-                          isActiveD = !!statusObj?.dinner;
+                          isActiveB = !!statusObj?.breakfast; isActiveL = !!statusObj?.lunch; isActiveD = !!statusObj?.dinner;
                       } else if (isToday && s.mealStatus?.autoMode) {
-                          isActiveB = !!s.weeklySchedule?.[viewContext.dayName]?.breakfast;
-                          isActiveL = !!s.weeklySchedule?.[viewContext.dayName]?.lunch;
-                          isActiveD = !!s.weeklySchedule?.[viewContext.dayName]?.dinner;
+                          isActiveB = !!s.weeklySchedule?.[viewContext.dayName]?.breakfast; isActiveL = !!s.weeklySchedule?.[viewContext.dayName]?.lunch; isActiveD = !!s.weeklySchedule?.[viewContext.dayName]?.dinner;
                       }
                       
                       const gCountB = isDecisionLocked ? Number(guestObj?.breakfast || 0) : 0;
@@ -637,9 +641,6 @@ export default function AdminMealDashboardPage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
-                              {isDecisionLocked ? <Badge className="bg-success/10 text-success text-[7px] font-black h-5 uppercase">Marked</Badge> : <Badge variant="outline" className="text-[7px] font-bold h-5 uppercase">Pending</Badge>}
-                          </TableCell>
-                          <TableCell className="text-center">
                             <div className="flex justify-center gap-2">
                                 {[{ id: 'breakfast', active: isActiveB, label: 'B' }, { id: 'lunch', active: isActiveL, label: 'L' }, { id: 'dinner', active: isActiveD, label: 'D' }].map(m => (
                                   <button key={m.id} onClick={() => handleToggleMeal(s, m.id)} className={cn("h-9 w-9 rounded-lg flex items-center justify-center font-black text-xs shadow-sm transition-all", m.active ? "bg-primary text-white scale-105" : "bg-slate-100 text-slate-300 hover:bg-slate-200")}>
@@ -647,6 +648,18 @@ export default function AdminMealDashboardPage() {
                                   </button>
                                 ))}
                             </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                             <div className="flex gap-2 justify-center">
+                                <Select value={s.mealChoices?.lunch || "Normal"} onValueChange={(v) => handleUpdateChoice(s.id, 'lunch', v)}>
+                                   <SelectTrigger className="h-8 text-[10px] w-24"><SelectValue placeholder="Lunch"/></SelectTrigger>
+                                   <SelectContent>{MEAL_CHOICE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                                </Select>
+                                <Select value={s.mealChoices?.dinner || "Normal"} onValueChange={(v) => handleUpdateChoice(s.id, 'dinner', v)}>
+                                   <SelectTrigger className="h-8 text-[10px] w-24"><SelectValue placeholder="Dinner"/></SelectTrigger>
+                                   <SelectContent>{MEAL_CHOICE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                                </Select>
+                             </div>
                           </TableCell>
                           <TableCell className="text-right pr-6">
                               <div className="flex justify-end gap-2">
@@ -672,20 +685,17 @@ export default function AdminMealDashboardPage() {
                 </Table>
               </div>
 
-              {/* Mobile View: Cards */}
               <div className="md:hidden space-y-3 p-4 bg-slate-50/50">
                   {filteredOverrideStudents.map(s => {
                     const targetDateYMD = viewContext.targetDateYMD;
                     const isTomorrow = viewDay === 'tomorrow';
                     const isToday = viewDay === 'today';
-
-                    const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
+                    const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : (isToday ? 'lastMealUpdateDateToday' : 'lastMealUpdateDateToday');
                     const isDecisionLocked = s[decisionField] === targetDateYMD;
                     const statusObj = isTomorrow ? s.tomorrowMealStatus : s.mealStatus;
                     const guestObj = isTomorrow ? s.tomorrowGuestMeals : s.guestMeals;
 
                     let isActiveB = false; let isActiveL = false; let isActiveD = false;
-
                     if (isDecisionLocked) {
                         isActiveB = !!statusObj?.breakfast; isActiveL = !!statusObj?.lunch; isActiveD = !!statusObj?.dinner;
                     } else if (isToday && s.mealStatus?.autoMode) {
@@ -715,14 +725,37 @@ export default function AdminMealDashboardPage() {
                                 <div className="space-y-2">
                                   <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest text-right">Guests</p>
                                   <div className="flex gap-1 justify-end">
-                                      {['breakfast', 'lunch', 'dinner'].map(mId => (
-                                        <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-xl border p-1 flex-1">
-                                            <span className="text-[6px] font-black opacity-40 uppercase">{mId[0]}G</span>
-                                            <span className="text-[10px] font-black text-primary">{isDecisionLocked ? Number(guestObj?.[mId] || 0) : 0}</span>
-                                        </div>
-                                      ))}
+                                      {['breakfast', 'lunch', 'dinner'].map(mId => {
+                                        const val = isDecisionLocked ? Number(guestObj?.[mId] || 0) : 0;
+                                        return (
+                                          <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-xl border p-1 flex-1">
+                                              <span className="text-[6px] font-black opacity-40 uppercase">{mId[0]}G</span>
+                                              <div className="flex items-center gap-1.5">
+                                                 <button onClick={() => handleUpdateGuestMeal(s, mId, -1)} disabled={val <= 0} className="h-4 w-3 flex items-center justify-center text-slate-300"><Minus size={8}/></button>
+                                                 <span className="text-[10px] font-black text-primary">{val}</span>
+                                                 <button onClick={() => handleUpdateGuestMeal(s, mId, 1)} className="h-4 w-3 flex items-center justify-center text-slate-300"><Plus size={8}/></button>
+                                              </div>
+                                          </div>
+                                        )
+                                      })}
                                   </div>
                                 </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 pt-2">
+                               <div className="space-y-1">
+                                  <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Lunch Choice</p>
+                                  <Select value={s.mealChoices?.lunch || "Normal"} onValueChange={(v) => handleUpdateChoice(s.id, 'lunch', v)}>
+                                     <SelectTrigger className="h-9 rounded-xl bg-slate-50 border-none text-[10px] font-bold shadow-inner"><SelectValue/></SelectTrigger>
+                                     <SelectContent>{MEAL_CHOICE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                                  </Select>
+                               </div>
+                               <div className="space-y-1">
+                                  <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Dinner Choice</p>
+                                  <Select value={s.mealChoices?.dinner || "Normal"} onValueChange={(v) => handleUpdateChoice(s.id, 'dinner', v)}>
+                                     <SelectTrigger className="h-9 rounded-xl bg-slate-50 border-none text-[10px] font-bold shadow-inner"><SelectValue/></SelectTrigger>
+                                     <SelectContent>{MEAL_CHOICE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                                  </Select>
+                               </div>
                             </div>
                           </CardContent>
                       </Card>
