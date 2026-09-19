@@ -685,7 +685,8 @@ export default function AdminMealDashboardPage() {
                 </Table>
               </div>
 
-              <div className="md:hidden space-y-3 p-4 bg-slate-50/50">
+              {/* UPDATED MOBILE VIEW: COLUMNAR CARD LAYOUT */}
+              <div className="md:hidden space-y-4 p-4 bg-slate-50/50">
                   {filteredOverrideStudents.map(s => {
                     const targetDateYMD = viewContext.targetDateYMD;
                     const isTomorrow = viewDay === 'tomorrow';
@@ -702,60 +703,75 @@ export default function AdminMealDashboardPage() {
                         isActiveB = !!s.weeklySchedule?.[viewContext.dayName]?.breakfast; isActiveL = !!s.weeklySchedule?.[viewContext.dayName]?.lunch; isActiveD = !!s.weeklySchedule?.[viewContext.dayName]?.dinner;
                     }
 
+                    const gCountB = isDecisionLocked ? Number(guestObj?.breakfast || 0) : 0;
+                    const gCountL = isDecisionLocked ? Number(guestObj?.lunch || 0) : 0;
+                    const gCountD = isDecisionLocked ? Number(guestObj?.dinner || 0) : 0;
+
                     return (
-                      <Card key={s.id} className="border-none shadow-sm rounded-2xl overflow-hidden bg-white">
+                      <Card key={s.id} className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
                           <CardContent className="p-4 space-y-4">
-                            <div className="flex justify-between items-start">
+                            <div className="flex justify-between items-center">
                                 <div className="flex items-center gap-3">
-                                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-black shadow-sm">{s.roomNumber}</div>
-                                  <div><h3 className="font-black text-slate-800 text-sm">{s.name}</h3><p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p></div>
-                                </div>
-                                {isDecisionLocked && <Badge className="bg-success text-[7px] font-black uppercase h-5">Marked</Badge>}
-                            </div>
-                            <Separator className="opacity-50" />
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                  <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Self Meals</p>
-                                  <div className="flex gap-2">
-                                      {[{ id: 'breakfast', active: isActiveB, label: 'B' }, { id: 'lunch', active: isActiveL, label: 'L' }, { id: 'dinner', active: isActiveD, label: 'D' }].map(m => (
-                                        <button key={m.id} onClick={() => handleToggleMeal(s, m.id)} className={cn("h-10 flex-1 rounded-xl flex items-center justify-center font-black shadow-sm transition-all", m.active ? "bg-primary text-white" : "bg-slate-100 text-slate-300")}>{m.label}</button>
-                                      ))}
+                                  <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
+                                  <div className="space-y-0.5">
+                                    <h3 className="font-black text-slate-800 text-sm">{s.name}</h3>
+                                    <p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
                                   </div>
                                 </div>
-                                <div className="space-y-2">
-                                  <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest text-right">Guests</p>
-                                  <div className="flex gap-1 justify-end">
-                                      {['breakfast', 'lunch', 'dinner'].map(mId => {
-                                        const val = isDecisionLocked ? Number(guestObj?.[mId] || 0) : 0;
-                                        return (
-                                          <div key={mId} className="flex flex-col items-center bg-slate-50 rounded-xl border p-1 flex-1">
-                                              <span className="text-[6px] font-black opacity-40 uppercase">{mId[0]}G</span>
-                                              <div className="flex items-center gap-1.5">
-                                                 <button onClick={() => handleUpdateGuestMeal(s, mId, -1)} disabled={val <= 0} className="h-4 w-3 flex items-center justify-center text-slate-300"><Minus size={8}/></button>
-                                                 <span className="text-[10px] font-black text-primary">{val}</span>
-                                                 <button onClick={() => handleUpdateGuestMeal(s, mId, 1)} className="h-4 w-3 flex items-center justify-center text-slate-300"><Plus size={8}/></button>
-                                              </div>
-                                          </div>
-                                        )
-                                      })}
-                                  </div>
-                                </div>
+                                {isDecisionLocked && <Badge className="bg-success text-[8px] font-black uppercase h-5 px-2 rounded-full">✓ Locked</Badge>}
                             </div>
-                            <div className="grid grid-cols-2 gap-3 pt-2">
-                               <div className="space-y-1">
-                                  <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Lunch Choice</p>
-                                  <Select value={s.mealChoices?.lunch || "Normal"} onValueChange={(v) => handleUpdateChoice(s.id, 'lunch', v)}>
-                                     <SelectTrigger className="h-9 rounded-xl bg-slate-50 border-none text-[10px] font-bold shadow-inner"><SelectValue/></SelectTrigger>
-                                     <SelectContent>{MEAL_CHOICE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-                                  </Select>
-                               </div>
-                               <div className="space-y-1">
-                                  <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Dinner Choice</p>
-                                  <Select value={s.mealChoices?.dinner || "Normal"} onValueChange={(v) => handleUpdateChoice(s.id, 'dinner', v)}>
-                                     <SelectTrigger className="h-9 rounded-xl bg-slate-50 border-none text-[10px] font-bold shadow-inner"><SelectValue/></SelectTrigger>
-                                     <SelectContent>{MEAL_CHOICE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-                                  </Select>
-                               </div>
+
+                            <div className="space-y-3">
+                              {[
+                                { id: 'breakfast', label: 'Breakfast', icon: '🌅', menu: currentMenu?.breakfast, active: isActiveB, guests: gCountB },
+                                { id: 'lunch', label: 'Lunch', icon: '☀️', menu: currentMenu?.lunch, active: isActiveL, guests: gCountL },
+                                { id: 'dinner', label: 'Dinner', icon: '🌙', menu: currentMenu?.dinner, active: isActiveD, guests: gCountD }
+                              ].map((m) => (
+                                <div key={m.id} className={cn("p-3 rounded-2xl border transition-all space-y-3", m.active || m.guests > 0 ? "bg-primary/[0.03] border-primary/10" : "bg-slate-50/50 border-slate-100")}>
+                                  <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-lg">{m.icon}</span>
+                                      <div>
+                                        <p className="text-[10px] font-black text-slate-800 uppercase leading-none">{m.label}</p>
+                                        <p className="text-[8px] text-muted-foreground font-bold truncate max-w-[100px]">{m.menu || 'No Menu'}</p>
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-3">
+                                      {/* Guest Counter */}
+                                      <div className="flex items-center bg-white rounded-lg border p-1 h-8 shadow-sm">
+                                         <button onClick={() => handleUpdateGuestMeal(s, m.id, -1)} disabled={m.guests <= 0} className="h-6 w-6 flex items-center justify-center text-slate-400 hover:text-destructive transition-colors"><Minus size={10}/></button>
+                                         <span className="text-xs font-black text-primary w-5 text-center">{m.guests}</span>
+                                         <button onClick={() => handleUpdateGuestMeal(s, m.id, 1)} className="h-6 w-6 flex items-center justify-center text-slate-400 hover:text-primary transition-colors"><Plus size={10}/></button>
+                                      </div>
+                                      {/* Self Toggle */}
+                                      <button 
+                                        onClick={() => handleToggleMeal(s, m.id)} 
+                                        className={cn(
+                                          "h-8 w-12 rounded-lg flex items-center justify-center font-black text-xs shadow-sm transition-all", 
+                                          m.active ? "bg-primary text-white" : "bg-white text-slate-300 border"
+                                        )}
+                                      >
+                                        {m.active ? 'ON' : 'OFF'}
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {(m.id === 'lunch' || m.id === 'dinner') && (m.active || m.guests > 0) && (
+                                    <div className="pt-2 border-t border-dashed border-primary/10">
+                                       <Select value={(m.id === 'lunch' ? s.mealChoices?.lunch : s.mealChoices?.dinner) || "Normal"} onValueChange={(v) => handleUpdateChoice(s.id, m.id as any, v)}>
+                                          <SelectTrigger className="h-8 rounded-xl bg-white border-none text-[10px] font-bold shadow-sm w-full">
+                                            <ChefHat size={12} className="mr-2 text-primary" />
+                                            <SelectValue placeholder="Select Choice"/>
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                             {MEAL_CHOICE_OPTIONS.map(o => <SelectItem key={o} value={o} className="text-xs">{o}</SelectItem>)}
+                                          </SelectContent>
+                                       </Select>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           </CardContent>
                       </Card>
