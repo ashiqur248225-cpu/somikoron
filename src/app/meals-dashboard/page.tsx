@@ -32,21 +32,22 @@ import {
   DoorOpen,
   User,
   ShieldAlert,
-  History
+  History,
+  MessageCircle
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase"
-import { collection, query, where, doc, updateDoc, serverTimestamp, increment } from "firebase/firestore"
+import { collection, query, where, doc, updateDoc, serverTimestamp, increment, writeBatch } from "firebase/firestore"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { syncMissingAutoMeals } from "@/lib/meal-sync-service"
 
@@ -144,13 +145,10 @@ export default function AdminMealDashboardPage() {
 
   const currentMenu = useMemo(() => {
     if (!routines || !userBranch || !viewContext.dayName) return null
-    const routine = routines.find(r => r.day === viewContext.dayName && r.branch === userBranch)
-    if (routine) return routine;
-    // Fallback if composite ID was used
-    return routines.find(r => r.id === `${viewContext.dayName}_${userBranch}`);
+    return routines.find(r => r.day === viewContext.dayName && r.branch === userBranch) || 
+           routines.find(r => r.id === `${viewContext.dayName}_${userBranch}`);
   }, [routines, userBranch, viewContext.dayName])
 
-  // Dynamic Options from Routine
   const getDynamicOptions = (menuStr: string) => {
     const defaults = ["Normal"];
     if (!menuStr) return defaults;
@@ -199,7 +197,6 @@ export default function AdminMealDashboardPage() {
       
       const isTomorrow = viewDay === 'tomorrow';
       const isToday = viewDay === 'today';
-      const isYesterday = viewDay === 'yesterday';
 
       const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
       const statusObj = isTomorrow ? s.tomorrowMealStatus : s.mealStatus;
@@ -216,8 +213,6 @@ export default function AdminMealDashboardPage() {
         willEatB = !!sched.breakfast && bAvail;
         willEatL = !!sched.lunch && lAvail;
         willEatD = !!sched.dinner && dAvail;
-      } else {
-        willEatB = false; willEatL = false; willEatD = false;
       }
 
       choiceL = s.mealChoices?.lunch || "Normal";
@@ -246,6 +241,7 @@ export default function AdminMealDashboardPage() {
         if (!bd.rooms[roomNo]) bd.rooms[roomNo] = { roomNo, residents: [], roomTotals: { b: 0, l: 0, d: 0, guests: 0 } }
         const rd = bd.rooms[roomNo]
         rd.roomTotals.b += combinedB; rd.roomTotals.l += combinedL; rd.roomTotals.d += combinedD;
+        rd.roomTotals.guests += (isDecided ? (Number(guestObj?.breakfast || 0) + Number(guestObj?.lunch || 0) + Number(guestObj?.dinner || 0)) : 0);
 
         rd.residents.push({ 
           id: s.id, 
@@ -308,7 +304,7 @@ export default function AdminMealDashboardPage() {
       }
 
       await updateDoc(sRef, updateData);
-      toast({ title: "Attendance Marked", description: `${student.name}'s ${mealId} is now ${!currentVal ? 'ON' : 'OFF'} for ${viewDay}.` });
+      toast({ title: "Attendance Marked", description: `${student.name}'s ${mealId} is now ${!currentVal ? 'ON' : 'OFF'}` });
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
   }
 
@@ -356,15 +352,13 @@ export default function AdminMealDashboardPage() {
         [`mealChoices.${mealType}`]: choice,
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Choice Saved", description: `${mealType} choice set to ${choice}` });
+      toast({ title: "Choice Saved" });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message });
     }
   }
 
   const handlePrint = () => { if (typeof window !== "undefined") window.print(); }
-
-  if (!isMounted || studentsLoading || configLoading) return <div className="flex flex-col items-center justify-center p-20 gap-4"><Loader2 className="animate-spin h-10 w-10 text-primary" /><p className="text-sm font-bold text-muted-foreground uppercase animate-pulse">Syncing Dashboard...</p></div>
 
   const filteredOverrideStudents = students?.filter(s => {
     const search = searchTerm.toLowerCase();
@@ -373,6 +367,8 @@ export default function AdminMealDashboardPage() {
     const matchesBuilding = buildingFilter === 'all' || s.buildingId === buildingFilter;
     return matchesSearch && matchesRoom && matchesBuilding;
   }) || [];
+
+  if (!isMounted || studentsLoading || configLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>
 
   return (
     <div className="space-y-8 pb-20 w-full max-w-full overflow-x-hidden">
@@ -383,7 +379,7 @@ export default function AdminMealDashboardPage() {
           <div>
             <h1 className="text-xl font-bold text-primary tracking-tight md:text-3xl">Meal Analytics</h1>
             <p className="hidden md:block text-muted-foreground font-medium text-xs mt-1">
-              Decision Day: <span className="font-bold text-foreground">{viewContext.dayName} ({viewContext.dateStr})</span>
+              Target: <span className="font-bold text-foreground">{viewContext.dayName} ({viewContext.dateStr})</span>
             </p>
           </div>
         </div>
@@ -394,7 +390,7 @@ export default function AdminMealDashboardPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="yesterday">Yesterday</SelectItem>
+                {canOverride && <SelectItem value="yesterday">Yesterday</SelectItem>}
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="tomorrow">Tomorrow</SelectItem>
               </SelectContent>
@@ -411,9 +407,9 @@ export default function AdminMealDashboardPage() {
           <TabsTrigger value="manager" className="rounded-xl gap-2 font-bold h-10">Manual Overrides</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="summary" className="space-y-8 animate-in fade-in duration-500">
+        <TabsContent value="summary" className="space-y-8">
            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl group hover:shadow-md transition-all">
+            <Card className="border-none shadow-sm bg-white border-l-4 border-l-orange-500 rounded-2xl">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start">
                     <div className="space-y-1">
@@ -428,7 +424,7 @@ export default function AdminMealDashboardPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl group hover:shadow-md transition-all">
+            <Card className="border-none shadow-sm bg-white border-l-4 border-l-success rounded-2xl">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start">
                     <div className="space-y-1">
@@ -443,7 +439,7 @@ export default function AdminMealDashboardPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl group hover:shadow-md transition-all">
+            <Card className="border-none shadow-sm bg-white border-l-4 border-l-blue-500 rounded-2xl">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start">
                     <div className="space-y-1">
@@ -468,7 +464,7 @@ export default function AdminMealDashboardPage() {
                       <span className="text-xs font-bold text-white/80">{choice}</span>
                       <span className="text-2xl font-black text-success">{count}</span>
                     </div>
-                  )) : <p className="text-xs text-white/40 italic">No custom choices requested.</p>}
+                  )) : <p className="text-xs text-white/40 italic">No custom choices.</p>}
                 </div>
             </div>
             <div className="space-y-4">
@@ -479,7 +475,7 @@ export default function AdminMealDashboardPage() {
                       <span className="text-xs font-bold text-white/80">{choice}</span>
                       <span className="text-2xl font-black text-blue-400">{count}</span>
                     </div>
-                  )) : <p className="text-xs text-white/40 italic">No custom choices requested.</p>}
+                  )) : <p className="text-xs text-white/40 italic">No custom choices.</p>}
                 </div>
             </div>
           </Card>
@@ -572,7 +568,6 @@ export default function AdminMealDashboardPage() {
                                  <div key={r.id} className="flex justify-between items-center bg-slate-50/50 p-2 rounded-xl border border-slate-100">
                                     <div className="flex items-center gap-2">
                                        <span className="text-[11px] font-black text-slate-700">{r.name.split(' ')[0]}</span>
-                                       {r.isAuto && <Badge variant="outline" className="text-[7px] h-3 px-1 border-primary/20 text-primary uppercase font-bold">Auto</Badge>}
                                     </div>
                                     <div className="flex gap-1">
                                        {r.isSelfB && <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-1.5 rounded-md">B</span>}
@@ -592,18 +587,18 @@ export default function AdminMealDashboardPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="manager" className="animate-in fade-in zoom-in-95 duration-300 space-y-6">
+        <TabsContent value="manager" className="space-y-6">
           <Card className="rounded-3xl border-none shadow-sm bg-white overflow-hidden">
             <CardHeader className="bg-slate-50/50 border-b space-y-4">
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div>
                   <CardTitle className="text-lg">Manual Overrides ({viewDay})</CardTitle>
                   <CardDescription>
-                    {viewDay === 'tomorrow' ? "Attendance Mode: Blank slate for tomorrow's prep." : "Live Management: Final adjustments for the day."}
+                    {viewDay === 'tomorrow' ? "Attendance Sheet: Everything OFF by default." : "Daily Management: Review decisions."}
                   </CardDescription>
                 </div>
                 <Badge variant="outline" className="h-7 px-4 rounded-full border-primary text-primary font-black uppercase text-[10px]">
-                  Target: {viewContext.dayName}, {viewContext.dateStr}
+                  Date: {viewContext.dateStr}
                 </Badge>
               </div>
               
@@ -635,8 +630,8 @@ export default function AdminMealDashboardPage() {
                   <TableHeader className="bg-slate-50">
                     <TableRow className="border-none h-12">
                       <TableHead className="font-black uppercase text-[10px] text-slate-500 pl-6">Student & Location</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Mark Meals (B/L/D)</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Meal Choices</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Self Meals (B/L/D)</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-slate-500 text-center">Custom Choices</TableHead>
                       <TableHead className="font-black uppercase text-[10px] text-slate-500 text-right pr-6">Guests</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -644,7 +639,6 @@ export default function AdminMealDashboardPage() {
                     {filteredOverrideStudents.map(s => {
                       const targetDateYMD = viewContext.targetDateYMD;
                       const isTomorrow = viewDay === 'tomorrow';
-                      const isToday = viewDay === 'today';
                       const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
                       const isDecisionLocked = s[decisionField] === targetDateYMD;
                       const statusObj = isTomorrow ? s.tomorrowMealStatus : s.mealStatus;
@@ -653,8 +647,6 @@ export default function AdminMealDashboardPage() {
                       let isActiveB = false; let isActiveL = false; let isActiveD = false;
                       if (isDecisionLocked) {
                           isActiveB = !!statusObj?.breakfast; isActiveL = !!statusObj?.lunch; isActiveD = !!statusObj?.dinner;
-                      } else if (isToday && s.mealStatus?.autoMode) {
-                          isActiveB = !!s.weeklySchedule?.[viewContext.dayName]?.breakfast; isActiveL = !!s.weeklySchedule?.[viewContext.dayName]?.lunch; isActiveD = !!s.weeklySchedule?.[viewContext.dayName]?.dinner;
                       }
                       
                       const gCountB = isDecisionLocked ? Number(guestObj?.breakfast || 0) : 0;
@@ -681,11 +673,11 @@ export default function AdminMealDashboardPage() {
                           <TableCell className="text-center">
                              <div className="flex gap-2 justify-center">
                                 <Select value={s.mealChoices?.lunch || "Normal"} onValueChange={(v) => handleUpdateChoice(s.id, 'lunch', v)}>
-                                   <SelectTrigger className="h-8 text-[10px] w-24"><SelectValue placeholder="Lunch"/></SelectTrigger>
+                                   <SelectTrigger className="h-8 text-[10px] w-24"><SelectValue/></SelectTrigger>
                                    <SelectContent>{lunchOptions.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                                 </Select>
                                 <Select value={s.mealChoices?.dinner || "Normal"} onValueChange={(v) => handleUpdateChoice(s.id, 'dinner', v)}>
-                                   <SelectTrigger className="h-8 text-[10px] w-24"><SelectValue placeholder="Dinner"/></SelectTrigger>
+                                   <SelectTrigger className="h-8 text-[10px] w-24"><SelectValue/></SelectTrigger>
                                    <SelectContent>{dinnerOptions.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                                 </Select>
                              </div>
@@ -714,12 +706,11 @@ export default function AdminMealDashboardPage() {
                 </Table>
               </div>
 
-              {/* MOBILE VIEW */}
+              {/* MOBILE VIEW - COLUMNAR CARDS */}
               <div className="md:hidden space-y-4 p-4 bg-slate-50/50">
                   {filteredOverrideStudents.map(s => {
                     const targetDateYMD = viewContext.targetDateYMD;
                     const isTomorrow = viewDay === 'tomorrow';
-                    const isToday = viewDay === 'today';
                     const decisionField = isTomorrow ? 'lastMealUpdateDateTomorrow' : 'lastMealUpdateDateToday';
                     const isDecisionLocked = s[decisionField] === targetDateYMD;
                     const statusObj = isTomorrow ? s.tomorrowMealStatus : s.mealStatus;
@@ -728,8 +719,6 @@ export default function AdminMealDashboardPage() {
                     let isActiveB = false; let isActiveL = false; let isActiveD = false;
                     if (isDecisionLocked) {
                         isActiveB = !!statusObj?.breakfast; isActiveL = !!statusObj?.lunch; isActiveD = !!statusObj?.dinner;
-                    } else if (isToday && s.mealStatus?.autoMode) {
-                        isActiveB = !!s.weeklySchedule?.[viewContext.dayName]?.breakfast; isActiveL = !!s.weeklySchedule?.[viewContext.dayName]?.lunch; isActiveD = !!s.weeklySchedule?.[viewContext.dayName]?.dinner;
                     }
 
                     const gCountB = isDecisionLocked ? Number(guestObj?.breakfast || 0) : 0;
