@@ -290,29 +290,105 @@ export default function BulkMealEntryPage() {
           <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl text-muted-foreground bg-white shadow-sm" onClick={() => { setMealInputs({}); toast({ title: "Inputs Cleared" }); }}><RotateCcw size={20}/></Button>
         </div>
 
-        <div className="px-8">
-          <Table>
-            <TableHeader className="bg-white sticky top-0 z-10"><TableRow className="border-none h-16"><TableHead className="font-black uppercase text-[11px] text-slate-500">Resident Details</TableHead><TableHead className="font-black uppercase text-[11px] text-center text-slate-500">Counters (Self | Guest)</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">Effective Billable</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">Meal Bill</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">New Balance</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {filteredStudents.map(s => {
-                const count = Number(mealInputs[s.id] || 0); const rate = Number(mealRateData?.rate || 0); const bill = count * rate; const currentBal = Number(s.foodDueAmount || 0); const newBal = currentBal - bill;
-                return (
-                  <TableRow key={s.id} className={cn("group transition-all hover:bg-slate-50 h-20", newBal < 0 && "bg-destructive/[0.03]")}>
-                    <TableCell><div className="flex items-center gap-4"><div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.name.substring(0, 2).toUpperCase()}</div><div><p className="font-bold text-slate-800 text-sm leading-none">{s.name}</p><p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">{s.buildingName} • R-{s.roomNumber} • <span className={cn(Number(s.foodDueAmount) < 0 ? "text-destructive" : "text-success")}>Bal: ৳{s.foodDueAmount || 0}</span></p></div></div></TableCell>
-                    <TableCell className="text-center">
-                       <div className="flex items-center justify-center gap-2">
-                          <Badge variant="outline" className="text-[9px] font-black">S: {(s.currentMonthBreakfast || 0) + (s.currentMonthLunch || 0) + (s.currentMonthDinner || 0)}</Badge>
-                          <Badge variant="outline" className="text-[9px] font-black text-primary border-primary/20">G: {s.currentMonthGuestMeals || 0}</Badge>
-                       </div>
-                    </TableCell>
-                    <TableCell className="text-right"><div className="relative inline-block w-full max-w-[100px]"><Input type="number" step="0.5" className="h-12 text-center text-lg font-black bg-slate-100 border-none shadow-inner rounded-2xl" value={mealInputs[s.id] || ""} onChange={e => setMealInputs({...mealInputs, [s.id]: e.target.value})} /></div></TableCell>
-                    <TableCell className="text-right font-black text-slate-600 text-lg">৳{bill}</TableCell>
-                    <TableCell className="text-right"><span className={cn("font-black text-xl", newBal < 0 ? "text-destructive" : "text-primary")}>৳{newBal}</span></TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+        <div className="px-4 md:px-8">
+          {/* Desktop Table View */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader className="bg-white sticky top-0 z-10"><TableRow className="border-none h-16"><TableHead className="font-black uppercase text-[11px] text-slate-500">Resident Details</TableHead><TableHead className="font-black uppercase text-[11px] text-center text-slate-500">Counters (Self | Guest)</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">Effective Billable</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">Meal Bill</TableHead><TableHead className="font-black uppercase text-[11px] text-right w-40 text-slate-500">New Balance</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {filteredStudents.map(s => {
+                  const count = Number(mealInputs[s.id] || 0); const rate = Number(mealRateData?.rate || 0); const bill = count * rate; const currentBal = Number(s.foodDueAmount || 0); const newBal = currentBal - bill;
+                  return (
+                    <TableRow key={s.id} className={cn("group transition-all hover:bg-slate-50 h-20", newBal < 0 && "bg-destructive/[0.03]")}>
+                      <TableCell><div className="flex items-center gap-4"><div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.name.substring(0, 2).toUpperCase()}</div><div><p className="font-bold text-slate-800 text-sm leading-none">{s.name}</p><p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">{s.buildingName} • R-{s.roomNumber} • <span className={cn(Number(s.foodDueAmount) < 0 ? "text-destructive" : "text-success")}>Bal: ৳{s.foodDueAmount || 0}</span></p></div></div></TableCell>
+                      <TableCell className="text-center">
+                         <div className="flex items-center justify-center gap-2">
+                            <Badge variant="outline" className="text-[9px] font-black">S: {(s.currentMonthBreakfast || 0) + (s.currentMonthLunch || 0) + (s.currentMonthDinner || 0)}</Badge>
+                            <Badge variant="outline" className="text-[9px] font-black text-primary border-primary/20">G: {s.currentMonthGuestMeals || 0}</Badge>
+                         </div>
+                      </TableCell>
+                      <TableCell className="text-right"><div className="relative inline-block w-full max-w-[100px]"><Input type="number" step="0.5" className="h-12 text-center text-lg font-black bg-slate-100 border-none shadow-inner rounded-2xl" value={mealInputs[s.id] || ""} onChange={e => setMealInputs({...mealInputs, [s.id]: e.target.value})} /></div></TableCell>
+                      <TableCell className="text-right font-black text-slate-600 text-lg">৳{bill}</TableCell>
+                      <TableCell className="text-right"><span className={cn("font-black text-xl", newBal < 0 ? "text-destructive" : "text-primary")}>৳{newBal}</span></TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-4 py-4">
+            {filteredStudents.map(s => {
+              const count = Number(mealInputs[s.id] || 0); 
+              const rate = Number(mealRateData?.rate || 0); 
+              const bill = count * rate; 
+              const currentBal = Number(s.foodDueAmount || 0); 
+              const newBal = currentBal - bill;
+              
+              return (
+                <Card key={s.id} className={cn("border-none shadow-sm rounded-3xl overflow-hidden", newBal < 0 ? "bg-destructive/[0.03]" : "bg-white")}>
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs">
+                          {s.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-black text-slate-800 text-sm leading-tight">{s.name}</p>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">
+                            R-{s.roomNumber} • {s.buildingName}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className={cn("text-[9px] font-black uppercase", Number(s.foodDueAmount) < 0 ? "bg-destructive" : "bg-success")}>
+                        Bal: ৳{s.foodDueAmount || 0}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 bg-secondary/30 p-3 rounded-2xl border border-secondary">
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">Self Meals</p>
+                        <p className="text-xs font-black text-slate-700">
+                          {(s.currentMonthBreakfast || 0) + (s.currentMonthLunch || 0) + (s.currentMonthDinner || 0)}
+                        </p>
+                      </div>
+                      <div className="space-y-1 text-right">
+                        <p className="text-[8px] font-bold text-primary uppercase tracking-widest">Guest Meals</p>
+                        <p className="text-xs font-black text-primary">
+                          {s.currentMonthGuestMeals || 0}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 space-y-1">
+                        <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Effective Billable</Label>
+                        <Input 
+                          type="number" 
+                          step="0.5" 
+                          className="h-12 text-center text-lg font-black bg-slate-100 border-none shadow-inner rounded-2xl" 
+                          value={mealInputs[s.id] || ""} 
+                          onChange={e => setMealInputs({...mealInputs, [s.id]: e.target.value})} 
+                        />
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[8px] font-black uppercase text-muted-foreground">Bill</p>
+                        <p className="text-lg font-black text-slate-700">৳{bill}</p>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-dashed flex justify-between items-center">
+                       <span className="text-[10px] font-bold text-muted-foreground uppercase">Estimated New Balance</span>
+                       <span className={cn("font-black text-xl", newBal < 0 ? "text-destructive" : "text-primary")}>
+                         ৳{newBal}
+                       </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
         </div>
 
         <CardFooter className="p-10 bg-slate-50 border-t flex flex-col md:flex-row items-center justify-between gap-8 mt-4">
