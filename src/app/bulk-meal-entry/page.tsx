@@ -18,7 +18,9 @@ import {
   RotateCcw,
   Hash,
   Users,
-  RefreshCw
+  RefreshCw,
+  Search,
+  DoorOpen
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Separator } from "@/components/ui/separator"
@@ -56,7 +58,8 @@ export default function BulkMealEntryPage() {
   const [mealLogFilter, setMealLogFilter] = useState({
     month: "",
     year: "",
-    buildingId: "all"
+    buildingId: "all",
+    roomSearch: ""
   })
   const [mealInputs, setMealInputs] = useState<Record<string, string>>({})
 
@@ -78,7 +81,8 @@ export default function BulkMealEntryPage() {
     setMealLogFilter({
       month: currentMonth,
       year: currentYear,
-      buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : "all"
+      buildingId: (role === 'Building Manager' && bId !== 'none') ? bId : "all",
+      roomSearch: ""
     })
   }, [])
 
@@ -125,12 +129,12 @@ export default function BulkMealEntryPage() {
 
   const filteredStudents = useMemo(() => {
     if (!students) return []
-    return students.filter(s => 
-      (mealLogFilter.buildingId === 'all' || s.buildingId === mealLogFilter.buildingId) && 
-      s.isActive && 
-      s.paymentSystem === 'non-package'
-    )
-  }, [students, mealLogFilter.buildingId])
+    return students.filter(s => {
+      const matchesBuilding = mealLogFilter.buildingId === 'all' || s.buildingId === mealLogFilter.buildingId;
+      const matchesRoom = !mealLogFilter.roomSearch || String(s.roomNumber).toLowerCase().includes(mealLogFilter.roomSearch.toLowerCase());
+      return matchesBuilding && matchesRoom && s.isActive && s.paymentSystem === 'non-package';
+    })
+  }, [students, mealLogFilter.buildingId, mealLogFilter.roomSearch])
 
   const handleGlobalSync = async () => {
     if (!userBranch || isSyncing) return;
@@ -287,7 +291,19 @@ export default function BulkMealEntryPage() {
           <div className="flex-1 min-w-[150px] space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Select Month</Label><Select value={mealLogFilter.month} onValueChange={v => setMealLogFilter({...mealLogFilter, month: v})}><SelectTrigger className="h-12 rounded-2xl bg-white shadow-sm border-none font-bold"><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
           <div className="flex-1 min-w-[150px] space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Select Year</Label><Select value={mealLogFilter.year} onValueChange={v => setMealLogFilter({...mealLogFilter, year: v})}><SelectTrigger className="h-12 rounded-2xl bg-white shadow-sm border-none font-bold"><SelectValue /></SelectTrigger><SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent></Select></div>
           <div className="flex-1 min-w-[200px] space-y-1.5"><Label className="text-[10px] font-black uppercase ml-1">Filter Building</Label><Select value={mealLogFilter.buildingId} onValueChange={v => setMealLogFilter({...mealLogFilter, buildingId: v})}><SelectTrigger className="h-12 rounded-2xl bg-white shadow-sm border-none font-bold"><SelectValue /></SelectTrigger><SelectContent>{userRole !== 'Building Manager' && <SelectItem value="all">All Buildings</SelectItem>}{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
-          <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl text-muted-foreground bg-white shadow-sm" onClick={() => { setMealInputs({}); toast({ title: "Inputs Cleared" }); }}><RotateCcw size={20}/></Button>
+          <div className="flex-1 min-w-[180px] space-y-1.5">
+            <Label className="text-[10px] font-black uppercase ml-1">Search Room</Label>
+            <div className="relative">
+              <DoorOpen className="absolute left-3 top-3.5 h-5 w-5 text-muted-foreground" />
+              <Input 
+                placeholder="Room No..." 
+                className="h-12 pl-10 rounded-2xl bg-white shadow-sm border-none font-bold" 
+                value={mealLogFilter.roomSearch}
+                onChange={e => setMealLogFilter({...mealLogFilter, roomSearch: e.target.value})}
+              />
+            </div>
+          </div>
+          <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl text-muted-foreground bg-white shadow-sm" onClick={() => { setMealInputs({}); setMealLogFilter({...mealLogFilter, roomSearch: ""}); toast({ title: "Filters Cleared" }); }}><RotateCcw size={20}/></Button>
         </div>
 
         <div className="px-4 md:px-8">
@@ -337,7 +353,7 @@ export default function BulkMealEntryPage() {
                         <div>
                           <p className="font-black text-slate-800 text-sm leading-tight">{s.name}</p>
                           <p className="text-[10px] font-bold text-muted-foreground uppercase mt-1">
-                            R-{s.roomNumber} • {s.buildingName}
+                            R-{s.roomNumber} • {s.buildingName} • <span className={cn(Number(s.foodDueAmount) < 0 ? "text-destructive" : "text-success")}>Bal: ৳{s.foodDueAmount || 0}</span>
                           </p>
                         </div>
                       </div>
