@@ -97,7 +97,12 @@ export default function StudentsPage() {
       const totalDue = rentDue + (foodDue < 0 ? Math.abs(foodDue) : 0);
       return { ...s, totalReceived, rentDue, foodBalance: foodDue, totalDue }
     }).filter(s => {
-      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || (s.phone || "").includes(searchTerm)
+      const search = searchTerm.toLowerCase()
+      const matchesSearch = 
+        s.name.toLowerCase().includes(search) || 
+        (s.phone || "").includes(searchTerm) ||
+        String(s.roomNumber || "").includes(searchTerm)
+      
       const matchesBuilding = buildingFilter === "all" || s.buildingId === buildingFilter
       const matchesRoom = roomFilter === "all" || String(s.roomNumber) === roomFilter
       const matchesStatus = statusFilter === "all" ? true : (statusFilter === "active" ? s.isActive : !s.isActive)
@@ -214,7 +219,19 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      <div className="print:hidden">
+      <div className="print:hidden space-y-6">
+        <div className="bg-secondary/20 p-4 rounded-xl border flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search name, phone or room number..." 
+              className="pl-10 bg-white h-11 border-none shadow-sm rounded-xl" 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+            />
+          </div>
+        </div>
+
         {isLoading ? (
           <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
         ) : (
@@ -374,7 +391,7 @@ export default function StudentsPage() {
         <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader><DialogTitle>Filter Students</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-1.5"><Label>Search</Label><Input placeholder="Name or phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Search</Label><Input placeholder="Name, phone or room..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>Building</Label><Select value={buildingFilter} onValueChange={setBuildingFilter}><SelectTrigger><SelectValue placeholder="All" /></SelectTrigger><SelectContent><SelectItem value="all">All Buildings</SelectItem>{buildings?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-1.5"><Label>Room No.</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Rooms</SelectItem>{uniqueRooms.map(r => <SelectItem key={r} value={String(r)}>Room {r}</SelectItem>)}</SelectContent></Select></div>
