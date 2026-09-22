@@ -33,7 +33,8 @@ import {
   User,
   ShieldAlert,
   History,
-  MessageCircle
+  MessageCircle,
+  AlertCircle
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -118,6 +119,12 @@ export default function AdminMealDashboardPage() {
     [db, userBranch]
   )
   const { data: mealConfig, isLoading: configLoading } = useDoc(mealConfigRef)
+
+  const mealRateRef = useMemoFirebase(() => 
+    userBranch ? doc(db, "configs", `mealRate_${userBranch}`) : null, 
+    [db, userBranch]
+  )
+  const { data: mealRateData } = useDoc(mealRateRef)
 
   const viewContext = useMemo(() => {
     if (!isMounted) return { dayName: "", dateStr: "", targetDateYMD: "", todayYMD: "", yesterdayYMD: "", tomorrowYMD: "" }
@@ -653,12 +660,32 @@ export default function AdminMealDashboardPage() {
                       const gCountL = isDecisionLocked ? Number(guestObj?.lunch || 0) : 0;
                       const gCountD = isDecisionLocked ? Number(guestObj?.dinner || 0) : 0;
 
+                      // Estimated Balance Calculation
+                      const foodVal = Number(s.foodDueAmount || 0);
+                      const b = s.currentMonthBreakfast || 0;
+                      const l = s.currentMonthLunch || 0;
+                      const d = s.currentMonthDinner || 0;
+                      const g = s.currentMonthGuestMeals || 0;
+                      const mealRate = Number(mealRateData?.rate || 0);
+                      const effectiveMeals = (b * 0.5) + l + d + g;
+                      const estimatedFoodBalance = Math.round(foodVal - (effectiveMeals * mealRate));
+                      const isLowBalance = estimatedFoodBalance < 50;
+
                       return (
                         <TableRow key={s.id} className="hover:bg-slate-50/50 transition-colors border-b last:border-none">
                           <TableCell className="py-4 pl-6">
                             <div className="flex items-center gap-3">
                               <div className="h-10 w-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
-                              <div className="space-y-0.5"><p className="font-black text-slate-800 text-sm">{s.name}</p><p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p></div>
+                              <div className="space-y-0.5">
+                                <p className="font-black text-slate-800 text-sm">{s.name}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+                                  <div className={cn("flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full", isLowBalance ? "bg-destructive/10 text-destructive animate-pulse" : "bg-success/5 text-success")}>
+                                    {isLowBalance && <AlertCircle size={8} />}
+                                    Est. Bal: ৳{estimatedFoodBalance}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
@@ -725,6 +752,17 @@ export default function AdminMealDashboardPage() {
                     const gCountL = isDecisionLocked ? Number(guestObj?.lunch || 0) : 0;
                     const gCountD = isDecisionLocked ? Number(guestObj?.dinner || 0) : 0;
 
+                    // Estimated Balance Calculation
+                    const foodVal = Number(s.foodDueAmount || 0);
+                    const bCount = s.currentMonthBreakfast || 0;
+                    const lCount = s.currentMonthLunch || 0;
+                    const dCount = s.currentMonthDinner || 0;
+                    const gCount = s.currentMonthGuestMeals || 0;
+                    const mealRateValue = Number(mealRateData?.rate || 0);
+                    const effectiveTotalMeals = (bCount * 0.5) + lCount + dCount + gCount;
+                    const estimatedBalanceMobile = Math.round(foodVal - (effectiveTotalMeals * mealRateValue));
+                    const isLowBalanceMobile = estimatedBalanceMobile < 50;
+
                     return (
                       <Card key={s.id} className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
                           <CardContent className="p-4 space-y-4">
@@ -733,7 +771,13 @@ export default function AdminMealDashboardPage() {
                                   <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
                                   <div className="space-y-0.5">
                                     <h3 className="font-black text-slate-800 text-sm">{s.name}</h3>
-                                    <p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
+                                      <div className={cn("flex items-center gap-1 text-[8px] font-black px-1.5 py-0.5 rounded-full", isLowBalanceMobile ? "bg-destructive/10 text-destructive" : "bg-success/5 text-success")}>
+                                        {isLowBalanceMobile && <AlertCircle size={8} />}
+                                        Est. Bal: ৳{estimatedBalanceMobile}
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                                 {isDecisionLocked && <Badge className="bg-success text-[8px] font-black uppercase h-5 px-2 rounded-full">✓ Locked</Badge>}
