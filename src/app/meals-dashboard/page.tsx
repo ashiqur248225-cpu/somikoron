@@ -677,13 +677,17 @@ export default function AdminMealDashboardPage() {
                             <div className="flex items-center gap-3">
                               <div className="h-10 w-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
                               <div className="space-y-0.5">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <p className="font-black text-slate-800 text-sm">{s.name}</p>
                                   {s.mealChoices?.lunch && s.mealChoices.lunch !== "Normal" && (
-                                    <Badge variant="outline" className="text-[8px] h-4 px-1.5 bg-orange-50 text-orange-600 border-orange-200 font-black uppercase">L: {s.mealChoices.lunch}</Badge>
+                                    <span className="text-[10px] font-black text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-md border border-orange-100 uppercase">
+                                      {s.mealChoices.lunch}
+                                    </span>
                                   )}
                                   {s.mealChoices?.dinner && s.mealChoices.dinner !== "Normal" && (
-                                    <Badge variant="outline" className="text-[8px] h-4 px-1.5 bg-blue-50 text-blue-600 border-blue-200 font-black uppercase">D: {s.mealChoices.dinner}</Badge>
+                                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-100 uppercase">
+                                      {s.mealChoices.dinner}
+                                    </span>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -778,13 +782,17 @@ export default function AdminMealDashboardPage() {
                                 <div className="flex items-center gap-3">
                                   <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
                                   <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       <h3 className="font-black text-slate-800 text-sm">{s.name}</h3>
                                       {s.mealChoices?.lunch && s.mealChoices.lunch !== "Normal" && (
-                                        <Badge variant="outline" className="text-[8px] h-4 px-1.5 bg-orange-50 text-orange-600 border-orange-200 font-black uppercase">L: {s.mealChoices.lunch}</Badge>
+                                        <span className="text-[9px] font-black text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-md border border-orange-100 uppercase">
+                                          {s.mealChoices.lunch}
+                                        </span>
                                       )}
                                       {s.mealChoices?.dinner && s.mealChoices.dinner !== "Normal" && (
-                                        <Badge variant="outline" className="text-[8px] h-4 px-1.5 bg-blue-50 text-blue-600 border-blue-200 font-black uppercase">D: {s.mealChoices.dinner}</Badge>
+                                        <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-100 uppercase">
+                                          {s.mealChoices.dinner}
+                                        </span>
                                       )}
                                     </div>
                                     <div className="flex items-center gap-2">
