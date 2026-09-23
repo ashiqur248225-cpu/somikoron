@@ -677,7 +677,15 @@ export default function AdminMealDashboardPage() {
                             <div className="flex items-center gap-3">
                               <div className="h-10 w-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
                               <div className="space-y-0.5">
-                                <p className="font-black text-slate-800 text-sm">{s.name}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-black text-slate-800 text-sm">{s.name}</p>
+                                  {s.mealChoices?.lunch && s.mealChoices.lunch !== "Normal" && (
+                                    <Badge variant="outline" className="text-[8px] h-4 px-1.5 bg-orange-50 text-orange-600 border-orange-200 font-black uppercase">L: {s.mealChoices.lunch}</Badge>
+                                  )}
+                                  {s.mealChoices?.dinner && s.mealChoices.dinner !== "Normal" && (
+                                    <Badge variant="outline" className="text-[8px] h-4 px-1.5 bg-blue-50 text-blue-600 border-blue-200 font-black uppercase">D: {s.mealChoices.dinner}</Badge>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
                                   <div className={cn("flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full", isLowBalance ? "bg-destructive/10 text-destructive animate-pulse" : "bg-success/5 text-success")}>
@@ -770,7 +778,15 @@ export default function AdminMealDashboardPage() {
                                 <div className="flex items-center gap-3">
                                   <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-xs shadow-sm">{s.roomNumber}</div>
                                   <div className="space-y-0.5">
-                                    <h3 className="font-black text-slate-800 text-sm">{s.name}</h3>
+                                    <div className="flex items-center gap-2">
+                                      <h3 className="font-black text-slate-800 text-sm">{s.name}</h3>
+                                      {s.mealChoices?.lunch && s.mealChoices.lunch !== "Normal" && (
+                                        <Badge variant="outline" className="text-[8px] h-4 px-1.5 bg-orange-50 text-orange-600 border-orange-200 font-black uppercase">L: {s.mealChoices.lunch}</Badge>
+                                      )}
+                                      {s.mealChoices?.dinner && s.mealChoices.dinner !== "Normal" && (
+                                        <Badge variant="outline" className="text-[8px] h-4 px-1.5 bg-blue-50 text-blue-600 border-blue-200 font-black uppercase">D: {s.mealChoices.dinner}</Badge>
+                                      )}
+                                    </div>
                                     <div className="flex items-center gap-2">
                                       <p className="text-[9px] font-bold text-muted-foreground uppercase">{s.buildingName}</p>
                                       <div className={cn("flex items-center gap-1 text-[8px] font-black px-1.5 py-0.5 rounded-full", isLowBalanceMobile ? "bg-destructive/10 text-destructive" : "bg-success/5 text-success")}>
