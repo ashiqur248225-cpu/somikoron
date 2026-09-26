@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -200,7 +201,8 @@ export default function AdminMealDashboardPage() {
 
     students.forEach(s => {
       let willEatB = false; let willEatL = false; let willEatD = false;
-      let choiceL = "Normal"; let choiceD = "Normal";
+      let choiceL = s.mealChoices?.lunch || "Normal";
+      let choiceD = s.mealChoices?.dinner || "Normal";
       
       const isTomorrow = viewDay === 'tomorrow';
       const isToday = viewDay === 'today';
@@ -215,22 +217,26 @@ export default function AdminMealDashboardPage() {
         willEatB = !!statusObj?.breakfast && bAvail;
         willEatL = !!statusObj?.lunch && lAvail;
         willEatD = !!statusObj?.dinner && dAvail;
-      } else if (isToday && s.mealStatus?.autoMode) {
+      } else if ((isToday || isTomorrow) && s.mealStatus?.autoMode) {
+        // Correctly handle Auto-Mode for both today and tomorrow if not manually decided
         const sched = s.weeklySchedule?.[dayName] || { breakfast: true, lunch: true, dinner: true }
         willEatB = !!sched.breakfast && bAvail;
         willEatL = !!sched.lunch && lAvail;
         willEatD = !!sched.dinner && dAvail;
       }
 
-      choiceL = s.mealChoices?.lunch || "Normal";
-      choiceD = s.mealChoices?.dinner || "Normal";
+      const guestB = isDecided ? (Number(guestObj?.breakfast) || 0) : 0;
+      const guestL = isDecided ? (Number(guestObj?.lunch) || 0) : 0;
+      const guestD = isDecided ? (Number(guestObj?.dinner) || 0) : 0;
 
-      const combinedB = (willEatB ? 1 : 0) + (isDecided ? Number(guestObj?.breakfast || 0) : 0);
-      const combinedL = (willEatL ? 1 : 0) + (isDecided ? Number(guestObj?.lunch || 0) : 0);
-      const combinedD = (willEatD ? 1 : 0) + (isDecided ? Number(guestObj?.dinner || 0) : 0);
+      const combinedB = (willEatB ? 1 : 0) + guestB;
+      const combinedL = (willEatL ? 1 : 0) + guestL;
+      const combinedD = (willEatD ? 1 : 0) + guestD;
 
       if (combinedB > 0 || combinedL > 0 || combinedD > 0) {
-        totals.breakfast += combinedB; totals.lunch += combinedL; totals.dinner += combinedD;
+        totals.breakfast += combinedB; 
+        totals.lunch += combinedL; 
+        totals.dinner += combinedD;
         totals.totalPlates += (combinedB + combinedL + combinedD);
 
         const bId = s.buildingId || "unassigned";
@@ -241,14 +247,21 @@ export default function AdminMealDashboardPage() {
         const bd = buildingData[bId]
         bd.breakfast += combinedB; bd.lunch += combinedL; bd.dinner += combinedD;
 
-        if (combinedL > 0) { choices.lunch[choiceL] = (choices.lunch[choiceL] || 0) + combinedL; bd.choiceCounts.lunch[choiceL] = (bd.choiceCounts.lunch[choiceL] || 0) + combinedL; }
-        if (combinedD > 0) { choices.dinner[choiceD] = (choices.dinner[choiceD] || 0) + combinedD; bd.choiceCounts.dinner[choiceD] = (bd.choiceCounts.dinner[choiceD] || 0) + combinedD; }
+        // Apply choice counts for the entire combined meal count (Self + Guests)
+        if (combinedL > 0) { 
+          choices.lunch[choiceL] = (choices.lunch[choiceL] || 0) + combinedL; 
+          bd.choiceCounts.lunch[choiceL] = (bd.choiceCounts.lunch[choiceL] || 0) + combinedL; 
+        }
+        if (combinedD > 0) { 
+          choices.dinner[choiceD] = (choices.dinner[choiceD] || 0) + combinedD; 
+          bd.choiceCounts.dinner[choiceD] = (bd.choiceCounts.dinner[choiceD] || 0) + combinedD; 
+        }
 
         const roomNo = s.roomNumber || "N/A"
         if (!bd.rooms[roomNo]) bd.rooms[roomNo] = { roomNo, residents: [], roomTotals: { b: 0, l: 0, d: 0, guests: 0 } }
         const rd = bd.rooms[roomNo]
         rd.roomTotals.b += combinedB; rd.roomTotals.l += combinedL; rd.roomTotals.d += combinedD;
-        rd.roomTotals.guests += (isDecided ? (Number(guestObj?.breakfast || 0) + Number(guestObj?.lunch || 0) + Number(guestObj?.dinner || 0)) : 0);
+        rd.roomTotals.guests += (guestB + guestL + guestD);
 
         rd.residents.push({ 
           id: s.id, 
@@ -256,8 +269,8 @@ export default function AdminMealDashboardPage() {
           phone: s.phone, 
           isSelfB: willEatB, isSelfL: willEatL, isSelfD: willEatD, 
           choiceL, choiceD, 
-          guests: isDecided ? (guestObj || { breakfast: 0, lunch: 0, dinner: 0 }) : { breakfast: 0, lunch: 0, dinner: 0 }, 
-          isAuto: s.mealStatus?.autoMode 
+          guests: { breakfast: guestB, lunch: guestL, dinner: guestD }, 
+          isAuto: s.mealStatus?.autoMode && !isDecided
         })
       }
     })
@@ -656,9 +669,9 @@ export default function AdminMealDashboardPage() {
                           isActiveB = !!statusObj?.breakfast; isActiveL = !!statusObj?.lunch; isActiveD = !!statusObj?.dinner;
                       }
                       
-                      const gCountB = isDecisionLocked ? Number(guestObj?.breakfast || 0) : 0;
-                      const gCountL = isDecisionLocked ? Number(guestObj?.lunch || 0) : 0;
-                      const gCountD = isDecisionLocked ? Number(guestObj?.dinner || 0) : 0;
+                      const gCountB = isDecisionLocked ? (Number(guestObj?.breakfast) || 0) : 0;
+                      const gCountL = isDecisionLocked ? (Number(guestObj?.lunch) || 0) : 0;
+                      const gCountD = isDecisionLocked ? (Number(guestObj?.dinner) || 0) : 0;
 
                       // Estimated Balance Calculation
                       const foodVal = Number(s.foodDueAmount || 0);
@@ -760,9 +773,9 @@ export default function AdminMealDashboardPage() {
                         isActiveB = !!statusObj?.breakfast; isActiveL = !!statusObj?.lunch; isActiveD = !!statusObj?.dinner;
                     }
 
-                    const gCountB = isDecisionLocked ? Number(guestObj?.breakfast || 0) : 0;
-                    const gCountL = isDecisionLocked ? Number(guestObj?.lunch || 0) : 0;
-                    const gCountD = isDecisionLocked ? Number(guestObj?.dinner || 0) : 0;
+                    const gCountB = isDecisionLocked ? (Number(guestObj?.breakfast) || 0) : 0;
+                    const gCountL = isDecisionLocked ? (Number(guestObj?.lunch) || 0) : 0;
+                    const gCountD = isDecisionLocked ? (Number(guestObj?.dinner) || 0) : 0;
 
                     // Estimated Balance Calculation
                     const foodVal = Number(s.foodDueAmount || 0);
